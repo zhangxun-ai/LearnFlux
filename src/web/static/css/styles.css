@@ -1,67 +1,4 @@
-/* CSS变量定义 - 主题系统 */
-:root {
-    /* 深色主题（默认） */
-    --bg-gradient-start: #1e293b;
-    --bg-gradient-end: #0f172a;
-    --text-primary: #f8fafc;
-    --text-secondary: #cbd5e1;
-    --text-tertiary: #94a3b8;
-    --bg-primary: #1e293b;
-    --bg-secondary: #334155;
-    --bg-tertiary: #475569;
-    --border-primary: #475569;
-    --border-secondary: #64748b;
-    --border-focus: #667eea;
-    --shadow-light: rgba(0,0,0,0.3);
-    --shadow-medium: rgba(0,0,0,0.5);
-    --header-text: #f8fafc;
-    --accent-primary: #667eea;
-    --accent-secondary: #764ba2;
-    --success-bg: #064e3b;
-    --success-border: #059669;
-    --success-text: #34d399;
-    --error-bg: #7f1d1d;
-    --error-border: #dc2626;
-    --error-text: #fca5a5;
-    --loading-bg: #0c4a6e;
-    --loading-border: #0ea5e9;
-    --loading-text: #38bdf8;
-    --scrollbar-track: #334155;
-    --scrollbar-thumb: #64748b;
-    --scrollbar-thumb-hover: #94a3b8;
-}
-
-/* 浅色主题 */
-[data-theme="light"] {
-    --bg-gradient-start: #667eea;
-    --bg-gradient-end: #764ba2;
-    --text-primary: #333;
-    --text-secondary: #6b7280;
-    --text-tertiary: #9ca3af;
-    --bg-primary: #ffffff;
-    --bg-secondary: #f9fafb;
-    --bg-tertiary: #f3f4f6;
-    --border-primary: #e5e7eb;
-    --border-secondary: #d1d5db;
-    --border-focus: #667eea;
-    --shadow-light: rgba(0,0,0,0.1);
-    --shadow-medium: rgba(0,0,0,0.2);
-    --header-text: #ffffff;
-    --accent-primary: #667eea;
-    --accent-secondary: #764ba2;
-    --success-bg: #ecfdf5;
-    --success-border: #10b981;
-    --success-text: #059669;
-    --error-bg: #fef2f2;
-    --error-border: #ef4444;
-    --error-text: #dc2626;
-    --loading-bg: #f0f9ff;
-    --loading-border: #06b6d4;
-    --loading-text: #0891b2;
-    --scrollbar-track: #f1f1f1;
-    --scrollbar-thumb: #c1c1c1;
-    --scrollbar-thumb-hover: #a8a8a8;
-}
+/* 配色 token 统一来自 editorial.css（单一来源） */
 
 /* 重置和基础样式 */
 * {
@@ -97,16 +34,16 @@ body {
 }
 
 .header h1 {
-    font-size: 2.5rem;
+    font-size: 2.2rem;
     margin-bottom: 0.5rem;
-    font-weight: 700;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    font-weight: 500;
+    font-family: 'Fraunces', Georgia, 'Songti SC', serif;
+    letter-spacing: -0.01em;
 }
 
 .header p {
     font-size: 1.1rem;
-    opacity: 0.9;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+    color: var(--text-secondary);
 }
 
 /* 主要内容区域 */
@@ -175,7 +112,7 @@ body {
 .form-textarea:focus, .form-input:focus {
     outline: none;
     border-color: var(--border-focus);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    box-shadow: 0 0 0 3px rgba(228, 80, 58, 0.1);
 }
 
 .form-input:required:invalid {
@@ -227,7 +164,7 @@ body {
 
 .url-option:hover {
     border-color: var(--accent-primary);
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.1);
+    box-shadow: 0 2px 4px rgba(228, 80, 58, 0.1);
 }
 
 .url-option.selected {
@@ -292,6 +229,43 @@ body {
     font-weight: 400;
     color: var(--text-secondary);
     margin-top: 0.25rem;
+}
+
+.comment-insight-options {
+    border-top: 1px solid var(--border-primary);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 1rem 0;
+}
+
+.comment-limit-control {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.75rem 0 0 2rem;
+    transition: opacity 0.2s ease;
+}
+
+.comment-limit-control.disabled {
+    opacity: 0.45;
+}
+
+.inline-select-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.form-select {
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--border-secondary);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.form-select:disabled {
+    cursor: not-allowed;
 }
 
 /* 高级设置样式 */
@@ -389,7 +363,7 @@ body {
 .submit-btn {
     width: 100%;
     padding: 1rem 1.5rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #E4503A 0%, #C23A26 100%);
     color: white;
     border: none;
     border-radius: 12px;
@@ -401,12 +375,12 @@ body {
     align-items: center;
     justify-content: center;
     gap: 0.75rem;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 4px 12px rgba(228, 80, 58, 0.4);
 }
 
 .submit-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.5);
+    box-shadow: 0 8px 20px rgba(228, 80, 58, 0.5);
 }
 
 .submit-btn:active:not(:disabled) {
@@ -417,7 +391,7 @@ body {
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;
-    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.2);
+    box-shadow: 0 2px 6px rgba(228, 80, 58, 0.2);
 }
 
 .btn-icon {
@@ -491,7 +465,7 @@ body {
 
 .history-item:hover {
     border-color: var(--accent-primary);
-    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.1);
+    box-shadow: 0 2px 4px rgba(228, 80, 58, 0.1);
 }
 
 .history-info {
@@ -610,7 +584,7 @@ body {
     width: 20px;
     height: 20px;
     border: 2px solid #f3f3f3;
-    border-top: 2px solid #667eea;
+    border-top: 2px solid #E4503A;
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin-right: 0.5rem;
@@ -626,16 +600,16 @@ body {
     .container {
         padding: 0.75rem;
     }
-    
+
     .header h1 {
         font-size: 2rem;
     }
-    
+
     .main-content {
         padding: 1.25rem;
         border-radius: 12px;
     }
-    
+
     /* 移动端主题切换按钮优化 */
     .theme-toggle {
         top: 15px;
@@ -644,62 +618,62 @@ body {
         height: 40px;
         font-size: 1.1rem;
     }
-    
+
     .url-display {
         max-width: 150px;
     }
-    
+
     .input-group {
         flex-direction: column;
         gap: 0.75rem;
     }
-    
+
     .input-btn {
         align-self: flex-start;
         min-width: auto;
         padding: 0.5rem 1rem;
     }
-    
+
     .history-item {
         flex-direction: column;
         align-items: stretch;
         gap: 0.75rem;
         padding: 1rem;
     }
-    
+
     .history-actions {
         justify-content: flex-start;
         flex-wrap: wrap;
     }
-    
+
     .history-btn {
         flex: 1;
         text-align: center;
         min-width: 100px;
     }
-    
+
     /* 改善高级设置在平板上的显示 */
     .advanced-toggle {
         flex-direction: column;
         align-items: flex-start;
         gap: 0.5rem;
     }
-    
+
     .required-indicator {
         align-self: flex-end;
     }
-    
+
     /* 改善URL选项在平板上的显示 */
     .url-option {
         padding: 1rem;
     }
-    
+
     .url-option label {
         flex-direction: column;
         align-items: flex-start;
         gap: 0.5rem;
     }
-    
+
     .url-score {
         align-self: flex-start;
     }
@@ -709,121 +683,121 @@ body {
     .container {
         padding: 0.5rem;
     }
-    
+
     .header h1 {
         font-size: 1.75rem;
         line-height: 1.2;
     }
-    
+
     .header p {
         font-size: 1rem;
     }
-    
+
     .main-content {
         padding: 1rem;
         border-radius: 8px;
     }
-    
+
     .form-textarea {
         min-height: 80px;
         font-size: 1rem;
     }
-    
+
     .form-input {
         font-size: 1rem; /* 防止iOS缩放 */
     }
-    
+
     /* 改善按钮在手机上的体验 */
     .submit-btn {
         padding: 1.25rem 1rem;
         font-size: 1.1rem;
     }
-    
+
     .input-btn {
         padding: 0.75rem;
         min-width: 44px; /* 符合触摸标准 */
     }
-    
+
     /* 高级设置在手机上的优化 */
     .advanced-toggle {
         padding: 1rem 0;
         text-align: left;
     }
-    
+
     .toggle-left {
         font-size: 1rem;
     }
-    
+
     .required-indicator {
         font-size: 0.8rem;
         padding: 0.2rem 0.4rem;
     }
-    
+
     /* URL预览在手机上的优化 */
     .url-preview {
         min-height: 50px;
     }
-    
+
     .url-option {
         padding: 0.75rem;
         margin-bottom: 0.75rem;
     }
-    
+
     .url-display {
         max-width: 100%;
         font-size: 0.85rem;
         word-break: break-all;
     }
-    
+
     .url-score {
         font-size: 0.75rem;
     }
-    
+
     /* 历史记录在手机上的优化 */
     .history-container {
         padding: 1rem;
     }
-    
+
     .history-item {
         padding: 0.75rem;
     }
-    
+
     .history-title {
         font-size: 0.9rem;
         line-height: 1.3;
     }
-    
+
     .history-original-text {
         margin-top: 0.5rem;
         padding: 0.5rem;
     }
-    
+
     .original-text-label {
         font-size: 0.75rem;
     }
-    
+
     .original-text-content {
         font-size: 0.8rem;
         line-height: 1.3;
     }
-    
+
     .history-url {
         font-size: 0.8rem;
         word-break: break-all;
         line-height: 1.2;
     }
-    
+
     .history-meta {
         font-size: 0.75rem;
         margin-top: 0.5rem;
         flex-wrap: wrap;
     }
-    
+
     .history-actions {
         gap: 0.5rem;
         flex-wrap: wrap;
     }
-    
+
     .history-btn {
         padding: 0.75rem 1rem;
         font-size: 0.85rem;
@@ -831,18 +805,18 @@ body {
         min-width: auto;
         text-align: center;
     }
-    
+
     /* 状态容器在手机上的优化 */
     .status-container {
         padding: 1rem;
         font-size: 0.95rem;
     }
-    
+
     /* 表单组间距优化 */
     .form-group {
         margin-bottom: 1.25rem;
     }
-    
+
     .form-help {
         font-size: 0.8rem;
         line-height: 1.3;

@@ -79,6 +79,7 @@ class NotificationRouter:
         channel_name: str = None,
         webhook: str = None,
         webhooks: Dict[str, str] = None,
+        allow_fallback: bool = True,
     ) -> Dict[str, bool]:
         """Send text to target channels with fallback."""
         targets = self._resolve_targets(channel_name)
@@ -94,7 +95,7 @@ class NotificationRouter:
                 results[ch.name] = False
 
         # Fallback: if targeted channel(s) were found but all failed, try others
-        if channel_name and targets and not any(results.values()):
+        if allow_fallback and channel_name and targets and not any(results.values()):
             fallbacks = self._get_fallback_channels(targets)
             for ch in fallbacks:
                 try:

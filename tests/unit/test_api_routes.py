@@ -12,11 +12,14 @@ All console output must be in English only (no emoji, no Chinese).
 """
 
 import asyncio
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from video_transcript_api.api.routes.views import _decorate_view_timing
+from video_transcript_api.api.services.longcut import LongCutStartResult
 
 # ---------------------------------------------------------------------------
 # Helpers: build a minimal FastAPI app with mocked dependencies
@@ -249,6 +252,23 @@ class TestTranscribeEndpoint:
         assert call_kwargs.kwargs.get("use_speaker_recognition") is True or \
                (call_kwargs.args and len(call_kwargs.args) > 1)
 
+    def test_transcribe_enqueues_comment_options_when_enabled(
+        self, client, mock_task_queue
+    ):
+        resp = client.post(
+            "/api/transcribe",
+            json={
+                "url": "https://www.youtube.com/watch?v=abc123",
+                "include_comments": True,
+                "comment_limit": 50,
+            },
+        )
+
+        assert resp.status_code == 200
+        queued_task = mock_task_queue.get_nowait()
+        assert queued_task["include_comments"] is True
+        assert queued_task["comment_limit"] == 50
+
     def test_transcribe_with_download_url(self, client, mock_cache_manager):
         resp = client.post(
             "/api/transcribe",
@@ -301,6 +321,7 @@ class TestGetTaskStatus:
             "platform": "youtube",
             "completed_at": None,
             "error_message": None,
+            "progress": None,
         }
         row.update(overrides)
         return row
@@ -321,6 +342,25 @@ class TestGetTaskStatus:
         body = client.get("/api/task/task-1").json()
         assert body["code"] == 202
         assert body["data"]["status"] == "processing"
+
+    def test_task_status_includes_progress_when_available(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.get_task_by_id.return_value = self._row(
+            status="processing",
+            progress={
+                "stage": "downloading",
+                "stage_label": "正在下载音视频",
+                "percent": 22,
+                "basis": "download_bytes",
+                "confidence": "high",
+            },
+        )
+
+        body = client.get("/api/task/task-1").json()
+
+        assert body["data"]["progress"]["stage"] == "downloading"
+        assert body["data"]["progress"]["percent"] == 22
 
     def test_task_calibrating_returns_202(self, client, mock_cache_manager):
         # NEW state: transcript done, LLM calibration still running.
@@ -354,6 +394,144 @@ class TestGetTaskStatus:
         assert body["code"] == 500
         assert body["data"]["status"] == "failed"
         assert body["data"]["error"] == "ASR timeout"
+
+
+class TestViewProgressEndpoint:
+    """Tests for public view-token progress polling."""
+
+    def test_decorate_view_timing_adds_elapsed_and_duration(self):
+        processing = {
+            "status": "processing",
+            "created_at": "2026-06-08T10:00:00+00:00",
+            "progress": {"updated_at": "2026-06-08T10:01:05+00:00"},
+        }
+        _decorate_view_timing(
+            processing,
+            now=datetime(2026, 6, 8, 10, 2, 30, tzinfo=timezone.utc),
+        )
+
+        assert processing["elapsed_seconds"] == 150
+        assert processing["elapsed_display"] == "2 分 30 秒"
+        assert processing["progress"]["updated_at_display"].endswith("18:01:05")
+
+        completed = {
+            "status": "success",
+            "created_at": "2026-06-08T10:00:00+00:00",
+            "completed_at": "2026-06-08T10:07:42+00:00",
+        }
+        _decorate_view_timing(completed)
+
+        assert completed["duration_seconds"] == 462
+        assert completed["duration_display"] == "7 分 42 秒"
+
+    def test_processing_view_renders_progress_panel(self, client, mock_cache_manager):
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "processing",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "created_at": "2026-06-08T10:00:00",
+            "elapsed_display": "1 分 30 秒",
+            "progress": {
+                "stage": "downloading",
+                "stage_label": "正在下载音视频",
+                "percent": 22,
+                "basis": "download_bytes",
+                "confidence": "high",
+            },
+        }
+
+        resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert "progress-panel" in resp.text
+        assert "/view/vt-1/progress" in resp.text
+        assert "正在下载音视频" in resp.text
+        assert "已处理" in resp.text
+
+    def test_view_progress_returns_minimal_progress_payload(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "processing",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "created_at": "2026-06-08T10:00:00+00:00",
+            "progress": {
+                "stage": "transcribing",
+                "stage_label": "正在转录音视频",
+                "percent": 62,
+                "basis": "funasr_server_progress",
+                "confidence": "high",
+                "updated_at": "2026-06-08T10:01:05+00:00",
+            },
+        }
+
+        resp = client.get("/view/vt-1/progress")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "processing"
+        assert body["task_id"] == "task-1"
+        assert "elapsed_display" in body
+        assert body["progress"]["percent"] == 62
+        assert "updated_at_display" in body["progress"]
+        assert "transcript" not in body
+        assert "summary" not in body
+
+    def test_view_progress_unknown_token_returns_404(self, client, mock_cache_manager):
+        mock_cache_manager.get_view_data_by_token.return_value = None
+
+        resp = client.get("/view/missing/progress")
+
+        assert resp.status_code == 404
+
+    def test_open_in_longcut_redirects_for_youtube(self, client, mock_cache_manager):
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "view_token": "vt-1",
+            "platform": "youtube",
+            "media_id": "abc123",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={
+                "longcut": {
+                    "enabled": True,
+                    "base_url": "http://localhost:3000",
+                    "project_dir": "/tmp/longcut",
+                }
+            },
+        ), patch(
+            "video_transcript_api.api.routes.views.ensure_longcut_ready",
+            return_value=LongCutStartResult(True, False, "ready"),
+        ) as ensure_ready:
+            resp = client.get("/view/vt-1/longcut", follow_redirects=False)
+
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "http://localhost:3000/analyze/abc123"
+        ensure_ready.assert_called_once()
+
+    def test_open_in_longcut_rejects_non_youtube(self, client, mock_cache_manager):
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "view_token": "vt-1",
+            "platform": "bilibili",
+            "media_id": "BV123",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={"longcut": {"enabled": True}},
+        ), patch(
+            "video_transcript_api.api.routes.views.ensure_longcut_ready"
+        ) as ensure_ready:
+            resp = client.get("/view/vt-1/longcut")
+
+        assert resp.status_code == 400
+        ensure_ready.assert_not_called()
 
 
 class TestWebhookStatsEndpoint:

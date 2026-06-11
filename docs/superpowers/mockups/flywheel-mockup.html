@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>学做小红书 · 原型 v6</title>
+<style>
+  :root{--bg1:#1e293b;--bg2:#0f172a;--text:#f8fafc;--text2:#94a3b8;--card:#1e293b;--card2:#273449;--line:#334155;
+    --accent:#667eea;--accent2:#764ba2;--good:#34d399;--warn:#fbbf24;--new:#f87171}
+  [data-theme="light"]{--bg1:#eef1ff;--bg2:#e7e9ff;--text:#1f2937;--text2:#6b7280;--card:#fff;--card2:#f6f7fb;
+    --line:#eceef5;--good:#059669;--warn:#b45309;--new:#dc2626}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+    color:var(--text);background:linear-gradient(160deg,var(--bg1),var(--bg2));min-height:100vh;line-height:1.6;
+    display:flex;flex-direction:column;align-items:center;padding:16px 16px 92px}
+  .topbar{width:100%;max-width:600px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.92rem;opacity:.9}
+  .brand .dot{width:19px;height:19px;border-radius:6px;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .mock{font-size:.64rem;background:var(--warn);color:#111;padding:2px 7px;border-radius:999px;font-weight:700}
+  .tbtns{display:flex;gap:8px;align-items:center}
+  .tt,.fr{background:none;border:none;color:var(--text);cursor:pointer;opacity:.7;font-size:.78rem}
+  .tt{font-size:1.02rem}
+  .wrap{width:100%;max-width:600px}
+  .screen{display:none;animation:fade .22s ease}.screen.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .back{background:none;border:none;color:var(--text2);font-size:.92rem;cursor:pointer;padding:6px 0;margin-bottom:6px}
+  .ml-auto{margin-left:auto}.row{display:flex;align-items:center;gap:8px}
+  .h1{font-size:1.3rem;font-weight:800}
+  .btnp{padding:9px 14px;font-weight:700;border:none;border-radius:10px;color:#fff;cursor:pointer;font-size:.86rem;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .btng{padding:9px 14px;font-weight:700;border:1px solid var(--accent);border-radius:10px;background:transparent;color:var(--text);cursor:pointer;font-size:.86rem}
+  .field{flex:1;padding:11px 14px;font-size:.95rem;border-radius:11px;border:1px solid var(--line);background:var(--card);color:var(--text);outline:none}
+
+  /* bottom tab bar */
+  .tabbar{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:30px;
+    background:rgba(15,23,42,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:8px 0 10px;z-index:9}
+  [data-theme="light"] .tabbar{background:rgba(255,255,255,.92)}
+  .tabbtn{background:none;border:none;color:var(--text2);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.7rem;font-weight:600}
+  .tabbtn .i{font-size:1.25rem}
+  .tabbtn.on{color:var(--accent)}
+
+  /* filters (collapsed) */
+  .filtoggle{font-size:.82rem;color:var(--text2);background:none;border:1px solid var(--line);border-radius:9px;padding:6px 12px;cursor:pointer}
+  .filters{display:none;gap:7px;flex-wrap:wrap;align-items:center;margin:10px 0 2px}
+  .filters.open{display:flex}
+  .fpill{display:inline-flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--line);color:var(--text2);padding:6px 11px;border-radius:999px;font-size:.78rem;font-weight:600;cursor:pointer}
+  .fpill .v{color:var(--text)}
+  .fcount{font-size:.78rem;color:var(--text2);margin:10px 2px 4px}
+
+  .gday{font-size:.8rem;font-weight:700;color:var(--text2);margin:16px 2px 8px}
+  .gbgr{display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer}
+  .gbgr .ava{width:25px;height:25px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.82rem;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .gbgr .nm{font-weight:700;font-size:.9rem}.gbgr .go{color:var(--text2);font-size:.78rem}
+  .item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin:0 0 8px 28px}
+  .l1{display:flex;align-items:center;gap:7px}
+  .ititle{font-weight:600;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ty{font-size:.66rem;padding:1px 6px;border-radius:999px;font-weight:700;flex-shrink:0}
+  .ty.v{background:rgba(248,113,113,.16);color:var(--new)}.ty.a{background:rgba(52,211,153,.16);color:var(--good)}
+  .st{font-size:.66rem;padding:2px 8px;border-radius:999px;font-weight:700;flex-shrink:0}
+  .st.wait{background:var(--card2);color:var(--text2)}.st.ing{background:rgba(102,126,234,.18);color:#a8b5f7}
+  .st.ok{background:rgba(52,211,153,.15);color:var(--good)}.st.fail{background:rgba(248,113,113,.15);color:var(--new)}
+  .l2{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+  .idata{font-size:.77rem;color:var(--text2)}
+  .open{font-size:.79rem;color:var(--accent);text-decoration:none}
+  .mini{font-size:.79rem;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;border:none}
+  .mini.do{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  .mini.done{background:var(--card2);color:var(--good);border:1px solid var(--line)}
+  .mini.retry{background:rgba(248,113,113,.15);color:var(--new);border:1px solid rgba(248,113,113,.3)}
+  .summary{font-size:.79rem;color:var(--text2);margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+  .summary b{color:var(--text)}
+  .failmsg{font-size:.75rem;color:var(--new);margin-top:6px}
+  .pager{display:flex;justify-content:center;gap:6px;margin-top:18px}
+  .pager button{background:var(--card);border:1px solid var(--line);color:var(--text);padding:6px 11px;border-radius:9px;cursor:pointer;font-size:.83rem}
+  .pager button.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
+
+  /* me tab */
+  .mecard{background:linear-gradient(135deg,rgba(102,126,234,.14),rgba(118,75,162,.14));border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px}
+  .mecard .row{gap:12px}
+  .ava-lg{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .menm{font-weight:800}.mestat{color:var(--text2);font-size:.85rem}
+  .meprog{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:.9rem}
+  .meprog b{color:var(--good)}
+  .nextbox{background:var(--card);border:1px solid var(--accent);border-radius:14px;padding:16px;margin-bottom:16px}
+  .nextbox .lab{font-weight:800;margin-bottom:6px}
+  .nextbox .do{font-size:1.05rem;font-weight:700;line-height:1.5}
+  .nextbox .src{color:var(--text2);font-size:.8rem;margin-top:6px}
+
+  /* blogger list / detail */
+  .bgr{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:14px;cursor:pointer;background:var(--card);border:1px solid var(--line);margin-bottom:9px}
+  .bgr:hover{border-color:var(--accent)}
+  .ava{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.15rem;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .nm{font-weight:700}.mt{font-size:.78rem;color:var(--text2);display:flex;gap:6px;align-items:center;margin-top:1px;flex-wrap:wrap}
+  .tag{font-size:.7rem;padding:1px 7px;border-radius:999px;font-weight:700}
+  .tag.v{background:rgba(248,113,113,.16);color:var(--new)}.tag.a{background:rgba(52,211,153,.16);color:var(--good)}.tag.p{background:var(--card2);color:var(--text2)}
+  .newdot{flex-shrink:0;background:var(--new);color:#fff;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px}
+  .bio{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:15px;margin:6px 0 12px}
+  .bio .bn{font-weight:800;font-size:1.1rem;display:flex;align-items:center;gap:8px}
+  .bio .bm{color:var(--text2);font-size:.83rem;margin:4px 0 8px}.bio .bd{font-size:.88rem}
+  .subbadge{font-size:.66rem;padding:2px 8px;border-radius:999px;background:rgba(52,211,153,.15);color:var(--good);font-weight:700}
+
+  /* analysis */
+  .rmeta{color:var(--text2);font-size:.84rem;margin-bottom:6px}
+  .rstats{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:11px 0;border-bottom:1px solid var(--line);margin-bottom:6px}
+  .point{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .point .n{flex-shrink:0;width:25px;height:25px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem}
+  .point .t{font-weight:700}.point .d{color:var(--text2);font-size:.89rem}.ev{font-size:.74rem;color:var(--good);margin-top:4px}
+  .tip{margin-top:15px;background:rgba(102,126,234,.1);border-radius:13px;padding:15px}
+  .tip .lab{font-weight:700;margin-bottom:5px}.tip .do{font-weight:700}
+  .pills{display:flex;gap:8px;margin:10px 0 4px}
+  .pill{flex:1;text-align:center;padding:9px;border-radius:10px;cursor:pointer;font-weight:700;font-size:.87rem;background:var(--card);border:1px solid var(--line);color:var(--text2)}
+  .pill.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
+  .judge{padding:13px 0;border-top:1px solid var(--line);display:flex;gap:11px}
+  .judge .face{font-size:1.25rem}.judge .t{font-weight:700}.judge .d{color:var(--text2);font-size:.89rem}
+  .judge.ok .t{color:var(--good)}.judge.warn .t{color:var(--warn)}
+  .ta{width:100%;min-height:160px;padding:13px;border-radius:11px;border:1px solid var(--line);background:var(--card);color:var(--text);font-family:Menlo,Consolas,monospace;font-size:.81rem;line-height:1.6}
+  .note{color:var(--text2);font-size:.85rem;margin-bottom:10px}
+  .hero{text-align:center;padding:44px 6px 8px}.hero h1{font-size:1.7rem;font-weight:800}.hero p{color:var(--text2);margin-top:10px}
+  /* batch select + cost */
+  .selbox{display:none;margin-right:8px;width:17px;height:17px;accent-color:#667eea;flex-shrink:0}
+  body.selecting .selbox{display:inline-block}
+  .batchbar{position:fixed;bottom:64px;left:0;right:0;justify-content:center;z-index:10;display:none}
+  body.selecting .batchbar{display:flex}
+  .batchbar .inner{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:9px 14px;box-shadow:0 6px 24px rgba(0,0,0,.3);font-size:.85rem}
+  .costline{font-size:.8rem;color:var(--text2);margin-top:8px}.costline b{color:var(--text)}
+  .userow{display:flex;align-items:center;gap:8px;padding:11px 13px;background:var(--card);border:1px solid var(--line);border-radius:11px;margin-bottom:8px;font-size:.9rem}
+  .userow .c{margin-left:auto;font-weight:700}
+  .ulink{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:12px;cursor:pointer;margin-bottom:14px}
+  .pin{color:var(--warn);font-size:.72rem;font-weight:700}
+  /* filter dropdowns */
+  .fwrap{position:relative;display:inline-block}
+  .fmenu{display:none;position:absolute;top:116%;left:0;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;min-width:150px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+  .fmenu.show{display:block}
+  .fmenu>button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);padding:7px 10px;border-radius:7px;cursor:pointer;font-size:.83rem}
+  .fmenu>button:hover{background:var(--card2)}
+  .fmenu label{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:.83rem;cursor:pointer}
+  .fmenu label input{accent-color:#667eea}
+  .fmenu .div{height:1px;background:var(--line);margin:5px 0}
+  .fmenu .datebox{display:flex;gap:6px;align-items:center;padding:6px 8px}
+  .fmenu input[type=date]{background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:5px;font-size:.78rem;width:118px}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand"><span class="dot"></span> 学做小红书 <span class="mock">原型</span></span>
+    <span class="tbtns"><button class="fr" onclick="show('newuser')">🆕新用户首屏</button><button class="tt" onclick="tg()">☀️</button></span>
+  </div>
+  <div class="wrap">
+
+  <!-- ===== TAB: 内容 ===== -->
+  <div class="screen active" id="content">
+    <div class="row"><span class="h1">内容</span>
+      <button class="filtoggle ml-auto" onclick="document.getElementById('flt').classList.toggle('open')">筛选 ▾</button>
+      <button class="filtoggle" onclick="document.body.classList.toggle('selecting')">选择</button>
+      <button class="btng" onclick="show('newuser')">⚡ 快速解析</button></div>
+    <div class="filters" id="flt">
+      <div class="fwrap"><button class="fpill" onclick="tog(this)">订阅：<span class="v">已订阅</span> ▾</button>
+        <div class="fmenu" onclick="event.stopPropagation()"><button onclick="setf(this,'全部')">全部</button><button onclick="setf(this,'已订阅')">已订阅</button><button onclick="setf(this,'未订阅（临时解析）')">未订阅（临时解析）</button></div></div>
+      <div class="fwrap"><button class="fpill" onclick="tog(this)">博主：<span class="v">全部</span> ▾</button>
+        <div class="fmenu" onclick="event.stopPropagation()"><label><input type="checkbox" data-n="阿K" onchange="multi(this,'位')"> @AI玩家阿K</label><label><input type="checkbox" data-n="研究所" onchange="multi(this,'位')"> @AI工具研究所</label><label><input type="checkbox" data-n="Lina" onchange="multi(this,'位')"> @斜杠青年Lina</label></div></div>
+      <div class="fwrap"><button class="fpill" onclick="tog(this)">状态：<span class="v">全部</span> ▾</button>
+        <div class="fmenu" onclick="event.stopPropagation()"><label><input type="checkbox" data-n="待解析" onchange="multi(this,'项')"> 待解析</label><label><input type="checkbox" data-n="解析中" onchange="multi(this,'项')"> 解析中</label><label><input type="checkbox" data-n="解析成功" onchange="multi(this,'项')"> 解析成功</label><label><input type="checkbox" data-n="解析失败" onchange="multi(this,'项')"> 解析失败</label></div></div>
+      <div class="fwrap"><button class="fpill" onclick="tog(this)">类型：<span class="v">全部</span> ▾</button>
+        <div class="fmenu" onclick="event.stopPropagation()"><button onclick="setf(this,'全部')">全部</button><button onclick="setf(this,'视频')">视频</button><button onclick="setf(this,'图文')">图文</button></div></div>
+      <div class="fwrap"><button class="fpill" onclick="tog(this)">日期：<span class="v">近30天</span> ▾</button>
+        <div class="fmenu" onclick="event.stopPropagation()"><button onclick="setf(this,'今天')">今天</button><button onclick="setf(this,'近7天')">近7天</button><button onclick="setf(this,'近30天')">近30天</button><button onclick="setf(this,'近90天')">近90天</button><button onclick="setf(this,'全部')">全部</button><div class="div"></div><div class="datebox"><input type="date"><span>~</span><input type="date"></div></div></div>
+      <div class="fwrap"><button class="fpill" onclick="tog(this)">排序：<span class="v">最新</span> ▾</button>
+        <div class="fmenu" onclick="event.stopPropagation()"><button onclick="setf(this,'最新发布')">最新发布</button><button onclick="setf(this,'最高赞')">最高赞</button></div></div>
+    </div>
+    <div class="fcount">今天值得拆的 · 共 42 条 · 按发布日期↓、同博主集中</div>
+
+    <div class="gday">📅 今天</div>
+    <div class="gbgr" onclick="show('blogger')"><span class="ava">🎮</span><span class="nm">@AI玩家阿K</span><span class="ty v">📹</span><span class="go ml-auto">主页 ›</span></div>
+    <div class="item">
+      <div class="l1"><input type="checkbox" class="selbox"><span class="ititle">《2025我每天都在用的5个AI》</span><span class="ty v">📹</span><span class="st wait ml-auto">待解析</span></div>
+      <div class="l2"><span class="idata">👍 5.2k　❤️ 1.8k　💬 210</span><span class="ml-auto row"><a class="open" href="#">看原视频↗</a><button class="mini do" onclick="show('analysis')">解析</button></span></div>
+    </div>
+    <div class="item">
+      <div class="l1"><span class="ititle">《我用AI做了个赚钱小工具》</span><span class="ty v">📹</span><span class="st ing ml-auto">解析中…</span></div>
+      <div class="l2"><span class="idata">👍 3.4k　❤️ 1.1k　💬 96</span><span class="ml-auto row"><a class="open" href="#">看原视频↗</a><span class="idata">约 15 秒</span></span></div>
+    </div>
+    <div class="gbgr" onclick="show('blogger')"><span class="ava">🔬</span><span class="nm">@AI工具研究所</span><span class="ty a">📝</span><span class="go ml-auto">主页 ›</span></div>
+    <div class="item">
+      <div class="l1"><span class="ititle">《3个AI工具，第2个绝了》</span><span class="ty a">📝</span><span class="st ok ml-auto">解析成功</span></div>
+      <div class="l2"><span class="idata">👍 8.6k　❤️ 3.0k　💬 360</span><span class="ml-auto row"><a class="open" href="#">看原文↗</a><button class="mini done" onclick="show('analysis')">看解析</button></span></div>
+    </div>
+    <div class="gday">📅 昨天</div>
+    <div class="gbgr" onclick="show('blogger')"><span class="ava">✨</span><span class="nm">@斜杠青年Lina</span><span class="ty a">📝</span><span class="go ml-auto">主页 ›</span></div>
+    <div class="item">
+      <div class="l1"><input type="checkbox" class="selbox"><span class="ititle">《副业做小红书第一个月复盘》</span><span class="ty a">📝</span><span class="st fail ml-auto">解析失败</span></div>
+      <div class="l2"><span class="idata">👍 2.1k　❤️ 900　💬 75</span><span class="ml-auto row"><a class="open" href="#">看原文↗</a><button class="mini retry">重试</button></span></div>
+      <div class="failmsg">⚠️ 抓取超时，点重试即可</div>
+    </div>
+    <div class="pager"><button>‹</button><button class="on">1</button><button>2</button><button>3</button><button>›</button></div>
+    <div class="batchbar"><div class="inner">已选 <b>2</b> 条 · 预计 <b>¥0.84</b> <button class="btnp" onclick="alert('开始批量解析（示意）');document.body.classList.remove('selecting')">解析选中</button> <button class="fr" onclick="document.body.classList.remove('selecting')">取消</button></div></div>
+  </div>
+
+  <!-- ===== TAB: 博主 ===== -->
+  <div class="screen" id="bloggers">
+    <div class="row"><span class="h1">博主</span><button class="btnp ml-auto" onclick="show('newuser')">+ 订阅博主</button></div>
+    <div class="fcount">我订阅的 3 位 · 有新内容的排前面，再按最近更新（★可置顶核心对标）</div>
+    <div class="bgr" onclick="show('blogger')"><div class="ava">🎮</div><div style="flex:1;min-width:0"><div class="nm">@AI玩家阿K <span class="pin">★置顶</span></div><div class="mt"><span class="tag v">📹 视频</span><span class="tag p">小红书</span> 28w 粉 · 待解析 6</div></div><span class="newdot">3 条新</span></div>
+    <div class="bgr" onclick="show('blogger')"><div class="ava">🔬</div><div style="flex:1;min-width:0"><div class="nm">@AI工具研究所</div><div class="mt"><span class="tag a">📝 图文</span><span class="tag p">小红书</span> 12w 粉</div></div><span class="go" style="color:var(--text2)">›</span></div>
+    <div class="bgr" onclick="show('blogger')"><div class="ava">✨</div><div style="flex:1;min-width:0"><div class="nm">@斜杠青年Lina</div><div class="mt"><span class="tag v">📹</span><span class="tag a">📝</span><span class="tag p">小红书</span> 6w 粉</div></div><span class="go" style="color:var(--text2)">›</span></div>
+  </div>
+
+  <!-- ===== TAB: 我的 (the payoff) ===== -->
+  <div class="screen" id="me">
+    <div class="h1" style="margin-bottom:10px">我的成长</div>
+    <div class="mecard">
+      <div class="row"><div class="ava-lg">🧪</div><div><div class="menm">@我的AI实验室</div><div class="mestat">粉丝 1,240 · 小红书</div></div></div>
+      <div class="meprog">📈 本月发了 4 条，均赞 <b>86 → 214（+149%）</b>，方向对了，继续。</div>
+    </div>
+    <div class="ulink" onclick="show('usage')">💰 <div>用量与成本<div class="idata" style="font-size:.77rem">本月解析 36 条 · ¥4.20</div></div><span class="ml-auto" style="color:var(--text2)">›</span></div>
+    <div class="nextbox">
+      <div class="lab">⭐ 你下一条，建议这样做</div>
+      <div class="do">开头第一句直接抛重点 / 冲突，别铺垫。</div>
+      <div class="src">学自对标 @AI玩家阿K · <a class="open" href="#" onclick="show('method')">为什么</a></div>
+    </div>
+    <div class="fcount">我最近发的（已和对标比过）</div>
+    <div class="item" style="margin-left:0">
+      <div class="l1"><span class="ititle">《我整理的10个AI神器》</span><span class="ty a">📝</span><span class="st ok ml-auto">已诊断</span></div>
+      <div class="l2"><span class="idata">👍 210 · 3天前</span><span class="ml-auto row"><span class="idata">✅开头有钩子 ⚠️结尾缺引导</span><button class="mini done" onclick="show('mine')">看诊断</button></span></div>
+    </div>
+    <div class="item" style="margin-left:0">
+      <div class="l1"><span class="ititle">《AI做视频的完整流程》</span><span class="ty v">📹</span><span class="st ok ml-auto">已诊断</span></div>
+      <div class="l2"><span class="idata">👍 86 · 上周</span><span class="ml-auto row"><span class="idata">⚠️开头慢</span><button class="mini done" onclick="show('mine')">看诊断</button></span></div>
+    </div>
+    <button class="btnp" style="width:100%;margin-top:12px" onclick="show('mine')">＋ 贴一条我的新笔记，看看怎么改</button>
+  </div>
+
+  <!-- ===== first run ===== -->
+  <div class="screen" id="newuser">
+    <button class="back" onclick="show('content')">← 返回（看已有数据的样子）</button>
+    <div class="hero"><h1>想火，先学会拆爆款</h1><p>贴一个你想学的博主，或一条你刷到的好内容，<br>我帮你看懂它为什么火。</p></div>
+    <div class="row" style="margin-top:24px"><input class="field" placeholder="粘贴博主主页 / 内容链接…"><button class="btnp" onclick="show('analysis')">帮我看看</button></div>
+    <div class="fcount" style="text-align:center">目前支持小红书，微信 / 抖音 / B站 / YouTube 陆续加入。</div>
+  </div>
+
+  <!-- ===== blogger detail ===== -->
+  <div class="screen" id="blogger">
+    <button class="back" onclick="show('content')">← 返回</button>
+    <div class="bio">
+      <div class="bn">🎮 @AI玩家阿K <span class="subbadge">已订阅 ✓</span></div>
+      <div class="bm">📹 视频博主 · 28w 粉 · 小红书 · 共 18 条 · 待解析 6</div>
+      <div class="bd">个人说明：分享 AI 工具实测和踩坑，每周三更。「能用免费的，绝不花钱。」</div>
+      <button class="btng" style="width:100%;margin-top:12px" onclick="show('method')">📊 总结 TA 的整体套路</button>
+    </div>
+    <div class="row"><span class="fcount" style="margin:0">TA 的历史内容（18）</span><button class="filtoggle ml-auto" onclick="this.nextElementSibling.classList.toggle('open')">筛选 ▾</button>
+      <span class="filters" style="margin:0"><span class="fpill">状态 ▾</span><span class="fpill">类型 ▾</span><span class="fpill">日期 ▾</span></span></div>
+    <div class="item" style="margin:10px 0 8px">
+      <div class="l1"><span class="ititle">《别再花钱买AI课了》</span><span class="ty v">📹</span><span class="st ok ml-auto">解析成功</span></div>
+      <div class="l2"><span class="idata">👍 1.2w　❤️ 4.2k　💬 890 · 5天前</span><span class="ml-auto row"><a class="open" href="#">看原视频↗</a><button class="mini done" onclick="show('analysis')">看解析</button></span></div>
+      <div class="summary">📝 <b>关键套路</b>：反常识开头 + 每14秒一个反转 + 提问收尾</div>
+    </div>
+    <div class="item" style="margin:0 0 8px">
+      <div class="l1"><span class="ititle">《2025我每天都在用的5个AI》</span><span class="ty v">📹</span><span class="st wait ml-auto">待解析</span></div>
+      <div class="l2"><span class="idata">👍 5.2k　❤️ 1.8k　💬 210 · 今天</span><span class="ml-auto row"><a class="open" href="#">看原视频↗</a><button class="mini do" onclick="show('analysis')">解析</button></span></div>
+    </div>
+  </div>
+
+  <!-- ===== analysis ===== -->
+  <div class="screen" id="analysis">
+    <button class="back" onclick="show('content')">← 返回</button>
+    <div class="h1">《别再花钱买AI课了》</div>
+    <div class="rmeta">📹 视频 · @AI玩家阿K · 小红书 · 5天前</div>
+    <div class="rstats">👍 1.2w　❤️ 4.2k　💬 890 <a class="open ml-auto" href="#">看原视频 ↗</a></div>
+    <div class="costline">💰 本次解析花费 <b>¥0.12</b>（抓取 ¥0.04 · AI ¥0.08）</div>
+    <div class="point"><div class="n">1</div><div><div class="t">开头第一句就勾住你</div><div class="d">一上来抛「别再花钱买 AI 课了」。</div></div></div>
+    <div class="point"><div class="n">2</div><div><div class="t">中间不停给你新东西</div><div class="d">每隔十几秒一个反转，舍不得划走。</div></div></div>
+    <div class="point"><div class="n">3</div><div><div class="t">结尾让你愿意点赞关注</div><div class="d">最后问「想要清单的评论区扣 1」。</div></div></div>
+    <div class="tip"><div class="lab">💡 你可以马上试的一件事</div><div class="do">下条视频，把最重要的那句话放第一句。</div></div>
+    <button class="btng" style="width:100%;margin-top:14px" onclick="show('mine')">和我自己比一比 →</button>
+  </div>
+
+  <!-- ===== method ===== -->
+  <div class="screen" id="method">
+    <button class="back" onclick="show('blogger')">← 返回</button>
+    <div class="h1">@AI玩家阿K 的整体套路</div>
+    <div class="rmeta">基于已解析的 6 条爆款（👍&gt;1000）· 多条对比更靠谱</div>
+    <div class="point"><div class="n">1</div><div><div class="t">开头都用反常识断言</div><div class="ev">📊 6 条里 5 条，均赞 9200 vs 普通 1300</div></div></div>
+    <div class="point"><div class="n">2</div><div><div class="t">中段高密度反转</div><div class="ev">📊 平均每 14 秒一个新信息</div></div></div>
+    <div class="point"><div class="n">3</div><div><div class="t">结尾固定引导三连</div><div class="ev">📊 带提问结尾评论高 2.3 倍</div></div></div>
+    <div class="tip"><div class="lab">💡 一句话</div><div class="do">反常识开头 + 高密度反转 + 提问收尾。</div></div>
+    <div style="text-align:center;margin-top:14px"><button class="fr" style="color:var(--accent)" onclick="show('prompt')">⚙️ 分析规则（高级）· 改提示词让总结更准</button></div>
+  </div>
+
+  <!-- ===== mine ===== -->
+  <div class="screen" id="mine">
+    <button class="back" onclick="show('me')">←</button>
+    <div class="h1">《我整理的10个AI神器》</div>
+    <div class="rmeta">📝 我的图文 · 👍210 · 对比对标 @AI工具研究所</div>
+    <div class="judge ok"><span class="face">✅</span><div><div class="t">你做得好的</div><div class="d">开头有钩子，标题带了数字。</div></div></div>
+    <div class="judge warn"><span class="face">⚠️</span><div><div class="t">可以更好的</div><div class="d">结尾没有引导收藏 —— 对标都会来一句「先收藏」。</div></div></div>
+    <div class="tip"><div class="lab">💡 下一条试试</div><div class="do">结尾加一句「先收藏，用到再翻出来」。</div></div>
+  </div>
+
+  <!-- ===== usage ===== -->
+  <div class="screen" id="usage">
+    <button class="back" onclick="tab('me')">← 我的</button>
+    <div class="h1">用量与成本</div>
+    <div class="rmeta">每条解析都记一笔成本，可按周期 / 按博主统计</div>
+    <div class="userow">本月　<span class="idata">解析 36 条</span><span class="c">¥4.20</span></div>
+    <div class="userow">本周　<span class="idata">解析 9 条</span><span class="c">¥1.05</span></div>
+    <div class="fcount">按博主</div>
+    <div class="userow">🎮 @AI玩家阿K　<span class="idata">18 条</span><span class="c">¥2.30</span></div>
+    <div class="userow">🔬 @AI工具研究所　<span class="idata">12 条</span><span class="c">¥1.40</span></div>
+    <div class="userow">⚡ 临时解析　<span class="idata">6 条</span><span class="c">¥0.50</span></div>
+    <div class="fcount">最近明细（每条可追溯）</div>
+    <div class="userow"><span class="idata">《别再花钱买AI课了》· 今天</span><span class="c">¥0.12</span></div>
+    <div class="userow"><span class="idata">《3个AI工具，第2个绝了》· 昨天</span><span class="c">¥0.15</span></div>
+  </div>
+
+  <!-- ===== prompt ===== -->
+  <div class="screen" id="prompt">
+    <button class="back" onclick="show('method')">← 返回</button>
+    <div class="h1">分析规则</div>
+    <div class="note">视频和图文各一套、互不干扰，可改可存，让总结越来越准。</div>
+    <div class="pills"><div class="pill on" id="pp-v" onclick="pk('v')">📹 拆视频</div><div class="pill" id="pp-a" onclick="pk('a')">📝 拆图文</div></div>
+    <textarea class="ta" id="pta"></textarea>
+    <div class="row" style="margin-top:11px"><button class="btng" style="flex:1" onclick="alert('已恢复默认（示意）')">恢复默认</button><button class="btnp" style="flex:1" onclick="alert('已保存（示意）')">保存</button></div>
+  </div>
+
+  </div>
+
+  <!-- bottom nav -->
+  <div class="tabbar">
+    <button class="tabbtn on" id="t-content" onclick="tab('content')"><span class="i">📋</span>内容</button>
+    <button class="tabbtn" id="t-bloggers" onclick="tab('bloggers')"><span class="i">👤</span>博主</button>
+    <button class="tabbtn" id="t-me" onclick="tab('me')"><span class="i">📈</span>我的</button>
+  </div>
+
+<script>
+  var PV=`你是爆款短视频拆解专家。给你一个博主的多条视频（含转写、时间戳、点赞/收藏/评论）：
+1. 只聚焦点赞靠前的爆款，与普通款对比；
+2. 从【开头/中段/结尾】找出共同套路；
+3. 每条给证据：多少条这么做、数据差异；
+4. 给"下一条可马上照做的一件事"。用大白话。`;
+  var PA=`你是爆款图文拆解专家。给你一个博主的多篇图文（含标题、正文、封面、点赞/收藏/评论）：
+1. 只聚焦点赞靠前的爆款，与普通款对比；
+2. 从【标题/封面/正文结构】找出共同套路；
+3. 每条给证据；4. 给"下一篇可马上照做的一件事"。用大白话。`;
+  function pk(k){document.getElementById('pp-v').classList.toggle('on',k==='v');document.getElementById('pp-a').classList.toggle('on',k==='a');document.getElementById('pta').value=k==='v'?PV:PA;}
+  function show(s){document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));document.getElementById(s).classList.add('active');if(s==='prompt')pk('v');window.scrollTo({top:0,behavior:'smooth'});}
+  function tab(s){show(s);['content','bloggers','me'].forEach(t=>document.getElementById('t-'+t).classList.toggle('on',t===s));}
+  function closeMenus(){document.querySelectorAll('.fmenu.show').forEach(m=>m.classList.remove('show'));}
+  function tog(btn){var m=btn.nextElementSibling,open=m.classList.contains('show');closeMenus();if(!open)m.classList.add('show');event.stopPropagation();}
+  function setf(o,v){o.closest('.fwrap').querySelector('.fpill .v').textContent=v;closeMenus();}
+  function multi(cb,unit){var w=cb.closest('.fwrap'),n=[...w.querySelectorAll('input:checked')].map(x=>x.dataset.n);w.querySelector('.fpill .v').textContent=n.length?(n.length+' '+unit):'全部';}
+  document.addEventListener('click',closeMenus);
+  function tg(){var h=document.documentElement,d=h.getAttribute('data-theme')==='dark';h.setAttribute('data-theme',d?'light':'dark');document.querySelector('.tt').textContent=d?'🌙':'☀️';}
+</script>
+</body>
+</html>

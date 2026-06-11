@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <script>
+    (function() {
+        document.documentElement.setAttribute('data-theme', 'light');
+    })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>学习集合 - 内容解析工作台</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/collections.css?v=__ASSET_VERSION__">
+</head>
+<body>
+    <div id="site-nav"></div>
+    <script src="/static/js/site-nav.js?v=__ASSET_VERSION__"></script>
+
+    <main class="lc-page">
+        <section class="lc-hero">
+            <div class="lc-copy">
+                <p class="lc-eyebrow">学习集合 · 新工作流</p>
+                <h1>导入一个专题，生成可复用的方法论</h1>
+                <p>视频课程或文档专题，按顺序解析，最后沉淀为 Obsidian 笔记。</p>
+                <div class="lc-points">
+                    <span>一个专题</span>
+                    <span>逐个解析</span>
+                    <span>导出 Markdown</span>
+                </div>
+            </div>
+
+            <section class="lc-import-card" aria-label="创建学习集合">
+                <label class="lc-label" for="collection-title">专题名称</label>
+                <input id="collection-title" class="lc-input" value="如何走出人生困局">
+
+                <div class="lc-type-tabs" role="tablist" aria-label="集合类型">
+                    <button class="lc-type active" data-type="video_course" type="button">视频课程</button>
+                    <button class="lc-type" data-type="document_topic" type="button">文档专题</button>
+                </div>
+
+                <button class="lc-drop" id="drop-action" type="button">
+                    <span class="lc-plus">+</span>
+                    <strong id="drop-title">上传课程视频</strong>
+                    <span id="drop-subtitle">选择专题文件夹，或一次选择多个视频。</span>
+                </button>
+
+                <div class="lc-import-actions">
+                    <button class="lc-btn" id="pick-folder" type="button">选择文件夹</button>
+                    <button class="lc-btn primary" id="pick-files" type="button">选择多个文件</button>
+                </div>
+
+                <input id="folder-input" type="file" webkitdirectory multiple hidden>
+                <input id="files-input" type="file" multiple hidden>
+
+                <div class="lc-import-preview" id="import-preview">
+                    <strong>尚未选择文件</strong>
+                    <span>选择后会按文件名顺序逐个解析</span>
+                </div>
+
+                <section class="lc-history" aria-label="历史学习集合">
+                    <div class="lc-history-head">
+                        <strong>历史专题</strong>
+                        <span id="collection-history-count">0 个</span>
+                    </div>
+                    <div class="lc-history-list" id="collection-history-list">
+                        <div class="lc-history-empty">暂无历史专题</div>
+                    </div>
+                </section>
+
+                <div class="lc-hint" id="token-hint"></div>
+            </section>
+        </section>
+
+        <section class="lc-workspace">
+            <header class="lc-workspace-head">
+                <div>
+                    <h2 id="workspace-title">如何走出人生困局</h2>
+                    <p id="workspace-subtitle">选择一个专题文件夹，开始逐个解析。</p>
+                </div>
+                <div class="lc-progress">
+                    <div><span>解析进度</span><strong id="progress-value">0%</strong></div>
+                    <div class="lc-progress-track"><span id="progress-fill"></span></div>
+                </div>
+            </header>
+
+            <div class="lc-board">
+                <aside class="lc-sources">
+                    <div class="lc-panel-head">
+                        <h3>Sources</h3>
+                        <span id="source-count">0 个</span>
+                    </div>
+                    <div class="lc-source-list" id="source-list">
+                        <div class="lc-empty">上传视频或文档后，这里会显示每个 source 的解析状态。</div>
+                    </div>
+                </aside>
+
+                <section class="lc-detail">
+                    <div class="lc-tabs">
+                        <button class="lc-tab active" data-view="summary" type="button">专题总结</button>
+                        <button class="lc-tab" data-view="source" type="button">当前 source</button>
+                        <button class="lc-tab" data-view="markdown" type="button">Markdown</button>
+                    </div>
+
+                    <article class="lc-card" id="summary-view">
+                        <div class="lc-summary-hero">
+                            <span>专题级综合学习总结</span>
+                            <strong id="summary-status">等待生成集合级总结</strong>
+                            <p id="summary-description">导入并解析完成后，再从整体视角生成总结。</p>
+                        </div>
+                        <div class="lc-summary-grid">
+                            <div><strong>知识结构</strong><p id="summary-structure">解析完成后生成。</p></div>
+                            <div><strong>递进关系</strong><p id="summary-progression">解析完成后生成。</p></div>
+                            <div><strong>论点与证据</strong><p id="summary-evidence">解析完成后生成。</p></div>
+                            <div><strong>SOP / 行动清单</strong><p id="summary-sop">解析完成后生成。</p></div>
+                        </div>
+                        <div class="lc-export-row">
+                            <div>
+                                <strong>Obsidian 输出</strong>
+                                <span>包含专题总论、核心概念、章节作用、递进关系、复习笔记和行动清单。</span>
+                            </div>
+                            <div>
+                                <button class="lc-btn" id="generate-summary" type="button">生成总结</button>
+                                <button class="lc-btn primary" id="export-markdown" type="button">导出</button>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="lc-card hidden" id="source-view">
+                        <h3 id="source-title">选择一个 source</h3>
+                        <p id="source-meta">左侧选择后查看详情。</p>
+                        <div class="lc-source-timing" id="source-timing"></div>
+                        <div class="lc-source-actions">
+                            <a class="lc-btn" id="open-source" href="#" target="_blank" rel="noopener">原文/逐字稿</a>
+                        </div>
+                        <div class="lc-source-content">
+                            <section>
+                                <h4>AI 解读摘要</h4>
+                                <div id="source-summary" class="lc-text-preview">解析完成后显示。</div>
+                            </section>
+                            <section>
+                                <h4>逐字稿预览</h4>
+                                <pre id="source-transcript" class="lc-transcript-preview">解析完成后显示。</pre>
+                            </section>
+                        </div>
+                    </article>
+
+                    <article class="lc-card hidden" id="markdown-view">
+                        <h3>Markdown 预览</h3>
+                        <pre id="markdown-preview">生成专题总结后显示。</pre>
+                    </article>
+                </section>
+            </div>
+        </section>
+    </main>
+
+    <div class="lc-toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/static/js/collections.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

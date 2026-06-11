@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>学做小红书 · 拆解爆款</title>
+<link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+<link rel="stylesheet" href="/static/css/editorial.css?v=1">
+<style>
+  :root{
+    --paper:#FBF8F3; --ink:#1B1A17; --ink-soft:#4A463F; --muted:#9A938A;
+    --line:#EBE4D9; --card:#FFFFFF; --accent:#E4503A; --accent-ink:#C23A26;
+    --accent-soft:rgba(228,80,58,.07); --video:#E4503A; --article:#2F8F6B;
+    --shadow:0 1px 2px rgba(27,26,23,.04),0 12px 40px -16px rgba(27,26,23,.12);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  body{
+    font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+    color:var(--ink);background:var(--paper);line-height:1.6;min-height:100vh;
+    background-image:radial-gradient(120% 60% at 50% -10%, rgba(228,80,58,.06), transparent 60%);
+  }
+  .serif{font-family:'Fraunces',Georgia,'Songti SC',serif}
+  a{color:inherit}
+  ::selection{background:var(--accent);color:#fff}
+
+  /* top bar */
+  .top{max-width:1040px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;gap:10px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:1.02rem;letter-spacing:.2px}
+  .brand .mark{width:26px;height:26px;border-radius:8px;background:var(--accent);color:#fff;display:flex;
+    align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:.95rem}
+  .nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+  .nav a{font-size:.9rem;color:var(--ink-soft);text-decoration:none;padding:7px 12px;border-radius:8px;cursor:pointer;transition:.15s}
+  .nav a:hover{background:rgba(27,26,23,.05)}
+  .nav a.on{color:var(--accent-ink);font-weight:600}
+  .nav .home{color:var(--muted)}
+
+  .wrap{max-width:760px;margin:0 auto;padding:0 28px 100px}
+  .view{display:none;animation:rise .4s cubic-bezier(.2,.7,.2,1) both}
+  .view.on{display:block}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  /* hero */
+  .hero{text-align:center;padding:54px 0 8px}
+  .eyebrow{font-size:.8rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin-bottom:18px}
+  .hero h1{font-family:'Fraunces',Georgia,'Songti SC',serif;font-weight:500;font-size:2.7rem;line-height:1.15;letter-spacing:-.01em}
+  .hero h1 em{font-style:italic;color:var(--accent)}
+  .hero .sub{margin:18px auto 0;max-width:480px;color:var(--ink-soft);font-size:1.05rem}
+
+  /* core input */
+  .box{margin-top:30px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:10px;
+    box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;transition:.2s}
+  .box:focus-within{border-color:var(--accent);box-shadow:0 1px 2px rgba(27,26,23,.04),0 16px 50px -18px rgba(228,80,58,.4)}
+  .box input{flex:1;border:none;outline:none;background:transparent;font-size:1.02rem;padding:13px 14px;color:var(--ink);min-width:0}
+  .box input::placeholder{color:var(--muted)}
+  .go{flex-shrink:0;border:none;background:var(--accent);color:#fff;font-weight:600;font-size:1rem;
+    padding:13px 22px;border-radius:12px;cursor:pointer;transition:.15s;font-family:inherit}
+  .go:hover{background:var(--accent-ink)}.go:active{transform:scale(.98)}.go:disabled{opacity:.5;cursor:not-allowed}
+  .samples{margin-top:16px;display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;font-size:.86rem;color:var(--muted)}
+  .chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px;cursor:pointer;
+    color:var(--ink-soft);transition:.15s;font-size:.86rem}
+  .chip:hover{border-color:var(--accent);color:var(--accent-ink);transform:translateY(-1px)}
+  .note{margin-top:18px;font-size:.82rem;color:var(--muted);text-align:center}
+  .note a{color:var(--accent-ink);cursor:pointer;font-weight:600}
+
+  /* loading */
+  .loading{text-align:center;padding:48px 0}
+  .dots{display:inline-flex;gap:6px}.dots i{width:8px;height:8px;border-radius:50%;background:var(--accent);
+    animation:bd 1.2s ease-in-out infinite}.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+  @keyframes bd{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+  .loading p{margin-top:16px;color:var(--ink-soft)}
+
+  /* result */
+  .result{margin-top:14px}
+  .src{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:8px}
+  .ty{font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px}
+  .ty.video{background:rgba(228,80,58,.1);color:var(--video)}.ty.article{background:rgba(47,143,107,.1);color:var(--article)}
+  .src .tt{font-weight:600;font-size:1.05rem}.src .by{color:var(--muted);font-size:.88rem}
+  .src .link{margin-left:auto;color:var(--accent-ink);text-decoration:none;font-size:.88rem;font-weight:600}
+  .pt{display:flex;gap:18px;padding:22px 0;border-bottom:1px solid var(--line)}
+  .pt .n{font-family:'Fraunces',serif;font-size:1.7rem;color:var(--accent);line-height:1;flex-shrink:0;width:34px;font-weight:500}
+  .pt h3{font-size:1.12rem;margin-bottom:7px;letter-spacing:-.01em}
+  .pt .bd{color:var(--ink-soft);line-height:1.85}
+  .one{margin-top:24px;background:var(--accent-soft);border:1px solid rgba(228,80,58,.16);border-radius:16px;padding:22px 24px}
+  .one .lab{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin-bottom:8px}
+  .one .do{font-family:'Fraunces',serif;font-size:1.25rem;line-height:1.5;color:var(--ink)}
+  .err{margin-top:18px;padding:16px 18px;border-radius:14px;background:#FCEEEA;border:1px solid #F3C9BF;color:#A23320}
+
+  /* secondary: lists */
+  .head{padding:40px 0 4px}.head h2{font-family:'Fraunces',serif;font-weight:500;font-size:1.8rem}
+  .head p{color:var(--muted);margin-top:6px;font-size:.95rem}
+  .filters{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 6px}
+  .filters select{font-family:inherit;font-size:.86rem;color:var(--ink);background:var(--card);
+    border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer;outline:none;transition:.15s}
+  .filters select:hover{border-color:var(--accent)}
+  .cnt{font-size:.84rem;color:var(--muted);margin:14px 2px 6px}
+  .row{padding:18px 0;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:flex-start}
+  .row .ic{font-size:1.1rem;flex-shrink:0;margin-top:1px}
+  .row .main{flex:1;min-width:0}
+  .row .tt{font-weight:600;font-size:1rem}
+  .row .meta{color:var(--muted);font-size:.85rem;margin-top:4px}
+  .row .meta a{color:var(--accent-ink);text-decoration:none}
+  .st{font-size:.7rem;font-weight:600;padding:2px 9px;border-radius:999px;margin-left:8px;white-space:nowrap}
+  .st.pending{background:rgba(27,26,23,.06);color:var(--ink-soft)}
+  .st.processing{background:rgba(228,80,58,.1);color:var(--accent-ink)}
+  .st.success{background:rgba(47,143,107,.12);color:var(--article)}
+  .st.failed{background:#FCEEEA;color:#A23320}
+  .act{flex-shrink:0;border:1px solid var(--line);background:var(--card);color:var(--ink);font-family:inherit;
+    font-size:.85rem;font-weight:600;padding:8px 14px;border-radius:10px;cursor:pointer;transition:.15s}
+  .act:hover{border-color:var(--accent);color:var(--accent-ink)}
+  .act.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.act.primary:hover{background:var(--accent-ink);color:#fff}
+  .empty{padding:40px 0;text-align:center;color:var(--muted)}
+
+  /* settings */
+  .field{display:flex;gap:8px;margin-top:18px}
+  .field input{flex:1;border:1px solid var(--line);border-radius:12px;padding:13px 14px;font-size:.95rem;outline:none;font-family:inherit}
+  .field input:focus{border-color:var(--accent)}
+  .saved{color:var(--article);font-size:.86rem;margin-top:10px}
+  .hidden{display:none!important}
+  @media(max-width:560px){.hero h1{font-size:2.1rem}.top{padding:18px}.wrap{padding:0 18px 80px}}
+</style>
+</head>
+<body>
+  <div id="site-nav"></div>
+  <script src="/static/js/site-nav.js"></script>
+  <div class="top">
+    <nav class="nav">
+      <a class="on" data-v="analyze" onclick="fwV('analyze')">拆解</a>
+      <a data-v="history" onclick="fwV('history')">我解析过的</a>
+      <a data-v="bloggers" onclick="fwV('bloggers')">我的对标</a>
+      <a data-v="settings" onclick="fwV('settings')">设置</a>
+    </nav>
+  </div>
+
+  <div class="wrap">
+
+    <!-- ANALYZE -->
+    <div class="view on" id="v-analyze">
+      <div class="hero">
+        <div class="eyebrow">拆解爆款 · 秒懂为什么火</div>
+        <h1 class="serif">贴一个链接，<br>看懂它<em>为什么火</em></h1>
+        <p class="sub">小红书的视频或图文都行。我帮你拆出开头、留人、引导，再告诉你下一条该怎么做。</p>
+        <div class="box">
+          <input id="url" placeholder="粘贴小红书内容链接…" autocomplete="off" spellcheck="false">
+          <button class="go" id="go">拆解 →</button>
+        </div>
+        <div class="samples">
+          没有链接？试一个例子：
+          <span class="chip" data-u="https://www.xiaohongshu.com/discovery/item/6a1ceb8a00000000080306aa?xsec_token=AB6w1KLme-ykqXzgvgySIufM_L-yfr8eomVpufWJ0fqk8=&xsec_source=pc_share">📹 视频示例</span>
+          <span class="chip" data-u="https://www.xiaohongshu.com/discovery/item/69e72660000000001f0055b6?xsec_token=ABhx8az_Lx2_9_ZyJqqZB8GgDp8g5pZsNIs_jdU-0rRSA=&xsec_source=pc_share">📝 图文示例</span>
+        </div>
+        <div class="note" id="token-note"></div>
+      </div>
+
+      <div class="loading hidden" id="loading">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <p id="loading-text">正在抓取…</p>
+      </div>
+      <div class="err hidden" id="err"></div>
+      <div class="result hidden" id="result"></div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="view" id="v-history">
+      <div class="head"><h2 class="serif">我解析过的</h2><p>原内容和解析结果都能回看。</p></div>
+      <div class="filters">
+        <select id="f-subscribe"><option value="">全部来源</option><option value="subscribed">已订阅</option><option value="adhoc">临时解析</option></select>
+        <select id="f-blogger"><option value="">全部博主</option></select>
+        <select id="f-status"><option value="">全部状态</option><option value="pending">待解析</option><option value="processing">解析中</option><option value="success">解析成功</option><option value="failed">解析失败</option></select>
+        <select id="f-type"><option value="">全部类型</option><option value="video">视频</option><option value="article">图文</option></select>
+        <select id="f-date"><option value="">全部时间</option><option value="today">今天</option><option value="7d">近 7 天</option><option value="30d">近 30 天</option><option value="90d">近 90 天</option></select>
+        <select id="f-sort"><option value="published_at">最新发布</option><option value="like_count">最高赞</option></select>
+      </div>
+      <div id="contents"><div class="empty">加载中…</div></div>
+    </div>
+
+    <!-- BLOGGERS -->
+    <div class="view" id="v-bloggers">
+      <div class="head"><h2 class="serif">我的对标</h2><p>订阅博主只抓取最近内容（默认不解析），你在「我解析过的」里挑值得的再拆。</p></div>
+      <div class="box" style="margin-top:22px">
+        <input id="sub-url" placeholder="粘贴博主主页链接，订阅追更…" autocomplete="off">
+        <button class="go" id="sub">订阅</button>
+      </div>
+      <div id="bloggers" style="margin-top:10px"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="view" id="v-settings">
+      <div class="head"><h2 class="serif">设置</h2><p>填入 API 令牌后即可使用（保存在你本地浏览器）。</p></div>
+      <div class="field">
+        <input id="token-input" type="password" placeholder="粘贴 API 令牌…">
+        <button class="go" id="save-token">保存</button>
+      </div>
+      <div class="saved hidden" id="token-saved">✓ 已保存，去「拆解」试试吧。</div>
+    </div>
+
+  </div>
+
+<script>
+(function(){
+  var TOKEN_KEY='vta_bearer_token', ENC='vta_encrypt_key_2024';
+  function getToken(){try{var raw=localStorage.getItem(TOKEN_KEY);if(!raw)return '';
+    var r=raw.split('').reverse().join('');return decodeURIComponent(escape(atob(r))).replace(ENC,'');}catch(e){return '';}}
+  function setToken(t){try{var e=btoa(unescape(encodeURIComponent(ENC+t)));localStorage.setItem(TOKEN_KEY,e.split('').reverse().join(''));}catch(e){}}
+  var $=function(id){return document.getElementById(id);};
+  function show(e){e.classList.remove('hidden');}function hide(e){e.classList.add('hidden');}
+  function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+  function md(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');}
+  function hdrs(){return {'Content-Type':'application/json','Authorization':'Bearer '+getToken()};}
+
+  // view switch
+  window.fwV=function(v){
+    document.querySelectorAll('.view').forEach(function(e){e.classList.remove('on');});
+    document.querySelectorAll('.nav a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v);});
+    $('v-'+v).classList.add('on');window.scrollTo({top:0,behavior:'smooth'});
+    if(v==='history'){fwLoadBloggerOptions();fwLoadContents();}
+    if(v==='bloggers')fwLoadBloggers();
+  };
+
+  function checkToken(){
+    if(getToken()){$('token-note').innerHTML='';}
+    else{$('token-note').innerHTML='还没设置令牌？<a onclick="fwV(\'settings\')">去设置</a>';}
+  }
+
+  // ---------- analyze ----------
+  var timers=[];
+  function startLoad(){var steps=['正在抓取内容…','视频会下载并本地转写（约 1 分钟）…','正在让 AI 拆解…'];
+    $('loading-text').textContent=steps[0];
+    timers.push(setTimeout(function(){$('loading-text').textContent=steps[1];},3500));
+    timers.push(setTimeout(function(){$('loading-text').textContent=steps[2];},22000));}
+  function stopLoad(){timers.forEach(clearTimeout);timers=[];}
+
+  function renderResult(d){
+    var tc=d.media_type==='video'?'video':'article', tt=d.media_type==='video'?'视频':'图文';
+    var h='<div class="src"><span class="ty '+tc+'">'+tt+'</span><span class="tt">'+esc(d.title)+'</span>'+
+      '<span class="by">@'+esc(d.author)+(d.stats?(' · 👍 '+(d.stats.like_count||0)):'')+'</span>'+
+      '<a class="link" href="'+esc(d.original_url)+'" target="_blank" rel="noopener">看原内容 ↗</a></div>';
+    var n=1, ot=d.one_thing||'';
+    (d.sections||[]).forEach(function(s){
+      var isOne=/一件事|马上试|下一条|下一篇/.test(s.title);
+      if(isOne){return;}
+      h+='<div class="pt"><div class="n">'+(n<10?'0'+n:n)+'</div><div><h3>'+esc(s.title)+'</h3><div class="bd">'+md(s.body)+'</div></div></div>';
+      n++;
+    });
+    if(ot){h+='<div class="one"><div class="lab">你可以马上试的一件事</div><div class="do">'+md(ot)+'</div></div>';}
+    $('result').innerHTML=h;show($('result'));
+  }
+  function showErr(m){stopLoad();hide($('loading'));hide($('result'));$('err').innerHTML=esc(m);show($('err'));$('go').disabled=false;}
+
+  function analyze(url){
+    url=(url||$('url').value||'').trim();if(!url){$('url').focus();return;}
+    $('url').value=url;
+    if(!getToken()){fwV('settings');return;}
+    hide($('err'));hide($('result'));show($('loading'));$('go').disabled=true;startLoad();
+    fetch('/api/flywheel/analyze',{method:'POST',headers:hdrs(),body:JSON.stringify({url:url})})
+      .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+      .then(function(r){stopLoad();hide($('loading'));$('go').disabled=false;
+        if(r.s===401||r.s===403){showErr('令牌无效，请到「设置」重新填写。');return;}
+        if(!r.j||r.j.ok!==true){showErr((r.j&&r.j.error)||'解析失败，请重试。');return;}
+        renderResult(r.j);})
+      .catch(function(){showErr('网络错误，请重试。');});
+  }
+  $('go').addEventListener('click',function(){analyze();});
+  $('url').addEventListener('keydown',function(e){if(e.key==='Enter')analyze();});
+  document.querySelectorAll('.chip').forEach(function(c){c.addEventListener('click',function(){analyze(c.dataset.u);});});
+
+  // ---------- history ----------
+  var bloggerOptsLoaded=false;
+  function fwLoadBloggerOptions(){
+    if(bloggerOptsLoaded)return;bloggerOptsLoaded=true;
+    fetch('/api/flywheel/bloggers',{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
+      (d.items||[]).forEach(function(b){var o=document.createElement('option');o.value=b.id;o.textContent=b.handle;$('f-blogger').appendChild(o);});
+    }).catch(function(){});
+  }
+  window.fwLoadContents=function(){
+    var qs=new URLSearchParams();
+    var map={subscribe:'f-subscribe',blogger_ids:'f-blogger',statuses:'f-status',media_type:'f-type',date:'f-date',sort:'f-sort'};
+    for(var k in map){var v=$(map[k]).value;if(v)qs.set(k,v);}
+    $('contents').innerHTML='<div class="empty">加载中…</div>';
+    fetch('/api/flywheel/contents?'+qs.toString(),{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
+      if(!d.items||!d.items.length){$('contents').innerHTML='<div class="empty">没有匹配的内容。去「拆解」试一条，或「我的对标」订阅博主。</div>';return;}
+      var h='<div class="cnt">共 '+d.total+' 条</div>';
+      d.items.forEach(function(c){
+        var stTxt={pending:'待解析',processing:'解析中',success:'已解析',failed:'解析失败'}[c.analysis_status]||c.analysis_status;
+        var act = c.analysis_status==='success'
+          ? '<button class="act primary" onclick="fwView('+c.id+')">看解析</button>'
+          : (c.analysis_status==='failed'
+              ? '<button class="act" onclick="fwRun(\''+encodeURIComponent(c.original_url)+'\')">重试</button>'
+              : '<button class="act primary" onclick="fwRun(\''+encodeURIComponent(c.original_url)+'\')">解析</button>');
+        h+='<div class="row"><span class="ic">'+(c.media_type==='video'?'📹':'📝')+'</span>'+
+          '<div class="main"><div class="tt">'+esc(c.title)+'<span class="st '+c.analysis_status+'">'+stTxt+'</span></div>'+
+          '<div class="meta">@'+esc(c.blogger_handle)+' · 👍 '+c.like_count+' · <a href="'+esc(c.original_url)+'" target="_blank" rel="noopener">看原内容↗</a></div></div>'+
+          act+'</div>';
+      });
+      $('contents').innerHTML=h;
+    }).catch(function(){$('contents').innerHTML='<div class="err">加载失败，请检查令牌（设置）。</div>';});
+  };
+  // auto-apply on any filter change
+  ['f-subscribe','f-blogger','f-status','f-type','f-date','f-sort'].forEach(function(id){
+    $(id).addEventListener('change',fwLoadContents);
+  });
+  window.fwView=function(id){
+    fwV('analyze');hide($('err'));hide($('result'));show($('loading'));$('loading-text').textContent='正在加载解析结果…';
+    fetch('/api/flywheel/content/'+id,{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
+      hide($('loading'));
+      if(d.status!=='success'){showErr(d.error||'这条还没有解析成功，可在列表里点「解析」。');return;}
+      renderResult(d);
+    }).catch(function(){showErr('加载失败');});
+  };
+  window.fwRun=function(u){fwV('analyze');analyze(decodeURIComponent(u));};
+
+  // ---------- bloggers ----------
+  window.fwLoadBloggers=function(){
+    fetch('/api/flywheel/bloggers',{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
+      if(!d.items||!d.items.length){$('bloggers').innerHTML='<div class="empty">还没订阅博主。</div>';return;}
+      var h='';d.items.forEach(function(b){
+        h+='<div class="row"><span class="ic">'+(b.pinned?'★':'👤')+'</span><div class="main">'+
+          '<div class="tt">'+esc(b.handle)+'</div><div class="meta">'+esc(b.platform)+' · 粉丝 '+b.follower_count+'</div></div></div>';});
+      $('bloggers').innerHTML=h;
+    }).catch(function(){$('bloggers').innerHTML='<div class="err">加载失败</div>';});
+  };
+  $('sub').addEventListener('click',function(){
+    var url=($('sub-url').value||'').trim();if(!url)return;if(!getToken()){fwV('settings');return;}
+    $('sub').disabled=true;
+    fetch('/api/flywheel/subscribe',{method:'POST',headers:hdrs(),body:JSON.stringify({url:url})})
+      .then(function(r){return r.json();}).then(function(d){$('sub').disabled=false;
+        if(d.ok){$('sub-url').value='';bloggerOptsLoaded=false;fwLoadBloggers();}else alert(d.error||'订阅失败');})
+      .catch(function(){$('sub').disabled=false;alert('网络错误');});
+  });
+
+  // ---------- settings ----------
+  $('save-token').addEventListener('click',function(){
+    var t=($('token-input').value||'').trim();if(!t)return;setToken(t);show($('token-saved'));checkToken();
+  });
+  if(getToken())$('token-input').value='';
+  checkToken();
+})();
+</script>
+</body>
+</html>

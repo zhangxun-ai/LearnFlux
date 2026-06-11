@@ -26,12 +26,13 @@ class Transcriber:
     音视频转录器，基于CapsWriter-Offline客户端
     """
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, progress_callback=None):
         """Initialize transcriber with workspace directory."""
         if config is None:
             config = load_config()
 
         self.config = config
+        self.progress_callback = progress_callback
         self.output_dir = get_workspace_dir()
         self.max_retries = config.get("capswriter", {}).get("max_retries", 3)
         self.retry_delay = config.get("capswriter", {}).get("retry_delay", 5)
@@ -80,6 +81,7 @@ class Transcriber:
                 output_dir=self.output_dir,
                 max_retries=self.max_retries,
                 retry_delay=self.retry_delay,
+                progress_callback=self.progress_callback,
             )
 
             logger.info(f"已配置CapsWriter客户端，服务器: {server_addr}:{server_port}")
@@ -115,6 +117,10 @@ class Transcriber:
             # 确保音频文件存在
             if not os.path.exists(audio_path):
                 raise FileNotFoundError(f"音频文件不存在: {audio_path}")
+
+            # 本地 mlx-whisper 引擎优先：启用时直接本地转录，无需远程 CapsWriter 服务器
+            if self.config.get("local_whisper", {}).get("enabled", False):
+                return self._transcribe_local_whisper(audio_path, output_base)
 
             # 使用CapsWriter客户端进行转录（客户端内部已有重试逻辑）
             logger.info(f"调用CapsWriter客户端转录文件: {audio_path}")
@@ -178,3 +184,75 @@ class Transcriber:
         except Exception as e:
             logger.exception(f"转录音频文件失败: {str(e)}")
             raise
+
+    def _transcribe_local_whisper(self, audio_path, output_base):
+        """
+        使用本地 mlx-whisper 转录（macOS Apple Silicon 本地引擎）。
+        产出与 CapsWriter 路径一致的结果结构，后续 LLM 校对/总结链路无需改动。
+
+        参数:
+            audio_path: 音频/视频文件路径（mlx-whisper 内部用 ffmpeg 解码，两者皆可）
+            output_base: 输出文件基础名（不含扩展名）
+
+        返回:
+            dict: {transcript, txt_path, funasr_json_data, generated_files}
+        """
+        import subprocess
+
+        lw = self.config.get("local_whisper", {})
+        binary = os.path.expanduser(
+            lw.get("binary", "~/.venvs/mlx-whisper/bin/mlx_whisper")
+        )
+        model = lw.get("model", "mlx-community/whisper-large-v3-turbo")
+        language = (lw.get("language") or "").strip()
+        timeout = lw.get("timeout", 1800)
+
+        if not os.path.exists(binary):
+            raise RuntimeError(
+                f"本地 mlx-whisper 可执行文件不存在: {binary}（请检查 config.local_whisper.binary）"
+            )
+
+        txt_path = os.path.join(self.output_dir, f"{output_base}.txt")
+        cmd = [
+            binary,
+            audio_path,
+            "--model", model,
+            "--output-dir", self.output_dir,
+            "--output-name", output_base,
+            "--output-format", "txt",
+            "--verbose", "False",
+        ]
+        if language:
+            cmd += ["--language", language]
+
+        logger.info(
+            f"本地 mlx-whisper 转录开始: model={model}, lang={language or 'auto'}, audio={audio_path}"
+        )
+        start = time.time()
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"本地 mlx-whisper 转录超时(>{timeout}s): {audio_path}")
+
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout or "")[-600:]
+            raise RuntimeError(
+                f"本地 mlx-whisper 转录失败 (exit {proc.returncode}): {tail}"
+            )
+
+        if not os.path.exists(txt_path):
+            raise RuntimeError(f"本地 mlx-whisper 未生成文本文件: {txt_path}")
+
+        with open(txt_path, "r", encoding="utf-8") as f:
+            transcript = f.read().strip()
+
+        logger.info(
+            f"本地 mlx-whisper 转录完成，用时 {time.time() - start:.1f}s，文本长度 {len(transcript)}"
+        )
+
+        return {
+            "transcript": transcript,
+            "txt_path": txt_path,
+            "funasr_json_data": None,
+            "generated_files": [Path(txt_path)],
+        }

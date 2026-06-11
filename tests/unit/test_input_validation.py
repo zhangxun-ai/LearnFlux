@@ -119,3 +119,22 @@ class TestMetadataLengthLimits:
         assert override.title is None
         assert override.description is None
         assert override.author is None
+
+
+class TestCommentOptionValidation:
+    """Verify optional comment insight request fields."""
+
+    def test_comment_fetching_is_disabled_by_default(self):
+        """TranscribeRequest should not fetch comments unless explicitly enabled."""
+        req = TranscribeRequest(url="https://example.com/video")
+        assert req.include_comments is False
+        assert req.comment_limit == 100
+
+    def test_comment_limit_has_upper_bound(self):
+        """Large comment windows should be rejected to control cost."""
+        with pytest.raises(ValidationError):
+            TranscribeRequest(
+                url="https://example.com/video",
+                include_comments=True,
+                comment_limit=500,
+            )

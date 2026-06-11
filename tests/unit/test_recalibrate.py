@@ -168,3 +168,32 @@ class TestSaveLLMResultsSummaryBackfill:
         ]
         assert len(calibrated_calls) == 1
         assert calibrated_calls[0].kwargs["content"] == "calibrated body"
+
+    def test_saves_comment_insight_when_present(self, monkeypatch):
+        """Comment insight artifacts should be persisted with LLM results."""
+        from video_transcript_api.api.services.llm_ops import _save_llm_results
+
+        mock_cm = self._patch_cache_manager(monkeypatch)
+        result_dict = self._make_result_dict("fresh summary")
+        result_dict["评论洞察"] = "comment insight body"
+        result_dict["comment_samples"] = [{"text": "useful comment", "like_count": 42}]
+
+        _save_llm_results(
+            task_id="t5",
+            platform="youtube",
+            media_id="abc",
+            use_speaker_recognition=False,
+            result_dict=result_dict,
+            calibrate_only=False,
+        )
+
+        comment_calls = [
+            c for c in mock_cm.save_llm_result.call_args_list
+            if c.kwargs.get("llm_type") in ("comment_insight", "comment_samples")
+        ]
+        assert [c.kwargs["llm_type"] for c in comment_calls] == [
+            "comment_insight",
+            "comment_samples",
+        ]
+        assert comment_calls[0].kwargs["content"] == "comment insight body"
+        assert comment_calls[1].kwargs["content"] == result_dict["comment_samples"]

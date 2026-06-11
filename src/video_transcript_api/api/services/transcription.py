@@ -1,6 +1,9 @@
 import asyncio
+import copy
 import datetime
+import inspect
 import os
+import subprocess
 import threading
 import time
 from typing import Optional, Dict, Any
@@ -30,6 +33,7 @@ from ...utils.notifications.channel import _clean_url
 from ...utils.rendering import get_base_url
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
+from ...utils.task_progress import estimate_eta_seconds
 
 logger = get_logger()
 config = get_config()
@@ -39,6 +43,309 @@ cache_manager = get_cache_manager()
 task_queue = get_task_queue()
 llm_task_queue = get_llm_queue()
 executor = get_executor()
+
+
+def _safe_update_progress(task_id: str, **kwargs):
+    """Best-effort task progress update; progress must not break the task."""
+    try:
+        return cache_manager.update_task_progress(task_id, **kwargs)
+    except Exception as exc:
+        logger.debug(f"task progress update failed: {task_id}, error={exc}")
+        return None
+
+
+def _extract_audio_to_file(src_path: str, out_dir: str, media_id: str) -> Optional[str]:
+    """用 ffmpeg 抽取 16kHz 单声道压缩音频(m4a)，体积远小于原视频。
+
+    本地上传转写时先抽小音频、删原视频，避免几个 G 的文件在整个转写期间一直占盘
+    （参考本地 video2audio.sh 的做法）。失败返回 None，调用方退回直接转写原文件。
+    """
+    try:
+        out_path = os.path.join(out_dir, f"{media_id}.audio.m4a")
+        cmd = [
+            "ffmpeg", "-y", "-i", src_path,
+            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "aac", "-b:a", "64k",
+            out_path,
+        ]
+        proc = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3600
+        )
+        if proc.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+            return out_path
+        logger.warning(f"ffmpeg 抽音频返回码 {proc.returncode}，退回直接转写原文件")
+    except Exception as exc:
+        logger.warning(f"ffmpeg 抽音频异常，退回直接转写原文件: {exc}")
+    return None
+
+
+# 文档类扩展名：走文本提取（而非音视频转写）
+_DOC_EXTS = {".txt", ".md", ".markdown", ".csv", ".log", ".pdf", ".docx"}
+
+
+def _extract_document_text(path: str, ext: str) -> str:
+    """从本地文档提取纯文本：txt/md/csv/log 直接读，pdf 用 pypdf，docx 用 python-docx。"""
+    ext = (ext or "").lower()
+    if ext in (".txt", ".md", ".markdown", ".csv", ".log"):
+        with open(path, "rb") as f:
+            raw = f.read()
+        for enc in ("utf-8", "gb18030", "latin-1"):
+            try:
+                return raw.decode(enc).strip()
+            except UnicodeDecodeError:
+                continue
+        return raw.decode("utf-8", errors="ignore").strip()
+    if ext == ".pdf":
+        from pypdf import PdfReader
+
+        reader = PdfReader(path)
+        parts = [(page.extract_text() or "") for page in reader.pages]
+        return "\n".join(parts).strip()
+    if ext == ".docx":
+        import docx
+
+        document = docx.Document(path)
+        return "\n".join(p.text for p in document.paragraphs).strip()
+    raise ValueError(f"不支持的文档格式: {ext}")
+
+
+def process_local_upload(
+    task_id: str,
+    file_path: str,
+    original_name: str,
+    display_url: str,
+    media_id: str,
+    use_speaker_recognition: bool = False,
+) -> Dict[str, Any]:
+    """处理本地上传的音视频或文档，复用 LLM 后处理与结果页。
+
+    音视频：本地 mlx-whisper 转写（先抽小音频省空间）。文档(txt/md/pdf/docx)：直接提取文本。
+    两者都与平台字幕路径同构地 save_cache + 入 LLM 队列；/view/<view_token> 查看；临时文件用后即删。
+    """
+    tracker = PerfTracker(task_id=task_id)
+    audio_path = None
+    try:
+        cache_manager.update_task_status(task_id, TaskStatus.PROCESSING)
+
+        if not os.path.exists(file_path):
+            cache_manager.update_task_status(
+                task_id, TaskStatus.FAILED, error_message="上传文件不存在"
+            )
+            return {"status": "failed", "message": "上传文件不存在"}
+
+        ext = os.path.splitext(original_name)[1].lower()
+
+        if ext in _DOC_EXTS:
+            # 文档：直接提取文本，不走转写
+            _safe_update_progress(
+                task_id, stage="transcribing", stage_label="正在解析文档",
+                basis="local_upload", confidence="high",
+            )
+            transcript = _extract_document_text(file_path, ext).strip()
+            empty_msg = "未能从文档中提取到文本（可能是扫描件/图片型 PDF）"
+        else:
+            # 音视频：省空间——先抽 16kHz 单声道小音频、立即删原视频，再转写音频，
+            # 避免几个 G 的视频在整个转写期间占盘。抽取失败则退回直接转写原文件。
+            _safe_update_progress(
+                task_id, stage="transcribing", stage_label="正在提取音频",
+                basis="local_upload", confidence="high",
+            )
+            audio_path = _extract_audio_to_file(file_path, os.path.dirname(file_path), media_id)
+            transcribe_target = file_path
+            if audio_path:
+                transcribe_target = audio_path
+                try:
+                    os.remove(file_path)
+                    logger.info(
+                        f"已抽音频并删除原文件，省空间: task={task_id}, audio={os.path.basename(audio_path)}"
+                    )
+                except OSError:
+                    pass
+
+            _safe_update_progress(
+                task_id, stage="transcribing", stage_label="正在转录本地文件",
+                basis="local_upload", confidence="high",
+            )
+            # 长视频（如 1-2 小时）可能超过默认 30 分钟的转写超时，
+            # 这里为本地上传放宽到 4 小时，避免长内容半途超时失败。
+            upload_cfg = copy.deepcopy(get_config())
+            _lw = upload_cfg.setdefault("local_whisper", {})
+            _lw["timeout"] = max(int(_lw.get("timeout") or 1800), 14400)
+            transcriber = Transcriber(
+                config=upload_cfg,
+                progress_callback=_make_asr_progress_callback(task_id, "local-upload"),
+            )
+            output_base = (
+                datetime.datetime.now().strftime("%y%m%d-%H%M%S") + "_" + media_id[:8]
+            )
+            result = transcriber.transcribe(transcribe_target, output_base)
+            transcript = (result.get("transcript") or "").strip()
+            empty_msg = "转录结果为空"
+
+        if not transcript:
+            cache_manager.update_task_status(
+                task_id, TaskStatus.FAILED, error_message=empty_msg
+            )
+            return {"status": "failed", "message": empty_msg}
+
+        cache_manager.save_cache(
+            platform="generic",
+            url=display_url,
+            media_id=media_id,
+            use_speaker_recognition=False,
+            transcript_data=transcript,
+            transcript_type="capswriter",
+            title=original_name,
+            author="本地上传",
+            description="",
+        )
+
+        llm_task_queue.put(
+            {
+                "task_id": task_id,
+                "url": display_url,
+                "display_url": original_name,
+                "platform": "generic",
+                "media_id": media_id,
+                "video_title": original_name,
+                "author": "本地上传",
+                "description": "",
+                "transcript": transcript,
+                "use_speaker_recognition": False,
+                "is_generic": True,
+                "wechat_webhook": None,
+                "notification_channel": None,
+                "notification_webhooks": {},
+                "include_comments": False,
+                "comment_limit": 100,
+                "perf_tracker": tracker,
+            }
+        )
+        cache_manager.update_task_status(
+            task_id, TaskStatus.CALIBRATING, platform="generic", media_id=media_id
+        )
+        logger.info(
+            f"本地上传转录完成，已入 LLM 队列: {task_id}, file={original_name}, chars={len(transcript)}"
+        )
+        return {"status": "success", "message": "本地转录成功"}
+    except Exception as exc:
+        logger.exception(f"本地上传转录失败: {task_id}, error={exc}")
+        cache_manager.update_task_status(
+            task_id, TaskStatus.FAILED, error_message=f"本地转录失败: {exc}"
+        )
+        return {"status": "failed", "message": str(exc)}
+    finally:
+        # 清理全部临时文件：原上传文件 + 抽出的音频，不留任何重复存储
+        for _p in (file_path, audio_path):
+            if _p and os.path.exists(_p):
+                try:
+                    os.remove(_p)
+                except OSError:
+                    pass
+
+
+def _make_download_progress_callback(task_id: str):
+    started_at = time.time()
+    state = {"last_percent": -1, "last_time": 0.0}
+
+    def _callback(downloaded: int, total: int | None):
+        if not total or total <= 0:
+            return
+        fraction = max(0.0, min(1.0, downloaded / total))
+        percent = int(fraction * 100)
+        now = time.time()
+        if percent < 100 and percent - state["last_percent"] < 5 and now - state["last_time"] < 5:
+            return
+        state["last_percent"] = percent
+        state["last_time"] = now
+        eta = estimate_eta_seconds(
+            completed=downloaded,
+            total=total,
+            elapsed_seconds=now - started_at,
+        )
+        _safe_update_progress(
+            task_id,
+            stage="downloading",
+            stage_label="正在下载音视频",
+            fraction=fraction,
+            basis="download_bytes",
+            confidence="high",
+            evidence={
+                "completed": downloaded,
+                "total": total,
+                "unit": "bytes",
+            },
+            eta_seconds=eta,
+        )
+
+    return _callback
+
+
+def _download_file_with_progress(downloader, url: str, filename: str, task_id: str):
+    callback = _make_download_progress_callback(task_id)
+    try:
+        params = inspect.signature(downloader.download_file).parameters
+    except (TypeError, ValueError):
+        params = {}
+    if "progress_callback" in params:
+        return downloader.download_file(url, filename, progress_callback=callback)
+    return downloader.download_file(url, filename)
+
+
+def _make_asr_progress_callback(task_id: str, source: str):
+    started_at = time.time()
+
+    def _callback(payload: dict):
+        progress_value = payload.get("progress")
+        fraction = None
+        if progress_value is not None:
+            fraction = max(0.0, min(1.0, float(progress_value) / 100))
+
+        completed = payload.get("completed")
+        total = payload.get("total")
+        eta = estimate_eta_seconds(
+            completed=completed,
+            total=total,
+            elapsed_seconds=time.time() - started_at,
+        )
+        if source == "funasr":
+            phase = payload.get("phase")
+            basis = (
+                "funasr_upload_progress"
+                if phase == "upload"
+                else "funasr_server_progress"
+            )
+            confidence = "high"
+            unit = "chunks" if phase == "upload" else "percent"
+        else:
+            basis = "capswriter_audio_sent"
+            confidence = "medium"
+            unit = "seconds"
+
+        evidence = {
+            "source": source,
+            "phase": payload.get("phase"),
+            "unit": unit,
+        }
+        if completed is not None:
+            evidence["completed"] = completed
+        if total is not None:
+            evidence["total"] = total
+        if progress_value is not None:
+            evidence["progress"] = progress_value
+
+        _safe_update_progress(
+            task_id,
+            stage="transcribing",
+            stage_label="正在转录音视频",
+            fraction=fraction,
+            basis=basis,
+            confidence=confidence,
+            evidence=evidence,
+            eta_seconds=eta,
+            message=payload.get("message"),
+        )
+
+    return _callback
 
 
 class MetadataOverride(BaseModel):
@@ -85,6 +392,12 @@ class TranscribeRequest(BaseModel):
     )
     notification_config: Optional[NotificationConfig] = Field(
         None, description="通知配置（可选，指定渠道和自定义 webhook）"
+    )
+    include_comments: bool = Field(
+        False, description="是否获取高赞评论并生成评论洞察"
+    )
+    comment_limit: int = Field(
+        100, ge=1, le=200, description="热评拉取上限，仅在 include_comments=true 时生效"
     )
 
     @field_validator("wechat_webhook", "feishu_webhook")
@@ -222,6 +535,20 @@ def merge_metadata(parsed_metadata: Optional[dict], metadata_override: Optional[
     return final_metadata
 
 
+def _should_use_cached_llm_results(cache_data: dict, include_comments: bool) -> bool:
+    """Return whether a cache hit fully satisfies the current request."""
+    has_llm_results = (
+        cache_data is not None
+        and "llm_calibrated" in cache_data
+        and "llm_summary" in cache_data
+    )
+    if not has_llm_results:
+        return False
+    if include_comments and not cache_data.get("comment_insight"):
+        return False
+    return True
+
+
 async def verify_token(authorization: str = Header(None), request: Request = None):
     """
     验证API令牌（支持多用户）
@@ -262,9 +589,18 @@ async def process_task_queue():
             notification_webhooks = task.get("notification_webhooks", {})
             download_url = task.get("download_url")
             metadata_override = task.get("metadata_override")
+            include_comments = task.get("include_comments", False)
+            comment_limit = task.get("comment_limit", 100)
 
             try:
                 cache_manager.update_task_status(task_id, TaskStatus.PROCESSING, download_url=download_url)
+                _safe_update_progress(
+                    task_id,
+                    stage="url_parsing",
+                    stage_label="任务已开始，正在解析链接",
+                    basis="task_started",
+                    confidence="high",
+                )
 
                 future = executor.submit(
                     process_transcription,
@@ -276,14 +612,26 @@ async def process_task_queue():
                     metadata_override,
                     notification_channel=notification_channel,
                     notification_webhooks=notification_webhooks,
+                    include_comments=include_comments,
+                    comment_limit=comment_limit,
                 )
 
                 def task_completed(future_result):
-                    # 状态由 process_transcription / LLM 阶段写入 DB；
-                    # 此回调仅兜底 future 意外抛出（未被内部捕获）的情况。
+                    # 各阶段（process_transcription / LLM）会在内部把状态写入 DB；
+                    # 但「下载失败」等早退路径只是正常 return 一个 {"status":"failed"} 字典、
+                    # 并不抛异常，若不在此兜底写回终态，任务会永远停留在 processing。
                     try:
-                        future_result.result()
-                        logger.info(f"任务完成: {task_id}")
+                        result = future_result.result()
+                        if isinstance(result, dict) and result.get("status") == "failed":
+                            # 早退失败路径：写回终态，避免页面一直显示"处理中"
+                            error_message = result.get("message", "任务失败")
+                            logger.warning(f"任务失败: {task_id}, 原因: {error_message}")
+                            cache_manager.update_task_status(
+                                task_id, TaskStatus.FAILED,
+                                error_message=error_message,
+                            )
+                        else:
+                            logger.info(f"任务完成: {task_id}")
                     except Exception as exc:
                         logger.exception(
                             f"任务处理失败: {task_id}, URL: {url}, 错误: {exc}"
@@ -318,7 +666,7 @@ async def process_task_queue():
 def process_transcription(
     task_id, url, use_speaker_recognition=False, wechat_webhook=None,
     download_url=None, metadata_override=None, notification_channel=None,
-    notification_webhooks=None,
+    notification_webhooks=None, include_comments=False, comment_limit=100,
 ):
     """
     处理视频转录
@@ -332,6 +680,8 @@ def process_transcription(
         metadata_override: 元数据覆盖（dict）
         notification_channel: 指定通知渠道（wechat/feishu/None=全部）
         notification_webhooks: per-channel webhook dict {"wechat": "...", "feishu": "..."}
+        include_comments: 是否在 LLM 阶段生成高赞评论洞察
+        comment_limit: 热评拉取上限
     """
     if notification_webhooks is None:
         notification_webhooks = {}
@@ -385,6 +735,13 @@ def process_transcription(
         # url 本身就是平台链接，直接解析
         check_url = url
         logger.info(f"[URL解析] 开始解析 URL: {check_url[:100]}")
+        _safe_update_progress(
+            task_id,
+            stage="url_parsing",
+            stage_label="正在解析链接",
+            basis="stage_transition",
+            confidence="medium",
+        )
 
         with tracker.track("url_parse"):
             try:
@@ -410,6 +767,14 @@ def process_transcription(
         # ==================== 阶段2: 缓存检测（在创建下载器之前）====================
         cache_data = None
         is_generic_downloader = platform == 'generic'
+        _safe_update_progress(
+            task_id,
+            stage="cache_check",
+            stage_label="正在检查缓存",
+            basis="url_parse_result",
+            confidence="high",
+            evidence={"platform": platform, "media_id": video_id},
+        )
 
         with tracker.track("cache_check"):
             if video_id and platform and not is_generic_downloader:
@@ -453,7 +818,7 @@ def process_transcription(
             has_llm_calibrated = "llm_calibrated" in cache_data
             has_llm_summary = "llm_summary" in cache_data
 
-            if has_llm_calibrated and has_llm_summary:
+            if _should_use_cached_llm_results(cache_data, include_comments):
                 logger.info("缓存中已有 LLM 结果，直接使用")
                 cache_type = "含说话人识别" if has_speaker_recognition else "普通转录"
                 engine_info = "FunASR" if has_speaker_recognition else "CapsWriter"
@@ -583,6 +948,14 @@ def process_transcription(
 
             # 缓存部分命中（有转录但无 LLM 结果），记录计数
             tracker.count("cache_hit_partial")
+            _safe_update_progress(
+                task_id,
+                stage="calibrating",
+                stage_label="已命中转录缓存，正在校对和总结",
+                basis="cache_lookup",
+                confidence="high",
+                evidence={"transcript_chars": len(transcript)},
+            )
 
             try:
                 llm_task_queue.put(
@@ -604,6 +977,11 @@ def process_transcription(
                         "wechat_webhook": wechat_webhook,
                         "notification_channel": notification_channel,
                         "notification_webhooks": notification_webhooks,
+                        "include_comments": include_comments,
+                        "comment_limit": comment_limit,
+                        "comment_only": has_llm_calibrated and has_llm_summary and include_comments,
+                        "cached_calibrated": cache_data.get("llm_calibrated"),
+                        "cached_summary": cache_data.get("llm_summary"),
                         "perf_tracker": tracker,
                     }
                 )
@@ -648,6 +1026,13 @@ def process_transcription(
             metadata_obj = None
             download_info_obj = None
             parse_url = url
+            _safe_update_progress(
+                task_id,
+                stage="metadata",
+                stage_label="正在获取视频信息",
+                basis="cache_lookup",
+                confidence="medium",
+            )
 
             with tracker.track("metadata"):
                 try:
@@ -745,6 +1130,13 @@ def process_transcription(
                     from ...downloaders.youtube_api_errors import YouTubeApiError
 
                     # 一次 API 请求获取所有信息（含下载）
+                    _safe_update_progress(
+                        task_id,
+                        stage="downloading",
+                        stage_label="正在通过 YouTube API Server 获取资源",
+                        basis="stage_transition",
+                        confidence="low",
+                    )
                     with tracker.track("download"):
                         api_result = metadata_downloader.fetch_for_transcription(
                             url, use_speaker_recognition
@@ -779,6 +1171,14 @@ def process_transcription(
                             "平台字幕获取成功 - 使用 YouTube API Server",
                             title=video_title,
                             author=author,
+                        )
+                        _safe_update_progress(
+                            task_id,
+                            stage="calibrating",
+                            stage_label="已获取平台字幕，正在校对和总结",
+                            basis="platform_subtitle",
+                            confidence="high",
+                            evidence={"transcript_chars": len(transcript)},
                         )
 
                         # 保存到缓存
@@ -816,6 +1216,8 @@ def process_transcription(
                                     "wechat_webhook": wechat_webhook,
                                     "notification_channel": notification_channel,
                                     "notification_webhooks": notification_webhooks,
+                                    "include_comments": include_comments,
+                                    "comment_limit": comment_limit,
                                     "perf_tracker": tracker,
                                 }
                             )
@@ -832,6 +1234,14 @@ def process_transcription(
                             return {"status": "failed", "message": f"LLM任务加入队列失败: {exc}"}
 
                         # 转录就绪、LLM 校对/总结进行中 → calibrating（终态由 LLM 阶段写）
+                        _safe_update_progress(
+                            task_id,
+                            stage="calibrating",
+                            stage_label="转录已完成，正在校对和总结",
+                            basis="llm_started",
+                            confidence="medium",
+                            evidence={"transcript_chars": len(transcript)},
+                        )
                         cache_manager.update_task_status(
                             task_id,
                             TaskStatus.CALIBRATING,
@@ -863,12 +1273,21 @@ def process_transcription(
                             title=video_title,
                             author=author,
                         )
+                        _safe_update_progress(
+                            task_id,
+                            stage="transcribing",
+                            stage_label="正在转录音视频",
+                            basis="stage_transition",
+                            confidence="low",
+                        )
 
                         # 根据是否需要说话人识别选择转录器
                         with tracker.track("transcription"):
                             if use_speaker_recognition:
                                 logger.info("[youtube-api] Using FunASR for transcription")
-                                funasr_client = FunASRSpeakerClient()
+                                funasr_client = FunASRSpeakerClient(
+                                    progress_callback=_make_asr_progress_callback(task_id, "funasr")
+                                )
                                 funasr_result = funasr_client.transcribe_sync(local_file)
                                 transcript = funasr_result["formatted_text"]
                                 transcription_data = funasr_result["transcription_result"]
@@ -893,7 +1312,9 @@ def process_transcription(
                                 logger.info(
                                     "[youtube-api] Using CapsWriter for transcription"
                                 )
-                                transcriber = Transcriber()
+                                transcriber = Transcriber(
+                                    progress_callback=_make_asr_progress_callback(task_id, "capswriter")
+                                )
                                 temp_output_base = datetime.datetime.now().strftime(
                                     "%y%m%d-%H%M%S"
                                 )
@@ -950,6 +1371,8 @@ def process_transcription(
                                     "wechat_webhook": wechat_webhook,
                                     "notification_channel": notification_channel,
                                     "notification_webhooks": notification_webhooks,
+                                    "include_comments": include_comments,
+                                    "comment_limit": comment_limit,
                                     "perf_tracker": tracker,
                                 }
                             )
@@ -966,6 +1389,14 @@ def process_transcription(
                             return {"status": "failed", "message": f"LLM任务加入队列失败: {exc}"}
 
                         # 转录就绪、LLM 校对/总结进行中 → calibrating（终态由 LLM 阶段写）
+                        _safe_update_progress(
+                            task_id,
+                            stage="calibrating",
+                            stage_label="转录已完成，正在校对和总结",
+                            basis="llm_started",
+                            confidence="medium",
+                            evidence={"transcript_chars": len(transcript)},
+                        )
                         cache_manager.update_task_status(
                             task_id,
                             TaskStatus.CALIBRATING,
@@ -1044,6 +1475,14 @@ def process_transcription(
                     title=video_title,
                     author=author,
                 )
+                _safe_update_progress(
+                    task_id,
+                    stage="calibrating",
+                    stage_label="已获取平台字幕，正在校对和总结",
+                    basis="platform_subtitle",
+                    confidence="high",
+                    evidence={"transcript_chars": len(subtitle)},
+                )
 
                 # 使用新的缓存系统保存平台字幕
                 cache_result = cache_manager.save_cache(
@@ -1079,6 +1518,8 @@ def process_transcription(
                             "wechat_webhook": wechat_webhook,
                             "notification_channel": notification_channel,
                             "notification_webhooks": notification_webhooks,
+                            "include_comments": include_comments,
+                            "comment_limit": comment_limit,
                             "perf_tracker": tracker,
                         }
                     )
@@ -1123,6 +1564,13 @@ def process_transcription(
                     title=video_title,
                     author=author,
                 )
+                _safe_update_progress(
+                    task_id,
+                    stage="downloading",
+                    stage_label="正在下载音视频",
+                    basis="stage_transition",
+                    confidence="low",
+                )
 
                 # 下载文件
                 local_file = None
@@ -1141,7 +1589,12 @@ def process_transcription(
                         filename = download_info_obj.filename
 
                     with tracker.track("download"):
-                        local_file = download_downloader.download_file(actual_download_url, filename)
+                        local_file = _download_file_with_progress(
+                            download_downloader,
+                            actual_download_url,
+                            filename,
+                            task_id,
+                        )
                 else:
                     # 确保下载信息已获取
                     if download_info_obj is None and download_downloader:
@@ -1178,7 +1631,12 @@ def process_transcription(
                                 )
                         elif download_info_url and filename:
                             with tracker.track("download"):
-                                local_file = original_downloader.download_file(download_info_url, filename)
+                                local_file = _download_file_with_progress(
+                                    original_downloader,
+                                    download_info_url,
+                                    filename,
+                                    task_id,
+                                )
                         else:
                             error_msg = f"无法获取下载信息: {url}"
                             logger.error(error_msg)
@@ -1204,6 +1662,13 @@ def process_transcription(
                         title=video_title,
                         author=author,
                     )
+                    _safe_update_progress(
+                        task_id,
+                        stage="transcribing",
+                        stage_label="正在转录音视频",
+                        basis="stage_transition",
+                        confidence="low",
+                    )
 
                     # platform 和 video_id 已在前面设置
 
@@ -1212,7 +1677,9 @@ def process_transcription(
                         if use_speaker_recognition:
                             # 使用 FunASR 说话人识别服务器
                             logger.info("使用 FunASR 说话人识别服务器进行转录")
-                            funasr_client = FunASRSpeakerClient()
+                            funasr_client = FunASRSpeakerClient(
+                                progress_callback=_make_asr_progress_callback(task_id, "funasr")
+                            )
                             funasr_result = funasr_client.transcribe_sync(local_file)
 
                             # 获取格式化的转录文本
@@ -1243,7 +1710,9 @@ def process_transcription(
                             }
                         else:
                             # 使用普通 CapsWriter 转录器
-                            transcriber = Transcriber()
+                            transcriber = Transcriber(
+                                progress_callback=_make_asr_progress_callback(task_id, "capswriter")
+                            )
                             # 使用时间戳作为临时输出基础名
                             temp_output_base = datetime.datetime.now().strftime(
                                 "%y%m%d-%H%M%S"
@@ -1304,6 +1773,8 @@ def process_transcription(
                                 "wechat_webhook": wechat_webhook,
                                 "notification_channel": notification_channel,
                                 "notification_webhooks": notification_webhooks,
+                                "include_comments": include_comments,
+                                "comment_limit": comment_limit,
                                 "perf_tracker": tracker,
                             }
                         )
@@ -1334,6 +1805,14 @@ def process_transcription(
                     pass
 
                 # 转录就绪、LLM 校对/总结进行中 → calibrating（终态由 LLM 阶段写）
+                _safe_update_progress(
+                    task_id,
+                    stage="calibrating",
+                    stage_label="转录已完成，正在校对和总结",
+                    basis="llm_started",
+                    confidence="medium",
+                    evidence={"transcript_chars": len(transcript)},
+                )
                 cache_manager.update_task_status(
                     task_id,
                     TaskStatus.CALIBRATING,

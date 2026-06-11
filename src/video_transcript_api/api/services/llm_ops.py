@@ -20,6 +20,7 @@ from ..context import (
     get_logger,
     task_lock,
 )
+from ...comments import CommentInsightAnalyzer, generate_comment_insight
 from ...llm import call_llm_api
 from ...utils.notifications import (
     WechatNotifier,
@@ -38,6 +39,15 @@ cache_manager = get_cache_manager()
 llm_coordinator = get_llm_coordinator()
 llm_task_queue = get_llm_queue()
 llm_executor = get_llm_executor()
+
+
+def _safe_update_progress(task_id: str, **kwargs):
+    """Best-effort task progress update; progress must not break LLM work."""
+    try:
+        return cache_manager.update_task_progress(task_id, **kwargs)
+    except Exception as exc:
+        logger.debug(f"task progress update failed: {task_id}, error={exc}")
+        return None
 
 
 def process_llm_queue():
@@ -84,6 +94,7 @@ def _handle_llm_task(llm_task: dict):
             wechat_webhook = llm_task.get("wechat_webhook")
             notification_channel = llm_task.get("notification_channel")
             notification_webhooks = llm_task.get("notification_webhooks", {})
+            calibrate_only = llm_task.get("calibrate_only", False)
 
             _router = get_notification_router()
 
@@ -102,15 +113,68 @@ def _handle_llm_task(llm_task: dict):
                 video_title = _generate_title_if_needed(llm_task, video_title, transcript)
                 llm_task["video_title"] = video_title
 
+                if llm_task.get("comment_only"):
+                    logger.info(f"开始处理缓存补评论任务: {task_id}, 标题: {video_title}")
+                    _safe_update_progress(
+                        task_id,
+                        stage="comment_insight",
+                        stage_label="正在生成评论洞察",
+                        basis="llm_started",
+                        confidence="low",
+                    )
+                    result_dict = _build_comment_only_result_dict(llm_task)
+                    result_dict["models_used"] = llm_coordinator.config.get_models()
+                    _append_comment_insight(
+                        llm_task=llm_task,
+                        result_dict=result_dict,
+                        summary_model=llm_coordinator.config.summary_model,
+                        summary_reasoning_effort=llm_coordinator.config.summary_reasoning_effort,
+                    )
+                    _save_llm_results(
+                        task_id=task_id,
+                        platform=platform,
+                        media_id=media_id,
+                        use_speaker_recognition=use_speaker_recognition,
+                        result_dict=result_dict,
+                        calibrate_only=False,
+                    )
+                    if not calibrate_only:
+                        _send_notification(
+                            task_id=task_id,
+                            video_title=video_title,
+                            display_url=display_url,
+                            use_speaker_recognition=use_speaker_recognition,
+                            result_dict=result_dict,
+                            notification_channel=notification_channel,
+                            notification_webhooks=notification_webhooks,
+                        )
+                    tracker.log_summary()
+                    cache_manager.update_task_status(
+                        task_id,
+                        TaskStatus.SUCCESS,
+                        platform=platform,
+                        media_id=media_id,
+                        title=video_title,
+                        author=llm_task.get("author", ""),
+                    )
+                    logger.info(f"缓存补评论任务完成: {task_id}, 标题: {video_title}")
+                    return
+
                 # 使用新 LLM 协调器处理任务（用 PerfTracker 记录 LLM 处理耗时）
                 logger.info(f"开始使用 LLM 协调器处理任务: {task_id}")
+                _safe_update_progress(
+                    task_id,
+                    stage="calibrating",
+                    stage_label="正在校对和总结",
+                    basis="llm_started",
+                    confidence="low",
+                    evidence={"transcript_chars": len(transcript)},
+                )
 
                 # 准备内容参数
                 content = _prepare_llm_content(llm_task, transcript, use_speaker_recognition)
 
                 # 是否为仅校对模式（重新校对场景）
-                calibrate_only = llm_task.get("calibrate_only", False)
-
                 # 仅校对模式下，若缓存里 llm_summary.txt 缺失/为空，顺手补跑一次 summary
                 # 避免老任务卡在 view 页的 "总结处理中..." 状态
                 summary_backfill = False
@@ -144,7 +208,38 @@ def _handle_llm_task(llm_task: dict):
                 # 适配返回格式
                 result_dict = _build_result_dict(coordinator_result)
 
+                # 可选评论洞察：失败不影响主转录/总结链路
+                if not calibrate_only:
+                    models_used = result_dict.get("models_used", {})
+                    if llm_task.get("include_comments"):
+                        _safe_update_progress(
+                            task_id,
+                            stage="comment_insight",
+                            stage_label="正在生成评论洞察",
+                            basis="llm_started",
+                            confidence="low",
+                        )
+                    _append_comment_insight(
+                        llm_task=llm_task,
+                        result_dict=result_dict,
+                        summary_model=(
+                            models_used.get("summary_model")
+                            or llm_coordinator.config.summary_model
+                        ),
+                        summary_reasoning_effort=(
+                            models_used.get("summary_reasoning_effort")
+                            or llm_coordinator.config.summary_reasoning_effort
+                        ),
+                    )
+
                 logger.info(f"LLM处理完成，开始保存结果和发送微信通知: {task_id}")
+                _safe_update_progress(
+                    task_id,
+                    stage="notifying",
+                    stage_label="正在保存结果和发送通知",
+                    basis="stage_transition",
+                    confidence="medium",
+                )
 
                 # 保存结果到缓存
                 _save_llm_results(
@@ -320,6 +415,88 @@ def _build_result_dict(coordinator_result: dict) -> dict:
     return result_dict
 
 
+def _build_comment_only_result_dict(llm_task: dict) -> dict:
+    """Build a result dict from cached LLM outputs for comment-only enrichment."""
+    transcript = llm_task.get("transcript", "") or ""
+    calibrated_text = llm_task.get("cached_calibrated") or transcript
+    summary_text = llm_task.get("cached_summary")
+
+    return {
+        "校对文本": calibrated_text,
+        "内容总结": summary_text,
+        "skip_summary": summary_text is None,
+        "stats": {
+            "original_length": len(transcript),
+            "calibrated_length": len(calibrated_text),
+            "summary_length": len(summary_text) if summary_text else 0,
+        },
+        "models_used": {},
+        "calibrate_success": True,
+        "summary_success": summary_text is not None,
+    }
+
+
+def _append_comment_insight(
+    *,
+    llm_task: dict,
+    result_dict: dict,
+    summary_model: str,
+    summary_reasoning_effort: str | None,
+    analyzer=None,
+    insight_runner=generate_comment_insight,
+) -> None:
+    """Append optional hot-comment insight to an LLM result dict."""
+    if not llm_task.get("include_comments", False):
+        return
+
+    try:
+        fetch_limit = int(llm_task.get("comment_limit", 100))
+    except (TypeError, ValueError):
+        fetch_limit = 100
+    fetch_limit = max(1, min(fetch_limit, 200))
+    analysis_limit = min(fetch_limit, 50)
+
+    comment_analyzer = analyzer or CommentInsightAnalyzer(
+        llm_client=llm_coordinator.llm_client,
+        model=summary_model,
+        reasoning_effort=summary_reasoning_effort,
+    )
+
+    try:
+        insight_result = insight_runner(
+            url=llm_task.get("url", ""),
+            platform=llm_task.get("platform"),
+            media_id=llm_task.get("media_id"),
+            title=llm_task.get("video_title", ""),
+            author=llm_task.get("author", ""),
+            summary_text=result_dict.get("内容总结"),
+            fetch_limit=fetch_limit,
+            analysis_limit=analysis_limit,
+            analyzer=comment_analyzer,
+        )
+    except Exception as exc:
+        logger.warning(
+            f"评论洞察生成失败，不影响主任务: task_id={llm_task.get('task_id')}, error={exc}"
+        )
+        result_dict["comment_error"] = str(exc)
+        return
+
+    if not insight_result:
+        logger.info(f"未生成评论洞察: task_id={llm_task.get('task_id')}")
+        return
+
+    result_dict["评论洞察"] = insight_result["insight_text"]
+    result_dict["comment_samples"] = insight_result["samples"]
+    result_dict["comment_stats"] = {
+        "fetched_count": insight_result["fetched_count"],
+        "selected_count": insight_result["selected_count"],
+    }
+    logger.info(
+        f"评论洞察生成完成: task_id={llm_task.get('task_id')}, "
+        f"selected={insight_result['selected_count']}/{insight_result['fetched_count']}"
+    )
+
+
 def _should_backfill_summary(cache_data: dict, calibrate_only: bool) -> bool:
     """判断是否需要在 recalibrate 流程里顺手补跑一次 summary。
 
@@ -448,6 +625,28 @@ def _save_llm_results(
             logger.info(f"结构化数据已保存到缓存: {platform}/{media_id}/llm_processed.json")
         else:
             logger.warning(f"结构化数据保存失败: {task_id}")
+
+    comment_insight = result_dict.get("评论洞察")
+    if comment_insight:
+        cache_manager.save_llm_result(
+            platform=platform,
+            media_id=media_id,
+            use_speaker_recognition=use_speaker_recognition,
+            llm_type="comment_insight",
+            content=comment_insight,
+        )
+        logger.info(f"评论洞察已保存到缓存: {task_id}")
+
+    comment_samples = result_dict.get("comment_samples")
+    if comment_samples:
+        cache_manager.save_llm_result(
+            platform=platform,
+            media_id=media_id,
+            use_speaker_recognition=use_speaker_recognition,
+            llm_type="comment_samples",
+            content=comment_samples,
+        )
+        logger.info(f"评论样本已保存到缓存: {task_id}")
 
     if calibrate_success or summary_success:
         logger.info(f"LLM结果已保存到缓存: {platform}/{media_id}")

@@ -96,6 +96,17 @@ class TestURLParserBasic:
         assert result.platform == "douyin"
         assert result.video_id == "7123456789012345678"
 
+    def test_douyin_modal_url(self):
+        """Test Douyin modal URL with video ID in query params"""
+        parser = URLParser()
+        result = parser.parse(
+            "https://www.douyin.com/user/self?from_tab_name=main"
+            "&modal_id=7616674906457050408&showSubTab=video&showTab=record"
+        )
+
+        assert result.platform == "douyin"
+        assert result.video_id == "7616674906457050408"
+
     def test_xiaohongshu_url(self):
         """Test Xiaohongshu URL"""
         parser = URLParser()
@@ -111,6 +122,43 @@ class TestURLParserBasic:
 
         assert result.platform == "xiaoyuzhou"
         assert result.video_id == "687893e0a12f9ff06a98a597"
+
+    def test_twitter_x_status_url(self):
+        """Test X (twitter) status URL parsing"""
+        parser = URLParser()
+        result = parser.parse("https://x.com/elonmusk/status/1790000000000000000")
+
+        assert result.platform == "twitter"
+        assert result.video_id == "1790000000000000000"
+        assert not result.is_short_url
+
+    def test_twitter_legacy_domain_with_query(self):
+        """Test legacy twitter.com domain with trailing query params"""
+        parser = URLParser()
+        result = parser.parse("https://twitter.com/jack/status/20?s=20")
+
+        assert result.platform == "twitter"
+        assert result.video_id == "20"
+
+    def test_twitter_does_not_misclassify_netflix(self):
+        """Guard: 'x.com' is a substring of 'netflix.com' - must NOT be twitter"""
+        parser = URLParser()
+        result = parser.parse("https://netflix.com/title/status/80100000")
+
+        assert result.platform != "twitter"
+
+    def test_extract_platform_twitter(self):
+        """Lightweight extract_platform should recognize x.com / twitter.com"""
+        parser = URLParser()
+        assert parser.extract_platform(
+            "https://x.com/naval/status/1002103360646823936"
+        ) == "twitter"
+        assert parser.extract_platform("https://twitter.com/naval") == "twitter"
+
+    def test_extract_platform_not_twitter_for_netflix(self):
+        """Guard: extract_platform must not misclassify netflix.com as twitter"""
+        parser = URLParser()
+        assert parser.extract_platform("https://www.netflix.com/browse") != "twitter"
 
     def test_generic_url(self):
         """Test generic URL (no platform matched)"""

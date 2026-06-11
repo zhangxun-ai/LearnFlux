@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="内容解析工作台">
+  <defs>
+    <!-- 暖墨底：呼应全站「暖纸 / 墨字」编辑感，替代旧的紫色渐变（与珊瑚主题冲突） -->
+    <linearGradient id="vtaInk" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#26231D"/>
+      <stop offset="1" stop-color="#14130F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 圆角墨色底（在浅色纸底导航栏上对比清晰） -->
+  <rect width="64" height="64" rx="15" fill="url(#vtaInk)"/>
+
+  <!-- 原文行：米色、弱化，代表「未处理的内容」 -->
+  <rect x="17" y="20.5" width="26" height="3.4" rx="1.7" fill="#F4ECDD" opacity="0.62"/>
+
+  <!-- 珊瑚记号笔划亮：被提炼/标记出的「精华行」——品牌珊瑚作为唯一强调色 -->
+  <rect x="14.5" y="28" width="32" height="7.2" rx="3.2" fill="#E4503A"/>
+  <!-- 划亮行内的文字 -->
+  <rect x="18" y="30.4" width="22" height="2.4" rx="1.2" fill="#FBF8F3" opacity="0.92"/>
+
+  <!-- 原文行：较短，作为段落结尾 -->
+  <rect x="17" y="40" width="18" height="3.4" rx="1.7" fill="#F4ECDD" opacity="0.62"/>
+</svg>

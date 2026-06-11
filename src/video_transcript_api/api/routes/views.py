@@ -5,8 +5,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
+from ..services.longcut import (
+    build_analysis_url,
+    build_longcut_action,
+    ensure_longcut_ready,
+    get_longcut_settings,
+)
 from ..context import (
     get_cache_manager,
     get_config,
@@ -20,7 +26,7 @@ from ...utils.rendering import (
     render_markdown_to_html,
     render_transcript_content,
 )
-from ...utils.timeutil import format_datetime_for_display
+from ...utils.timeutil import format_datetime_for_display, get_configured_timezone
 
 logger = get_logger()
 cache_manager = get_cache_manager()
@@ -50,6 +56,85 @@ _SITEMAP_XML_TEMPLATE = """\
 """
 
 
+def _parse_task_datetime(value) -> Optional[datetime]:
+    """Parse DB/ISO task timestamps as UTC-aware datetimes."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        raw = value.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    parsed = datetime.strptime(raw, fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                return None
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_duration(seconds: Optional[float]) -> str:
+    if seconds is None:
+        return ""
+    total_seconds = max(0, int(round(seconds)))
+    if total_seconds < 60:
+        return f"{total_seconds} 秒"
+    minutes, rest = divmod(total_seconds, 60)
+    if minutes < 60:
+        return f"{minutes} 分 {rest} 秒" if rest else f"{minutes} 分"
+    hours, minutes = divmod(minutes, 60)
+    if minutes:
+        return f"{hours} 小时 {minutes} 分"
+    return f"{hours} 小时"
+
+
+def _format_local_datetime(value, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    parsed = _parse_task_datetime(value)
+    if not parsed:
+        return value or ""
+    return parsed.astimezone(get_configured_timezone()).strftime(fmt)
+
+
+def _decorate_view_timing(view_data: Dict[str, Any], now: Optional[datetime] = None):
+    """Add user-facing elapsed/duration/progress time fields in-place."""
+    current_time = now or datetime.now(timezone.utc)
+    created_at = _parse_task_datetime(view_data.get("created_at"))
+    completed_at = _parse_task_datetime(view_data.get("completed_at"))
+
+    if view_data.get("created_at"):
+        view_data["created_at_display"] = format_datetime_for_display(
+            view_data["created_at"]
+        )
+
+    if view_data.get("completed_at"):
+        view_data["completed_at_display"] = _format_local_datetime(
+            view_data["completed_at"]
+        )
+
+    if created_at:
+        end_time = completed_at or current_time
+        elapsed_seconds = max(0, int(round((end_time - created_at).total_seconds())))
+        view_data["elapsed_seconds"] = elapsed_seconds
+        view_data["elapsed_display"] = _format_duration(elapsed_seconds)
+        if completed_at:
+            view_data["duration_seconds"] = elapsed_seconds
+            view_data["duration_display"] = view_data["elapsed_display"]
+
+    progress = view_data.get("progress")
+    if isinstance(progress, dict) and progress.get("updated_at"):
+        progress["updated_at_display"] = _format_local_datetime(
+            progress["updated_at"]
+        )
+
+
 @router.get("/robots.txt", include_in_schema=False)
 async def robots_txt():
     """返回 robots.txt，允许首页被搜索引擎收录以建立域名信任."""
@@ -73,104 +158,109 @@ _HOME_HTML = """\
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VideoTranscriptAPI</title>
-    <meta name="description" content="Multi-platform video transcription with AI-powered proofreading and summarization. Supports YouTube, Bilibili, Douyin, Xiaohongshu and more.">
-    <meta name="theme-color" content="#667eea">
+    <title>内容解析工作台 · 视频转录 / 帖子精华 / 文档解析</title>
+    <meta name="description" content="一站式内容解析：视频转录、X / 小红书 / 微信公众号帖子精华提炼（含可信度判断）、本地音视频与文档解析。">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
+    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
+    <meta property="og:title" content="内容解析工作台">
+    <meta property="og:description" content="视频转录 · 帖子精华提炼 · 文档解析，附「是否属实」可信度判断">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="/static/icon/og.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=1">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
-            line-height: 1.6;
-            color: #333;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
-        }
-        .card {
-            background: #fff;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-            padding: 48px;
-            max-width: 560px;
-            width: 100%;
-            text-align: center;
-        }
-        .logo { font-size: 3rem; margin-bottom: 16px; }
-        h1 { font-size: 1.8rem; margin-bottom: 8px; font-weight: 700; }
-        .subtitle { color: #6b7280; margin-bottom: 32px; font-size: 0.95rem; }
-        .features {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 32px;
-            text-align: left;
-        }
-        .feature {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 14px 16px;
-            font-size: 0.88rem;
-            color: #374151;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .feature-icon { font-size: 1.2rem; flex-shrink: 0; }
-        .cta {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-            text-decoration: none;
-            padding: 12px 32px;
-            border-radius: 8px;
-            font-size: 0.95rem;
-            font-weight: 500;
-            transition: opacity 0.2s, transform 0.2s;
-        }
-        .cta:hover { opacity: 0.9; transform: translateY(-1px); }
-        .footer {
-            margin-top: 24px;
-            font-size: 0.78rem;
-            color: #9ca3af;
-            opacity: 0.8;
-        }
-        .footer a { color: #9ca3af; text-decoration: none; }
-        .footer a:hover { text-decoration: underline; }
-        @media (max-width: 480px) {
-            .card { padding: 32px 24px; }
-            .features { grid-template-columns: 1fr; }
-            h1 { font-size: 1.5rem; }
-        }
+        /* 配色 token / 字体 / 导航 来自 editorial.css（单一来源） */
+        *{margin:0;padding:0;box-sizing:border-box}
+        html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+        body{font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:var(--ink);
+            background:var(--paper);line-height:1.6;min-height:100vh;
+            background-image:radial-gradient(120% 55% at 50% -8%,rgba(228,80,58,.06),transparent 60%);}
+        .serif{font-family:'Fraunces',Georgia,'Songti SC',serif}
+        a{color:inherit;text-decoration:none}
+        ::selection{background:var(--accent);color:#fff}
+        .nav{max-width:1040px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;gap:10px}
+        .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:1.02rem}
+        .brand .mark{width:26px;height:26px;border-radius:8px;background:var(--accent);color:#fff;
+            display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:.95rem}
+        .links{margin-left:auto;display:flex;gap:4px;align-items:center}
+        .links a{font-size:.9rem;color:var(--ink-soft);padding:7px 13px;border-radius:9px;transition:.15s}
+        .links a:hover{background:rgba(27,26,23,.05)}
+        .links a.hot{color:var(--accent-ink);font-weight:600}
+        .links a.cta{background:var(--accent);color:#fff;font-weight:600}
+        .links a.cta:hover{background:var(--accent-ink)}
+        .hero{max-width:760px;margin:0 auto;text-align:center;padding:64px 28px 18px}
+        .eyebrow{font-size:.8rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin-bottom:18px}
+        .hero h1{font-weight:500;font-size:3rem;line-height:1.12;letter-spacing:-.01em}
+        .hero h1 em{font-style:italic;color:var(--accent)}
+        .hero .sub{margin:20px auto 0;max-width:500px;color:var(--ink-soft);font-size:1.06rem}
+        .cta-row{margin-top:30px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+        .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 26px;border-radius:12px;font-weight:600;
+            font-size:1rem;background:var(--accent);color:#fff;transition:.15s}
+        .btn:hover{background:var(--accent-ink);transform:translateY(-1px)}
+        .btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+        .btn.ghost:hover{border-color:var(--accent);color:var(--accent-ink);background:var(--card)}
+        .section{max-width:920px;margin:0 auto;padding:54px 28px}
+        .flagship{display:block;background:var(--card);border:1px solid var(--line);border-radius:20px;
+            padding:30px 34px;box-shadow:var(--shadow);transition:.18s;position:relative;overflow:hidden}
+        .flagship:hover{transform:translateY(-3px);border-color:var(--accent)}
+        .flagship::before{content:"";position:absolute;top:0;bottom:0;left:0;width:4px;background:var(--accent)}
+        .flagship .k{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink);font-weight:600}
+        .flagship h3{font-size:1.5rem;margin:8px 0;letter-spacing:-.01em}
+        .flagship p{color:var(--ink-soft);max-width:560px}
+        .flagship .arrow{position:absolute;right:30px;bottom:26px;color:var(--accent);font-size:1.3rem}
+        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:16px}
+        .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;transition:.18s}
+        .card:hover{transform:translateY(-3px);border-color:var(--accent)}
+        .card .ic{font-size:1.5rem}
+        .card h3{font-size:1.1rem;margin:12px 0 6px}
+        .card p{color:var(--ink-soft);font-size:.92rem}
+        .foot{text-align:center;padding:30px 20px 50px;color:var(--muted);font-size:.84rem}
+        .foot a{color:var(--ink-soft)}
+        @media(max-width:560px){.hero h1{font-size:2.2rem}.nav{padding:18px}.links a:not(.cta):not(.hot){display:none}}
     </style>
 </head>
 <body>
-    <div class="card">
-        <div class="logo">🎬</div>
-        <h1>VideoTranscriptAPI</h1>
-        <p class="subtitle">多平台视频转录与 AI 智能校对服务</p>
-        <div class="features">
-            <div class="feature"><span class="feature-icon">🌐</span>支持 YouTube、Bilibili、抖音、小红书、小宇宙播客及音视频直链</div>
-            <div class="feature"><span class="feature-icon">🎙️</span>本地语音转文字 + LLM 智能校对</div>
-            <div class="feature"><span class="feature-icon">📝</span>自动生成内容总结</div>
-            <div class="feature"><span class="feature-icon">👀</span>网页版查看 + 企业微信推送</div>
-            <div class="feature"><span class="feature-icon">📋</span>任务历史：搜索、过滤、已读追踪、摘要预览</div>
+    <div id="site-nav"></div>
+    <script src="/static/js/site-nav.js"></script>
+
+    <header class="hero">
+        <div class="eyebrow">一站式内容解析</div>
+        <h1 class="serif">把任意内容，<br>秒变<em>可读的精华</em></h1>
+        <p class="sub">视频转录、帖子精华提炼、本地音视频与文档解析——还能拆解小红书爆款，看懂它为什么火。</p>
+        <div class="cta-row">
+            <a class="btn" href="/add_task_by_web">开始使用 →</a>
+            <a class="btn ghost" href="/flywheel">🔥 学做小红书</a>
         </div>
-        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-            <a class="cta" href="/add_task_by_web">提交任务</a>
-            <a class="cta" href="/static/history.html" style="background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);">任务历史</a>
+    </header>
+
+    <section class="section">
+        <a class="flagship" href="/flywheel">
+            <div class="k">新 · 拆解爆款</div>
+            <h3 class="serif">学做小红书</h3>
+            <p>贴一个博主或内容链接，自动拆出它「为什么火」——开头、留人、引导，再告诉你下一条该怎么改。视频自动转写。</p>
+            <span class="arrow">→</span>
+        </a>
+        <div class="grid">
+            <a class="card" href="/add_task_by_web">
+                <div class="ic">🎬</div><h3>视频链接转录</h3>
+                <p>YouTube / B站 / 抖音 / 小宇宙，自动转文字 + AI 校对总结。</p>
+            </a>
+            <a class="card" href="/post">
+                <div class="ic">𝕏</div><h3>帖子精华提炼</h3>
+                <p>X / 小红书 / 公众号，抓正文 + 高赞评论，提炼精华并标注可信度。</p>
+            </a>
+            <a class="card" href="/add_task_by_web">
+                <div class="ic">📁</div><h3>本地音视频 / 文档</h3>
+                <p>拖拽本地视频、音频或 PDF / Word，本地转写 / 提取 + AI 提炼。</p>
+            </a>
         </div>
-        <p style="margin-top: 16px; font-size: 0.85rem;">
-            <a href="https://mp.weixin.qq.com/s/w8VnWJcUp5VkD5J-fYCUrg" target="_blank" rel="noopener" style="color: #667eea; text-decoration: none;">📖 开发契机和玩法分享</a>
-        </p>
-        <p class="footer">
-            Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a>
-            · Open Source ·
-            <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">☆ Star on GitHub</a>
-        </p>
-    </div>
+    </section>
+
+    <footer class="foot">
+        Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source
+    </footer>
 </body>
 </html>
 """
@@ -201,6 +291,8 @@ def resolve_export_file_path(cache_dir: str, export_type: str) -> Optional[Path]
         return base / "llm_calibrated.txt"
     if export_type == "summary":
         return base / "llm_summary.txt"
+    if export_type == "comment_insight":
+        return base / "comment_insight.txt"
     if export_type == "transcript":
         funasr_file = base / "transcript_funasr.json"
         capswriter_file = base / "transcript_capswriter.txt"
@@ -221,6 +313,7 @@ def _build_text_metadata_header(view_data: Dict[str, Any], export_type: str) -> 
     type_map = {
         "calibrated": "校对文本",
         "summary": "总结文本",
+        "comment_insight": "高赞评论洞察",
         "transcript": "原始转录",
     }
 
@@ -264,6 +357,7 @@ def _build_metadata_headers(view_data: Dict[str, Any], export_type: str) -> dict
     type_map = {
         "calibrated": "calibrated",
         "summary": "summary",
+        "comment_insight": "comment_insight",
         "transcript": "transcript",
     }
 
@@ -312,6 +406,7 @@ def _build_page_html(
     type_map = {
         "calibrated": "校对文本",
         "summary": "内容总结",
+        "comment_insight": "高赞评论洞察",
         "transcript": "原始转录",
     }
 
@@ -481,6 +576,7 @@ def handle_page_export(view_data: Dict[str, Any], export_type: str) -> Response:
         content_type_cn = {
             "calibrated": "校对文本",
             "summary": "总结文本",
+            "comment_insight": "高赞评论洞察",
             "transcript": "原始转录",
         }.get(export_type, export_type)
         return HTMLResponse(
@@ -567,6 +663,7 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
     type_map = {
         "calibrated": "校对文本",
         "summary": "总结文本",
+        "comment_insight": "高赞评论洞察",
         "transcript": "原始转录",
     }
 
@@ -646,7 +743,7 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
     file_path = resolve_export_file_path(cache_dir, export_type)
     if file_path is None:
         return Response(
-            content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, transcript",
+            content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, comment_insight, transcript",
             media_type="text/plain; charset=utf-8",
             status_code=400,
         )
@@ -656,6 +753,7 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
         content_type_cn = {
             "calibrated": "校对文本",
             "summary": "总结文本",
+            "comment_insight": "高赞评论洞察",
             "transcript": "原始转录",
         }.get(export_type, export_type)
 
@@ -709,7 +807,22 @@ async def add_task_by_web(request: Request):
         index_file = static_dir / "index.html"
         if index_file.exists():
             content = index_file.read_text(encoding="utf-8")
-            return HTMLResponse(content=content)
+            # 资源版本号：取关键静态文件的最新修改时间。文件一变版本即变，
+            # 浏览器据此强制拉取新的 app.js / css，避免缓存旧前端导致的 UI 错乱。
+            asset_files = [
+                index_file,
+                static_dir / "js" / "app.js",
+                static_dir / "css" / "styles.css",
+                static_dir / "css" / "workbench.css",
+                static_dir / "css" / "nav.css",
+            ]
+            version = str(int(max(
+                (f.stat().st_mtime for f in asset_files if f.exists()),
+                default=0,
+            )))
+            content = content.replace("__ASSET_VERSION__", version)
+            # HTML 本身不缓存，确保每次都拿到最新的资源版本号
+            return HTMLResponse(content=content, headers={"Cache-Control": "no-cache"})
         else:
             logger.error("Web任务添加页面文件不存在: %s", index_file)
             return HTMLResponse(
@@ -754,7 +867,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
         file_path = resolve_export_file_path(cache_dir, export_type)
         if file_path is None:
             return Response(
-                content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, transcript",
+                content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, comment_insight, transcript",
                 media_type="text/plain; charset=utf-8",
                 status_code=400,
             )
@@ -763,6 +876,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
             content_type_cn = {
                 "calibrated": "校对文本",
                 "summary": "总结文本",
+                "comment_insight": "高赞评论洞察",
                 "transcript": "原始转录",
             }.get(export_type, export_type)
             return Response(
@@ -862,10 +976,7 @@ async def view_transcript(
         if page:
             return handle_page_export(view_data, page)
 
-        if view_data.get("created_at"):
-            view_data["created_at_display"] = format_datetime_for_display(
-                view_data["created_at"]
-            )
+        _decorate_view_timing(view_data)
 
         if view_data["status"] == "processing":
             return templates.TemplateResponse(
@@ -895,11 +1006,20 @@ async def view_transcript(
                 view_data["summary_html"] = render_markdown_to_html(
                     view_data["summary"]
                 )
+            if view_data.get("comment_insight"):
+                view_data["comment_insight_html"] = render_markdown_to_html(
+                    view_data["comment_insight"]
+                )
 
             cache_dir = view_data.get("cache_dir")
 
             # 计算字数统计
-            stats = {"original_length": 0, "calibrated_length": 0, "summary_length": 0}
+            stats = {
+                "original_length": 0,
+                "calibrated_length": 0,
+                "summary_length": 0,
+                "duration_display": view_data.get("duration_display"),
+            }
 
             if cache_dir and os.path.exists(cache_dir):
                 cache_dir_path = Path(cache_dir)
@@ -979,6 +1099,11 @@ async def view_transcript(
 
             # 简化渲染逻辑：直接调用 render_with_cache_analysis
             view_data["calibrated_html"] = render_calibrated_content_smart(cache_dir)
+            longcut_settings = get_longcut_settings(get_config())
+            view_data["longcut_action"] = build_longcut_action(
+                view_data,
+                longcut_settings,
+            )
 
         return templates.TemplateResponse(
             "transcript.html",
@@ -994,3 +1119,73 @@ async def view_transcript(
                 "message": "查看页面失败，请稍后重试",
             },
         )
+
+
+@router.get("/view/{view_token}/longcut")
+def open_in_longcut(view_token: str, request: Request):
+    """Start LongCut if needed and redirect a YouTube result into it."""
+    view_data = cache_manager.get_view_data_by_token(view_token)
+    if not view_data:
+        return templates.TemplateResponse(
+            "error.html",
+            {
+                "request": request,
+                "message": "view_token 无效或已过期",
+            },
+            status_code=404,
+        )
+
+    settings = get_longcut_settings(get_config())
+    action = build_longcut_action(view_data, settings)
+    if not action:
+        return templates.TemplateResponse(
+            "error.html",
+            {
+                "request": request,
+                "message": "当前任务不是可在 LongCut 中打开的 YouTube 视频",
+            },
+            status_code=400,
+        )
+
+    result = ensure_longcut_ready(settings)
+    if not result.ready:
+        return templates.TemplateResponse(
+            "error.html",
+            {
+                "request": request,
+                "message": f"LongCut 启动失败：{result.message}",
+            },
+            status_code=503,
+        )
+
+    return RedirectResponse(
+        build_analysis_url(settings.base_url, str(view_data["media_id"])),
+        status_code=303,
+    )
+
+
+@router.get("/view/{view_token}/progress")
+async def view_progress(view_token: str):
+    """Return minimal task progress for a public view token."""
+    view_data = cache_manager.get_view_data_by_token(view_token)
+    if not view_data:
+        raise HTTPException(status_code=404, detail="view_token 无效或已过期")
+    _decorate_view_timing(view_data)
+
+    payload = {
+        "status": view_data.get("status"),
+        "task_id": view_data.get("task_id"),
+        "view_token": view_token,
+        "title": view_data.get("title"),
+        "created_at": view_data.get("created_at"),
+        "elapsed_seconds": view_data.get("elapsed_seconds"),
+        "elapsed_display": view_data.get("elapsed_display"),
+        "duration_seconds": view_data.get("duration_seconds"),
+        "duration_display": view_data.get("duration_display"),
+        "progress": view_data.get("progress"),
+    }
+    message = view_data.get("message") or view_data.get("error_message")
+    if message:
+        payload["message"] = message
+
+    return payload

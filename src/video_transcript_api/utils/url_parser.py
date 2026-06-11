@@ -22,7 +22,7 @@ class ParsedURL:
     解析后的 URL 信息
 
     Attributes:
-        platform: 平台名称 (youtube/bilibili/douyin/xiaohongshu/xiaoyuzhou/generic)
+        platform: 平台名称 (youtube/bilibili/douyin/xiaohongshu/xiaoyuzhou/twitter/generic)
         video_id: 视频ID (唯一标识)
         normalized_url: 规范化的URL（长链接格式）
         is_short_url: 是否为短链接
@@ -68,6 +68,7 @@ class URLParser:
         ],
         'douyin': [
             r'douyin\.com/(?:video|note)/(\d+)',  # 标准链接
+            r'douyin\.com/.*?[?&](?:aweme_id|modal_id)=(\d+)',  # 查询参数中的视频ID
             r'v\.douyin\.com/(\w+)',  # 短链接（需要解析）
         ],
         'xiaoyuzhou': [
@@ -76,6 +77,15 @@ class URLParser:
         'xiaohongshu': [
             r'xiaohongshu\.com/(?:explore|discovery/item|items)/(\w+)',  # 主域名
             r'xhslink\.com/(\w+)',  # 短链接（需要解析）
+        ],
+        'twitter': [
+            # X / Twitter 推文链接：x.com 或 twitter.com 的 /<user>/status/<id>
+            # 负向后顾 (?<!\w) 防止把 'x.com' 当作 netflix.com 等的子串而误判
+            r'(?<!\w)(?:x|twitter)\.com/[^/]+/status/(\d+)',
+        ],
+        'weixin': [
+            r'mp\.weixin\.qq\.com/s/([A-Za-z0-9_\-]+)',  # /s/TOKEN 形式
+            r'mp\.weixin\.qq\.com/s\?[^\s]*?(?:__biz|mid)=([A-Za-z0-9_\-=%]+)',  # 查询参数形式
         ],
     }
 
@@ -280,6 +290,9 @@ class URLParser:
             return 'xiaoyuzhou'
         elif 'xiaohongshu.com' in url_lower or 'xhslink.com' in url_lower:
             return 'xiaohongshu'
+        # 边界匹配，避免 netflix.com 等把 'x.com' 当子串误判为 twitter
+        elif re.search(r'(?<!\w)(?:x|twitter)\.com', url_lower):
+            return 'twitter'
 
         return 'generic'
 

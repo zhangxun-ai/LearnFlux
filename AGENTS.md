@@ -73,3 +73,6 @@ Commit messages follow the current log style: concise, imperative Chinese summar
 
 ## Security & Configuration Notes
 Do not commit live credentials; extend `config.example.json` and document defaults instead. Keep generated artifacts in `data/` and `logs/` out of patches unless troubleshooting. When working with remote transcription servers, load tokens from environment variables and clear `data/temp` via `scripts/cleanup_cache.py` after tests so sensitive media does not linger.
+
+## GitNexus Impact Checks
+Before modifying shared functions, classes, FastAPI handlers, downloader/transcriber/cache logic, task queues, webhooks, authentication, authorization, storage, or other high-impact code, inspect the target with GitNexus `context` and run GitNexus `impact` upstream when this repository is indexed. If the index is missing or stale, run `gitnexus analyze --skip-agents-md --skip-skills --skip-embeddings --workers 1` from the repository root before relying on graph results. After edits to indexed code, run GitNexus `detect_changes` and combine it with normal pytest/typecheck/lint/build verification.

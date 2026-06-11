@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import threading
 
 from fastapi import FastAPI, Request
@@ -10,7 +11,8 @@ from ..utils.ytdlp import YtdlpConfigBuilder
 from ..llm import set_default_config, log_llm_stats
 from ..llm.llm import log_llm_config_summary
 from .context import get_cache_manager, get_config, get_logger, get_static_dir, get_temp_manager
-from .routes import audit, health, tasks, users, views
+from .services.progress_notifications import process_progress_reminders
+from .routes import audit, collections, flywheel, health, post_insight, tasks, users, views
 from .services.transcription import process_llm_queue, process_task_queue
 
 
@@ -65,6 +67,9 @@ def create_app() -> FastAPI:
     app.include_router(audit.router)
     app.include_router(users.router)
     app.include_router(views.router)
+    app.include_router(collections.router)
+    app.include_router(post_insight.router)
+    app.include_router(flywheel.router)
 
     @app.on_event("startup")
     async def startup_event():
@@ -100,6 +105,11 @@ def create_app() -> FastAPI:
         logger.info("启动任务队列处理器")
         asyncio.create_task(process_task_queue())
 
+        logger.info("启动任务进度提醒处理器")
+        app.state.progress_reminder_task = asyncio.create_task(
+            process_progress_reminders()
+        )
+
         logger.info("启动LLM队列处理器线程")
         llm_thread = threading.Thread(target=process_llm_queue, daemon=True)
         llm_thread.start()
@@ -131,6 +141,12 @@ def create_app() -> FastAPI:
 
     @app.on_event("shutdown")
     async def shutdown_event():
+        progress_task = getattr(app.state, "progress_reminder_task", None)
+        if progress_task:
+            progress_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await progress_task
+
         temp_manager = get_temp_manager()
         temp_manager.clean_up()
 

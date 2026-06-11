@@ -69,6 +69,117 @@
 .recalibrate-status { font-size: 0.85rem; color: var(--text-secondary, #888); white-space: nowrap; }
 .recalibrate-done { color: #5cb85c; }
 .recalibrate-error { color: #d9534f; }
+
+/* Comment insight */
+.comment-samples-details {
+    margin-top: 18px;
+    border-top: 1px solid var(--border-color, #e5e7eb);
+    padding-top: 12px;
+}
+.comment-samples-details summary {
+    cursor: pointer;
+    color: var(--text-secondary, #666);
+    font-size: 0.9rem;
+}
+.comment-samples-list {
+    margin: 12px 0 0 20px;
+    padding: 0;
+}
+.comment-samples-list li {
+    margin-bottom: 10px;
+    color: var(--text-primary, #333);
+}
+.comment-sample-meta {
+    color: var(--text-secondary, #666);
+    font-size: 0.82rem;
+    margin-bottom: 2px;
+}
+.comment-sample-text {
+    line-height: 1.7;
+}
+
+.advanced-actions-details {
+    padding: 8px 30px;
+    margin: 0;
+    background: rgba(0, 0, 0, 0.015);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    font-size: 0.86rem;
+}
+
+.advanced-actions-details > summary {
+    cursor: pointer;
+    color: var(--text-secondary, #666);
+    font-weight: 500;
+    list-style: none;
+}
+
+.advanced-actions-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.advanced-actions-details > summary::before {
+    content: '▶';
+    display: inline-block;
+    margin-right: 8px;
+    font-size: 0.7rem;
+    transition: transform 0.2s ease;
+}
+
+.advanced-actions-details[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.advanced-actions-details .quick-copy-bar {
+    padding: 12px 0 8px;
+    border-bottom: 0;
+    background: transparent;
+}
+
+.advanced-actions-details .export-links-details {
+    padding: 4px 0 0;
+    border-bottom: 0;
+    background: transparent;
+}
+
+.learning-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 30px;
+    background: #f6fbff;
+    border-bottom: 1px solid rgba(37, 99, 235, 0.14);
+}
+
+.longcut-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    border-radius: 6px;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.longcut-action-btn:hover {
+    background: #1d4ed8;
+    color: #fff;
+}
+
+.learning-action-desc {
+    color: var(--text-secondary, #666);
+    font-size: 0.88rem;
+}
+
+@media (max-width: 720px) {
+    .learning-action-bar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 12px 18px;
+    }
+}
 </style>
 {% endblock %}
 
@@ -79,10 +190,21 @@
         <span class="stats-icon">📊</span>
         <span class="stats-label">转录统计</span>
         <span class="stats-content">
+            {% if stats.duration_display %}总耗时 {{ stats.duration_display }} | {% endif %}
             原始转录 {{ "{:,}".format(stats.original_length) }} 字
             {% if stats.calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(stats.calibrated_length) }} 字{% endif %}
             {% if stats.summary_length > 0 and stats.summary_length != stats.calibrated_length %} | 内容总结 {{ "{:,}".format(stats.summary_length) }} 字{% endif %}
         </span>
+    </div>
+    {% endif %}
+
+    {% if longcut_action %}
+    <div class="learning-action-bar">
+        <a class="longcut-action-btn" href="{{ longcut_action.url }}">
+            <span>▶</span>
+            <span>{{ longcut_action.label }}</span>
+        </a>
+        <span class="learning-action-desc">{{ longcut_action.description }}</span>
     </div>
     {% endif %}
 
@@ -107,7 +229,7 @@
     <details class="llm-config-details">
         <summary>
             <span class="config-icon">⚙️</span>
-            <span class="config-label">处理信息</span>
+            <span class="config-label">高级信息</span>
             {% if llm_config.has_risk %}<span class="risk-badge">风险降级</span>{% endif %}
         </summary>
         <div class="llm-config-grid">
@@ -127,52 +249,64 @@
     </details>
     {% endif %}
 
-    <!-- 一键复制常用链接 -->
+    <!-- 高级操作：导出与复制 -->
     {% if view_token %}
-    <div class="quick-copy-bar">
-        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?raw=calibrated" title="复制 Raw 校对文本 URL">
-            <span class="quick-copy-label">Raw 校对文本</span>
-            <span class="quick-copy-action">复制 URL</span>
-            <span class="quick-copy-desc">纯文本，粘贴到 ChatGPT / Claude 直接读取</span>
-        </button>
-        <button class="quick-copy-btn" data-path="/view/{{ view_token }}?page=calibrated" title="复制 HTML 校对页面 URL">
-            <span class="quick-copy-label">HTML 校对页面</span>
-            <span class="quick-copy-action">复制 URL</span>
-            <span class="quick-copy-desc">带标题的 HTML，供 NotebookLM 等工具爬取</span>
-        </button>
-    </div>
-    {% endif %}
-
-    <!-- 导出链接栏 -->
-    {% if view_token %}
-    <details class="export-links-details">
-        <summary class="export-links-summary">
-            <span class="export-icon">📤</span>
-            <span class="export-summary-label">更多导出选项</span>
+    <details class="advanced-actions-details">
+        <summary>
+            <span>导出与复制</span>
         </summary>
-        <div class="export-links-content">
-            <div class="export-group">
-                <span class="export-group-label">Raw 纯文本</span>
-                <span class="export-group-items">
-                    <a href="/view/{{ view_token }}?raw=calibrated" title="导出校对文本（纯文本）">校对文本</a>
-                    <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?raw=summary" title="导出内容总结（纯文本）">总结</a>
-                    <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?raw=transcript" title="导出原始转录（纯文本）">原始转录</a>
-                </span>
-                <span class="export-hint">下载 TXT / 粘贴 URL 到 ChatGPT、Claude 等 LLM 直接读取</span>
+        <div>
+            <div class="quick-copy-bar">
+                <button class="quick-copy-btn" data-path="/view/{{ view_token }}?raw=calibrated" title="复制 Raw 校对文本 URL">
+                    <span class="quick-copy-label">Raw 校对文本</span>
+                    <span class="quick-copy-action">复制 URL</span>
+                    <span class="quick-copy-desc">纯文本，粘贴到 ChatGPT / Claude 直接读取</span>
+                </button>
+                <button class="quick-copy-btn" data-path="/view/{{ view_token }}?page=calibrated" title="复制 HTML 校对页面 URL">
+                    <span class="quick-copy-label">HTML 校对页面</span>
+                    <span class="quick-copy-action">复制 URL</span>
+                    <span class="quick-copy-desc">带标题的 HTML，供 NotebookLM 等工具爬取</span>
+                </button>
             </div>
-            <div class="export-group">
-                <span class="export-group-label">HTML 页面</span>
-                <span class="export-group-items">
-                    <a href="/view/{{ view_token }}?page=calibrated" title="导出校对文本（HTML 页面）">校对文本</a>
-                    <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?page=summary" title="导出内容总结（HTML 页面）">总结</a>
-                    <span class="export-sep">·</span>
-                    <a href="/view/{{ view_token }}?page=transcript" title="导出原始转录（HTML 页面）">原始转录</a>
-                </span>
-                <span class="export-hint">带标题与 Meta 标签，适合 NotebookLM 等工具爬取</span>
-            </div>
+
+            <details class="export-links-details">
+                <summary class="export-links-summary">
+                    <span class="export-icon">📤</span>
+                    <span class="export-summary-label">更多导出选项</span>
+                </summary>
+                <div class="export-links-content">
+                    <div class="export-group">
+                        <span class="export-group-label">Raw 纯文本</span>
+                        <span class="export-group-items">
+                            <a href="/view/{{ view_token }}?raw=calibrated" title="导出校对文本（纯文本）">校对文本</a>
+                            <span class="export-sep">·</span>
+                            <a href="/view/{{ view_token }}?raw=summary" title="导出内容总结（纯文本）">总结</a>
+                            {% if comment_insight %}
+                            <span class="export-sep">·</span>
+                            <a href="/view/{{ view_token }}?raw=comment_insight" title="导出高赞评论洞察（纯文本）">评论洞察</a>
+                            {% endif %}
+                            <span class="export-sep">·</span>
+                            <a href="/view/{{ view_token }}?raw=transcript" title="导出原始转录（纯文本）">原始转录</a>
+                        </span>
+                        <span class="export-hint">下载 TXT / 粘贴 URL 到 ChatGPT、Claude 等 LLM 直接读取</span>
+                    </div>
+                    <div class="export-group">
+                        <span class="export-group-label">HTML 页面</span>
+                        <span class="export-group-items">
+                            <a href="/view/{{ view_token }}?page=calibrated" title="导出校对文本（HTML 页面）">校对文本</a>
+                            <span class="export-sep">·</span>
+                            <a href="/view/{{ view_token }}?page=summary" title="导出内容总结（HTML 页面）">总结</a>
+                            {% if comment_insight %}
+                            <span class="export-sep">·</span>
+                            <a href="/view/{{ view_token }}?page=comment_insight" title="导出高赞评论洞察（HTML 页面）">评论洞察</a>
+                            {% endif %}
+                            <span class="export-sep">·</span>
+                            <a href="/view/{{ view_token }}?page=transcript" title="导出原始转录（HTML 页面）">原始转录</a>
+                        </span>
+                        <span class="export-hint">带标题与 Meta 标签，适合 NotebookLM 等工具爬取</span>
+                    </div>
+                </div>
+            </details>
         </div>
     </details>
     {% endif %}
@@ -187,7 +321,32 @@
             {% endif %}
         </div>
     </div>
-    
+
+    {% if comment_insight_html %}
+    <div class="section">
+        <h2>💬 高赞评论洞察</h2>
+        <div class="content">
+            {{ comment_insight_html|safe }}
+        </div>
+        {% if comment_samples %}
+        <details class="comment-samples-details">
+            <summary>查看高赞评论样本</summary>
+            <ol class="comment-samples-list">
+                {% for sample in comment_samples[:20] %}
+                <li>
+                    <div class="comment-sample-meta">
+                        {% if sample.user_nickname %}@{{ sample.user_nickname }} · {% endif %}
+                        点赞 {{ sample.like_count or 0 }} · 回复 {{ sample.reply_count or 0 }}
+                    </div>
+                    <div class="comment-sample-text">{{ sample.text }}</div>
+                </li>
+                {% endfor %}
+            </ol>
+        </details>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {% if calibrated_html %}
     <div class="section">
         <div class="section-header">
@@ -228,7 +387,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/floating-toc.js"></script>
+<script src="/static/js/floating-toc.js?v=comment-toc-20260607"></script>
 {% if view_token %}
 <script>
 (function() {

@@ -3,7 +3,7 @@
  * 支持 PC 端和移动端响应式设计
  *
  * 功能特性：
- * - 自动提取内容总结区块的 H1-H4 标题
+ * - 自动提取内容总结与高赞评论洞察区块的 H1-H4 标题
  * - PC 端：右侧浮动，悬停展开，支持 Pin 固定
  * - 移动端：底部浮动按钮，点击弹出半屏面板
  * - 滚动自动高亮当前标题
@@ -19,11 +19,11 @@
         // 本地存储键名
         STORAGE_KEY: 'vta_toc_pinned',
 
-        // 标题选择器：仅从"内容总结"区块提取 H1-H4
-        HEADING_SELECTOR: '.section:has(h2:contains("内容总结")) .content h1, ' +
-                         '.section:has(h2:contains("内容总结")) .content h2, ' +
-                         '.section:has(h2:contains("内容总结")) .content h3, ' +
-                         '.section:has(h2:contains("内容总结")) .content h4',
+        // 需要纳入目录的正文区块
+        CONTENT_SECTIONS: [
+            { title: '📝 内容总结', headingText: '内容总结' },
+            { title: '💬 高赞评论洞察', headingText: '高赞评论洞察' }
+        ],
 
         // 校对文本区块选择器
         CALIBRATED_SELECTOR: '.section:has(h2:contains("校对文本"))',
@@ -41,6 +41,7 @@
     // ========== 全局变量 ==========
     let tocData = {
         headings: [],
+        headingGroups: [],
         calibratedSection: null
     };
 
@@ -96,50 +97,64 @@
     // ========== 数据提取 ==========
 
     /**
+     * 按区块标题查找 section
+     */
+    function findSectionByHeadingText(headingText) {
+        return Array.from(document.querySelectorAll('.section')).find(section => {
+            const h2 = section.querySelector('h2');
+            return h2 && h2.textContent.includes(headingText);
+        });
+    }
+
+    /**
      * 提取页面标题数据
      */
     function extractHeadings() {
         const headings = [];
+        const headingGroups = [];
+        let headingIndex = 0;
 
-        // 由于 :contains 不是标准选择器，我们需要手动查找
-        const summarySection = Array.from(document.querySelectorAll('.section')).find(section => {
-            const h2 = section.querySelector('h2');
-            return h2 && h2.textContent.includes('内容总结');
-        });
+        CONFIG.CONTENT_SECTIONS.forEach(sectionConfig => {
+            const section = findSectionByHeadingText(sectionConfig.headingText);
+            if (!section) return;
 
-        if (!summarySection) {
-            console.warn('未找到"内容总结"区块');
-            return headings;
-        }
+            const contentDiv = section.querySelector('.content');
+            if (!contentDiv) return;
 
-        const contentDiv = summarySection.querySelector('.content');
-        if (!contentDiv) {
-            console.warn('未找到内容区域');
-            return headings;
-        }
+            const groupHeadings = [];
+            const headingElements = contentDiv.querySelectorAll('h1, h2, h3, h4');
 
-        // 提取 H1-H4 标题
-        const headingElements = contentDiv.querySelectorAll('h1, h2, h3, h4');
+            headingElements.forEach(element => {
+                const level = parseInt(element.tagName.substring(1));
+                const text = element.textContent.trim();
 
-        headingElements.forEach((element, index) => {
-            const level = parseInt(element.tagName.substring(1));
-            const text = element.textContent.trim();
+                if (!text) return;
 
-            if (!text) return;
+                if (!element.id) {
+                    element.id = generateId(text, headingIndex);
+                }
 
-            // 确保标题有 ID
-            if (!element.id) {
-                element.id = generateId(text, index);
-            }
+                const heading = {
+                    level: level,
+                    text: text,
+                    id: element.id,
+                    element: element
+                };
 
-            headings.push({
-                level: level,
-                text: text,
-                id: element.id,
-                element: element
+                headings.push(heading);
+                groupHeadings.push(heading);
+                headingIndex += 1;
             });
+
+            if (groupHeadings.length > 0) {
+                headingGroups.push({
+                    title: sectionConfig.title,
+                    headings: groupHeadings
+                });
+            }
         });
 
+        tocData.headingGroups = headingGroups;
         console.log(`提取到 ${headings.length} 个标题`);
         return headings;
     }
@@ -148,11 +163,7 @@
      * 查找校对文本区块
      */
     function findCalibratedSection() {
-        const sections = Array.from(document.querySelectorAll('.section'));
-        return sections.find(section => {
-            const h2 = section.querySelector('h2');
-            return h2 && h2.textContent.includes('校对文本');
-        });
+        return findSectionByHeadingText('校对文本');
     }
 
     // ========== UI 渲染 ==========
@@ -161,22 +172,24 @@
      * 创建 PC 端 TOC 结构
      */
     function createPCTocHTML() {
-        const headings = tocData.headings;
+        const headingGroups = tocData.headingGroups;
         const hasCalibratedSection = !!tocData.calibratedSection;
 
         let headingsHTML = '';
 
-        if (headings.length > 0) {
-            headingsHTML += '<div class="toc-section-title">📝 内容总结</div>';
-            headings.forEach(heading => {
-                const levelClass = `data-level="${heading.level}"`;
-                headingsHTML += `
-                    <div class="toc-item">
-                        <a class="toc-link" href="#${heading.id}" ${levelClass} data-id="${heading.id}">
-                            ${heading.text}
-                        </a>
-                    </div>
-                `;
+        if (headingGroups.length > 0) {
+            headingGroups.forEach(group => {
+                headingsHTML += `<div class="toc-section-title">${group.title}</div>`;
+                group.headings.forEach(heading => {
+                    const levelClass = `data-level="${heading.level}"`;
+                    headingsHTML += `
+                        <div class="toc-item">
+                            <a class="toc-link" href="#${heading.id}" ${levelClass} data-id="${heading.id}">
+                                ${heading.text}
+                            </a>
+                        </div>
+                    `;
+                });
             });
         }
 
@@ -215,21 +228,24 @@
      * 创建移动端 TOC 结构
      */
     function createMobileTocHTML() {
-        const headings = tocData.headings;
+        const headingGroups = tocData.headingGroups;
         const hasCalibratedSection = !!tocData.calibratedSection;
 
         let headingsHTML = '';
 
-        if (headings.length > 0) {
-            headings.forEach(heading => {
-                const levelClass = `data-level="${heading.level}"`;
-                headingsHTML += `
-                    <div class="toc-item">
-                        <a class="toc-link" href="#${heading.id}" ${levelClass} data-id="${heading.id}">
-                            ${heading.text}
-                        </a>
-                    </div>
-                `;
+        if (headingGroups.length > 0) {
+            headingGroups.forEach(group => {
+                headingsHTML += `<div class="toc-section-title">${group.title}</div>`;
+                group.headings.forEach(heading => {
+                    const levelClass = `data-level="${heading.level}"`;
+                    headingsHTML += `
+                        <div class="toc-item">
+                            <a class="toc-link" href="#${heading.id}" ${levelClass} data-id="${heading.id}">
+                                ${heading.text}
+                            </a>
+                        </div>
+                    `;
+                });
             });
         }
 

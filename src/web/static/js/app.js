@@ -9,11 +9,13 @@ const APP_CONFIG = {
         BEARER_TOKEN: 'vta_bearer_token',
         WECHAT_WEBHOOK: 'vta_wechat_webhook',
         SPEAKER_RECOGNITION: 'vta_speaker_recognition',
+        INCLUDE_COMMENTS: 'vta_include_comments',
+        COMMENT_LIMIT: 'vta_comment_limit',
         TASK_HISTORY: 'vta_task_history',
         THEME_PREFERENCE: 'vta_theme_preference'
     },
     API_BASE_URL: '',
-    MAX_HISTORY_ITEMS: 10,
+    MAX_HISTORY_ITEMS: 200,
     ENCRYPTION_KEY: 'vta_encrypt_key_2024' // 简单的加密密钥
 };
 
@@ -235,7 +237,7 @@ class APIManager {
     /**
      * 提交转录任务
      */
-    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null) {
+    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100) {
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
 
         if (!token) {
@@ -244,7 +246,9 @@ class APIManager {
 
         const requestBody = {
             url: url,
-            use_speaker_recognition: useSpeakerRecognition
+            use_speaker_recognition: useSpeakerRecognition,
+            include_comments: Boolean(includeComments),
+            comment_limit: Number.parseInt(commentLimit, 10) || 100
         };
 
         // 只有当 webhook 不为空时才添加到请求体中
@@ -274,7 +278,7 @@ class APIManager {
      */
     static async getTaskStatus(taskId) {
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
-        
+
         if (!token) {
             throw new Error('请先设置API访问令牌');
         }
@@ -314,6 +318,7 @@ class TaskHistoryManager {
                 title: taskData.title || this.extractTitleFromURL(taskData.url),
                 timestamp: Date.now(),
                 useSpeakerRecognition: taskData.use_speaker_recognition || false,
+                includeComments: taskData.include_comments || false,
                 status: 'submitted'
             };
 
@@ -321,7 +326,7 @@ class TaskHistoryManager {
             const existingUrlIndex = history.findIndex(task => task.url === newTask.url);
             let isDuplicate = false;
             let oldTask = null;
-            
+
             if (existingUrlIndex !== -1) {
                 // 如果已存在相同URL的任务，移除旧的记录
                 oldTask = history[existingUrlIndex];
@@ -329,7 +334,7 @@ class TaskHistoryManager {
                 isDuplicate = true;
                 console.log(`检测到重复URL，已移除旧记录: ${newTask.url}`);
             }
-            
+
             // 将新任务添加到最前面
             history.unshift(newTask);
 
@@ -339,8 +344,9 @@ class TaskHistoryManager {
             }
 
             StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
+            window.__histPage = 1;  // 新任务回到第 1 页（最新在最前）
             this.renderHistory();
-            
+
             return {
                 isDuplicate: isDuplicate,
                 oldTask: oldTask,
@@ -367,13 +373,13 @@ class TaskHistoryManager {
             if (!confirm('确定要删除这个任务记录吗？')) {
                 return;
             }
-            
+
             const history = this.getHistory();
             const updatedHistory = history.filter(task => task.id !== taskId);
-            
+
             StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, updatedHistory);
             this.renderHistory();
-            
+
             UIManager.showStatus('success', '任务记录已删除');
             setTimeout(UIManager.hideStatus, 2000);
         } catch (e) {
@@ -390,7 +396,7 @@ class TaskHistoryManager {
         try {
             const urlObj = new URL(url);
             const hostname = urlObj.hostname.replace('www.', '');
-            
+
             if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
                 return 'YouTube视频';
             } else if (hostname.includes('bilibili.com')) {
@@ -413,50 +419,52 @@ class TaskHistoryManager {
      * 渲染历史记录
      */
     static renderHistory() {
-        const history = this.getHistory();
+        const allHistory = this.getHistory();
         const container = document.getElementById('history-container');
         const list = document.getElementById('history-list');
+        if (!container || !list) return;
 
-        if (history.length === 0) {
+        if (allHistory.length === 0) {
             container.style.display = 'none';
             return;
         }
-
         container.style.display = 'block';
-        list.innerHTML = '';
 
-        history.forEach((task, index) => {
-            const item = document.createElement('div');
-            item.className = 'history-item fade-in';
-            
-            const timeStr = new Date(task.timestamp).toLocaleString('zh-CN');
-            const originalTextPreview = task.original_text ? 
-                (task.original_text.length > 100 ? task.original_text.substring(0, 100) + '...' : task.original_text) : '';
-            
-            item.innerHTML = `
-                <div class="history-info">
-                    <div class="history-title">${task.title}</div>
-                    ${originalTextPreview ? `
-                        <div class="history-original-text">
-                            <span class="original-text-label">原始内容：</span>
-                            <span class="original-text-content">${originalTextPreview}</span>
-                        </div>
-                    ` : ''}
-                    <div class="history-url">${task.url}</div>
-                    <div class="history-meta">
-                        <span>${timeStr}</span>
-                        ${task.useSpeakerRecognition ? '<span class="feature-tag">• 说话人识别</span>' : ''}
-                    </div>
-                </div>
-                <div class="history-actions">
-                    <button class="history-btn" onclick="copyToClipboard('${task.url}')">📋 复制</button>
-                    <a class="history-btn" href="/view/${task.view_token || task.id}" target="_blank">👁️ 查看</a>
-                    <button class="history-btn delete-btn" onclick="TaskHistoryManager.deleteTask('${task.id}')">🗑️ 删除</button>
-                </div>
-            `;
-            
-            list.appendChild(item);
-        });
+        // 过滤（类型 + 状态 + 日期）→ 按时间倒序（最近靠前）
+        const typeFilter = window.__histFilter || 'all';
+        const statusFilter = window.__histStatus || 'all';
+        const dateFilter = window.__histDate || 'all';
+        const filtered = allHistory
+            .filter((task) => {
+                const t = histTypeOf(task);
+                const typeOk = typeFilter === 'all' || t === typeFilter;
+                const sc = statusInfo(task.status, t).cls;
+                const statusOk = statusFilter === 'all'
+                    || (statusFilter === 'done' && sc === 'done')
+                    || (statusFilter === 'failed' && sc === 'failed')
+                    || (statusFilter === 'running' && (sc === 'running' || sc === 'queued'));
+                return typeOk && statusOk && inDateRange(task.timestamp, dateFilter);
+            })
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        // 分页
+        const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE_SIZE));
+        let page = Math.min(Math.max(window.__histPage || 1, 1), totalPages);
+        window.__histPage = page;
+        const pageItems = filtered.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+
+        list.innerHTML = '';
+        if (pageItems.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'hist-empty';
+            empty.innerHTML = '<span class="empty-icon">🗂️</span>该筛选条件下暂无记录';
+            list.appendChild(empty);
+        } else {
+            pageItems.forEach((task) => list.appendChild(buildHistoryCard(task)));
+        }
+
+        renderHistoryPagination(filtered.length, page, totalPages);
+        refreshHistoryStatuses();
     }
 }
 
@@ -470,22 +478,22 @@ class ThemeManager {
     static initialize() {
         // 获取保存的主题偏好
         const savedTheme = StorageManager.get(APP_CONFIG.STORAGE_KEYS.THEME_PREFERENCE);
-        
+
         // 如果没有保存的主题，则检测系统偏好
         let theme = savedTheme;
         if (!theme) {
             theme = this.detectSystemTheme();
         }
-        
+
         // 应用主题
         this.applyTheme(theme);
-        
+
         // 绑定主题切换按钮事件
         const themeToggle = document.getElementById('theme-toggle');
         if (themeToggle) {
             themeToggle.addEventListener('click', () => this.toggleTheme());
         }
-        
+
         // 监听系统主题变化（如果用户没有手动设置过主题）
         if (!savedTheme && window.matchMedia) {
             const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -498,7 +506,7 @@ class ThemeManager {
             });
         }
     }
-    
+
     /**
      * 检测系统主题偏好
      */
@@ -508,7 +516,7 @@ class ThemeManager {
         }
         return 'dark';
     }
-    
+
     /**
      * 应用主题
      */
@@ -531,7 +539,7 @@ class ThemeManager {
             }
         }
     }
-    
+
     /**
      * 切换主题
      */
@@ -539,7 +547,7 @@ class ThemeManager {
         const currentTheme = this.getCurrentTheme();
         const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
         const themeToggle = document.getElementById('theme-toggle');
-        
+
         // 添加按钮旋转动画
         if (themeToggle) {
             themeToggle.classList.add('switching');
@@ -547,25 +555,25 @@ class ThemeManager {
                 themeToggle.classList.remove('switching');
             }, 600);
         }
-        
+
         // 保存用户偏好
         StorageManager.set(APP_CONFIG.STORAGE_KEYS.THEME_PREFERENCE, newTheme);
-        
+
         // 添加页面过渡动画
         const body = document.body;
         body.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-        
+
         // 应用新主题
         setTimeout(() => {
             this.applyTheme(newTheme);
         }, 50);
-        
+
         // 清除过渡样式
         setTimeout(() => {
             body.style.transition = '';
         }, 350);
     }
-    
+
     /**
      * 获取当前主题
      */
@@ -584,7 +592,7 @@ class UIManager {
     static showStatus(type, message, details = '') {
         const container = document.getElementById('status-container');
         const content = document.getElementById('status-content');
-        
+
         container.className = `status-container status-${type} fade-in`;
         container.style.display = 'block';
 
@@ -629,14 +637,14 @@ class UIManager {
         const btn = document.getElementById('submit-btn');
         const btnIcon = btn.querySelector('.btn-icon');
         const btnText = btn.querySelector('.btn-text');
-        
+
         const selectedURL = getSelectedURL();
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
-        
+
         const canSubmit = selectedURL && token && !currentTask;
-        
+
         btn.disabled = !canSubmit;
-        
+
         if (currentTask) {
             btnIcon.textContent = '⏳';
             btnText.textContent = '处理中...';
@@ -648,7 +656,7 @@ class UIManager {
             btnText.textContent = '请在高级设置中填写 API 令牌';
         } else {
             btnIcon.textContent = '🚀';
-            btnText.textContent = '开始转录';
+            btnText.textContent = submitLabelForUrl(selectedURL);
         }
     }
 
@@ -658,9 +666,9 @@ class UIManager {
     static toggleAdvancedSettings() {
         const settings = document.getElementById('advanced-settings');
         const icon = document.querySelector('.toggle-icon');
-        
+
         isAdvancedSettingsExpanded = !isAdvancedSettingsExpanded;
-        
+
         if (isAdvancedSettingsExpanded) {
             settings.classList.add('expanded');
             icon.classList.add('rotated');
@@ -714,15 +722,15 @@ class UIManager {
 function handleTextInput(textarea) {
     const text = textarea.value;
     const urlResults = URLExtractor.extractAndRankURLs(text);
-    
+
     const previewContainer = document.getElementById('url-preview');
-    
+
     if (urlResults.length === 0) {
         previewContainer.innerHTML = '<div class="no-urls">未检测到URL</div>';
         UIManager.updateSubmitButton();
         return;
     }
-    
+
     // 显示提取的URL，最高分的作为默认选择
     let html = '<div class="detected-urls">';
     urlResults.forEach((result, index) => {
@@ -738,9 +746,9 @@ function handleTextInput(textarea) {
         `;
     });
     html += '</div>';
-    
+
     previewContainer.innerHTML = html;
-    
+
     // 绑定选择事件
     bindURLSelection();
     UIManager.updateSubmitButton();
@@ -751,19 +759,19 @@ function handleTextInput(textarea) {
  */
 function bindURLSelection() {
     const options = document.querySelectorAll('.url-option');
-    
+
     options.forEach(option => {
         option.addEventListener('click', () => {
             // 移除所有选中状态
             options.forEach(opt => opt.classList.remove('selected'));
-            
+
             // 添加选中状态
             option.classList.add('selected');
-            
+
             // 选中对应的单选按钮
             const radio = option.querySelector('input[type="radio"]');
             radio.checked = true;
-            
+
             UIManager.updateSubmitButton();
         });
     });
@@ -775,6 +783,413 @@ function bindURLSelection() {
 function getSelectedURL() {
     const selected = document.querySelector('input[name="selected-url"]:checked');
     return selected ? selected.value : null;
+}
+
+/* ============================================================
+   工作台：内容识别 / 路由 / 历史筛选 / Tab / 上下文选项
+   （函数声明会被提升，供上方 submitTranscription、renderHistory、
+    updateSubmitButton 在运行时调用）
+   ============================================================ */
+
+/**
+ * 内容识别：从链接判断处理类型（视频转录 / 帖子洞察 / 即将支持）。
+ * 作为识别横幅、提交路由、历史分类的单一事实源。
+ */
+function classifyContent(url) {
+    let host = '';
+    let path = '';
+    try {
+        const u = new URL(url);
+        host = u.hostname.replace(/^www\./, '').toLowerCase();
+        path = u.pathname;
+    } catch (e) {
+        return { type: 'unknown', platform: 'unknown', label: '未识别', action: '尝试按视频处理', soon: false };
+    }
+
+    // X / Twitter 帖子（已支持）
+    if ((host === 'x.com' || host === 'twitter.com' || host === 'mobile.twitter.com')
+        && /\/status\/\d+/.test(path)) {
+        return { type: 'post', platform: 'twitter', label: '𝕏 帖子', action: '帖子精华提炼 + 可信度判断', soon: false };
+    }
+    // 微信公众号文章 → 帖子洞察（正文 + 留言）
+    if (host === 'mp.weixin.qq.com') {
+        return { type: 'post', platform: 'weixin', label: '微信公众号', action: '帖子精华提炼', soon: false };
+    }
+    // 视频平台（已支持，走转录）
+    const videoHosts = ['youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv',
+        'douyin.com', 'v.douyin.com', 'iesdouyin.com', 'xiaoyuzhoufm.com',
+        'tiktok.com', 'vm.tiktok.com'];
+    if (videoHosts.some((h) => host === h || host.endsWith('.' + h))) {
+        return { type: 'video', platform: host, label: '视频', action: '语音转录', soon: false };
+    }
+    // 小红书：作为图文帖走帖子洞察（分析笔记正文 + 可信度判断）
+    if (host === 'xiaohongshu.com' || host === 'xhslink.com') {
+        return { type: 'post', platform: 'xiaohongshu', label: '小红书', action: '帖子精华提炼', soon: false };
+    }
+    // 其它/短链：未知，尝试按视频处理
+    return { type: 'unknown', platform: host || 'unknown', label: '未识别', action: '尝试按视频处理', soon: false };
+}
+
+/** 提交按钮文案（按识别类型） */
+function submitLabelForUrl(url) {
+    if (!url) return '开始解析';
+    const c = classifyContent(url);
+    if (c.soon) return '该平台暂未支持';
+    if (c.type === 'post') return '提炼精华';
+    if (c.type === 'video') return '开始转录';
+    return '开始解析';
+}
+
+/** 历史状态徽章信息 */
+function statusInfo(status, type) {
+    const s = (status || '').toString().toLowerCase();
+    if (type === 'post') return { cls: 'done', text: '已完成' };
+    if (['done', 'completed', 'success', 'finished'].includes(s)) return { cls: 'done', text: '已完成' };
+    if (['failed', 'error', 'fail'].includes(s)) return { cls: 'failed', text: '失败' };
+    if (['processing', 'running', 'transcribing', 'in_progress'].includes(s)) return { cls: 'running', text: '处理中' };
+    if (['queued', 'pending', 'submitted'].includes(s)) return { cls: 'running', text: '处理中' };
+    return { cls: 'queued', text: '已提交' };
+}
+
+/** 相对时间 */
+function formatRelativeTime(ts) {
+    if (!ts) return '';
+    const diff = Date.now() - ts;
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return '刚刚';
+    if (m < 60) return m + ' 分钟前';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + ' 小时前';
+    const d = Math.floor(h / 24);
+    if (d < 30) return d + ' 天前';
+    try { return new Date(ts).toLocaleDateString('zh-CN'); } catch (e) { return ''; }
+}
+
+function escapeHtml(s) {
+    return (s == null ? '' : String(s)).replace(/[&<>"']/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+/** 用于内联 onclick 的 JS 字符串实参转义 */
+function jsAttr(s) {
+    return String(s == null ? '' : s)
+        .replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+/** 每页历史条数 */
+const HISTORY_PAGE_SIZE = 8;
+
+/** 日期范围判断（today / 7d / 30d / 90d / all） */
+function inDateRange(ts, rangeKey) {
+    if (!rangeKey || rangeKey === 'all' || !ts) return true;
+    const now = Date.now();
+    const DAY = 86400000;
+    if (rangeKey === 'today') {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return ts >= d.getTime();
+    }
+    if (rangeKey === '7d') return ts >= now - 7 * DAY;
+    if (rangeKey === '30d') return ts >= now - 30 * DAY;
+    if (rangeKey === '90d') return ts >= now - 90 * DAY;
+    return true;
+}
+
+/** 构建单条历史卡片 DOM */
+// 历史条目类型：优先存储的 type；其次有 view_token 视作视频转录（有 /view 结果）；否则按 URL。
+function histTypeOf(task) {
+    if (task.type) return task.type;
+    if (task.view_token) return 'video';
+    return classifyContent(task.url).type === 'post' ? 'post' : 'video';
+}
+
+function buildHistoryCard(task) {
+    const cls = classifyContent(task.url);
+    const histType = histTypeOf(task);
+    // 图标按来源平台映射（展示来源，避免帖子一律显示 𝕏）
+    const PLATFORM_ICONS = {
+        twitter: '𝕏', xiaohongshu: '📕', weixin: '📰',
+        bilibili: '📺', douyin: '🎵', youtube: '▶️', xiaoyuzhou: '🎙️',
+    };
+    const icon = histType === 'file'
+        ? '📁'
+        : (PLATFORM_ICONS[cls.platform] || (histType === 'post' ? '📝' : '🎬'));
+    const typeLabel = histType === 'post' ? '帖子' : (histType === 'file' ? '文件' : '视频');
+    const st = statusInfo(task.status, histType);
+    const timeStr = formatRelativeTime(task.timestamp);
+
+    let host = '链接';
+    try { host = new URL(task.url).hostname.replace(/^www\./, ''); } catch (e) { /* keep fallback */ }
+
+    // 动作按状态：失败→重试（不查看失败页）；处理中→禁用；成功→查看真正的结果
+    let viewBtn;
+    if (st.cls === 'failed') {
+        const retryHref = (cls.type === 'post')
+            ? ('/post?url=' + encodeURIComponent(task.url))
+            : '/add_task_by_web';
+        viewBtn = `<a class="hist-btn" href="${retryHref}">🔁 重试</a>`;
+    } else if (st.cls === 'running' || st.cls === 'queued') {
+        viewBtn = `<a class="hist-btn" aria-disabled="true">⏳ 处理中</a>`;
+    } else if (task.result_id) {
+        // 帖子洞察结果（已持久化到本地）→ 查看存储结果
+        viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">👁️ 查看</a>`;
+    } else if (task.view_token) {
+        viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">👁️ 查看</a>`;
+    } else {
+        viewBtn = `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url)}">🔁 重新分析</a>`;
+    }
+
+    const tags = [];
+    if (task.useSpeakerRecognition) tags.push('<span class="hist-feature-tag">说话人识别</span>');
+    if (task.includeComments) tags.push('<span class="hist-feature-tag">评论洞察</span>');
+
+    const card = document.createElement('div');
+    card.className = 'hist-card fade-in';
+    card.setAttribute('data-type', histType);
+    if (task.id) card.setAttribute('data-task-id', task.id);
+    card.innerHTML = `
+                <div class="hist-icon">${icon}</div>
+                <div class="hist-body">
+                    <div class="hist-top-row">
+                        <span class="type-badge t-${histType}">${typeLabel}</span>
+                        <span class="status-badge s-${st.cls}">${st.text}</span>
+                        <span class="hist-title" title="${escapeAttr(task.title || '')}">${escapeHtml(task.title || '未命名')}</span>
+                    </div>
+                    <div class="hist-meta">
+                        <span class="hist-source">🔗 <a href="${escapeAttr(task.url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a></span>
+                        <span class="hist-time">${timeStr}</span>
+                        ${tags.join('')}
+                    </div>
+                </div>
+                <div class="hist-actions">
+                    ${viewBtn}
+                    <button class="hist-btn" onclick="copyToClipboard('${jsAttr(task.url)}')">📋 复制</button>
+                    <button class="hist-btn danger" onclick="TaskHistoryManager.deleteTask('${jsAttr(task.id)}')">🗑️ 删除</button>
+                </div>
+            `;
+    return card;
+}
+
+/** 渲染分页控件（只有超过一页时显示） */
+function renderHistoryPagination(total, page, totalPages) {
+    const el = document.getElementById('history-pagination');
+    if (!el) return;
+    if (total <= HISTORY_PAGE_SIZE) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+        <button type="button" class="page-btn" data-page-action="prev" ${page <= 1 ? 'disabled' : ''}>‹ 上一页</button>
+        <span class="page-info">第 ${page} / ${totalPages} 页 · 共 ${total} 条</span>
+        <button type="button" class="page-btn" data-page-action="next" ${page >= totalPages ? 'disabled' : ''}>下一页 ›</button>
+    `;
+}
+
+/** 历史视频任务的状态最佳努力刷新（复用既有 getTaskStatus，容错字段名） */
+function refreshHistoryStatuses() {
+    let token = null;
+    try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return; }
+    if (!token) return;
+    const history = TaskHistoryManager.getHistory();
+    document.querySelectorAll('.hist-card[data-task-id][data-type="video"]').forEach((card) => {
+        const taskId = card.getAttribute('data-task-id');
+        if (!taskId) return;
+        APIManager.getTaskStatus(taskId).then((resp) => {
+            const raw = (resp && (resp.data || resp)) || {};
+            const s = raw.status || raw.task_status || raw.state;
+            if (!s) return;
+            const norm = String(s).toLowerCase();
+            const entry = history.find((t) => t && t.id === taskId);
+            if (!entry) return;
+            // 回写真实状态（下次渲染直接正确，不再从 submitted 起跳）
+            if (entry.status !== norm) {
+                entry.status = norm;
+                StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
+            }
+            // 用最新状态重建整张卡片：徽章与动作按钮（查看/重试/处理中）保持一致
+            if (card.parentNode) {
+                card.replaceWith(buildHistoryCard(entry));
+            }
+        }).catch(() => { /* best-effort, ignore */ });
+    });
+}
+
+/** 更新识别横幅 + 视频专属选项可见性 + 按钮文案 */
+function updateDetection() {
+    const banner = document.getElementById('detect-banner');
+    const videoOpts = document.getElementById('video-options');
+    const url = getSelectedURL();
+
+    if (!url) {
+        if (banner) banner.hidden = true;
+        if (videoOpts) videoOpts.hidden = true;
+        if (typeof UIManager !== 'undefined') UIManager.updateSubmitButton();
+        return;
+    }
+
+    const c = classifyContent(url);
+    if (banner) {
+        const variant = c.type === 'video' ? 'is-video'
+            : (c.type === 'post' ? (c.soon ? 'is-soon' : 'is-post') : 'is-unknown');
+        banner.className = 'detect-banner ' + variant;
+        banner.hidden = false;
+        banner.innerHTML = '<span class="db-chip">' + escapeHtml(c.label) + '</span>'
+            + '<span class="db-text">将执行：<strong>' + escapeHtml(c.action) + '</strong></span>';
+    }
+    if (videoOpts) videoOpts.hidden = !(c.type === 'video' || c.type === 'unknown');
+    if (typeof UIManager !== 'undefined') UIManager.updateSubmitButton();
+}
+
+/** 工作台新增交互的初始化 */
+function initWorkbenchUI() {
+    // 输入 Tab 切换
+    document.querySelectorAll('.input-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.input-tab').forEach((t) => {
+                t.classList.remove('active');
+                t.setAttribute('aria-selected', 'false');
+            });
+            document.querySelectorAll('.input-panel').forEach((p) => {
+                p.classList.remove('active');
+                p.hidden = true;
+            });
+            tab.classList.add('active');
+            tab.setAttribute('aria-selected', 'true');
+            const panel = document.getElementById(tab.getAttribute('data-panel'));
+            if (panel) { panel.classList.add('active'); panel.hidden = false; }
+        });
+    });
+
+    // 本地文件：上传 → 转录 → 跳结果页
+    const dz = document.getElementById('file-dropzone');
+    const fileInput = document.getElementById('file-input');
+    if (dz && fileInput) {
+        const hint = document.getElementById('dropzone-hint');
+
+        const uploadLocalFile = (fileObj) => {
+            if (!fileObj) return;
+            const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+            if (!token) {
+                UIManager.showStatus('error', '请先设置 API 令牌', '请在高级设置中填写你的 API 访问令牌（Bearer Token）');
+                if (!isAdvancedSettingsExpanded) UIManager.toggleAdvancedSettings();
+                setTimeout(() => { const t = document.getElementById('bearer-token'); if (t) t.focus(); }, 100);
+                setTimeout(UIManager.hideStatus, 5000);
+                return;
+            }
+            if (hint) hint.textContent = '上传中… ' + fileObj.name;
+            dz.classList.add('uploading');
+            const fd = new FormData();
+            fd.append('file', fileObj);
+            fd.append('use_speaker_recognition', 'false');
+            fetch('/api/upload-transcribe', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: fd,
+            }).then((resp) => resp.json().then((d) => ({ status: resp.status, d })))
+              .then(({ status, d }) => {
+                  dz.classList.remove('uploading');
+                  if (status === 401 || status === 403) {
+                      if (hint) hint.textContent = '令牌无效，请在高级设置重新填写';
+                      return;
+                  }
+                  if (d && d.code === 202 && d.data && d.data.view_token) {
+                      if (hint) hint.textContent = '上传成功，正在转录…';
+                      window.location.href = '/view/' + d.data.view_token;
+                  } else if (hint) {
+                      hint.textContent = (d && (d.detail || d.message)) || '上传失败，请重试';
+                  }
+              }).catch(() => {
+                  dz.classList.remove('uploading');
+                  if (hint) hint.textContent = '网络错误，请重试';
+              });
+        };
+
+        dz.addEventListener('click', () => fileInput.click());
+        dz.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files && fileInput.files[0]) uploadLocalFile(fileInput.files[0]);
+        });
+        ['dragover', 'dragenter'].forEach((ev) => dz.addEventListener(ev, (e) => {
+            e.preventDefault(); dz.classList.add('dragover');
+        }));
+        dz.addEventListener('dragleave', (e) => { e.preventDefault(); dz.classList.remove('dragover'); });
+        dz.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dz.classList.remove('dragover');
+            const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+            if (f) uploadLocalFile(f);
+        });
+    }
+
+    // 历史：类型筛选
+    document.querySelectorAll('#history-filter .filter-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('#history-filter .filter-chip').forEach((c) => c.classList.remove('active'));
+            chip.classList.add('active');
+            window.__histFilter = chip.getAttribute('data-filter');
+            window.__histPage = 1;
+            TaskHistoryManager.renderHistory();
+        });
+    });
+
+    // 历史：日期筛选
+    const dateSel = document.getElementById('history-date');
+    if (dateSel) {
+        dateSel.addEventListener('change', () => {
+            window.__histDate = dateSel.value;
+            window.__histPage = 1;
+            TaskHistoryManager.renderHistory();
+        });
+    }
+
+    // 历史：状态筛选（成功 / 失败 / 处理中）
+    const statusSel = document.getElementById('history-status');
+    if (statusSel) {
+        statusSel.addEventListener('change', () => {
+            window.__histStatus = statusSel.value;
+            window.__histPage = 1;
+            TaskHistoryManager.renderHistory();
+        });
+    }
+
+    // 历史：分页（事件委托，按钮会随渲染重建）
+    const pager = document.getElementById('history-pagination');
+    if (pager) {
+        pager.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-page-action]');
+            if (!btn || btn.disabled) return;
+            const cur = window.__histPage || 1;
+            window.__histPage = btn.getAttribute('data-page-action') === 'next' ? cur + 1 : cur - 1;
+            TaskHistoryManager.renderHistory();
+        });
+    }
+
+    // 识别横幅：输入或选择变化后更新（setTimeout 让既有 handleTextInput/选择逻辑先跑）
+    const share = document.getElementById('share-content');
+    const preview = document.getElementById('url-preview');
+    if (share) share.addEventListener('input', () => setTimeout(updateDetection, 0));
+    if (preview) preview.addEventListener('click', () => setTimeout(updateDetection, 0));
+    updateDetection();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initWorkbenchUI);
+} else {
+    initWorkbenchUI();
+}
+
+function updateCommentLimitControl() {
+    const includeComments = document.getElementById('include-comments');
+    const commentLimit = document.getElementById('comment-limit');
+    const control = document.getElementById('comment-limit-control');
+
+    if (!includeComments || !commentLimit || !control) {
+        return;
+    }
+
+    const enabled = includeComments.checked;
+    commentLimit.disabled = !enabled;
+    control.classList.toggle('disabled', !enabled);
 }
 
 /**
@@ -797,19 +1212,35 @@ async function copyToClipboard(text) {
  */
 async function submitTranscription(event) {
     event.preventDefault();
-    
+
     if (currentTask) {
         return;
     }
-    
+
     const selectedURL = getSelectedURL();
     const useSpeakerRecognition = document.getElementById('speaker-recognition').checked;
+    const includeComments = document.getElementById('include-comments').checked;
+    const commentLimit = Number.parseInt(document.getElementById('comment-limit').value, 10) || 100;
     const wechatWebhook = document.getElementById('wechat-webhook').value.trim();
     const originalText = document.getElementById('share-content').value.trim();
 
     if (!selectedURL) {
         UIManager.showStatus('error', '请先选择一个视频链接', '请在上方文本框中输入包含视频链接的内容，系统会自动提取并显示可选的链接');
         setTimeout(UIManager.hideStatus, 5000);
+        return;
+    }
+
+    // 按识别类型路由：已支持的帖子（X / 小红书）→ 帖子洞察流程；
+    // 暂未支持的平台（公众号等）→ 友好提示；其余走视频转录。
+    const detected = classifyContent(selectedURL);
+    if (detected.type === 'post' && !detected.soon) {
+        window.location.href = '/post?url=' + encodeURIComponent(selectedURL);
+        return;
+    }
+    if (detected.soon) {
+        UIManager.showStatus('error', detected.label + ' 暂未支持',
+            '该平台的解析功能即将上线，敬请期待');
+        setTimeout(UIManager.hideStatus, 4000);
         return;
     }
 
@@ -838,47 +1269,56 @@ async function submitTranscription(event) {
 
         // 保存设置到本地存储
         StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, useSpeakerRecognition);
+        StorageManager.set(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS, includeComments);
+        StorageManager.set(APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT, commentLimit);
 
-        const response = await APIManager.submitTranscription(selectedURL, useSpeakerRecognition, wechatWebhook);
-        
+        const response = await APIManager.submitTranscription(
+            selectedURL,
+            useSpeakerRecognition,
+            wechatWebhook,
+            includeComments,
+            commentLimit
+        );
+
         if (response.code === 202 && response.data && response.data.task_id) {
             const taskData = {
                 task_id: response.data.task_id,
                 view_token: response.data.view_token,
                 url: selectedURL,
                 original_text: originalText,
-                use_speaker_recognition: useSpeakerRecognition
+                use_speaker_recognition: useSpeakerRecognition,
+                include_comments: includeComments
             };
-            
+
             // 添加到历史记录
             const historyResult = TaskHistoryManager.addTask(taskData);
-            
+
             // 根据是否重复显示不同的提示
             let statusMessage = '任务提交成功！';
             let statusDetails = `任务ID: ${response.data.task_id}<br>转录将在后台进行，完成后会通过配置的企业微信通知您<br>`;
-            
+
             if (historyResult.isDuplicate) {
                 statusMessage = '任务提交成功！(检测到重复URL)';
                 statusDetails += `<span style="color: #f59e0b;">⚠️ 相同链接的旧任务记录已被更新</span><br>`;
             }
-            
+
             statusDetails += `<a href="/view/${response.data.view_token}" target="_blank" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
-            
+
             UIManager.showStatus('success', statusMessage, statusDetails);
-            
+
             // 清空表单
             document.getElementById('share-content').value = '';
             document.getElementById('url-preview').innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
-            
+
             // 3秒后跳转到查看页面
             setTimeout(() => {
                 window.open(`/view/${response.data.view_token}`, '_blank');
             }, 3000);
-            
+
         } else {
             throw new Error(response.message || '提交失败');
         }
-        
+
     } catch (error) {
         console.error('提交任务失败:', error);
         UIManager.showStatus('error', '提交任务失败', error.message);
@@ -898,6 +1338,8 @@ function initializePage() {
     const savedToken = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
     const savedWebhook = StorageManager.get(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK);
     const savedSpeakerRecognition = StorageManager.get(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION);
+    const savedIncludeComments = StorageManager.get(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS);
+    const savedCommentLimit = StorageManager.get(APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT);
 
     if (savedToken) {
         document.getElementById('bearer-token').value = savedToken;
@@ -911,24 +1353,33 @@ function initializePage() {
     if (savedSpeakerRecognition !== null) {
         document.getElementById('speaker-recognition').checked = savedSpeakerRecognition;
     }
-    
+
+    if (savedIncludeComments !== null) {
+        document.getElementById('include-comments').checked = savedIncludeComments;
+    }
+
+    if (savedCommentLimit !== null) {
+        document.getElementById('comment-limit').value = String(savedCommentLimit);
+    }
+    updateCommentLimitControl();
+
     // 绑定事件监听器
     const textarea = document.getElementById('share-content');
     textarea.value = ''; // 确保初始为空
     textarea.addEventListener('input', () => handleTextInput(textarea));
-    
+
     // 确保URL预览区域初始状态正确
     const previewContainer = document.getElementById('url-preview');
     previewContainer.innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
-    
+
     // 如果没有保存的 token，自动展开高级设置
     if (!savedToken) {
         UIManager.toggleAdvancedSettings();
     }
-    
+
     const form = document.getElementById('transcribe-form');
     form.addEventListener('submit', submitTranscription);
-    
+
     const advancedToggle = document.getElementById('advanced-toggle');
     advancedToggle.addEventListener('click', UIManager.toggleAdvancedSettings);
 
@@ -966,16 +1417,28 @@ function initializePage() {
     document.getElementById('speaker-recognition').addEventListener('change', (e) => {
         StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, e.target.checked);
     });
-    
+
+    document.getElementById('include-comments').addEventListener('change', (e) => {
+        StorageManager.set(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS, e.target.checked);
+        updateCommentLimitControl();
+    });
+
+    document.getElementById('comment-limit').addEventListener('change', (e) => {
+        StorageManager.set(
+            APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT,
+            Number.parseInt(e.target.value, 10) || 100
+        );
+    });
+
     // 渲染任务历史
     TaskHistoryManager.renderHistory();
-    
+
     // 初始化主题系统
     ThemeManager.initialize();
-    
+
     // 初始状态更新
     UIManager.updateSubmitButton();
-    
+
     console.log('视频转录Web应用初始化完成');
 }
 

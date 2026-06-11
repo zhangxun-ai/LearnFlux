@@ -16,6 +16,7 @@ import hashlib
 import base64
 from pathlib import Path
 from datetime import datetime
+from typing import Callable, Optional
 from loguru import logger
 
 from ..utils.logging import load_config
@@ -24,7 +25,7 @@ from ..utils.logging import load_config
 class FunASRSpeakerClient:
     """FunASR 说话人识别服务器客户端"""
 
-    def __init__(self):
+    def __init__(self, progress_callback: Optional[Callable[[dict], None]] = None):
         self.config = load_config()
         self.server_config = self.config.get("funasr_spk_server", {})
         self.server_url = self.server_config.get("server_url", "ws://localhost:8767")
@@ -32,6 +33,15 @@ class FunASRSpeakerClient:
         self.retry_delay = self.server_config.get("retry_delay", 5)
         self.connection_timeout = self.server_config.get("connection_timeout", 30)
         self.websocket = None
+        self.progress_callback = progress_callback
+
+    def _emit_progress(self, payload: dict):
+        if not self.progress_callback:
+            return
+        try:
+            self.progress_callback(payload)
+        except Exception as exc:
+            logger.debug(f"FunASR progress callback failed: {exc}")
 
     async def connect_to_server(self):
         """连接到服务器"""
@@ -145,6 +155,7 @@ class FunASRSpeakerClient:
         if response["type"] == "task_complete":
             # 直接返回缓存结果
             logger.info("✓ 使用缓存结果")
+            self._emit_progress({"phase": "complete", "progress": 100})
             return response["data"]["result"]
 
         if response["type"] != "upload_ready":
@@ -166,6 +177,14 @@ class FunASRSpeakerClient:
         }
 
         await self.send_message(upload_data)
+        self._emit_progress(
+            {
+                "phase": "upload",
+                "progress": 100,
+                "completed": file_size,
+                "total": file_size,
+            }
+        )
         response = await self.receive_message()
 
         # 处理上传后的响应
@@ -217,6 +236,7 @@ class FunASRSpeakerClient:
 
         if response["type"] == "task_complete":
             logger.info("✓ 使用缓存结果")
+            self._emit_progress({"phase": "complete", "progress": 100})
             return response["data"]["result"]
 
         if response["type"] != "upload_ready":
@@ -253,6 +273,14 @@ class FunASRSpeakerClient:
                 progress = chunk_response["data"]["progress"]
                 logger.info(
                     f"上传进度: {progress:.1f}% ({chunk_index + 1}/{total_chunks})"
+                )
+                self._emit_progress(
+                    {
+                        "phase": "upload",
+                        "progress": progress,
+                        "completed": chunk_index + 1,
+                        "total": total_chunks,
+                    }
                 )
 
         logger.info("✓ 所有分片上传完成，等待处理...")
@@ -292,6 +320,14 @@ class FunASRSpeakerClient:
                 status = response["data"]["status"]
                 message = response["data"].get("message", "")
                 logger.debug(f"转录进度: {progress}% - {status} - {message}")
+                self._emit_progress(
+                    {
+                        "phase": "transcribe",
+                        "progress": progress,
+                        "status": status,
+                        "message": message,
+                    }
+                )
 
             elif response["type"] == "task_queued":
                 position = response["data"]["queue_position"]
@@ -303,6 +339,7 @@ class FunASRSpeakerClient:
             elif response["type"] == "task_complete":
                 result = response["data"]["result"]
                 logger.info("✓ 转录完成")
+                self._emit_progress({"phase": "complete", "progress": 100})
                 return result
 
             elif response["type"] == "error":

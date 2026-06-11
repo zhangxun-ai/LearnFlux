@@ -17,6 +17,10 @@ class TestResolveExportFilePath:
         p = resolve_export_file_path(str(tmp_path), "summary")
         assert p == tmp_path / "llm_summary.txt"
 
+    def test_comment_insight(self, tmp_path):
+        p = resolve_export_file_path(str(tmp_path), "comment_insight")
+        assert p == tmp_path / "comment_insight.txt"
+
     def test_transcript_prefers_funasr_when_present(self, tmp_path):
         (tmp_path / "transcript_funasr.json").write_text("{}", encoding="utf-8")
         p = resolve_export_file_path(str(tmp_path), "transcript")

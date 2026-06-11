@@ -150,6 +150,7 @@ class TOCFunctionalityTest:
 
         # 检查核心函数
         required_functions = [
+            'findSectionByHeadingText',
             'extractHeadings',
             'findCalibratedSection',
             'createPCTocHTML',
@@ -193,6 +194,20 @@ class TOCFunctionalityTest:
             "移动端检测",
             has_mobile_check,
             "实现了移动端判断逻辑"
+        )
+
+        has_comment_section = '高赞评论洞察' in content and 'CONTENT_SECTIONS' in content
+        self.log_test(
+            "高赞评论洞察目录分组",
+            has_comment_section,
+            "评论洞察区块会被纳入 TOC"
+        )
+
+        has_heading_groups = 'headingGroups' in content
+        self.log_test(
+            "多内容区分组",
+            has_heading_groups,
+            "TOC 支持内容总结和评论洞察分组"
         )
 
         # 检查事件监听
@@ -242,6 +257,13 @@ class TOCFunctionalityTest:
             "校对文本区块",
             has_calibrated_section,
             "存在校对文本区块"
+        )
+
+        has_comment_section = '高赞评论洞察' in content and 'comment_insight_html' in content
+        self.log_test(
+            "高赞评论洞察区块",
+            has_comment_section,
+            "存在可供 TOC 提取的评论洞察区块"
         )
 
     def test_code_quality(self):

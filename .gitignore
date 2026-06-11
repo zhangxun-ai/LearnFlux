@@ -33,6 +33,8 @@ data/*.db-shm
 data/*.db-wal
 data/output
 data/risk_control/
+data/flywheel/
+data/server.pid
 tests/llm/output
 
 

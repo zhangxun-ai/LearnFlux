@@ -17,7 +17,7 @@ import uuid
 import subprocess
 import argparse
 from pathlib import Path
-from typing import Tuple, List, Optional, Dict, Any
+from typing import Callable, Tuple, List, Optional, Dict, Any
 
 import websockets
 from loguru import logger
@@ -378,6 +378,7 @@ class CapsWriterClient:
         output_dir: str = None,
         max_retries: int = None,
         retry_delay: int = None,
+        progress_callback: Optional[Callable[[dict], None]] = None,
     ):
         """
         初始化客户端
@@ -412,9 +413,18 @@ class CapsWriterClient:
         )
         self.websocket = None
         self.current_task_id = None
+        self.progress_callback = progress_callback
 
         # 确保临时目录存在
         os.makedirs(self.output_dir, exist_ok=True)
+
+    def _emit_progress(self, payload: dict):
+        if not self.progress_callback:
+            return
+        try:
+            self.progress_callback(payload)
+        except Exception as exc:
+            logger.debug(f"CapsWriter progress callback failed: {exc}")
 
     def log(self, message: str, level: str = "info"):
         """记录日志"""
@@ -562,6 +572,14 @@ class CapsWriterClient:
                     self.log(
                         f"发送进度: {progress:.2f}秒 / {audio_duration:.2f}秒 ({progress_percent:.1f}%)"
                     )
+                    self._emit_progress(
+                        {
+                            "phase": "audio_sent",
+                            "progress": progress_percent,
+                            "completed": progress,
+                            "total": audio_duration,
+                        }
+                    )
                     break
 
             if is_final:
@@ -595,6 +613,7 @@ class CapsWriterClient:
                         process_time = result["time_complete"] - result["time_start"]
                         rtf = process_time / result["duration"]
                         self.log(f"处理耗时: {process_time:.2f}秒, RTF: {rtf:.3f}")
+                        self._emit_progress({"phase": "complete", "progress": 100})
                         return result
                 except json.JSONDecodeError:
                     self.log("接收到非JSON数据，已忽略", "warning")

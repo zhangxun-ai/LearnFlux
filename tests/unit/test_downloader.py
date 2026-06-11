@@ -57,6 +57,19 @@ class TestDownloaderFactory(unittest.TestCase):
         self.assertIsInstance(downloader, GenericDownloader)
 
 
+class TestDouyinDownloaderBasic(unittest.TestCase):
+    """Test Douyin downloader basic methods (no network)."""
+
+    def test_extract_video_id_from_modal_url(self):
+        """Should extract video ID from Douyin modal URL."""
+        downloader = DouyinDownloader()
+        video_id = downloader.extract_video_id(
+            "https://www.douyin.com/user/self?from_tab_name=main"
+            "&modal_id=7616674906457050408&showSubTab=video&showTab=record"
+        )
+        self.assertEqual(video_id, "7616674906457050408")
+
+
 class TestXiaoyuzhouDownloaderBasic(unittest.TestCase):
     """Test Xiaoyuzhou downloader basic methods (no network)."""
 

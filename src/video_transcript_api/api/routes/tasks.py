@@ -1,6 +1,17 @@
 import asyncio
 import datetime
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+import os
+import uuid
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 
 from ..context import (
     get_audit_logger,
@@ -13,6 +24,7 @@ from ..services.transcription import (
     RecalibrateRequest,
     TranscribeRequest,
     TranscribeResponse,
+    process_local_upload,
     verify_token,
 )
 from ...utils.notifications import send_view_link_wechat, get_notification_router
@@ -65,6 +77,7 @@ async def transcribe_video(
 
     logger.info(
         f"收到转录API请求 - URL: {url}, 说话人识别: {request_body.use_speaker_recognition}, "
+        f"评论洞察: {request_body.include_comments}, 评论上限: {request_body.comment_limit}, "
         f"自定义企微webhook: {request_body.wechat_webhook is not None}, "
         f"download_url: {normalized_download_url}, metadata_override: {normalized_metadata_override}"
     )
@@ -143,6 +156,8 @@ async def transcribe_video(
                 "user_info": user_info,
                 "download_url": normalized_download_url,
                 "metadata_override": normalized_metadata_override,
+                "include_comments": request_body.include_comments,
+                "comment_limit": request_body.comment_limit,
             }
 
             try:
@@ -229,6 +244,95 @@ async def transcribe_video(
         raise HTTPException(status_code=500, detail=f"提交转录任务失败: {exc}")
 
 
+# 上传大小上限：可配置，默认 20GB（视频常达数 GB，2 小时视频更大）。
+# 流式写盘、不进内存，真正的边界是磁盘空间。
+_UPLOAD_MAX_MB = int((config.get("upload") or {}).get("max_mb", 20480))
+_UPLOAD_MAX_BYTES = _UPLOAD_MAX_MB * 1024 * 1024
+
+
+@router.post("/upload-transcribe", response_model=TranscribeResponse)
+async def upload_transcribe(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    file: UploadFile = File(...),
+    use_speaker_recognition: bool = Form(False),
+    user_info: dict = Depends(verify_token),
+):
+    """接收本地音视频文件，转录后复用 LLM 后处理与结果页（不走下载）。"""
+    filename = (file.filename or "upload").strip() or "upload"
+    media_id = uuid.uuid4().hex
+
+    upload_dir = os.path.join(
+        config.get("storage", {}).get("temp_dir", "./data/temp"), "uploads"
+    )
+    os.makedirs(upload_dir, exist_ok=True)
+    ext = os.path.splitext(filename)[1][:10] or ".bin"
+    temp_path = os.path.join(upload_dir, f"{media_id}{ext}")
+
+    # 边读边写，限制大小，避免占满磁盘
+    size = 0
+    try:
+        with open(temp_path, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > _UPLOAD_MAX_BYTES:
+                    out.close()
+                    os.remove(temp_path)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"文件过大（上限 {_UPLOAD_MAX_MB // 1024}GB）",
+                    )
+                out.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(f"保存上传文件失败: {exc}")
+        raise HTTPException(status_code=500, detail="保存上传文件失败")
+
+    if size == 0:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise HTTPException(status_code=400, detail="上传文件为空")
+
+    display_url = f"local://{media_id}/{filename}"
+    task_info = cache_manager.create_task(
+        url=display_url,
+        use_speaker_recognition=use_speaker_recognition,
+        platform="generic",
+        media_id=media_id,
+    )
+    task_id = task_info["task_id"]
+    view_token = task_info["view_token"]
+
+    audit_logger.log_api_call(
+        api_key=user_info.get("api_key"),
+        user_id=user_info.get("user_id"),
+        endpoint="/api/upload-transcribe",
+        video_url=display_url,
+        user_agent=request.headers.get("User-Agent"),
+        remote_ip=request.client.host if request.client else None,
+    )
+
+    background_tasks.add_task(
+        process_local_upload,
+        task_id,
+        temp_path,
+        filename,
+        display_url,
+        media_id,
+        use_speaker_recognition,
+    )
+    logger.info(f"本地上传受理: task={task_id}, file={filename}, size={size}")
+    return TranscribeResponse(
+        code=202,
+        message="本地文件已上传，转录中",
+        data={"task_id": task_id, "view_token": view_token},
+    )
+
+
 @router.get("/task/{task_id}", response_model=TranscribeResponse)
 async def get_task_status(
     task_id: str,
@@ -271,6 +375,8 @@ async def get_task_status(
             "platform": task_info.get("platform"),
             "completed_at": task_info.get("completed_at"),
         }
+        if task_info.get("progress"):
+            data["progress"] = task_info.get("progress")
         if status == TaskStatus.FAILED:
             data["error"] = task_info.get("error_message") or "任务处理失败"
 

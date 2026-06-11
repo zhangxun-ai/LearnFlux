@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <!-- 暖墨底（与新 logo 一致） -->
+    <linearGradient id="ogInk" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#26231D"/>
+      <stop offset="1" stop-color="#14130F"/>
+    </linearGradient>
+    <!-- 暖纸底 -->
+    <linearGradient id="ogPaper" x1="0" y1="0" x2="0" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FBF8F3"/>
+      <stop offset="1" stop-color="#F3EDE4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 暖纸背景 + 顶部珊瑚细线（编辑感） -->
+  <rect width="1200" height="630" fill="url(#ogPaper)"/>
+  <rect x="0" y="0" width="1200" height="6" fill="#E4503A"/>
+
+  <!-- LOGO：新「标记精华」标记，放大到 256 -->
+  <g transform="translate(150,187) scale(4)">
+    <rect width="64" height="64" rx="15" fill="url(#ogInk)"/>
+    <rect x="17" y="20.5" width="26" height="3.4" rx="1.7" fill="#F4ECDD" opacity="0.62"/>
+    <rect x="14.5" y="28" width="32" height="7.2" rx="3.2" fill="#E4503A"/>
+    <rect x="18" y="30.4" width="22" height="2.4" rx="1.2" fill="#FBF8F3" opacity="0.92"/>
+    <rect x="17" y="40" width="18" height="3.4" rx="1.7" fill="#F4ECDD" opacity="0.62"/>
+  </g>
+
+  <!-- 文案（墨字 / 灰阶 / 珊瑚强调） -->
+  <text x="470" y="280" font-family="PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="72" font-weight="800" fill="#1B1A17">内容解析工作台</text>
+  <text x="472" y="345" font-family="PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="34" fill="#6B6258">视频转录 · 帖子精华提炼 · 文档解析</text>
+  <text x="472" y="398" font-family="PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="28" font-weight="600" fill="#C23A26">一站式 · 附「是否属实」可信度判断</text>
+</svg>

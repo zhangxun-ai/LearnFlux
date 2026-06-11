@@ -3,8 +3,9 @@ import re
 import json
 import requests
 import time
+import contextlib
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 from urllib.parse import urlparse, parse_qs
 from .models import VideoMetadata, DownloadInfo
 from ..errors import (
@@ -206,7 +207,13 @@ class BaseDownloader(ABC):
             logger.error(f"解析短链接失败: {url}, 错误: {str(e)}")
             return url
 
-    def download_file(self, url, filename, max_retries: int = 3):
+    def download_file(
+        self,
+        url,
+        filename,
+        max_retries: int = 3,
+        progress_callback: Optional[Callable[[int, Optional[int]], None]] = None,
+    ):
         """Download file to local temp directory with retry logic.
 
         Args:
@@ -223,7 +230,16 @@ class BaseDownloader(ABC):
             try:
                 logger.info(f"downloading file (attempt {attempt}/{max_retries}): {url[:100]}...")
 
-                response = requests.get(url, stream=True, timeout=60)
+                # 带浏览器 User-Agent 下载；部分 CDN（如抖音）裸请求会被拒/断连
+                headers = {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    )
+                }
+                if "douyin" in url or "zjcdn.com" in url:
+                    headers["Referer"] = "https://www.douyin.com/"
+                response = requests.get(url, stream=True, timeout=60, headers=headers)
                 response.raise_for_status()
 
                 content_length = response.headers.get("Content-Length")
@@ -240,6 +256,9 @@ class BaseDownloader(ABC):
                         if chunk:
                             f.write(chunk)
                             downloaded_size += len(chunk)
+                            if progress_callback:
+                                with contextlib.suppress(Exception):
+                                    progress_callback(downloaded_size, expected_size)
 
                 actual_size = os.path.getsize(local_path)
                 logger.info(f"actual file size: {actual_size / 1024 / 1024:.2f} MB")

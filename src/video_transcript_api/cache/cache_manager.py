@@ -10,6 +10,7 @@ from contextlib import contextmanager
 import threading
 from ..utils.logging import setup_logger
 from ..utils.task_status import TaskStatus
+from ..utils.task_progress import build_progress
 
 logger = setup_logger("cache_manager")
 
@@ -19,29 +20,29 @@ class CacheManager:
     管理视频转录缓存的类
     使用 SQLite 数据库存储元数据，文件系统存储实际内容
     """
-    
+
     def __init__(self, cache_dir: str = "./data/cache", db_path: str = None):
         """
         初始化缓存管理器
-        
+
         Args:
             cache_dir: 缓存文件目录
             db_path: SQLite 数据库路径，默认为 cache_dir/cache.db
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
+
         if db_path is None:
             self.db_path = self.cache_dir / "cache.db"
         else:
             self.db_path = Path(db_path)
-            
+
         # 使用线程本地存储来管理数据库连接
         self._local = threading.local()
-        
+
         # 初始化数据库
         self._init_database()
-        
+
     def _get_connection(self) -> sqlite3.Connection:
         """获取当前线程的数据库连接"""
         if not hasattr(self._local, 'connection'):
@@ -53,7 +54,7 @@ class CacheManager:
             except sqlite3.OperationalError:
                 logger.warning("WAL mode not supported, using default journal mode")
         return self._local.connection
-        
+
     @contextmanager
     def _get_cursor(self):
         """获取数据库游标的上下文管理器"""
@@ -68,7 +69,7 @@ class CacheManager:
             raise
         finally:
             cursor.close()
-            
+
     def _init_database(self):
         """初始化数据库表结构"""
         with self._get_cursor() as cursor:
@@ -88,7 +89,7 @@ class CacheManager:
                     UNIQUE(platform, media_id, use_speaker_recognition)
                 )
             ''')
-            
+
             # 新增任务状态表
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS task_status (
@@ -107,6 +108,8 @@ class CacheManager:
                     cache_id INTEGER,
                     llm_config TEXT,
                     error_message TEXT,
+                    progress_json TEXT,
+                    progress_reminders_json TEXT,
                     FOREIGN KEY (cache_id) REFERENCES video_cache(id)
                 )
             ''')
@@ -117,10 +120,10 @@ class CacheManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_view_token ON task_status(view_token)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_task_status ON task_status(status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_task_platform_media ON task_status(platform, media_id)')
-            
+
         # 执行数据库迁移
         self._migrate_database()
-    
+
     def _migrate_database(self):
         """执行数据库迁移"""
         try:
@@ -167,6 +170,24 @@ class CacheManager:
                     logger.info("添加 error_message 字段到 task_status 表...")
                     cursor.execute("ALTER TABLE task_status ADD COLUMN error_message TEXT")
                     logger.info("error_message 字段添加成功")
+
+                # 迁移5: 添加 progress_json 字段（任务进度持久化）
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [col[1] for col in cursor.fetchall()]
+
+                if 'progress_json' not in columns:
+                    logger.info("添加 progress_json 字段到 task_status 表...")
+                    cursor.execute("ALTER TABLE task_status ADD COLUMN progress_json TEXT")
+                    logger.info("progress_json 字段添加成功")
+
+                # 迁移6: 添加 progress_reminders_json 字段（长任务提醒去重）
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [col[1] for col in cursor.fetchall()]
+
+                if 'progress_reminders_json' not in columns:
+                    logger.info("添加 progress_reminders_json 字段到 task_status 表...")
+                    cursor.execute("ALTER TABLE task_status ADD COLUMN progress_reminders_json TEXT")
+                    logger.info("progress_reminders_json 字段添加成功")
                 else:
                     logger.debug("数据库结构正常，无需迁移")
 
@@ -205,6 +226,9 @@ class CacheManager:
                 completed_at TIMESTAMP,
                 cache_id INTEGER,
                 llm_config TEXT,
+                error_message TEXT,
+                progress_json TEXT,
+                progress_reminders_json TEXT,
                 FOREIGN KEY (cache_id) REFERENCES video_cache(id)
             )
         ''')
@@ -234,39 +258,43 @@ class CacheManager:
                 row_map.get("completed_at"),
                 row_map.get("cache_id"),
                 row_map.get("llm_config"),
+                row_map.get("error_message"),
+                row_map.get("progress_json"),
+                row_map.get("progress_reminders_json"),
             ]
 
             cursor.execute('''
                 INSERT INTO task_status
                 (task_id, view_token, url, download_url, platform, media_id, use_speaker_recognition,
-                 status, title, author, created_at, completed_at, cache_id, llm_config)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 status, title, author, created_at, completed_at, cache_id, llm_config,
+                 error_message, progress_json, progress_reminders_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', new_row_data)
 
         logger.info(f"数据库迁移完成，恢复了 {len(existing_data)} 条记录")
-            
+
     def _get_file_path(self, platform: str, media_id: str, date: datetime.datetime = None) -> Path:
         """
         获取文件存储路径
-        
+
         Args:
             platform: 平台名称
             media_id: 媒体ID
             date: 日期，默认为当前日期
-            
+
         Returns:
             Path: 文件存储路径
         """
         if date is None:
             date = datetime.datetime.now()
-            
+
         year = date.strftime("%Y")
         year_month = date.strftime("%Y%m")
-        
+
         # 构建路径：cache_dir/platform/YYYY/YYYYMM/media_id
         file_path = self.cache_dir / platform / year / year_month / media_id
         return file_path
-        
+
     def save_cache(self,
                    platform: str,
                    url: str,
@@ -317,46 +345,46 @@ class CacheManager:
                     with open(json_file, 'w', encoding='utf-8') as f:
                         json.dump(extra_json_data, f, ensure_ascii=False, indent=2)
                     logger.info(f"已保存 CapsWriter FunASR 兼容格式: {json_file}")
-                    
+
             # 计算相对路径（兼容 Windows 和 Linux）
             relative_path = file_path.relative_to(self.cache_dir)
             files_loc = relative_path.as_posix()  # 使用 POSIX 格式保证跨平台兼容
-            
+
             # 保存到数据库
             with self._get_cursor() as cursor:
                 cursor.execute('''
-                    INSERT OR REPLACE INTO video_cache 
+                    INSERT OR REPLACE INTO video_cache
                     (platform, url, title, author, description, media_id, use_speaker_recognition, files_loc, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ''', (platform, url, title, author, description, media_id, use_speaker_recognition, files_loc))
-                
+
             logger.info(f"缓存保存成功: {platform}/{media_id}, 说话人识别: {use_speaker_recognition}")
-            
+
             return {
                 "platform": platform,
                 "media_id": media_id,
                 "files_loc": files_loc,
                 "transcript_file": str(transcript_file)
             }
-            
+
         except Exception as e:
             logger.error(f"保存缓存失败: {e}")
             return None
-            
-    def get_cache(self, 
-                  platform: str = None, 
+
+    def get_cache(self,
+                  platform: str = None,
                   media_id: str = None,
                   url: str = None,
                   use_speaker_recognition: Optional[bool] = None) -> Optional[Dict[str, Any]]:
         """
         获取缓存
-        
+
         Args:
             platform: 平台名称
             media_id: 媒体ID
             url: 视频URL
             use_speaker_recognition: 是否需要说话人识别的缓存
-            
+
         Returns:
             Dict: 缓存数据，包含数据库记录和文件内容
         """
@@ -365,7 +393,7 @@ class CacheManager:
                 # 构建查询条件
                 conditions = []
                 params = []
-                
+
                 if platform and media_id:
                     conditions.append("platform = ? AND media_id = ?")
                     params.extend([platform, media_id])
@@ -375,7 +403,7 @@ class CacheManager:
                 else:
                     logger.warning("必须提供 platform+media_id 或 url")
                     return None
-                    
+
                 # 处理 use_speaker_recognition 条件
                 if use_speaker_recognition is True:
                     # 如果明确要求说话人识别，只查找带说话人识别的
@@ -383,32 +411,32 @@ class CacheManager:
                 elif use_speaker_recognition is False:
                     # 如果不要求说话人识别，可以使用任何缓存（优先使用带说话人识别的）
                     pass  # 不添加条件
-                    
+
                 query = f"SELECT * FROM video_cache WHERE {' AND '.join(conditions)} ORDER BY use_speaker_recognition DESC, updated_at DESC LIMIT 1"
                 cursor.execute(query, params)
-                
+
                 row = cursor.fetchone()
                 if not row:
                     return None
-                    
+
                 # 转换为字典
                 cache_data = dict(row)
-                
+
                 # 获取文件路径
                 files_loc = Path(cache_data['files_loc'])
                 file_path = self.cache_dir / files_loc
-                
+
                 # 检查文件夹是否存在
                 if not file_path.exists():
                     logger.warning(f"缓存文件夹不存在: {file_path}")
                     # 删除数据库记录
                     cursor.execute("DELETE FROM video_cache WHERE id = ?", (cache_data['id'],))
                     return None
-                    
+
                 # 读取转录文件
                 transcript_funasr = file_path / "transcript_funasr.json"
                 transcript_capswriter = file_path / "transcript_capswriter.txt"
-                
+
                 if transcript_funasr.exists():
                     with open(transcript_funasr, 'r', encoding='utf-8') as f:
                         cache_data['transcript_data'] = json.load(f)
@@ -423,28 +451,39 @@ class CacheManager:
                     cursor.execute("DELETE FROM video_cache WHERE id = ?", (cache_data['id'],))
                     logger.info(f"已删除无效的缓存记录: {cache_data['id']}")
                     return None
-                    
+
                 # 读取其他文件（如果存在）
                 llm_calibrated = file_path / "llm_calibrated.txt"
                 llm_summary = file_path / "llm_summary.txt"
-                
+
                 if llm_calibrated.exists():
                     with open(llm_calibrated, 'r', encoding='utf-8') as f:
                         cache_data['llm_calibrated'] = f.read()
-                        
+
                 if llm_summary.exists():
                     with open(llm_summary, 'r', encoding='utf-8') as f:
                         cache_data['llm_summary'] = f.read()
-                        
+
+                comment_insight = file_path / "comment_insight.txt"
+                comment_samples = file_path / "comment_samples.json"
+
+                if comment_insight.exists():
+                    with open(comment_insight, 'r', encoding='utf-8') as f:
+                        cache_data['comment_insight'] = f.read()
+
+                if comment_samples.exists():
+                    with open(comment_samples, 'r', encoding='utf-8') as f:
+                        cache_data['comment_samples'] = json.load(f)
+
                 cache_data['file_path'] = str(file_path)
-                
+
                 logger.info(f"缓存命中: {platform}/{media_id}, 说话人识别: {cache_data['use_speaker_recognition']}")
                 return cache_data
-                
+
         except Exception as e:
             logger.error(f"获取缓存失败: {e}")
             return None
-            
+
     def save_llm_result(self,
                         platform: str,
                         media_id: str,
@@ -505,6 +544,19 @@ class CacheManager:
                 with open(llm_file, 'w', encoding='utf-8') as f:
                     json.dump(structured_data, f, ensure_ascii=False, indent=2)
 
+            elif llm_type == "comment_insight":
+                llm_file = file_path / "comment_insight.txt"
+                with open(llm_file, 'w', encoding='utf-8') as f:
+                    f.write(content)
+
+            elif llm_type == "comment_samples":
+                if not isinstance(content, (list, dict)):
+                    logger.error(f"comment_samples 类型要求 content 为 list/dict，实际类型: {type(content)}")
+                    return False
+                llm_file = file_path / "comment_samples.json"
+                with open(llm_file, 'w', encoding='utf-8') as f:
+                    json.dump(content, f, ensure_ascii=False, indent=2)
+
             else:
                 logger.error(f"未知的 LLM 类型: {llm_type}")
                 return False
@@ -515,19 +567,19 @@ class CacheManager:
         except Exception as e:
             logger.error(f"保存 LLM 结果失败: {e}")
             return False
-            
-    def list_cache(self, 
+
+    def list_cache(self,
                    platform: str = None,
                    limit: int = 100,
                    offset: int = 0) -> List[Dict[str, Any]]:
         """
         列出缓存记录
-        
+
         Args:
             platform: 平台名称（可选）
             limit: 返回记录数限制
             offset: 偏移量
-            
+
         Returns:
             List[Dict]: 缓存记录列表
         """
@@ -539,18 +591,18 @@ class CacheManager:
                 else:
                     query = "SELECT * FROM video_cache ORDER BY updated_at DESC LIMIT ? OFFSET ?"
                     cursor.execute(query, (limit, offset))
-                    
+
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
-                
+
         except Exception as e:
             logger.error(f"列出缓存失败: {e}")
             return []
-            
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """
         获取缓存统计信息
-        
+
         Returns:
             Dict: 统计信息
         """
@@ -559,81 +611,81 @@ class CacheManager:
                 # 总记录数
                 cursor.execute("SELECT COUNT(*) as total FROM video_cache")
                 total = cursor.fetchone()['total']
-                
+
                 # 按平台统计
                 cursor.execute("""
-                    SELECT platform, COUNT(*) as count 
-                    FROM video_cache 
+                    SELECT platform, COUNT(*) as count
+                    FROM video_cache
                     GROUP BY platform
                 """)
                 platform_stats = {row['platform']: row['count'] for row in cursor.fetchall()}
-                
+
                 # 按说话人识别统计
                 cursor.execute("""
-                    SELECT use_speaker_recognition, COUNT(*) as count 
-                    FROM video_cache 
+                    SELECT use_speaker_recognition, COUNT(*) as count
+                    FROM video_cache
                     GROUP BY use_speaker_recognition
                 """)
                 speaker_stats = {bool(row['use_speaker_recognition']): row['count'] for row in cursor.fetchall()}
-                
+
                 # 计算缓存目录大小
                 cache_size = sum(f.stat().st_size for f in self.cache_dir.rglob('*') if f.is_file())
-                
+
                 return {
                     "total_records": total,
                     "platform_stats": platform_stats,
                     "speaker_recognition_stats": speaker_stats,
                     "cache_size_mb": round(cache_size / 1024 / 1024, 2)
                 }
-                
+
         except Exception as e:
             logger.error(f"获取缓存统计失败: {e}")
             return {}
-            
+
     def validate_cache_integrity(self) -> int:
         """
         验证缓存完整性，删除文件不存在的记录
-        
+
         Returns:
             int: 删除的无效记录数
         """
         try:
             deleted_count = 0
-            
+
             with self._get_cursor() as cursor:
                 # 获取所有缓存记录
                 cursor.execute("SELECT id, files_loc FROM video_cache")
                 records = cursor.fetchall()
-                
+
                 invalid_records = []
-                
+
                 for record in records:
                     files_loc = Path(record['files_loc'])
                     file_path = self.cache_dir / files_loc
-                    
+
                     # 检查文件夹是否存在
                     if not file_path.exists():
                         invalid_records.append(record['id'])
                         logger.warning(f"缓存文件夹不存在: {file_path}")
                         continue
-                    
+
                     # 检查转录文件是否存在
                     transcript_funasr = file_path / "transcript_funasr.json"
                     transcript_capswriter = file_path / "transcript_capswriter.txt"
-                    
+
                     if not transcript_funasr.exists() and not transcript_capswriter.exists():
                         invalid_records.append(record['id'])
                         logger.warning(f"转录文件不存在: {file_path}")
-                
+
                 # 批量删除无效记录
                 if invalid_records:
                     placeholders = ','.join(['?'] * len(invalid_records))
                     cursor.execute(f"DELETE FROM video_cache WHERE id IN ({placeholders})", invalid_records)
                     deleted_count = len(invalid_records)
                     logger.info(f"批量删除了 {deleted_count} 条无效缓存记录")
-                
+
                 return deleted_count
-                
+
         except Exception as e:
             logger.error(f"验证缓存完整性失败: {e}")
             return 0
@@ -641,59 +693,78 @@ class CacheManager:
     def cleanup_old_cache(self, days: int = 30) -> int:
         """
         清理旧缓存
-        
+
         Args:
             days: 保留最近几天的缓存
-            
+
         Returns:
             int: 删除的记录数
         """
         try:
             cutoff_date = datetime.datetime.now() - datetime.timedelta(days=days)
-            
+
             with self._get_cursor() as cursor:
                 # 获取要删除的记录
                 cursor.execute("""
-                    SELECT id, files_loc 
-                    FROM video_cache 
+                    SELECT id, files_loc
+                    FROM video_cache
                     WHERE updated_at < ?
                 """, (cutoff_date,))
-                
+
                 records_to_delete = cursor.fetchall()
-                
+
                 # 删除文件
                 for record in records_to_delete:
                     file_path = self.cache_dir / Path(record['files_loc'])
                     if file_path.exists():
                         import shutil
                         shutil.rmtree(file_path)
-                        
+
                 # 删除数据库记录
                 cursor.execute("DELETE FROM video_cache WHERE updated_at < ?", (cutoff_date,))
-                
+
                 deleted_count = len(records_to_delete)
                 logger.info(f"清理了 {deleted_count} 条旧缓存记录")
                 return deleted_count
-                
+
         except Exception as e:
             logger.error(f"清理缓存失败: {e}")
             return 0
-            
+
     def close(self):
         """关闭数据库连接"""
         if hasattr(self._local, 'connection'):
             self._local.connection.close()
-    
+
     # ========== 任务状态管理方法 ==========
-    
+
     def generate_task_id(self) -> str:
         """生成全局唯一任务ID"""
         return f"task_{uuid.uuid4().hex}"
-    
+
     def generate_view_token(self) -> str:
         """生成查看token"""
         return f"view_{secrets.token_urlsafe(32)}"
-    
+
+    def _decode_task_row(self, row) -> Dict[str, Any]:
+        """Convert a task_status row into API-facing task data."""
+        data = dict(row)
+        data["progress"] = self._decode_json_field(data.get("progress_json"))
+        data["progress_reminders"] = self._decode_json_field(
+            data.get("progress_reminders_json")
+        ) or []
+        return data
+
+    def _decode_json_field(self, raw_value):
+        if not raw_value:
+            return None
+        if isinstance(raw_value, (dict, list)):
+            return raw_value
+        try:
+            return json.loads(raw_value)
+        except (TypeError, json.JSONDecodeError):
+            return None
+
     def create_task(self, url: str, use_speaker_recognition: bool = False,
                     download_url: str = None, platform: str = None,
                     media_id: str = None) -> Dict[str, str]:
@@ -739,14 +810,20 @@ class CacheManager:
                 logger.info(f"生成新view_token: {view_token} for URL: {url}")
 
         try:
+            queued_progress = build_progress(
+                stage="queued",
+                basis="task_created",
+                confidence="high",
+            )
             with self._get_cursor() as cursor:
                 cursor.execute('''
                     INSERT INTO task_status
                     (task_id, view_token, url, download_url, use_speaker_recognition,
-                     status, platform, media_id)
-                    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)
+                     status, platform, media_id, progress_json, progress_reminders_json)
+                    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)
                 ''', (task_id, view_token, url, download_url, use_speaker_recognition,
-                      platform, media_id))
+                      platform, media_id, json.dumps(queued_progress, ensure_ascii=False),
+                      json.dumps([], ensure_ascii=False)))
 
             logger.info(f"任务创建成功: {task_id}, view_token: {view_token}, download_url: {download_url}")
             return {
@@ -756,7 +833,7 @@ class CacheManager:
         except Exception as e:
             logger.error(f"创建任务失败: {e}")
             raise
-    
+
     def update_task_status(self, task_id: str, status: str, platform: str = None,
                           media_id: str = None, title: str = None, author: str = None,
                           cache_id: int = None, download_url: str = None,
@@ -813,6 +890,21 @@ class CacheManager:
 
                 if status in ['success', 'failed']:
                     update_fields.append("completed_at = CURRENT_TIMESTAMP")
+                    if status == TaskStatus.SUCCESS:
+                        progress = build_progress(
+                            stage="completed",
+                            basis="task_completed",
+                            confidence="high",
+                        )
+                    else:
+                        progress = build_progress(
+                            stage="failed",
+                            basis="task_failed",
+                            confidence="high",
+                            message=error_message,
+                        )
+                    update_fields.append("progress_json = ?")
+                    params.append(json.dumps(progress, ensure_ascii=False))
 
                 params.append(task_id)
 
@@ -834,6 +926,96 @@ class CacheManager:
 
         except Exception as e:
             logger.error(f"更新任务状态失败: {e}")
+            raise
+
+    def update_task_progress(
+        self,
+        task_id: str,
+        *,
+        stage: str,
+        stage_label: str = None,
+        fraction: float = None,
+        basis: str = "stage_transition",
+        confidence: str = "low",
+        evidence: Dict[str, Any] = None,
+        eta_seconds: int = None,
+        message: str = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Persist structured progress for a task."""
+        progress = build_progress(
+            stage=stage,
+            stage_label=stage_label,
+            fraction=fraction,
+            basis=basis,
+            confidence=confidence,
+            evidence=evidence,
+            eta_seconds=eta_seconds,
+            message=message,
+        )
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE task_status
+                    SET progress_json = ?
+                    WHERE task_id = ? AND status NOT IN (?, ?)
+                    """,
+                    (
+                        json.dumps(progress, ensure_ascii=False),
+                        task_id,
+                        TaskStatus.SUCCESS,
+                        TaskStatus.FAILED,
+                    ),
+                )
+            return progress
+        except Exception as e:
+            logger.error(f"更新任务进度失败: {e}")
+            raise
+
+    def list_active_tasks_for_progress_reminders(self) -> List[Dict[str, Any]]:
+        """List non-terminal tasks for long-running progress reminders."""
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT * FROM task_status
+                    WHERE status IN (?, ?, ?)
+                    ORDER BY created_at ASC
+                    """,
+                    (
+                        TaskStatus.QUEUED,
+                        TaskStatus.PROCESSING,
+                        TaskStatus.CALIBRATING,
+                    ),
+                )
+                return [self._decode_task_row(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"查询长任务提醒列表失败: {e}")
+            return []
+
+    def mark_progress_reminder_sent(self, task_id: str, marker: str):
+        """Persist a sent reminder marker for a task."""
+        task_info = self.get_task_by_id(task_id)
+        if not task_info:
+            return
+
+        reminders = task_info.get("progress_reminders") or []
+        if marker in reminders:
+            return
+
+        reminders.append(marker)
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE task_status
+                    SET progress_reminders_json = ?
+                    WHERE task_id = ?
+                    """,
+                    (json.dumps(reminders, ensure_ascii=False), task_id),
+                )
+        except Exception as e:
+            logger.error(f"标记长任务提醒失败: {e}")
             raise
 
     def recover_orphaned_tasks(self) -> int:
@@ -876,10 +1058,10 @@ class CacheManager:
     def get_task_by_id(self, task_id: str) -> Optional[Dict[str, Any]]:
         """
         根据任务ID获取任务信息
-        
+
         Args:
             task_id: 任务ID
-            
+
         Returns:
             Dict: 任务信息
         """
@@ -887,15 +1069,15 @@ class CacheManager:
             with self._get_cursor() as cursor:
                 cursor.execute("SELECT * FROM task_status WHERE task_id = ?", (task_id,))
                 row = cursor.fetchone()
-                
+
                 if row:
-                    return dict(row)
+                    return self._decode_task_row(row)
                 return None
-                
+
         except Exception as e:
             logger.error(f"获取任务信息失败: {e}")
             return None
-    
+
     def get_task_by_view_token(self, view_token: str) -> Optional[Dict[str, Any]]:
         """
         根据view_token获取任务信息
@@ -928,20 +1110,20 @@ class CacheManager:
                 row = cursor.fetchone()
 
                 if row:
-                    return dict(row)
+                    return self._decode_task_row(row)
                 return None
 
         except Exception as e:
             logger.error(f"根据view_token获取任务信息失败: {e}")
             return None
-    
+
     def get_view_data_by_token(self, view_token: str) -> Optional[Dict[str, Any]]:
         """
         根据view_token获取查看页面数据
-        
+
         Args:
             view_token: 查看token
-            
+
         Returns:
             Dict: 页面数据
         """
@@ -957,20 +1139,31 @@ class CacheManager:
             if task_info['status'] in ['queued', 'processing', 'calibrating']:
                 return {
                     'status': 'processing',
+                    'task_id': task_info.get('task_id'),
+                    'view_token': task_info.get('view_token'),
                     'title': task_info.get('title', '转录处理中...'),
                     'url': display_url,
-                    'created_at': task_info['created_at']
+                    'platform': task_info.get('platform'),
+                    'media_id': task_info.get('media_id'),
+                    'created_at': task_info['created_at'],
+                    'progress': task_info.get('progress'),
                 }
 
             # 如果任务失败
             if task_info['status'] == 'failed':
                 return {
                     'status': 'failed',
+                    'task_id': task_info.get('task_id'),
+                    'view_token': task_info.get('view_token'),
                     'title': task_info.get('title', '转录失败'),
                     'url': display_url,
-                    'message': task_info.get('error_message') or '转录任务失败，请重新提交'
+                    'platform': task_info.get('platform'),
+                    'media_id': task_info.get('media_id'),
+                    'message': task_info.get('error_message') or '转录任务失败，请重新提交',
+                    'completed_at': task_info.get('completed_at'),
+                    'progress': task_info.get('progress'),
                 }
-            
+
             # 任务成功，获取缓存数据
             if task_info['platform'] and task_info['media_id']:
                 cache_data = self.get_cache(
@@ -978,7 +1171,7 @@ class CacheManager:
                     media_id=task_info['media_id'],
                     use_speaker_recognition=task_info['use_speaker_recognition']
                 )
-                
+
                 if cache_data:
                     # 缓存存在，返回完整数据
                     # 确保返回的是字符串类型
@@ -999,6 +1192,8 @@ class CacheManager:
 
                     return {
                         'status': 'success',
+                        'task_id': task_info.get('task_id'),
+                        'view_token': task_info.get('view_token'),
                         'title': cache_data.get('title', ''),
                         'author': cache_data.get('author', ''),
                         'description': cache_data.get('description', ''),
@@ -1007,31 +1202,47 @@ class CacheManager:
                         'transcript': transcript,
                         'use_speaker_recognition': cache_data.get('use_speaker_recognition', False),
                         'created_at': task_info['created_at'],
+                        'completed_at': task_info.get('completed_at'),
                         'cache_dir': cache_data.get('file_path'),
                         'llm_config': llm_config,  # 添加 LLM 模型配置
-                        'platform': cache_data.get('platform', '')
+                        'platform': cache_data.get('platform', ''),
+                        'media_id': cache_data.get('media_id') or task_info.get('media_id'),
+                        'comment_insight': cache_data.get('comment_insight'),
+                        'comment_samples': cache_data.get('comment_samples', []),
+                        'progress': task_info.get('progress'),
                     }
                 else:
                     # 底层文件已清理
                     return {
                         'status': 'file_cleaned',
+                        'task_id': task_info.get('task_id'),
+                        'view_token': task_info.get('view_token'),
                         'title': task_info.get('title', '视频转录'),
                         'url': display_url,
-                        'created_at': task_info['created_at']
+                        'platform': task_info.get('platform'),
+                        'media_id': task_info.get('media_id'),
+                        'created_at': task_info['created_at'],
+                        'completed_at': task_info.get('completed_at'),
+                        'progress': task_info.get('progress'),
                     }
             else:
                 # 任务信息不完整
                 return {
                     'status': 'incomplete',
+                    'task_id': task_info.get('task_id'),
+                    'view_token': task_info.get('view_token'),
                     'title': task_info.get('title', '任务信息不完整'),
                     'url': display_url,
-                    'created_at': task_info['created_at']
+                    'platform': task_info.get('platform'),
+                    'media_id': task_info.get('media_id'),
+                    'created_at': task_info['created_at'],
+                    'progress': task_info.get('progress'),
                 }
-                
+
         except Exception as e:
             logger.error(f"获取查看页面数据失败: {e}")
             return None
-    
+
     def get_cache_by_view_token(self, view_token: str) -> Optional[Dict[str, Any]]:
         """根据 view_token 获取完整缓存数据（含转录文件路径和元数据）
 
@@ -1086,11 +1297,11 @@ class CacheManager:
     def get_existing_task_by_url(self, url: str, use_speaker_recognition: bool = False) -> Optional[Dict[str, Any]]:
         """
         根据URL和说话人识别参数查找现有任务
-        
+
         Args:
             url: 视频URL
             use_speaker_recognition: 是否使用说话人识别
-            
+
         Returns:
             Optional[Dict]: 现有任务信息（包含task_id和view_token），如果没有找到则返回None
         """

@@ -269,6 +269,35 @@ class TestSaveLLMResult:
         assert "llm_summary" in result
         assert result["llm_summary"] == "Summary."
 
+    def test_save_comment_insight(self, cm, cache_dir):
+        _save_sample_capswriter(cm)
+        ok = cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="comment_insight",
+            content="Comment insight.",
+        )
+        assert ok is True
+        files = list(cache_dir.rglob("comment_insight.txt"))
+        assert len(files) == 1
+        assert files[0].read_text(encoding="utf-8") == "Comment insight."
+
+    def test_save_comment_samples_and_get_cache(self, cm):
+        _save_sample_capswriter(cm)
+        samples = [{"text": "useful comment", "like_count": 12}]
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="comment_samples",
+            content=samples,
+        )
+
+        result = cm.get_cache(platform="youtube", media_id="vid1")
+
+        assert result["comment_samples"] == samples
+
 
 # ---------------------------------------------------------------------------
 # list_cache
@@ -487,3 +516,149 @@ class TestLLMConfigFallback:
         view_data = cm.get_view_data_by_token(cache_hit["view_token"])
         assert view_data is not None
         assert view_data.get("llm_config") is None
+
+
+class TestCommentInsightViewData:
+    """Tests for exposing comment insight artifacts to view templates."""
+
+    def test_view_data_includes_comment_insight_and_samples(self, cm):
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="Calibrated.",
+        )
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="summary",
+            content="Summary.",
+        )
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="comment_insight",
+            content="Comment insight.",
+        )
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="comment_samples",
+            content=[{"text": "useful comment", "like_count": 42}],
+        )
+        task_info = cm.create_task(
+            url="https://example.com/vid1",
+            platform="youtube",
+            media_id="vid1",
+        )
+        cm.update_task_status(
+            task_info["task_id"],
+            "success",
+            platform="youtube",
+            media_id="vid1",
+        )
+
+        view_data = cm.get_view_data_by_token(task_info["view_token"])
+
+        assert view_data["comment_insight"] == "Comment insight."
+        assert view_data["comment_samples"] == [
+            {"text": "useful comment", "like_count": 42}
+        ]
+
+
+class TestTaskProgress:
+    """Tests for persisted task progress."""
+
+    def test_create_task_initializes_queued_progress(self, cm):
+        task = cm.create_task(url="https://example.com/progress")
+
+        task_info = cm.get_task_by_id(task["task_id"])
+
+        assert task_info["progress"]["stage"] == "queued"
+        assert task_info["progress"]["percent"] == 0
+        assert task_info["progress"]["basis"] == "task_created"
+
+    def test_update_task_progress_persists_structured_progress(self, cm):
+        task = cm.create_task(url="https://example.com/progress-update")
+
+        cm.update_task_progress(
+            task["task_id"],
+            stage="downloading",
+            stage_label="正在下载音视频",
+            fraction=0.5,
+            basis="download_bytes",
+            confidence="high",
+            evidence={"completed": 50, "total": 100, "unit": "bytes"},
+        )
+
+        task_info = cm.get_task_by_id(task["task_id"])
+
+        assert task_info["progress"]["stage"] == "downloading"
+        assert task_info["progress"]["percent"] == 22
+        assert task_info["progress"]["confidence"] == "high"
+        assert task_info["progress"]["evidence"]["unit"] == "bytes"
+
+    def test_processing_view_data_includes_progress_and_tokens(self, cm):
+        task = cm.create_task(
+            url="https://www.youtube.com/watch?v=abc123",
+            platform="youtube",
+            media_id="abc123",
+        )
+        cm.update_task_status(task["task_id"], "processing")
+        cm.update_task_progress(
+            task["task_id"],
+            stage="transcribing",
+            stage_label="正在转录音视频",
+            fraction=0.25,
+            basis="capswriter_audio_sent",
+            confidence="medium",
+        )
+
+        view_data = cm.get_view_data_by_token(task["view_token"])
+
+        assert view_data["status"] == "processing"
+        assert view_data["task_id"] == task["task_id"]
+        assert view_data["view_token"] == task["view_token"]
+        assert view_data["platform"] == "youtube"
+        assert view_data["media_id"] == "abc123"
+        assert view_data["progress"]["stage"] == "transcribing"
+        assert view_data["progress"]["percent"] == 46
+
+    def test_progress_reminder_markers_are_persisted(self, cm):
+        task = cm.create_task(url="https://example.com/progress-reminder")
+        cm.update_task_status(task["task_id"], "processing")
+
+        cm.mark_progress_reminder_sent(task["task_id"], "10m")
+
+        task_info = cm.get_task_by_id(task["task_id"])
+        active_tasks = cm.list_active_tasks_for_progress_reminders()
+
+        assert task_info["progress_reminders"] == ["10m"]
+        assert active_tasks[0]["progress_reminders"] == ["10m"]
+
+    def test_success_view_data_includes_completed_at_for_duration(self, cm):
+        _save_sample_capswriter(cm)
+        task = cm.create_task(
+            url="https://example.com/vid1",
+            platform="youtube",
+            media_id="vid1",
+        )
+
+        cm.update_task_status(
+            task["task_id"],
+            "success",
+            platform="youtube",
+            media_id="vid1",
+        )
+
+        view_data = cm.get_view_data_by_token(task["view_token"])
+
+        assert view_data["status"] == "success"
+        assert view_data["platform"] == "youtube"
+        assert view_data["media_id"] == "vid1"
+        assert view_data["completed_at"]

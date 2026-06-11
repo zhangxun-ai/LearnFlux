@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block title %}帖子精华提炼{% endblock %}
+{% block meta_description %}粘贴一条帖子链接（X / 小红书），自动抓取正文与高赞回复，提炼精华并给出可信度判断{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ===== 入口表单 ===== */
+    .post-entry { padding: 28px 30px; }
+    .post-entry .entry-label { font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 10px; }
+    .post-entry .entry-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .post-entry input[type="text"] {
+        flex: 1; min-width: 220px; padding: 12px 14px; font-size: 1rem;
+        border: 1px solid var(--border-primary); border-radius: 8px;
+        background: var(--bg-secondary); color: var(--text-primary);
+        transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+    .post-entry input[type="text"]:focus {
+        outline: none; border-color: #E4503A; box-shadow: 0 0 0 3px rgba(228,80,58,0.2);
+    }
+    .btn-analyze {
+        padding: 12px 22px; font-size: 1rem; font-weight: 600; border: none;
+        border-radius: 8px; cursor: pointer; color: #fff;
+        background: linear-gradient(135deg, #E4503A, #C23A26);
+        transition: transform 0.12s ease, opacity 0.2s ease;
+    }
+    .btn-analyze:hover { transform: translateY(-1px); }
+    .btn-analyze:active { transform: scale(0.98); }
+    .btn-analyze:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+    .entry-hint { margin-top: 10px; font-size: 0.8rem; color: var(--text-secondary); opacity: 0.8; }
+    .entry-hint a { color: #E4503A; text-decoration: none; }
+
+    /* ===== 加载态（分阶段） ===== */
+    .post-loading { padding: 48px 30px; text-align: center; }
+    .spinner {
+        width: 42px; height: 42px; margin: 0 auto 18px;
+        border: 4px solid var(--border-primary); border-top-color: #E4503A;
+        border-radius: 50%; animation: vta-spin 0.9s linear infinite;
+    }
+    @keyframes vta-spin { to { transform: rotate(360deg); } }
+    .loading-step { font-size: 1rem; color: var(--text-primary); font-weight: 500; }
+    .loading-sub { margin-top: 6px; font-size: 0.82rem; color: var(--text-secondary); }
+
+    /* ===== 来源头部 ===== */
+    .source-meta {
+        padding: 16px 30px; background: rgba(228,80,58,0.06);
+        border-bottom: 1px solid var(--border-primary);
+        display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-size: 0.88rem;
+    }
+    .source-meta .author { font-weight: 600; color: var(--text-primary); }
+    .source-meta a { color: #E4503A; text-decoration: none; }
+    .source-meta a:hover { text-decoration: underline; }
+    .source-meta .meta-dim { color: var(--text-secondary); }
+
+    /* ===== 一键复制条 ===== */
+    .copy-bar { padding: 12px 30px; border-bottom: 1px solid var(--border-primary); }
+    .copy-btn {
+        padding: 9px 16px; font-size: 0.88rem; border-radius: 7px; cursor: pointer;
+        border: 1px solid var(--border-primary); background: var(--bg-primary); color: var(--text-primary);
+        transition: all 0.15s ease;
+    }
+    .copy-btn:hover { border-color: #E4503A; background: rgba(228,80,58,0.06); }
+    .copy-btn.copied { border-color: #10b981; background: rgba(16,185,129,0.1); color: #10b981; }
+
+    /* ===== 洞察卡片 ===== */
+    .insight-card { padding: 24px 30px; border-bottom: 1px solid var(--border-primary); }
+    .insight-card:last-child { border-bottom: none; }
+    .insight-card h2 {
+        margin: 0 0 14px; font-size: 1.2rem; color: var(--text-primary);
+        display: flex; align-items: center; gap: 8px;
+    }
+    .insight-card .content { line-height: 1.8; }
+
+    /* 可信度卡片：视觉焦点 */
+    .card-credibility {
+        background: var(--bg-secondary);
+        border-left: 3px solid var(--border-primary);
+    }
+    [data-theme="dark"] .card-credibility { background: rgba(245, 158, 11, 0.08); }
+    .card-credibility h2::before { content: "🔎"; }
+
+    /* 可信度徽章 */
+    .cred-chip {
+        display: inline-block; padding: 2px 10px; margin: 2px 4px 2px 0;
+        border-radius: 999px; font-size: 0.78rem; font-weight: 600; white-space: nowrap;
+        background: var(--bg-tertiary); border: 1px solid var(--border-primary);
+    }
+    .cred-ok     { color: #3F7D52; }
+    .cred-claim  { color: #9A6A2E; }
+    .cred-verify { color: #B0463A; }
+    .cred-rebut  { color: #41618C; }
+    [data-theme="dark"] .cred-ok     { color: #34d399; }
+    [data-theme="dark"] .cred-claim  { color: #fbbf24; }
+    [data-theme="dark"] .cred-verify { color: #f87171; }
+    [data-theme="dark"] .cred-rebut  { color: #60a5fa; }
+
+    /* 原文折叠 */
+    .thread-details { padding: 16px 30px 26px; }
+    .thread-details summary {
+        cursor: pointer; color: var(--text-secondary); font-size: 0.88rem; user-select: none;
+    }
+    .thread-details summary:hover { color: #E4503A; }
+    .thread-raw {
+        margin-top: 12px; padding: 14px; border-radius: 8px;
+        background: var(--bg-secondary); border: 1px solid var(--border-primary);
+        white-space: pre-wrap; word-break: break-word; line-height: 1.7; font-size: 0.92rem;
+        color: var(--text-primary);
+    }
+
+    /* 错误态 */
+    .post-error {
+        margin: 26px 30px; padding: 18px 20px; border-radius: 8px;
+        background: rgba(239,68,68,0.08); border-left: 4px solid #ef4444; color: var(--text-primary);
+    }
+    .post-error .err-title { font-weight: 600; margin-bottom: 6px; }
+    .post-error a { color: #E4503A; text-decoration: none; }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 480px) {
+        .post-entry, .source-meta, .copy-bar, .insight-card, .thread-details { padding-left: 16px; padding-right: 16px; }
+        .post-entry .entry-row { flex-direction: column; }
+        .btn-analyze { width: 100%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 入口 -->
+<div class="section post-entry" id="entry-section">
+    <div class="entry-label">粘贴一条帖子链接（X 推文 / 小红书笔记 / 微信公众号文章），自动提炼正文 + 高赞回复的精华，并给出可信度判断。</div>
+    <div class="entry-row">
+        <input type="text" id="post-url" placeholder="X / 小红书 / 微信公众号 文章链接均可"
+               value="{{ prefill_url or '' }}" autocomplete="off" spellcheck="false">
+        <button class="btn-analyze" id="analyze-btn">分析</button>
+    </div>
+    <div class="entry-hint">
+        使用首页设置的 API 令牌（<a href="/add_task_by_web">前往首页设置</a>）。当前支持 X / 小红书 / 微信公众号。
+    </div>
+</div>
+
+<!-- 加载 -->
+<div class="section post-loading hidden" id="loading-section">
+    <div class="spinner"></div>
+    <div class="loading-step" id="loading-step">正在抓取帖子与高赞回复…</div>
+    <div class="loading-sub">首次抓取与分析通常需要 10–30 秒，请稍候。</div>
+</div>
+
+<!-- 错误 -->
+<div class="post-error hidden" id="error-section">
+    <div class="err-title" id="error-title">出错了</div>
+    <div id="error-message"></div>
+</div>
+
+<!-- 结果 -->
+<div id="result-section" class="hidden">
+    <div class="source-meta" id="source-meta"></div>
+    <div class="copy-bar">
+        <button class="copy-btn" id="copy-btn" type="button">📋 复制全文精华</button>
+    </div>
+    <div id="sections-container"></div>
+    <details class="thread-details" id="thread-details">
+        <summary>展开作者原文 thread</summary>
+        <div class="thread-raw" id="thread-raw"></div>
+    </details>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var TOKEN_KEY = 'vta_bearer_token';
+    // 首页 app.js 用 simpleEncrypt 加密存储令牌（btoa + 反转字符串）。
+    // 这里必须用同样的算法解密，否则会把密文当令牌发出去 → 服务器 401。
+    var ENCRYPTION_KEY = 'vta_encrypt_key_2024';
+
+    function getToken() {
+        try {
+            var raw = localStorage.getItem(TOKEN_KEY);
+            if (!raw) return '';
+            var reversed = raw.split('').reverse().join('');
+            return decodeURIComponent(escape(atob(reversed))).replace(ENCRYPTION_KEY, '');
+        } catch (e) {
+            return '';
+        }
+    }
+
+    var $ = function (id) { return document.getElementById(id); };
+    var entry = $('entry-section'),
+        loading = $('loading-section'),
+        errorBox = $('error-section'),
+        result = $('result-section'),
+        btn = $('analyze-btn'),
+        urlInput = $('post-url');
+
+    function show(el) { el.classList.remove('hidden'); }
+    function hide(el) { el.classList.add('hidden'); }
+
+    function showError(title, message, withSettingsLink) {
+        hide(loading); hide(result);
+        $('error-title').textContent = title;
+        $('error-message').innerHTML = message +
+            (withSettingsLink ? ' <a href="/add_task_by_web">前往首页设置令牌</a>' : '');
+        show(errorBox);
+        btn.disabled = false;
+    }
+
+    var loadingTimers = [];
+    function startLoadingAnimation() {
+        var steps = [
+            '正在抓取帖子与高赞回复…',
+            '正在审核分析、判断可信度…',
+            '正在提炼可行动的精华…'
+        ];
+        var stepEl = $('loading-step');
+        stepEl.textContent = steps[0];
+        loadingTimers.push(setTimeout(function () { stepEl.textContent = steps[1]; }, 6000));
+        loadingTimers.push(setTimeout(function () { stepEl.textContent = steps[2]; }, 16000));
+    }
+    function stopLoadingAnimation() {
+        loadingTimers.forEach(clearTimeout);
+        loadingTimers = [];
+    }
+
+    function escapeHtml(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : s;
+        return d.innerHTML;
+    }
+
+    function renderResult(data) {
+        // 来源头部
+        var srcUrl = escapeHtml(data.source_url || '');
+        var parts = [];
+        parts.push('<span class="author">👤 @' + escapeHtml(data.author || 'Unknown') + '</span>');
+        if (data.source_url) {
+            parts.push('🔗 <a href="' + srcUrl + '" target="_blank" rel="noopener">查看原推文</a>');
+        }
+        var fetched = data.fetched_comment_count || 0;
+        var analyzed = data.analyzed_comment_count || 0;
+        parts.push('<span class="meta-dim">💬 抓取回复 ' + fetched + ' 条 · 分析 ' + analyzed + ' 条</span>');
+        $('source-meta').innerHTML = parts.join('');
+
+        // 分段卡片
+        var container = $('sections-container');
+        container.innerHTML = '';
+        (data.sections || []).forEach(function (sec) {
+            var card = document.createElement('div');
+            card.className = 'insight-card card-' + (sec.key || 'other');
+            var h2 = document.createElement('h2');
+            h2.textContent = sec.title || '';
+            var body = document.createElement('div');
+            body.className = 'content';
+            body.innerHTML = sec.html || '';
+            card.appendChild(h2);
+            card.appendChild(body);
+            container.appendChild(card);
+        });
+
+        // 原文 thread
+        var threadWrap = $('thread-details');
+        if (data.thread_text) {
+            $('thread-raw').textContent = data.thread_text;
+            show(threadWrap);
+        } else {
+            hide(threadWrap);
+        }
+
+        // 复制
+        var copyBtn = $('copy-btn');
+        copyBtn.onclick = function () {
+            navigator.clipboard.writeText(data.raw_markdown || '').then(function () {
+                copyBtn.classList.add('copied');
+                copyBtn.textContent = '✓ 已复制';
+                setTimeout(function () {
+                    copyBtn.classList.remove('copied');
+                    copyBtn.textContent = '📋 复制全文精华';
+                }, 1600);
+            });
+        };
+
+        hide(loading); hide(errorBox); show(result);
+        btn.disabled = false;
+    }
+
+    // 持久化帖子洞察结果到本地 + 写入任务记录（同链接去重、最新覆盖），供首页历史"查看"
+    function recordPostHistory(url, data) {
+        try {
+            var id = 'p' + Date.now() + Math.floor(Math.random() * 1000);
+            localStorage.setItem('vta_post_result_' + id, JSON.stringify(data));
+            var KEY = 'vta_task_history';
+            var hist = [];
+            try { hist = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { hist = []; }
+            if (!Array.isArray(hist)) hist = [];
+            hist = hist.filter(function (t) { return t && t.url !== url; });
+            hist.unshift({
+                id: 'post_' + id,
+                url: url,
+                title: data.title || ('@' + (data.author || '') + ' 的帖子'),
+                type: 'post',
+                status: 'done',
+                timestamp: Date.now(),
+                result_id: id,
+                includeComments: (data.fetched_comment_count || 0) > 0
+            });
+            if (hist.length > 200) hist = hist.slice(0, 200);
+            localStorage.setItem(KEY, JSON.stringify(hist));
+        } catch (e) {
+            /* 持久化失败不影响结果展示 */
+        }
+    }
+
+    function analyze() {
+        var url = (urlInput.value || '').trim();
+        if (!url) { urlInput.focus(); return; }
+
+        var token = getToken();
+        if (!token) {
+            showError('需要 API 令牌', '请先在首页设置你的 API 访问令牌（Bearer Token），再来分析。', true);
+            return;
+        }
+
+        hide(errorBox); hide(result);
+        show(loading);
+        btn.disabled = true;
+        startLoadingAnimation();
+
+        fetch('/api/post-insight', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ url: url })
+        }).then(function (resp) {
+            return resp.json().then(function (data) { return { status: resp.status, data: data }; });
+        }).then(function (r) {
+            stopLoadingAnimation();
+            if (r.status === 401 || r.status === 403) {
+                showError('令牌无效', '你的 API 令牌无效或已过期，请在首页重新设置。', true);
+                return;
+            }
+            if (!r.data || r.data.ok !== true) {
+                var msg = (r.data && r.data.error) ? escapeHtml(r.data.error) : '分析失败，请稍后重试。';
+                showError('无法分析这条帖子', msg, false);
+                return;
+            }
+            renderResult(r.data);
+            recordPostHistory(url, r.data);
+        }).catch(function () {
+            stopLoadingAnimation();
+            showError('网络错误', '请求未能完成，请检查网络后重试。', false);
+        });
+    }
+
+    btn.addEventListener('click', analyze);
+    urlInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') analyze();
+    });
+
+    // 带 ?view=<id> 直接展示已存结果（不重新请求、不耗费用）；否则若带 url 则自动分析
+    var __viewId = new URLSearchParams(window.location.search).get('view');
+    if (__viewId) {
+        var __stored = null;
+        try { __stored = JSON.parse(localStorage.getItem('vta_post_result_' + __viewId) || 'null'); } catch (e) {}
+        if (__stored) {
+            if (urlInput) urlInput.value = __stored.source_url || '';
+            renderResult(__stored);
+        } else if ((urlInput.value || '').trim()) {
+            analyze();
+        }
+    } else if ((urlInput.value || '').trim()) {
+        analyze();
+    }
+})();
+</script>
+{% endblock %}

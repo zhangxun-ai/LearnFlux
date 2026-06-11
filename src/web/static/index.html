@@ -1,136 +1,190 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="light">
 <head>
     <script>
     (function() {
-        var saved = localStorage.getItem('vta_theme_preference');
-        var theme = saved || 'dark';
-        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-theme', 'light');
     })();
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>视频转录 - VideoTranscriptAPI</title>
-    <meta name="description" content="提交视频转录任务，支持 YouTube、Bilibili、抖音、小红书、小宇宙等多平台">
-    <meta name="theme-color" content="#667eea">
+    <title>内容解析工作台 - VideoTranscriptAPI</title>
+    <meta name="description" content="视频转录、X/小红书/公众号帖子精华提炼、本地文件解析，多平台一站式内容解析">
+    <meta name="theme-color" content="#FBF8F3">
     <meta name="robots" content="noindex">
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
+    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/css/styles.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/workbench.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=1">
 </head>
 <body>
+    <div id="site-nav"></div>
+    <script src="/static/js/site-nav.js"></script>
     <div class="container">
         <header class="header">
-            <button id="theme-toggle" class="theme-toggle" title="切换到浅色模式">
-                ☀️
-            </button>
-            <h1>🎬 视频转录服务</h1>
-            <p>支持多平台视频转录，智能说话人识别</p>
+            <h1 class="serif">内容解析工作台</h1>
+            <p>视频转录 · 帖子精华提炼 · 文件解析，多平台一站式</p>
         </header>
 
         <main class="main-content">
-            <form id="transcribe-form" class="form-container">
-                <!-- URL输入区域 -->
-                <div class="form-group">
-                    <label for="share-content" class="form-label">
-                        📋 粘贴分享内容或视频链接
-                    </label>
-                    <textarea 
-                        id="share-content" 
-                        class="form-textarea"
-                        placeholder="支持粘贴完整的分享文案，系统将自动提取其中的视频链接...&#10;&#10;例如：&#10;• YouTube/Bilibili/抖音等平台分享链接&#10;• 小红书/小宇宙等平台分享文案&#10;• 各种短链接服务"
-                        rows="4">
-                    </textarea>
-                    
-                    <!-- URL预览区域 -->
-                    <div id="url-preview" class="url-preview">
-                        <div class="no-urls">请输入包含视频链接的内容</div>
-                    </div>
-                </div>
-
-                <!-- 说话人识别选项 -->
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="speaker-recognition" class="form-checkbox">
-                        <label for="speaker-recognition" class="checkbox-label">
-                            🎤 启用说话人识别功能
-                            <span class="checkbox-desc">自动区分不同说话人，适用于多人对话、访谈等场景</span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- 高级设置 -->
-                <div class="form-group">
-                    <button type="button" id="advanced-toggle" class="advanced-toggle">
-                        <span class="toggle-left">
-                            ⚙️ 高级设置 <span class="toggle-icon">▼</span>
-                        </span>
-                        <span class="required-indicator">包含必填项</span>
+            <!-- ===== 输入卡片：链接 / 本地文件 两个 Tab ===== -->
+            <div class="input-card">
+                <div class="input-tabs" role="tablist">
+                    <button type="button" class="input-tab active" id="tab-link"
+                            data-panel="panel-link" role="tab" aria-selected="true">
+                        🔗 粘贴链接
                     </button>
-                    
-                    <div id="advanced-settings" class="advanced-settings">
-                        <!-- API访问令牌 -->
-                        <div class="form-group">
-                            <label for="bearer-token" class="form-label required">
-                                🔐 API访问令牌 (Bearer Token) <span class="required-mark">*</span>
-                            </label>
-                            <div class="input-group">
-                                <input
-                                    type="password"
-                                    id="bearer-token"
-                                    class="form-input"
-                                    placeholder="请输入API访问令牌"
-                                    required
-                                >
-                                <button type="button" id="toggle-token-visibility" class="input-btn">👁️</button>
-                            </div>
-                            <small class="form-help">
-                                <span class="required-text">必填项</span> - 令牌将安全地保存在浏览器本地
-                            </small>
-                        </div>
-
-                        <!-- 企业微信 Webhook -->
-                        <div class="form-group">
-                            <label for="wechat-webhook" class="form-label">
-                                📢 企业微信 Webhook 地址
-                            </label>
-                            <div class="input-group">
-                                <input
-                                    type="text"
-                                    id="wechat-webhook"
-                                    class="form-input"
-                                    placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
-                                >
-                                <button type="button" id="clear-webhook" class="input-btn">🗑️</button>
-                            </div>
-                            <small class="form-help">
-                                可选项 - 用于接收任务完成通知，留空则使用系统默认配置。输入后自动保存到浏览器本地
-                            </small>
-                        </div>
-
-                    </div>
-                </div>
-
-                <!-- 提交按钮 -->
-                <div class="form-group">
-                    <button type="submit" id="submit-btn" class="submit-btn" disabled>
-                        <span class="btn-icon">🚀</span>
-                        <span class="btn-text">开始转录</span>
+                    <button type="button" class="input-tab" id="tab-file"
+                            data-panel="panel-file" role="tab" aria-selected="false">
+                        📁 本地文件
                     </button>
                 </div>
-            </form>
 
-            <!-- 状态显示区域 -->
-            <div id="status-container" class="status-container" style="display: none;">
-                <div id="status-content" class="status-content">
-                    <!-- 动态内容 -->
+                <!-- 链接面板 -->
+                <div class="input-panel active" id="panel-link" role="tabpanel">
+                    <form id="transcribe-form" class="form-container">
+                        <div class="form-group">
+                            <textarea
+                                id="share-content"
+                                class="form-textarea"
+                                placeholder="粘贴任意链接，系统自动识别并选择处理方式：&#10;• YouTube / Bilibili / 抖音 / 小宇宙 视频 → 语音转录&#10;• X(Twitter) / 小红书 / 微信公众号 帖子 → 精华提炼 + 可信度判断&#10;• 本地视频 / 文件上传 → 即将支持"
+                                rows="3"></textarea>
+
+                            <!-- URL 提取与选择（app.js 既有机制） -->
+                            <div id="url-preview" class="url-preview">
+                                <div class="no-urls">等待输入链接…</div>
+                            </div>
+
+                            <!-- 识别结果横幅：告诉用户"将执行什么" -->
+                            <div id="detect-banner" class="detect-banner" hidden></div>
+                        </div>
+
+                        <!-- 视频专属选项：仅当识别为视频时显示 -->
+                        <div id="video-options" class="video-options" hidden>
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="speaker-recognition" class="form-checkbox">
+                                <label for="speaker-recognition" class="checkbox-label">
+                                    🎤 启用说话人识别功能
+                                    <span class="checkbox-desc">自动区分不同说话人，适用于多人对话、访谈等场景</span>
+                                </label>
+                            </div>
+                            <div class="comment-insight-options">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="include-comments" class="form-checkbox">
+                                    <label for="include-comments" class="checkbox-label">
+                                        💬 分析高赞评论
+                                        <span class="checkbox-desc">仅获取平台热评窗口，按热度筛选后生成评论洞察</span>
+                                    </label>
+                                </div>
+                                <div id="comment-limit-control" class="comment-limit-control">
+                                    <label for="comment-limit" class="inline-select-label">热评上限</label>
+                                    <select id="comment-limit" class="form-select">
+                                        <option value="50">50 条</option>
+                                        <option value="100" selected>100 条</option>
+                                        <option value="200">200 条</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 高级设置 -->
+                        <div class="form-group">
+                            <button type="button" id="advanced-toggle" class="advanced-toggle">
+                                <span class="toggle-left">
+                                    ⚙️ 高级设置 <span class="toggle-icon">▼</span>
+                                </span>
+                                <span class="required-indicator">包含必填项</span>
+                            </button>
+
+                            <div id="advanced-settings" class="advanced-settings">
+                                <div class="form-group">
+                                    <label for="bearer-token" class="form-label required">
+                                        🔐 API访问令牌 (Bearer Token) <span class="required-mark">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="password" id="bearer-token" class="form-input"
+                                               placeholder="请输入API访问令牌" required>
+                                        <button type="button" id="toggle-token-visibility" class="input-btn">👁️</button>
+                                    </div>
+                                    <small class="form-help">
+                                        <span class="required-text">必填项</span> - 令牌将安全地保存在浏览器本地
+                                    </small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="wechat-webhook" class="form-label">
+                                        📢 企业微信 Webhook 地址
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="text" id="wechat-webhook" class="form-input"
+                                               placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...">
+                                        <button type="button" id="clear-webhook" class="input-btn">🗑️</button>
+                                    </div>
+                                    <small class="form-help">
+                                        可选项 - 用于接收任务完成通知，留空则使用系统默认配置。输入后自动保存到浏览器本地
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" id="submit-btn" class="submit-btn" disabled>
+                                <span class="btn-icon">🚀</span>
+                                <span class="btn-text">开始解析</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 本地文件面板：视频/音频上传转录 -->
+                <div class="input-panel" id="panel-file" role="tabpanel" hidden>
+                    <input type="file" id="file-input"
+                           accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.mov,.mkv,.webm,.txt,.md,.markdown,.csv,.log,.pdf,.docx"
+                           hidden>
+                    <div class="file-dropzone" id="file-dropzone" tabindex="0">
+                        <div class="dropzone-icon">📁</div>
+                        <div class="dropzone-title">拖拽视频 / 音频 / 文档到此处，或点击选择</div>
+                        <div class="dropzone-sub">音视频 → 转录总结　·　文档(pdf/docx/txt/md) → 提取分析</div>
+                        <div class="dropzone-badge" id="dropzone-hint">支持 视频 / 音频 / 文档 · 大文件长视频均可 · 自动 AI 提炼</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- 历史记录区域 -->
+            <!-- 状态显示 -->
+            <div id="status-container" class="status-container" style="display: none;">
+                <div id="status-content" class="status-content"></div>
+            </div>
+
+            <!-- 历史记录 -->
             <div id="history-container" class="history-container" style="display: none;">
-                <h3>📋 最近任务</h3>
-                <div id="history-list" class="history-list">
-                    <!-- 动态内容 -->
+                <div class="history-header">
+                    <h3>📋 任务记录</h3>
+                    <div class="history-controls">
+                        <div class="history-filter" id="history-filter">
+                            <button type="button" class="filter-chip active" data-filter="all">全部</button>
+                            <button type="button" class="filter-chip" data-filter="video">🎬 视频</button>
+                            <button type="button" class="filter-chip" data-filter="post">𝕏 帖子</button>
+                            <button type="button" class="filter-chip" data-filter="file">📁 文件</button>
+                        </div>
+                        <select id="history-status" class="hist-date-select" aria-label="按状态筛选">
+                            <option value="all">全部状态</option>
+                            <option value="done">✅ 成功</option>
+                            <option value="failed">❌ 失败</option>
+                            <option value="running">⏳ 处理中</option>
+                        </select>
+                        <select id="history-date" class="hist-date-select" aria-label="按日期筛选">
+                            <option value="all">全部时间</option>
+                            <option value="today">今天</option>
+                            <option value="7d">近 7 天</option>
+                            <option value="30d">近 30 天</option>
+                            <option value="90d">近 90 天</option>
+                        </select>
+                    </div>
                 </div>
+                <div id="history-list" class="history-list"></div>
+                <div id="history-pagination" class="history-pagination"></div>
             </div>
         </main>
 
@@ -139,6 +193,6 @@
         </footer>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

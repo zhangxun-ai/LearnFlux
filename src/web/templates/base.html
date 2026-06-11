@@ -1,109 +1,92 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="light">
 <head>
     <script>
     (function() {
-        var saved = localStorage.getItem('vta_theme_preference');
-        var theme = saved || 'dark';
-        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-theme', 'light');
     })();
     </script>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
     <meta name="description" content="{% block meta_description %}Video Transcript API - 多平台视频转录与 AI 校对服务{% endblock %}">
-    <meta name="theme-color" content="#667eea">
-    <meta property="og:title" content="{% block og_title %}{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}多平台视频转录与 AI 校对服务{% endblock %}">
+    <meta name="theme-color" content="#E4503A">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
+    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
+    <meta property="og:title" content="{% block og_title %}内容解析工作台{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}视频转录 · 帖子精华提炼 · 文档解析，附可信度判断{% endblock %}">
     <meta property="og:type" content="article">
     <meta property="og:locale" content="zh_CN">
-    <meta property="og:site_name" content="Video Transcript API">
+    <meta property="og:site_name" content="内容解析工作台">
+    <meta property="og:image" content="/static/icon/og.png">
     <title>{% block title %}视频转录查看器{% endblock %}</title>
     <style>
-        /* CSS变量定义 - 主题系统 */
-        :root {
-            /* 深色主题（默认） */
-            --bg-gradient-start: #1e293b;
-            --bg-gradient-end: #0f172a;
-            --text-primary: #f8fafc;
-            --text-secondary: #cbd5e1;
-            --bg-primary: #1e293b;
-            --bg-secondary: #334155;
-            --bg-tertiary: #475569;
-            --border-primary: #475569;
-            --header-text: #f8fafc;
-        }
-
-        /* 浅色主题 */
-        [data-theme="light"] {
-            --bg-gradient-start: #667eea;
-            --bg-gradient-end: #764ba2;
-            --text-primary: #333;
-            --text-secondary: #6b7280;
-            --bg-primary: #ffffff;
-            --bg-secondary: #f8f9fa;
-            --bg-tertiary: #f3f4f6;
-            --border-primary: #e5e7eb;
-            --header-text: #ffffff;
-        }
+        /* 配色 token 统一来自 editorial.css（单一来源） */
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
             line-height: 1.6;
             color: var(--text-primary);
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 20px;
+            margin: 0;
+            padding: 0;
             background: var(--bg-secondary);
             transition: color 0.3s ease, background 0.3s ease;
         }
-        
+
         .container {
+            max-width: 900px;
+            margin: 24px auto 40px;
             background: var(--bg-primary);
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             overflow: hidden;
             transition: background 0.3s ease;
         }
-        
+
         .header {
-            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
-            color: var(--header-text);
-            padding: 30px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 38px 30px 24px;
             text-align: center;
             position: relative;
+            border-bottom: 1px solid var(--border-primary);
         }
-        
+
         .header h1 {
             margin: 0;
-            font-size: 1.8rem;
-            font-weight: 600;
+            font-size: 1.9rem;
+            font-weight: 500;
+            font-family: 'Fraunces', Georgia, 'Songti SC', serif;
+            letter-spacing: -0.01em;
         }
-        
+
         .header .meta {
             margin-top: 10px;
             opacity: 0.9;
             font-size: 0.9rem;
         }
-        
+
         .header .meta a {
-            color: var(--header-text);
+            color: #C2533F;
             text-decoration: none;
         }
-        
+
         .header .meta a:hover {
             text-decoration: underline;
         }
-        
+
         .section {
             padding: 30px;
             border-bottom: 1px solid var(--border-primary);
         }
-        
+
         .section:last-child {
             border-bottom: none;
         }
-        
+
         .section h2 {
             margin: 0 0 20px 0;
             color: var(--text-primary);
@@ -111,27 +94,27 @@
             border-bottom: 2px solid var(--border-primary);
             padding-bottom: 10px;
         }
-        
+
         .content {
             line-height: 1.8;
             font-size: 1rem;
         }
-        
+
         /* Markdown样式 */
         .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 {
             margin-top: 24px;
             margin-bottom: 16px;
             font-weight: 600;
         }
-        
+
         .content h1 { font-size: 1.6rem; }
         .content h2 { font-size: 1.4rem; }
         .content h3 { font-size: 1.2rem; }
-        
+
         .content p {
             margin-bottom: 16px;
         }
-        
+
         .content blockquote {
             border-left: 4px solid var(--border-primary);
             padding-left: 16px;
@@ -149,7 +132,7 @@
             border-left-color: #64748b;
             background: var(--bg-tertiary);
         }
-        
+
         .content pre, .content code {
             background: var(--bg-tertiary);
             border: 1px solid var(--border-primary);
@@ -177,7 +160,7 @@
             border-color: #4a5568;
             color: #e2e8f0;
         }
-        
+
         /* 列表基础样式 */
         .content ul, .content ol {
             padding-left: 24px;
@@ -244,7 +227,7 @@
         .content li li:last-child {
             margin-bottom: 0;    /* 最后一个嵌套项无底部间距 */
         }
-        
+
         .content table {
             border-collapse: collapse;
             width: 100%;
@@ -284,26 +267,26 @@
         [data-theme="dark"] .content td {
             border-color: var(--border-primary);
         }
-        
+
         /* 响应式设计 */
         @media (max-width: 768px) {
-            body {
-                padding: 10px;
+            .container {
+                margin: 16px 10px 28px;
             }
-            
+
             .header {
                 padding: 20px;
             }
-            
+
             .header h1 {
                 font-size: 1.5rem;
             }
-            
+
             .section {
                 padding: 20px;
             }
         }
-        
+
         /* 状态样式 */
         .status-processing {
             background: #e7f3ff;
@@ -312,7 +295,7 @@
             margin: 16px 0;
             border-radius: 4px;
         }
-        
+
         .status-error {
             background: #ffebee;
             border-left: 4px solid #f44336;
@@ -320,7 +303,7 @@
             margin: 16px 0;
             border-radius: 4px;
         }
-        
+
         .status-cleaned {
             background: #fff3e0;
             border-left: 4px solid #ff9800;
@@ -328,34 +311,34 @@
             margin: 16px 0;
             border-radius: 4px;
         }
-        
+
         .action-list {
             list-style: none;
             padding: 0;
         }
-        
+
         .action-list li {
             padding: 8px 0;
             font-size: 1.1rem;
         }
-        
+
         .action-list a {
             color: #1976d2;
             text-decoration: none;
             font-weight: 500;
         }
-        
+
         .action-list a:hover {
             text-decoration: underline;
         }
-        
+
         /* 对话样式 */
         .dialog-container {
             display: flex;
             flex-direction: column;
             gap: 20px;
         }
-        
+
         .dialog-item {
             display: flex;
             align-items: flex-start;
@@ -368,11 +351,11 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             transition: box-shadow 0.2s ease, background 0.3s ease, border 0.3s ease;
         }
-        
+
         .dialog-item:hover {
             box-shadow: 0 2px 6px rgba(0,0,0,0.12);
         }
-        
+
         .speaker-header {
             display: flex;
             flex-direction: column;
@@ -381,7 +364,7 @@
             flex-shrink: 0;
             align-self: flex-start;
         }
-        
+
         .speaker-tag {
             width: 100px;
             text-align: center;
@@ -394,7 +377,7 @@
             word-break: break-all;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
-        
+
         .time-tag {
             background: var(--bg-tertiary);
             color: var(--text-secondary);
@@ -406,27 +389,27 @@
             white-space: nowrap;
             transition: background 0.3s ease, color 0.3s ease, border 0.3s ease;
         }
-        
+
         .dialog-content {
             flex: 1;
             min-width: 0;
             padding: 4px 0;
         }
-        
+
         .dialog-content p {
             margin: 0 0 16px 0;
             line-height: 1.7;
             text-align: justify;
         }
-        
+
         .dialog-content p:last-child {
             margin-bottom: 0;
         }
-        
+
         .dialog-content .paragraph-break {
             margin-bottom: 20px;
         }
-        
+
         /* 手机端响应式样式 */
         @media (max-width: 768px) {
             .dialog-item {
@@ -438,14 +421,14 @@
                 border-radius: 8px;
                 border-left: 4px solid var(--speaker-color, #3B82F6);
             }
-            
+
             .speaker-header {
                 flex-direction: row;
                 gap: 8px;
                 flex-wrap: wrap;
                 align-items: center;
             }
-            
+
             .speaker-tag {
                 width: auto;
                 text-align: left;
@@ -453,49 +436,48 @@
                 min-width: 60px;
                 margin-bottom: 0;
             }
-            
+
             .time-tag {
                 font-size: 0.75em;
                 padding: 3px 6px;
             }
-            
+
             .dialog-content {
                 padding-left: 0;
             }
-            
+
             .dialog-content p {
                 font-size: 1rem;
                 line-height: 1.6;
             }
         }
-        
+
         /* 更小屏幕优化 */
         @media (max-width: 480px) {
             body {
-                padding: 10px;
                 font-size: 16px;
             }
-            
+
             .dialog-item {
                 padding: 12px;
                 margin-bottom: 16px;
             }
-            
+
             .speaker-header {
                 gap: 6px;
             }
-            
+
             .speaker-tag {
                 font-size: 0.85em;
                 padding: 3px 6px;
                 min-width: 50px;
             }
-            
+
             .time-tag {
                 font-size: 0.7em;
                 padding: 2px 4px;
             }
-            
+
             .dialog-content p {
                 font-size: 16px;
                 line-height: 1.5;
@@ -505,6 +487,7 @@
 
         /* 主题切换按钮样式 */
         .theme-toggle {
+            display: none;
             position: absolute;
             top: 20px;
             right: 20px;
@@ -736,8 +719,8 @@
         }
 
         .quick-copy-btn:hover {
-            border-color: #667eea;
-            background: rgba(102, 126, 234, 0.06);
+            border-color: #E4503A;
+            background: rgba(228, 80, 58, 0.06);
         }
 
         .quick-copy-btn:active {
@@ -755,7 +738,7 @@
 
         .quick-copy-action {
             font-size: 0.75rem;
-            color: #667eea;
+            color: #E4503A;
             border-left: 1px solid var(--border-primary);
             padding-left: 8px;
             grid-row: 1 / 3;
@@ -786,11 +769,11 @@
         }
 
         [data-theme="dark"] .quick-copy-btn:hover {
-            background: rgba(147, 165, 246, 0.1);
+            background: rgba(228, 80, 58, 0.08);
         }
 
         [data-theme="dark"] .quick-copy-action {
-            color: #93a5f6;
+            color: #C2533F;
         }
 
         /* 响应式 */
@@ -898,7 +881,7 @@
         }
 
         .export-group-items a {
-            color: #667eea;
+            color: #E4503A;
             text-decoration: none;
             font-size: 0.85rem;
         }
@@ -927,7 +910,7 @@
         }
 
         [data-theme="dark"] .export-group-items a {
-            color: #93a5f6;
+            color: #C2533F;
         }
 
         /* 响应式设计 */
@@ -956,14 +939,14 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="/static/css/editorial.css?v=1">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <div id="site-nav"></div>
+    <script src="/static/js/site-nav.js"></script>
     <div class="container">
         <div class="header">
-            <button id="theme-toggle" class="theme-toggle" title="切换到浅色模式">
-                ☀️
-            </button>
             <h1>{{ title or "视频转录查看器" }}</h1>
             {% if author or url %}
             <div class="meta">
@@ -979,22 +962,22 @@
             </div>
             {% endif %}
         </div>
-        
+
         {% block content %}{% endblock %}
 
         <div class="powered-footer">
             Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source · <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">☆ Star on GitHub</a>
         </div>
     </div>
-    
+
     {% block extra_js %}{% endblock %}
-    
+
     <!-- 主题切换脚本 -->
     <script>
         // 简化版主题切换功能（用于模板页面）
         document.addEventListener('DOMContentLoaded', function() {
             const THEME_KEY = 'vta_theme_preference';
-            
+
             function getStoredTheme() {
                 try {
                     const value = localStorage.getItem(THEME_KEY);
@@ -1003,7 +986,7 @@
                     return null;
                 }
             }
-            
+
             function setStoredTheme(theme) {
                 try {
                     localStorage.setItem(THEME_KEY, JSON.stringify(theme));
@@ -1011,14 +994,14 @@
                     console.error('Failed to save theme preference');
                 }
             }
-            
+
             function detectSystemTheme() {
                 if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
                     return 'light';
                 }
                 return 'dark';
             }
-            
+
             function applyTheme(theme) {
                 const root = document.documentElement;
                 const themeToggle = document.getElementById('theme-toggle');
@@ -1038,12 +1021,12 @@
                     }
                 }
             }
-            
+
             function toggleTheme() {
                 const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
                 const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
                 const themeToggle = document.getElementById('theme-toggle');
-                
+
                 // 添加按钮旋转动画
                 if (themeToggle) {
                     themeToggle.classList.add('switching');
@@ -1051,29 +1034,29 @@
                         themeToggle.classList.remove('switching');
                     }, 600);
                 }
-                
+
                 setStoredTheme(newTheme);
-                
+
                 // 添加页面过渡动画
                 const body = document.body;
                 body.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-                
+
                 // 应用新主题
                 setTimeout(() => {
                     applyTheme(newTheme);
                 }, 50);
-                
+
                 // 清除过渡样式
                 setTimeout(() => {
                     body.style.transition = '';
                 }, 350);
             }
-            
+
             // 初始化主题
             const savedTheme = getStoredTheme();
             const theme = savedTheme || detectSystemTheme();
             applyTheme(theme);
-            
+
             // 绑定切换按钮
             const themeToggle = document.getElementById('theme-toggle');
             if (themeToggle) {

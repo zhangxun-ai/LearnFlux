@@ -926,7 +926,13 @@ async function fetchHistory() {
         renderPagination();
         updateUnreadBadge(res.data.items);
     } catch(e) {
-        if (e.message !== '401') showError('网络错误，请稍后重试');
+        if (e.message === '401') {
+            // 令牌无效：列表区给出明确提示，避免永远停在“加载中…”
+            document.getElementById('listArea').innerHTML =
+                `<div class="state-box"><div class="icon">🔑</div><div>访问令牌无效或已过期，请在上方输入正确的令牌后点击「查询」</div></div>`;
+        } else {
+            showError('网络错误，请稍后重试');
+        }
     }
 }
 

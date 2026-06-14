@@ -5,8 +5,8 @@
 {% block extra_css %}
 <style>
     .spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #3498db;
+        border: 4px solid var(--line);
+        border-top: 4px solid var(--accent);
         border-radius: 50%;
         width: 40px;
         height: 40px;
@@ -23,9 +23,9 @@
         max-width: 560px;
         margin: 24px auto 0;
         padding: 16px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--line);
         border-radius: 8px;
-        background: #fff;
+        background: var(--card);
     }
 
     .progress-header {
@@ -38,19 +38,19 @@
 
     .progress-stage {
         font-weight: 600;
-        color: #111827;
+        color: var(--text-primary);
     }
 
     .progress-percent {
         font-variant-numeric: tabular-nums;
-        color: #2563eb;
+        color: var(--accent);
         font-weight: 600;
     }
 
     .progress-track {
         width: 100%;
         height: 10px;
-        background: #e5e7eb;
+        background: var(--bg-tertiary);
         border-radius: 999px;
         overflow: hidden;
     }
@@ -58,7 +58,7 @@
     .progress-fill {
         width: {{ progress.percent if progress and progress.percent is not none else 0 }}%;
         height: 100%;
-        background: #2563eb;
+        background: var(--accent);
         transition: width 0.25s ease;
     }
 
@@ -67,7 +67,7 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px 16px;
         margin-top: 12px;
-        color: #4b5563;
+        color: var(--text-secondary);
         font-size: 0.92rem;
     }
 
@@ -78,32 +78,32 @@
     }
 
     .progress-meta-label {
-        color: #6b7280;
+        color: var(--text-tertiary);
         font-size: 0.82rem;
     }
 
     .progress-meta-value {
-        color: #1f2937;
+        color: var(--text-primary);
         font-weight: 600;
     }
 
     .progress-message {
         margin-top: 10px;
-        color: #374151;
+        color: var(--text-secondary);
         font-size: 0.92rem;
         line-height: 1.5;
     }
 
     .progress-hint {
         margin-top: 10px;
-        color: #6b7280;
+        color: var(--text-tertiary);
         font-size: 0.88rem;
         line-height: 1.5;
     }
 
     .progress-details {
         margin-top: 12px;
-        color: #6b7280;
+        color: var(--text-tertiary);
         font-size: 0.84rem;
     }
 
@@ -181,7 +181,7 @@
             </div>
             <p style="text-align: center; margin-top: 20px;">
                 <button onclick="window.location.reload()" style="
-                    background: #2196f3;
+                    background: var(--accent);
                     color: white;
                     border: none;
                     padding: 10px 20px;

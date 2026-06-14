@@ -2,19 +2,36 @@
 
 {% block title %}{{ title or "出现错误" }} - 视频转录查看器{% endblock %}
 
+{% block extra_css %}
+<style>
+    .error-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .error-btn { display: inline-block; text-decoration: none; padding: 10px 20px; border-radius: 8px;
+        font-weight: 600; font-size: 0.95rem; border: 1px solid var(--border-primary);
+        background: var(--card); color: var(--text-primary); transition: background .15s; }
+    .error-btn:hover { background: var(--bg-tertiary); }
+    .error-btn-primary { background: var(--accent); color: #fff; border-color: transparent; }
+    .error-btn-primary:hover { background: var(--accent-ink); }
+</style>
+{% endblock %}
+
 {% block content %}
     <div class="section">
         <div class="status-error">
             <h2 style="margin-top: 0;">❌ 出现错误</h2>
             <p>{{ message or "页面无法正常显示" }}</p>
-            
+
+            <div class="error-actions">
+                <a class="error-btn error-btn-primary" href="/add_task_by_web">🚀 去解析新内容</a>
+                <a class="error-btn" href="/static/history.html">📋 查看历史记录</a>
+            </div>
+
             {% if url %}
             <div style="margin-top: 20px;">
                 <h3>您可以：</h3>
                 <ul class="action-list">
                     <li>📎 <a href="{{ url }}" target="_blank" rel="noopener">查看原始视频链接</a></li>
                     <li>🔄 刷新页面重试</li>
-                    <li>📝 重新提交转录任务</li>
+                    <li>📝 <a href="/add_task_by_web">重新提交转录任务</a></li>
                 </ul>
             </div>
             {% endif %}
@@ -32,7 +49,7 @@
             
             <p style="margin-top: 20px;">
                 <button onclick="window.location.reload()" style="
-                    background: #f44336;
+                    background: var(--accent);
                     color: white;
                     border: none;
                     padding: 10px 20px;

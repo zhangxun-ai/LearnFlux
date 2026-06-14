@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>设置 - 内容解析工作台</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+            min-height: 100vh; color: var(--text-primary);
+        }
+        .st-page { max-width: 720px; margin: 0 auto; padding: 26px 20px 80px; }
+        .st-head h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 1.9rem; }
+        .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+            padding: 18px 20px; margin-top: 16px; box-shadow: var(--shadow); }
+        .card h2 { font-size: 1.05rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .card .card-sub { color: var(--text-tertiary); font-size: 0.82rem; margin: 4px 0 14px; }
+        .adv-block { padding-top: 14px; margin-top: 14px; border-top: 1px dashed var(--line); }
+        .adv-block:first-of-type { border-top: none; margin-top: 6px; }
+        .adv-block h3 { font-size: 0.95rem; margin-bottom: 2px; }
+        .field { margin-bottom: 13px; }
+        .field:last-child { margin-bottom: 0; }
+        .field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+        .field input[type=text], .field input[type=password], .field input[type=number], .field select {
+            width: 100%; padding: 9px 11px; border: 1.5px solid var(--border-primary);
+            border-radius: 9px; font-size: 0.92rem; background: var(--bg-primary);
+            color: var(--text-primary); font-family: inherit; }
+        .field input:focus, .field select:focus { outline: none; border-color: var(--border-focus); }
+        .field .hint { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 5px; }
+        .key-row { display: flex; gap: 8px; align-items: center; }
+        .key-row input { flex: 1; }
+        .key-link { white-space: nowrap; font-size: 0.82rem; color: var(--accent-primary); text-decoration: none;
+            border: 1px solid var(--accent-primary); border-radius: 8px; padding: 8px 10px; }
+        .key-link:hover { background: var(--accent-soft); }
+        .combo { position: relative; }
+        .combo input[type=text] { padding-right: 36px; }
+        .combo-toggle { position: absolute; top: 0; right: 0; height: 100%; width: 32px;
+            border: none; background: transparent; color: var(--text-tertiary);
+            cursor: pointer; font-size: 0.7rem; line-height: 1; }
+        .combo-menu { position: absolute; z-index: 60; left: 0; right: 0; top: calc(100% + 4px);
+            max-height: 220px; overflow-y: auto; margin: 0; padding: 4px; list-style: none;
+            background: var(--bg-primary); border: 1.5px solid var(--border-primary);
+            border-radius: 9px; box-shadow: var(--shadow); }
+        .combo-menu[hidden] { display: none; }
+        .combo-menu li { padding: 8px 10px; border-radius: 6px; font-size: 0.9rem; cursor: pointer; }
+        .combo-menu li.combo-item:hover, .combo-menu li.combo-item.active { background: var(--accent-soft); color: var(--accent-primary); }
+        .combo-empty { color: var(--text-tertiary); cursor: default; font-size: 0.82rem; }
+        .toggle-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.85rem; }
+        .toggle-row input { width: auto; }
+        .btn { border: none; border-radius: 9px; padding: 9px 18px; font-size: 0.9rem; font-weight: 600;
+            cursor: pointer; background: var(--accent-primary); color: #fff; transition: background .15s; }
+        .btn:hover { background: var(--accent-secondary); }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .auth-status { font-size: 0.82rem; padding: 3px 10px; border-radius: 999px; }
+        .auth-status.ok { background: var(--success-bg); color: var(--success-text); }
+        .auth-status.err { background: var(--error-bg); color: var(--error-text); }
+        .badge-set { font-size: 0.72rem; color: var(--success-text); font-weight: 600; }
+        .help-q { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px;
+            border-radius: 50%; border: 1px solid var(--text-tertiary); color: var(--text-tertiary);
+            font-size: 0.72rem; font-weight: 700; cursor: help; vertical-align: middle; position: relative; }
+        .help-q:focus { outline: none; border-color: var(--accent-primary); color: var(--accent-primary); }
+        .help-q[data-tip]:hover::after, .help-q[data-tip]:focus::after {
+            content: attr(data-tip); position: absolute; left: -4px; top: calc(100% + 9px);
+            width: 300px; max-width: 78vw; white-space: normal; text-align: left;
+            background: var(--ink, #1f2933); color: var(--paper, #fff);
+            padding: 10px 12px; border-radius: 9px; font-size: 0.76rem; font-weight: 400;
+            line-height: 1.6; letter-spacing: .01em; z-index: 200;
+            box-shadow: 0 10px 30px rgba(0,0,0,.22); pointer-events: none; }
+        .help-q[data-tip]:hover::before, .help-q[data-tip]:focus::before {
+            content: ''; position: absolute; left: 3px; top: calc(100% + 3px);
+            border: 6px solid transparent; border-bottom-color: var(--ink, #1f2933);
+            z-index: 201; pointer-events: none; }
+        details.card > summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; list-style: none; color: var(--text-secondary); }
+        details.card > summary::-webkit-details-marker { display: none; }
+        details.card > summary::before { content: '▸ '; color: var(--text-tertiary); }
+        details.card[open] > summary::before { content: '▾ '; }
+        .save-bar { position: sticky; bottom: 0; margin-top: 20px; padding: 14px 0;
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            background: linear-gradient(to top, var(--bg-gradient-end) 60%, transparent); }
+        .save-hint { font-size: 0.8rem; color: var(--text-tertiary); }
+        code { background: var(--bg-tertiary); padding: 1px 5px; border-radius: 5px; font-size: 0.88em; }
+        .toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px);
+            background: var(--ink); color: var(--paper); padding: 10px 18px; border-radius: 10px;
+            font-size: 0.88rem; opacity: 0; pointer-events: none; transition: .25s; z-index: 2000; }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        @media (max-width: 600px) { .st-page { padding: 16px 14px 64px; } .key-row { flex-wrap: wrap; } }
+    </style>
+</head>
+<body>
+    <div id="site-nav"></div>
+    <script src="/static/js/site-nav.js?v=__ASSET_VERSION__"></script>
+
+    <main class="st-page">
+        <header class="st-head"><h1>设置</h1></header>
+
+        <!-- 管理口令：加载 / 保存配置的钥匙（全站唯一一处） -->
+        <section class="card">
+            <div class="field">
+                <label for="token">管理口令 <span class="help-q" tabindex="0" role="img" aria-label="管理口令说明" data-tip="“管理口令”是保护本后台的口令，等于 config.jsonc 里的 api.auth_token，由你（管理员）首次在配置文件中设定。它不是 AI 服务商的 API Key；用于在本页读取/保存配置，与提交任务、历史页用的是同一个口令。">?</span></label>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                    <input type="password" id="token" placeholder="输入管理口令" style="flex:1; min-width:240px;">
+                    <button class="btn" id="load-btn">加载</button>
+                    <span class="auth-status" id="auth-status" style="display:none;"></span>
+                </div>
+                <div class="hint">即 <code>config.jsonc</code> 的 <code>api.auth_token</code>，用于读取/保存配置。</div>
+            </div>
+        </section>
+
+        <!-- 配置分组（打开即渲染；核心默认展示，高级默认折叠） -->
+        <div id="groups"></div>
+
+        <div class="save-bar">
+            <button class="btn" id="save-btn">保存配置</button>
+            <span class="save-hint">保存后重启服务生效</span>
+        </div>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+    (function () {
+        var TOKEN_KEY = 'vta_settings_token';
+        var providers = [];
+
+        function $(id) { return document.getElementById(id); }
+        function q(key) { return document.querySelector('[data-key="' + key + '"]'); }
+        function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+        function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); }, 2400); }
+        function getToken() { return $('token').value.trim(); }
+        function authHeaders() { return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }; }
+
+        function fieldHTML(f) {
+            var key = esc(f.key);
+            if (f.type === 'bool') {
+                return '<div class="field"><label class="toggle-row"><input type="checkbox" data-key="' + key + '"> ' + esc(f.label) + '</label>' +
+                    (f.help ? '<div class="hint">' + esc(f.help) + '</div>' : '') + '</div>';
+            }
+            var badge = (f.type === 'secret') ? ' <span class="badge-set" style="display:none;">已配置</span>' : '';
+            var control;
+            if (f.type === 'select') {
+                control = '<select data-key="' + key + '">' + (f.options || []).map(function (o) { return '<option value="' + esc(o) + '">' + esc(o) + '</option>'; }).join('') + '</select>';
+            } else if (f.type === 'model') {
+                control = '<div class="combo"><input type="text" data-key="' + key + '" autocomplete="off" placeholder="选择或手动输入模型名">' +
+                    '<button type="button" class="combo-toggle" tabindex="-1" aria-label="展开模型列表">▾</button>' +
+                    '<ul class="combo-menu" hidden></ul></div>';
+            } else if (f.type === 'int') {
+                control = '<input type="number" data-key="' + key + '" autocomplete="off">';
+            } else if (f.type === 'secret') {
+                // 密钥 + 旁边一键获取链接（provider_key_link 的链接随服务商更新）
+                var link = f.provider_key_link
+                    ? '<a class="key-link" id="llm-key-link" target="_blank" rel="noopener" style="display:none;"></a>'
+                    : (f.key_url ? '<a class="key-link" href="' + esc(f.key_url) + '" target="_blank" rel="noopener">获取 ↗</a>' : '');
+                control = '<div class="key-row"><input type="password" data-key="' + key + '" autocomplete="new-password">' + link + '</div>';
+            } else {
+                control = '<input type="text" data-key="' + key + '" autocomplete="off">';
+            }
+            return '<div class="field"><label>' + esc(f.label) + badge + '</label>' + control +
+                (f.help ? '<div class="hint">' + esc(f.help) + '</div>' : '') + '</div>';
+        }
+
+        function providerCtrlHTML() {
+            return '<div class="field"><label for="provider">服务商</label>' +
+                '<select id="provider">' + providers.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select></div>';
+        }
+
+        function renderGroups(groups) {
+            var core = groups.filter(function (g) { return g.tier !== 'advanced'; });
+            var adv = groups.filter(function (g) { return g.tier === 'advanced'; });
+
+            var coreHTML = core.map(function (g) {
+                return '<section class="card"><h2>' + esc(g.icon) + ' ' + esc(g.title) +
+                    (g.provider ? ' <span class="badge-set" id="current-provider" style="display:none;"></span>' : '') + '</h2>' +
+                    (g.desc ? '<div class="card-sub">' + esc(g.desc) + '</div>' : '') +
+                    (g.provider ? providerCtrlHTML() : '') +
+                    g.fields.map(fieldHTML).join('') + '</section>';
+            }).join('');
+
+            var advHTML = adv.length ? '<details class="card"><summary>高级设置（不懂可忽略，留空即用默认值）</summary>' +
+                adv.map(function (g) {
+                    return '<div class="adv-block"><h3>' + esc(g.icon) + ' ' + esc(g.title) + '</h3>' +
+                        (g.desc ? '<div class="card-sub">' + esc(g.desc) + '</div>' : '') +
+                        g.fields.map(fieldHTML).join('') + '</div>';
+                }).join('') + '</details>' : '';
+
+            $('groups').innerHTML = coreHTML + advHTML;
+
+            var sel = $('provider');
+            if (sel) { sel.addEventListener('change', function () { applyProvider(true); }); applyProvider(true); }
+        }
+
+        // 模型下拉：自定义组合框，替代会被当前值过滤的原生 datalist。
+        // ▾ 永远展示完整候选；打字才过滤；点选填入；仍允许手动输入任意模型名。
+        var modelOptions = [];
+        function setModelOptions(models) {
+            modelOptions = (models || []).slice();
+            document.querySelectorAll('.combo').forEach(function (combo) {
+                var menu = combo.querySelector('.combo-menu');
+                if (menu && !menu.hidden) renderComboMenu(combo, true);
+            });
+        }
+        function renderComboMenu(combo, showAll) {
+            var input = combo.querySelector('input[data-key]');
+            var menu = combo.querySelector('.combo-menu');
+            var typed = showAll ? '' : input.value.trim().toLowerCase();
+            var list = modelOptions.filter(function (m) { return !typed || m.toLowerCase().indexOf(typed) >= 0; });
+            if (!list.length) {
+                menu.innerHTML = '<li class="combo-empty">' +
+                    (modelOptions.length ? '无匹配项，可直接使用输入的名称' : '该服务商暂无预置模型，请手动输入') + '</li>';
+                return;
+            }
+            var cur = input.value;
+            menu.innerHTML = list.map(function (m) {
+                return '<li class="combo-item' + (m === cur ? ' active' : '') + '" data-val="' + esc(m) + '">' + esc(m) + '</li>';
+            }).join('');
+        }
+        function openCombo(combo, showAll) { closeAllCombos(combo); renderComboMenu(combo, showAll); combo.querySelector('.combo-menu').hidden = false; }
+        function closeCombo(combo) { var m = combo.querySelector('.combo-menu'); if (m) m.hidden = true; }
+        function closeAllCombos(except) { document.querySelectorAll('.combo').forEach(function (c) { if (c !== except) closeCombo(c); }); }
+
+        // 选择/初始化服务商：填 Base URL、模型候选、获取链接
+        function applyProvider(resetToProviderDefaults) {
+            var sel = $('provider'); if (!sel) return;
+            var p = providers.find(function (x) { return x.id === sel.value; });
+            if (!p) return;
+            var baseEl = q('llm.base_url');
+            if (resetToProviderDefaults && baseEl && p.base_url) baseEl.value = p.base_url;
+            setModelOptions(p.models);
+            if (resetToProviderDefaults) {
+                var c = q('llm.calibrate_model'), s = q('llm.summary_model');
+                if (c) c.value = (p.models && p.models[0]) || '';
+                if (s) s.value = (p.models && (p.models[1] || p.models[0])) || '';
+            }
+            var link = $('llm-key-link');
+            if (link) {
+                if (p.api_key_url) { link.href = p.api_key_url; link.textContent = '获取 ' + p.name + ' Key ↗'; link.style.display = ''; }
+                else link.style.display = 'none';
+            }
+        }
+
+        function fillValues(groups) {
+            var baseUrl = '';
+            groups.forEach(function (g) {
+                g.fields.forEach(function (f) {
+                    var el = q(f.key); if (!el) return;
+                    if (el.type === 'checkbox') { el.checked = !!f.value; }
+                    else if (f.type === 'secret') { el.value = ''; el.placeholder = f.set ? (f.masked + '（已配置，留空不改）') : '未配置'; }
+                    else { el.value = (f.value == null ? '' : f.value); if (f.key === 'llm.base_url') baseUrl = el.value; }
+                    var badge = el.closest('.field') ? el.closest('.field').querySelector('.badge-set') : null;
+                    if (badge) badge.style.display = f.set ? '' : 'none';
+                });
+            });
+            // 按当前 base_url 预选服务商，并据此填模型候选
+            var sel = $('provider');
+            if (sel) {
+                var matched = providers.find(function (p) { return p.base_url && p.base_url === baseUrl; });
+                sel.value = matched ? matched.id : 'custom';
+                var p = providers.find(function (x) { return x.id === sel.value; }) || { models: [] };
+                setModelOptions(p.models);
+                var link = $('llm-key-link');
+                if (link) { if (p.api_key_url) { link.href = p.api_key_url; link.textContent = '获取 ' + p.name + ' Key ↗'; link.style.display = ''; } else link.style.display = 'none'; }
+                var cur = $('current-provider');
+                if (cur) { if (baseUrl) { cur.textContent = '当前：' + p.name; cur.style.display = ''; } else cur.style.display = 'none'; }
+            }
+        }
+
+        function showAuth(ok, text) { var el = $('auth-status'); el.style.display = ''; el.textContent = text; el.className = 'auth-status ' + (ok ? 'ok' : 'err'); }
+
+        async function init() {
+            try {
+                var resp = await fetch('/api/settings/schema');
+                var json = await resp.json();
+                providers = json.data.providers || [];
+                renderGroups(json.data.groups || []);
+            } catch (e) { $('groups').innerHTML = '<div class="card">加载配置结构失败，请刷新。</div>'; return; }
+            var saved = localStorage.getItem(TOKEN_KEY);
+            if (saved) { $('token').value = saved; loadValues(); }
+        }
+
+        async function loadValues() {
+            if (!getToken()) { toast('请先输入管理口令'); return; }
+            try {
+                var resp = await fetch('/api/settings', { headers: authHeaders() });
+                if (resp.status === 401) { showAuth(false, '口令无效'); return; }
+                var json = await resp.json();
+                if (json.code !== 200) { showAuth(false, json.message || '加载失败'); return; }
+                showAuth(true, '已加载');
+                providers = json.data.providers || providers;
+                fillValues(json.data.groups || []);
+                localStorage.setItem(TOKEN_KEY, getToken());
+            } catch (e) { showAuth(false, '网络错误'); }
+        }
+
+        async function saveSettings() {
+            if (!getToken()) { toast('请先输入管理口令'); return; }
+            var payload = {};
+            document.querySelectorAll('[data-key]').forEach(function (el) {
+                payload[el.getAttribute('data-key')] = (el.type === 'checkbox') ? el.checked : el.value;
+            });
+            $('save-btn').disabled = true;
+            try {
+                var resp = await fetch('/api/settings', { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
+                var json = await resp.json();
+                if (resp.ok && json.code === 200) { toast('保存成功，重启服务后生效'); providers = json.data.providers || providers; fillValues(json.data.groups || []); }
+                else { toast(json.detail || json.message || '保存失败'); }
+            } catch (e) { toast('网络错误，保存失败'); }
+            finally { $('save-btn').disabled = false; }
+        }
+
+        // 组合框交互：▾ 展开全部候选 / 输入实时过滤 / 点选填入 / 点击外部或 Esc 关闭
+        document.addEventListener('click', function (e) {
+            var toggle = e.target.closest('.combo-toggle');
+            if (toggle) { var cb = toggle.closest('.combo'); cb.querySelector('.combo-menu').hidden ? openCombo(cb, true) : closeCombo(cb); return; }
+            var item = e.target.closest('.combo-menu .combo-item');
+            if (item) { var c = item.closest('.combo'); c.querySelector('input[data-key]').value = item.getAttribute('data-val'); closeCombo(c); return; }
+            if (!e.target.closest('.combo')) closeAllCombos(null);
+        });
+        document.addEventListener('input', function (e) {
+            var cb = e.target.closest && e.target.closest('.combo');
+            if (cb && e.target.matches('input[data-key]')) openCombo(cb, false);
+        });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAllCombos(null); });
+
+        $('load-btn').addEventListener('click', loadValues);
+        $('token').addEventListener('keydown', function (e) { if (e.key === 'Enter') loadValues(); });
+        $('save-btn').addEventListener('click', saveSettings);
+        init();
+    })();
+    </script>
+</body>
+</html>

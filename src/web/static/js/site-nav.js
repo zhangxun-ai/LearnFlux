@@ -6,10 +6,12 @@
 (function () {
     var LINKS = [
         { href: '/', label: '首页' },
-        { href: '/add_task_by_web', label: '工作台' },
-        { href: '/collections', label: '学习集合' },
+        { href: '/add_task_by_web', label: '单篇深度学习' },
+        { href: '/collections', label: '系列深度学习' },
         { href: '/post', label: '帖子洞察' },
-        { href: '/flywheel', label: '学做小红书' }
+        { href: '/flywheel', label: 'IP 对标' },
+        { href: '/static/history.html', label: '历史' },
+        { href: '/settings', label: '设置' }
     ];
 
     function isActive(href) {

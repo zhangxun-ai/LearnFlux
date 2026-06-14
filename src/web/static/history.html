@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>任务历史 - VideoTranscriptAPI</title>
+    <title>任务历史 - 内容解析工作台</title>
+    <link rel="stylesheet" href="/static/css/editorial.css">
     <link rel="stylesheet" href="/static/css/styles.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -13,10 +14,10 @@
             background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
             min-height: 100vh;
             color: var(--text-primary);
-            padding: 20px;
         }
 
-        .container { max-width: 1100px; margin: 0 auto; }
+        /* 留白移到内容容器：避免 body 的 padding 把 sticky 站点导航整体内缩，与其他页保持贴边满宽一致 */
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
 
         /* 顶部 */
         .header {
@@ -374,35 +375,23 @@
     </style>
 </head>
 <body>
+<div id="site-nav"></div>
+<script src="/static/js/site-nav.js"></script>
 <div class="container">
     <div class="header">
         <h1>任务历史</h1>
-        <a href="/">← 返回主页</a>
     </div>
 
-    <!-- API Key 输入 -->
+    <!-- 访问令牌输入 -->
     <div class="auth-bar">
-        <label>API Key</label>
-        <input type="password" id="apiKeyInput" placeholder="输入 API Key..." autocomplete="off">
+        <label>API 访问令牌</label>
+        <input type="password" id="apiKeyInput" placeholder="输入访问令牌后查看任务记录" autocomplete="off">
         <button class="btn btn-primary" onclick="loadHistory()">查询</button>
-        <label class="remember-label">
-            <input type="checkbox" id="rememberKey"> 记住
-        </label>
         <span class="auth-status" id="authStatus" style="display:none"></span>
         <span style="flex:1"></span>
-        <button class="btn btn-ghost" id="aliasToggle" onclick="toggleAliasPanel()" style="display:none; font-size:0.8rem; padding:6px 12px">
-            Webhook 别名
-        </button>
     </div>
-
-    <!-- Webhook 别名设置面板 -->
-    <div class="alias-panel" id="aliasPanel">
-        <h3>Webhook 别名（保存在本地浏览器）</h3>
-        <div id="aliasRows"></div>
-        <button class="btn btn-primary" onclick="saveAliases()" style="margin-top:10px; font-size:0.8rem; padding:6px 14px">
-            保存别名
-        </button>
-        <div class="alias-save-hint">* 别名仅存储在本地，清除浏览器数据后会丢失</div>
+    <div style="font-size:0.8rem; color:var(--text-tertiary); margin:-6px 0 4px;">
+        即后台 <code>config.jsonc</code> 里的 <code>api.auth_token</code>（与提交任务、设置页用的是同一个令牌）；输入后会记在本浏览器，下次自动带入。
     </div>
 
     <!-- 过滤栏 -->
@@ -414,12 +403,6 @@
         <div class="filter-group">
             <label>结束日期</label>
             <input type="date" id="filterEndDate">
-        </div>
-        <div class="filter-group">
-            <label>Webhook</label>
-            <select id="filterWebhook">
-                <option value="">全部</option>
-            </select>
         </div>
         <div class="filter-group">
             <label>平台</label>
@@ -712,21 +695,17 @@ function loadSavedKey() {
     const saved = persisted || session;
     if (saved) {
         document.getElementById('apiKeyInput').value = saved;
-        if (persisted) document.getElementById('rememberKey').checked = true;
     }
 }
 
 async function loadHistory(page = 0) {
     const keyInput = document.getElementById('apiKeyInput').value.trim();
-    if (!keyInput) { showStatus('err', '请输入 API Key'); return; }
+    if (!keyInput) { showStatus('err', '请输入 API 访问令牌'); return; }
 
     currentApiKey = keyInput;
     sessionStorage.setItem('vta_api_key', keyInput);
-    if (document.getElementById('rememberKey').checked) {
-        localStorage.setItem('vta_api_key_persist', keyInput);
-    } else {
-        localStorage.removeItem('vta_api_key_persist');
-    }
+    // 静默记住令牌（仅存本浏览器），下次自动带入
+    localStorage.setItem('vta_api_key_persist', keyInput);
     currentPage = page;
 
     showListLoading();
@@ -749,10 +728,6 @@ async function loadFilterOptions() {
             loadFiltersFromURL();   // 恢复 URL 里的过滤条件（必须在下拉填充后）
             document.getElementById('filterBar').style.display = 'flex';
             document.getElementById('statsBar').style.display = 'flex';
-            // 只在有 webhook 记录时才显示别名设置入口
-            if (filterOptions.webhooks && filterOptions.webhooks.length > 0) {
-                document.getElementById('aliasToggle').style.display = '';
-            }
         }
     } catch(e) {
         console.error('filter-options error', e);
@@ -760,16 +735,6 @@ async function loadFilterOptions() {
 }
 
 function populateFilterDropdowns() {
-    const aliasMap = getAliasMap();
-    const webhookSel = document.getElementById('filterWebhook');
-    webhookSel.innerHTML = '<option value="">全部</option>';
-    filterOptions.webhooks.forEach(w => {
-        const opt = document.createElement('option');
-        opt.value = w;
-        opt.textContent = aliasMap[w] || shortWebhook(w);
-        webhookSel.appendChild(opt);
-    });
-
     const platformSel = document.getElementById('filterPlatform');
     platformSel.innerHTML = '<option value="">全部</option>';
     filterOptions.platforms.forEach(p => {
@@ -863,7 +828,6 @@ function applyFilter() { serializeFiltersToURL(); loadHistory(0); }
 function resetFilter() {
     document.getElementById('filterStartDate').value = '';
     document.getElementById('filterEndDate').value = '';
-    document.getElementById('filterWebhook').value = '';
     document.getElementById('filterPlatform').value = '';
     document.getElementById('filterAuthor').value = '';
     document.getElementById('filterStatus').value = 'success';
@@ -897,7 +861,7 @@ async function apiFetch(url, params = {}) {
         headers: { 'Authorization': `Bearer ${currentApiKey}` }
     });
     const json = await res.json();
-    if (res.status === 401) { showStatus('err', 'API Key 无效'); throw new Error('401'); }
+    if (res.status === 401) { showStatus('err', '访问令牌无效'); throw new Error('401'); }
     return json;
 }
 
@@ -920,7 +884,6 @@ async function fetchHistory() {
 
     const startDate = document.getElementById('filterStartDate').value;
     const endDate   = document.getElementById('filterEndDate').value;
-    const webhook   = document.getElementById('filterWebhook').value;
     const platform  = document.getElementById('filterPlatform').value;
     const author    = document.getElementById('filterAuthor').value;
     const status    = document.getElementById('filterStatus').value;
@@ -928,7 +891,6 @@ async function fetchHistory() {
 
     if (startDate) params.start_date = startDate;
     if (endDate)   params.end_date = endDate;
-    if (webhook)   params.webhook = webhook;
     if (platform)  params.platform = platform;
     if (author)    params.author = author;
     if (status)    params.status = status;
@@ -939,7 +901,6 @@ async function fetchHistory() {
         if (res.code !== 200) { showError(res.message || '查询失败'); return; }
 
         currentMasked = res.data.api_key_masked || currentMasked;
-        showStatus('ok', '认证成功');
         selectedSet.clear();
         updateSelectionUI();
 
@@ -994,8 +955,9 @@ function renderList(items) {
             });
         }
     });
-    document.getElementById('selectAllChk').checked = false;
-    document.getElementById('selectAllChk').indeterminate = false;
+    // 重渲染（翻页/筛选）后清空选择，避免“复选框已重置但 selectedSet 残留”导致全选无法取消
+    selectedSet.clear();
+    updateSelectionUI();
 }
 
 function buildRow(item, readSet) {

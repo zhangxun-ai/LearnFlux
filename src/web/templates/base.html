@@ -939,12 +939,12 @@
             }
         }
     </style>
-    <link rel="stylesheet" href="/static/css/editorial.css?v=1">
+    <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
     <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js"></script>
+    <script src="/static/js/site-nav.js?v={{ asset_ver }}"></script>
     <div class="container">
         <div class="header">
             <h1>{{ title or "视频转录查看器" }}</h1>

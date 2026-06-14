@@ -142,6 +142,13 @@ def get_templates() -> Jinja2Templates:
     global _templates
     if _templates is None:
         _templates = Jinja2Templates(directory=str(get_template_dir()))
+        # 模板页资源版本号：用 editorial.css 的 mtime 破坏 CSS/JS 浏览器缓存，
+        # 部署/改样式后回访用户即可拿到新版（模板里用 ?v={{ asset_ver }}）。
+        try:
+            css_mtime = (get_static_dir() / "css" / "editorial.css").stat().st_mtime
+            _templates.env.globals["asset_ver"] = str(int(css_mtime))
+        except OSError:
+            _templates.env.globals["asset_ver"] = "1"
     return _templates
 
 

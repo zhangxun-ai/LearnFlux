@@ -57,6 +57,8 @@ cp config/config.example.jsonc config/config.jsonc
 uv run python main.py --start
 ```
 
+> 💡 除手改 `config.jsonc` 外，服务启动后也可在浏览器打开 **`/settings` 设置页**，用「管理口令」（即 `api.auth_token`）在线配置各 AI 服务商的密钥/模型、TikHub 等密钥与服务地址；配置写入 `data/config.db` 并在启动时深合并到 `config.jsonc` 之上，**保存后重启服务生效**。
+
 ### Docker 部署
 
 ```bash
@@ -103,6 +105,7 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 - **查看结果**：`GET /view/{view_token}`
 - **任务历史**：`GET /static/history.html` — 支持按日期、平台、频道、关键词搜索，已读追踪，摘要预览
 - **导出文件**：`GET /export/{view_token}/{type}`（支持 `calibrated`、`summary`、`transcript`）
+- **设置中心**：`GET /settings` — 在线配置 AI 服务商密钥/模型、TikHub 等密钥与服务地址（凭管理口令读写，模型支持从服务商实时拉取）
 
 ### API 端点一览
 
@@ -116,6 +119,10 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 | `/api/audit/filter-options` | GET | 获取过滤选项（webhook/平台/频道列表） |
 | `/api/audit/summary` | GET | 任务摘要预览（前 300 字） |
 | `/api/users/profile` | GET | 当前用户信息 |
+| `/settings` | GET | 设置中心页面 |
+| `/api/settings/schema` | GET | 配置结构（无值、免鉴权，用于渲染表单） |
+| `/api/settings` | GET / POST | 读取（脱敏）/ 写入配置，需管理口令 |
+| `/api/settings/provider-models` | POST | 按当前 Key 实时拉取服务商可用模型 |
 | `/view/{view_token}` | GET | 结果查看页 |
 | `/view/{view_token}?raw=calibrated` | GET | 纯文本导出 |
 | `/view/{view_token}?page=calibrated` | GET | HTML 页面导出 |

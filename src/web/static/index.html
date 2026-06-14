@@ -8,8 +8,8 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>内容解析工作台 - VideoTranscriptAPI</title>
-    <meta name="description" content="视频转录、X/小红书/公众号帖子精华提炼、本地文件解析，多平台一站式内容解析">
+    <title>视频/文档深度学习 - 内容解析工作台</title>
+    <meta name="description" content="视频转录、文档解析、AI 精华提炼，把内容沉淀成可复习的学习笔记">
     <meta name="theme-color" content="#FBF8F3">
     <meta name="robots" content="noindex">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
@@ -17,15 +17,15 @@
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/styles.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/workbench.css?v=__ASSET_VERSION__">
-    <link rel="stylesheet" href="/static/css/editorial.css?v=1">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
 </head>
 <body>
     <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js"></script>
+    <script src="/static/js/site-nav.js?v=__ASSET_VERSION__"></script>
     <div class="container">
         <header class="header">
-            <h1 class="serif">内容解析工作台</h1>
-            <p>视频转录 · 帖子精华提炼 · 文件解析，多平台一站式</p>
+            <h1 class="serif">视频/文档深度学习</h1>
+            <p>拿到原文稿，再提炼成可复习、可沉淀的知识笔记</p>
         </header>
 
         <main class="main-content">
@@ -44,12 +44,21 @@
 
                 <!-- 链接面板 -->
                 <div class="input-panel active" id="panel-link" role="tabpanel">
-                    <form id="transcribe-form" class="form-container">
+                    <form id="transcribe-form" class="form-container" autocomplete="off" data-form-type="other">
                         <div class="form-group">
                             <textarea
                                 id="share-content"
+                                name="deep-learning-source-content"
                                 class="form-textarea"
-                                placeholder="粘贴任意链接，系统自动识别并选择处理方式：&#10;• YouTube / Bilibili / 抖音 / 小宇宙 视频 → 语音转录&#10;• X(Twitter) / 小红书 / 微信公众号 帖子 → 精华提炼 + 可信度判断&#10;• 本地视频 / 文件上传 → 即将支持"
+                                autocomplete="off"
+                                autocorrect="off"
+                                autocapitalize="none"
+                                spellcheck="false"
+                                aria-autocomplete="none"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
+                                data-form-type="other"
+                                placeholder="粘贴视频链接，系统会生成原文稿 + AI 深度学习笔记：&#10;• YouTube / Bilibili / 抖音 / 小红书 / 小宇宙 视频 → 转录文稿 + 精华提炼&#10;• 本地音视频 / PDF / Word / Markdown → 提取原文 + AI 总结&#10;• 帖子/文章洞察、IP 对标拆解请使用顶部对应模块"
                                 rows="3"></textarea>
 
                             <!-- URL 提取与选择（app.js 既有机制） -->
@@ -104,12 +113,21 @@
                                         🔐 API访问令牌 (Bearer Token) <span class="required-mark">*</span>
                                     </label>
                                     <div class="input-group">
-                                        <input type="password" id="bearer-token" class="form-input"
-                                               placeholder="请输入API访问令牌" required>
-                                        <button type="button" id="toggle-token-visibility" class="input-btn">👁️</button>
+                                        <input type="text" id="bearer-token" name="api-token-local-only"
+                                               class="form-input secret-masked"
+                                               placeholder="请输入API访问令牌" required
+                                               autocomplete="new-password"
+                                               autocorrect="off"
+                                               autocapitalize="none"
+                                               spellcheck="false"
+                                               data-lpignore="true"
+                                               data-1p-ignore="true"
+                                               data-form-type="other">
+                                        <button type="button" id="toggle-token-visibility" class="input-btn"
+                                                aria-label="显示 API 令牌">👁️</button>
                                     </div>
                                     <small class="form-help">
-                                        <span class="required-text">必填项</span> - 令牌将安全地保存在浏览器本地
+                                        <span class="required-text">必填项</span> · 即服务访问口令，首次使用请向管理员获取（自部署见 <code>config.jsonc</code> 的 <code>api.auth_token</code>，亦可在<a href="/settings" target="_blank" rel="noopener">设置页</a>查看/设定）。令牌仅保存在你的浏览器本地。
                                     </small>
                                 </div>
 
@@ -165,7 +183,7 @@
                         <div class="history-filter" id="history-filter">
                             <button type="button" class="filter-chip active" data-filter="all">全部</button>
                             <button type="button" class="filter-chip" data-filter="video">🎬 视频</button>
-                            <button type="button" class="filter-chip" data-filter="post">𝕏 帖子</button>
+                            <button type="button" class="filter-chip" data-filter="post">📝 帖文</button>
                             <button type="button" class="filter-chip" data-filter="file">📁 文件</button>
                         </div>
                         <select id="history-status" class="hist-date-select" aria-label="按状态筛选">

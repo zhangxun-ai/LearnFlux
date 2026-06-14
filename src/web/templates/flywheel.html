@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<title>学做小红书 · 拆解爆款</title>
+<title>IP 对标工作台 · 内容拆解</title>
 <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
-<link rel="stylesheet" href="/static/css/editorial.css?v=1">
+<link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
 <style>
   :root{
     --paper:#FBF8F3; --ink:#1B1A17; --ink-soft:#4A463F; --muted:#9A938A;
@@ -78,6 +78,16 @@
   .ty.video{background:rgba(228,80,58,.1);color:var(--video)}.ty.article{background:rgba(47,143,107,.1);color:var(--article)}
   .src .tt{font-weight:600;font-size:1.05rem}.src .by{color:var(--muted);font-size:.88rem}
   .src .link{margin-left:auto;color:var(--accent-ink);text-decoration:none;font-size:.88rem;font-weight:600}
+  .result-layout{display:grid;grid-template-columns:170px minmax(0,1fr);gap:26px;align-items:start}
+  .result-toc{position:sticky;top:18px;padding:14px 0;border-right:1px solid var(--line)}
+  .result-toc .toc-title{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:9px}
+  .result-toc a{display:block;text-decoration:none;color:var(--ink-soft);font-size:.84rem;line-height:1.35;padding:7px 12px 7px 0;border-radius:8px}
+  .result-toc a:hover{color:var(--accent-ink)}
+  .result-main{min-width:0}
+  .source-text{padding:22px 0;border-bottom:1px solid var(--line)}
+  .source-text h2{font-size:1.12rem;margin-bottom:9px;letter-spacing:-.01em}
+  .source-text .source-body{color:var(--ink-soft);line-height:1.85;white-space:normal;overflow-wrap:break-word}
+  .source-text .source-empty{color:var(--muted)}
   .pt{display:flex;gap:18px;padding:22px 0;border-bottom:1px solid var(--line)}
   .pt .n{font-family:'Fraunces',serif;font-size:1.7rem;color:var(--accent);line-height:1;flex-shrink:0;width:34px;font-weight:500}
   .pt h3{font-size:1.12rem;margin-bottom:7px;letter-spacing:-.01em}
@@ -115,19 +125,32 @@
   /* settings */
   .field{display:flex;gap:8px;margin-top:18px}
   .field input{flex:1;border:1px solid var(--line);border-radius:12px;padding:13px 14px;font-size:.95rem;outline:none;font-family:inherit}
+  .field input.secret-input{-webkit-text-security:disc}
   .field input:focus{border-color:var(--accent)}
   .saved{color:var(--article);font-size:.86rem;margin-top:10px}
+  .prompt-box{margin-top:28px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+  .prompt-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .prompt-top select{font-family:inherit;border:1px solid var(--line);border-radius:10px;background:#fff;padding:9px 12px;outline:none}
+  .prompt-ver{color:var(--muted);font-size:.86rem}
+  .prompt-box textarea{width:100%;min-height:360px;resize:vertical;border:1px solid var(--line);border-radius:12px;
+    padding:13px 14px;font-family:'SFMono-Regular',Consolas,monospace;font-size:.86rem;line-height:1.6;color:var(--ink);
+    background:#FFFCF8;outline:none}
+  .prompt-box textarea:focus{border-color:var(--accent)}
+  .prompt-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .prompt-status{font-size:.86rem;color:var(--muted)}
+  .sub-msg{font-size:.84rem;color:var(--accent-ink);margin-left:2px}
   .hidden{display:none!important}
+  @media(max-width:720px){.result-layout{grid-template-columns:1fr;gap:4px}.result-toc{position:static;border-right:none;border-bottom:1px solid var(--line);display:flex;gap:4px;overflow-x:auto;padding:10px 0}.result-toc .toc-title{display:none}.result-toc a{flex:0 0 auto;padding:6px 10px;border:1px solid var(--line);background:var(--card);white-space:nowrap}}
   @media(max-width:560px){.hero h1{font-size:2.1rem}.top{padding:18px}.wrap{padding:0 18px 80px}}
 </style>
 </head>
 <body>
   <div id="site-nav"></div>
-  <script src="/static/js/site-nav.js"></script>
+  <script src="/static/js/site-nav.js?v={{ asset_ver }}"></script>
   <div class="top">
     <nav class="nav">
       <a class="on" data-v="analyze" onclick="fwV('analyze')">拆解</a>
-      <a data-v="history" onclick="fwV('history')">我解析过的</a>
+      <a data-v="history" onclick="fwV('history')">我拆解过的</a>
       <a data-v="bloggers" onclick="fwV('bloggers')">我的对标</a>
       <a data-v="settings" onclick="fwV('settings')">设置</a>
     </nav>
@@ -138,11 +161,11 @@
     <!-- ANALYZE -->
     <div class="view on" id="v-analyze">
       <div class="hero">
-        <div class="eyebrow">拆解爆款 · 秒懂为什么火</div>
+        <div class="eyebrow">IP 对标 · 看懂内容为什么火</div>
         <h1 class="serif">贴一个链接，<br>看懂它<em>为什么火</em></h1>
-        <p class="sub">小红书的视频或图文都行。我帮你拆出开头、留人、引导，再告诉你下一条该怎么做。</p>
+        <p class="sub">当前先支持小红书视频或图文。这个模块用于学习对标账号的选题、开头、留人、转化和迭代方法。</p>
         <div class="box">
-          <input id="url" placeholder="粘贴小红书内容链接…" autocomplete="off" spellcheck="false">
+          <input id="url" name="xhs-content-link" type="url" inputmode="url" placeholder="粘贴小红书对标内容链接…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
           <button class="go" id="go">拆解 →</button>
         </div>
         <div class="samples">
@@ -163,7 +186,7 @@
 
     <!-- HISTORY -->
     <div class="view" id="v-history">
-      <div class="head"><h2 class="serif">我解析过的</h2><p>原内容和解析结果都能回看。</p></div>
+      <div class="head"><h2 class="serif">我拆解过的</h2><p>原内容和对标拆解结果都能回看。</p></div>
       <div class="filters">
         <select id="f-subscribe"><option value="">全部来源</option><option value="subscribed">已订阅</option><option value="adhoc">临时解析</option></select>
         <select id="f-blogger"><option value="">全部博主</option></select>
@@ -181,6 +204,7 @@
       <div class="box" style="margin-top:22px">
         <input id="sub-url" placeholder="粘贴博主主页链接，订阅追更…" autocomplete="off">
         <button class="go" id="sub">订阅</button>
+        <span class="sub-msg" id="sub-msg" role="alert" hidden></span>
       </div>
       <div id="bloggers" style="margin-top:10px"></div>
     </div>
@@ -189,10 +213,29 @@
     <div class="view" id="v-settings">
       <div class="head"><h2 class="serif">设置</h2><p>填入 API 令牌后即可使用（保存在你本地浏览器）。</p></div>
       <div class="field">
-        <input id="token-input" type="password" placeholder="粘贴 API 令牌…">
+        <input id="token-input" class="secret-input" name="api-token-local" type="text" placeholder="粘贴 API 令牌…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
         <button class="go" id="save-token">保存</button>
       </div>
       <div class="saved hidden" id="token-saved">✓ 已保存，去「拆解」试试吧。</div>
+      <div class="prompt-box">
+        <div class="head" style="padding:0 0 10px">
+          <h2 class="serif">拆解提示词</h2>
+          <p>当前提示词会作为新内容拆解的 active 版本，保存后自动生成新版本。</p>
+        </div>
+        <div class="prompt-top">
+          <select id="prompt-media-type">
+            <option value="video">视频拆解提示词</option>
+            <option value="article">图文拆解提示词</option>
+          </select>
+          <span class="prompt-ver" id="prompt-version">未加载</span>
+        </div>
+        <textarea id="prompt-body" spellcheck="false" placeholder="加载当前提示词…"></textarea>
+        <div class="prompt-actions">
+          <button class="go" id="prompt-save" type="button">保存为新版本</button>
+          <button class="act" id="prompt-reset" type="button">恢复默认提示词</button>
+          <span class="prompt-status" id="prompt-status"></span>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -206,8 +249,9 @@
   var $=function(id){return document.getElementById(id);};
   function show(e){e.classList.remove('hidden');}function hide(e){e.classList.add('hidden');}
   function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
-  function md(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');}
+  function md(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');}
   function hdrs(){return {'Content-Type':'application/json','Authorization':'Bearer '+getToken()};}
+  function shortTitle(s){s=s||'';return s.length>16?s.slice(0,16)+'…':s;}
 
   // view switch
   window.fwV=function(v){
@@ -216,6 +260,7 @@
     $('v-'+v).classList.add('on');window.scrollTo({top:0,behavior:'smooth'});
     if(v==='history'){fwLoadBloggerOptions();fwLoadContents();}
     if(v==='bloggers')fwLoadBloggers();
+    if(v==='settings')fwLoadPrompts();
   };
 
   function checkToken(){
@@ -236,14 +281,21 @@
     var h='<div class="src"><span class="ty '+tc+'">'+tt+'</span><span class="tt">'+esc(d.title)+'</span>'+
       '<span class="by">@'+esc(d.author)+(d.stats?(' · 👍 '+(d.stats.like_count||0)):'')+'</span>'+
       '<a class="link" href="'+esc(d.original_url)+'" target="_blank" rel="noopener">看原内容 ↗</a></div>';
-    var n=1, ot=d.one_thing||'';
+    var n=1, ot=d.one_thing||'', source=d.source_text||'', sourceLabel=d.source_label||(d.media_type==='video'?'视频转写文字':'图文正文');
+    var toc='<nav class="result-toc" aria-label="结果目录"><div class="toc-title">目录</div><a href="#source-text">'+esc(sourceLabel)+'</a>';
+    var body='<div class="result-main"><section class="source-text" id="source-text" tabindex="-1"><h2>'+esc(sourceLabel)+'</h2>'+
+      '<div class="source-body '+(source?'':'source-empty')+'">'+(source?md(source):'这条历史解析没有保存原文稿，请重新解析后查看。')+'</div></section>';
     (d.sections||[]).forEach(function(s){
       var isOne=/一件事|马上试|下一条|下一篇/.test(s.title);
       if(isOne){return;}
-      h+='<div class="pt"><div class="n">'+(n<10?'0'+n:n)+'</div><div><h3>'+esc(s.title)+'</h3><div class="bd">'+md(s.body)+'</div></div></div>';
+      var sid='section-'+n;
+      toc+='<a href="#'+sid+'">'+esc(shortTitle(s.title))+'</a>';
+      body+='<section class="pt" id="'+sid+'" tabindex="-1"><div class="n">'+(n<10?'0'+n:n)+'</div><div><h3>'+esc(s.title)+'</h3><div class="bd">'+md(s.body)+'</div></div></section>';
       n++;
     });
-    if(ot){h+='<div class="one"><div class="lab">你可以马上试的一件事</div><div class="do">'+md(ot)+'</div></div>';}
+    if(ot){toc+='<a href="#one-thing">马上试</a>';body+='<section class="one" id="one-thing" tabindex="-1"><div class="lab">你可以马上试的一件事</div><div class="do">'+md(ot)+'</div></section>';}
+    toc+='</nav>';body+='</div>';
+    h+='<div class="result-layout">'+toc+body+'</div>';
     $('result').innerHTML=h;show($('result'));
   }
   function showErr(m){stopLoad();hide($('loading'));hide($('result'));$('err').innerHTML=esc(m);show($('err'));$('go').disabled=false;}
@@ -320,20 +372,72 @@
       $('bloggers').innerHTML=h;
     }).catch(function(){$('bloggers').innerHTML='<div class="err">加载失败</div>';});
   };
+  function subMsg(t){var m=$('sub-msg');if(!m)return;if(t){m.textContent=t;m.hidden=false;}else{m.textContent='';m.hidden=true;}}
   $('sub').addEventListener('click',function(){
     var url=($('sub-url').value||'').trim();if(!url)return;if(!getToken()){fwV('settings');return;}
-    $('sub').disabled=true;
+    subMsg('');$('sub').disabled=true;
     fetch('/api/flywheel/subscribe',{method:'POST',headers:hdrs(),body:JSON.stringify({url:url})})
       .then(function(r){return r.json();}).then(function(d){$('sub').disabled=false;
-        if(d.ok){$('sub-url').value='';bloggerOptsLoaded=false;fwLoadBloggers();}else alert(d.error||'订阅失败');})
-      .catch(function(){$('sub').disabled=false;alert('网络错误');});
+        if(d.ok){$('sub-url').value='';subMsg('');bloggerOptsLoaded=false;fwLoadBloggers();}else subMsg(d.error||'订阅失败');})
+      .catch(function(){$('sub').disabled=false;subMsg('网络错误');});
   });
 
   // ---------- settings ----------
+  var promptItems=[], promptLoaded=false;
+  function currentPrompt(){
+    var media=$('prompt-media-type').value;
+    for(var i=0;i<promptItems.length;i++){if(promptItems[i].media_type===media)return promptItems[i];}
+    return null;
+  }
+  function renderPromptEditor(){
+    var item=currentPrompt();
+    if(!item){$('prompt-version').textContent='未加载';$('prompt-body').value='';return;}
+    $('prompt-version').textContent='当前版本 v'+item.version+(item.updated_at?' · '+item.updated_at.slice(0,16).replace('T',' '):'');
+    $('prompt-body').value=item.body||'';
+  }
+  window.fwLoadPrompts=function(force, doneText){
+    if(!getToken()){$('prompt-status').textContent='请先保存 API 令牌';return Promise.resolve();}
+    if(promptLoaded&&!force){renderPromptEditor();return;}
+    $('prompt-status').textContent='正在加载提示词…';
+    return fetch('/api/flywheel/prompts',{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
+      promptItems=d.items||[];promptLoaded=true;renderPromptEditor();$('prompt-status').textContent=doneText||'已加载';
+    }).catch(function(){$('prompt-status').textContent='提示词加载失败';});
+  };
+  $('prompt-media-type').addEventListener('change',renderPromptEditor);
+  $('prompt-save').addEventListener('click',function(){
+    if(!getToken()){fwV('settings');return;}
+    var media=$('prompt-media-type').value, body=$('prompt-body').value||'';
+    if(!body.trim()){$('prompt-status').textContent='提示词不能为空';return;}
+    $('prompt-save').disabled=true;$('prompt-status').textContent='正在保存…';
+    fetch('/api/flywheel/prompts/'+media,{method:'PUT',headers:hdrs(),body:JSON.stringify({body:body})})
+      .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+      .then(function(r){$('prompt-save').disabled=false;
+        if(r.s>=400){$('prompt-status').textContent=(r.j&&r.j.detail)||'保存失败';return;}
+        promptLoaded=false;return fwLoadPrompts(true,'已保存为新版本 v'+r.j.version);
+      }).catch(function(){$('prompt-save').disabled=false;$('prompt-status').textContent='保存失败';});
+  });
+  $('prompt-reset').addEventListener('click',function(){
+    if(!getToken()){fwV('settings');return;}
+    var media=$('prompt-media-type').value;
+    $('prompt-reset').disabled=true;$('prompt-status').textContent='正在恢复默认…';
+    fetch('/api/flywheel/prompts/'+media+'/reset',{method:'POST',headers:hdrs()})
+      .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+      .then(function(r){$('prompt-reset').disabled=false;
+        if(r.s>=400){$('prompt-status').textContent=(r.j&&r.j.detail)||'恢复失败';return;}
+        promptLoaded=false;return fwLoadPrompts(true,'已恢复默认提示词 v'+r.j.version);
+      }).catch(function(){$('prompt-reset').disabled=false;$('prompt-status').textContent='恢复失败';});
+  });
   $('save-token').addEventListener('click',function(){
     var t=($('token-input').value||'').trim();if(!t)return;setToken(t);show($('token-saved'));checkToken();
+    promptLoaded=false;fwLoadPrompts(true);
   });
   if(getToken())$('token-input').value='';
+  var startParams=new URLSearchParams(window.location.search);
+  var startUrl=startParams.get('url');
+  if(startUrl){
+    $('url').value=startUrl;
+    if(startParams.get('run')==='1')setTimeout(function(){analyze(startUrl);},0);
+  }
   checkToken();
 })();
 </script>

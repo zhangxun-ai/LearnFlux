@@ -56,6 +56,8 @@
             cursor: pointer; background: var(--accent-primary); color: #fff; transition: background .15s; }
         .btn:hover { background: var(--accent-secondary); }
         .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-ghost { background: transparent; color: var(--accent-primary); border: 1px solid var(--accent-primary); }
+        .btn-ghost:hover { background: var(--accent-soft); }
         .auth-status { font-size: 0.82rem; padding: 3px 10px; border-radius: 999px; }
         .auth-status.ok { background: var(--success-bg); color: var(--success-text); }
         .auth-status.err { background: var(--error-bg); color: var(--error-text); }
@@ -101,7 +103,7 @@
         <!-- 管理口令：加载 / 保存配置的钥匙（全站唯一一处） -->
         <section class="card">
             <div class="field">
-                <label for="token">管理口令 <span class="help-q" tabindex="0" role="img" aria-label="管理口令说明" data-tip="“管理口令”是保护本后台的口令，等于 config.jsonc 里的 api.auth_token，由你（管理员）首次在配置文件中设定。它不是 AI 服务商的 API Key；用于在本页读取/保存配置，与提交任务、历史页用的是同一个口令。">?</span></label>
+                <label for="token">管理口令 <span class="help-q" tabindex="0" role="img" aria-label="管理口令说明" data-tip="“管理口令”不是从哪里申请或获取的，而是你（管理员）首次部署时在 config.jsonc 的 api.auth_token 里自行设定的任意字符串——随便取一个、记牢即可。它不是 AI 服务商的 API Key；本页读取/保存配置，以及提交任务、查看历史，用的都是这同一个口令。忘了就打开 config.jsonc 查看或改写后重启服务。">?</span></label>
                 <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                     <input type="password" id="token" placeholder="输入管理口令" style="flex:1; min-width:240px;">
                     <button class="btn" id="load-btn">加载</button>
@@ -165,7 +167,10 @@
 
         function providerCtrlHTML() {
             return '<div class="field"><label for="provider">服务商</label>' +
-                '<select id="provider">' + providers.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select></div>';
+                '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
+                '<select id="provider" style="flex:1; min-width:200px;">' + providers.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select>' +
+                '<button type="button" class="btn btn-ghost" id="fetch-models-btn" title="用当前 API Key 从服务商实时拉取可用模型（模型在迭代，离线候选仅作兜底）">🔄 拉取可用模型</button>' +
+                '</div></div>';
         }
 
         function renderGroups(groups) {
@@ -221,6 +226,27 @@
         function openCombo(combo, showAll) { closeAllCombos(combo); renderComboMenu(combo, showAll); combo.querySelector('.combo-menu').hidden = false; }
         function closeCombo(combo) { var m = combo.querySelector('.combo-menu'); if (m) m.hidden = true; }
         function closeAllCombos(except) { document.querySelectorAll('.combo').forEach(function (c) { if (c !== except) closeCombo(c); }); }
+
+        // 实时拉取服务商可用模型（模型持续迭代）；失败则保留离线候选与手动输入。
+        async function fetchProviderModels() {
+            if (!getToken()) { toast('请先输入管理口令'); return; }
+            var baseEl = q('llm.base_url'), keyEl = q('llm.api_key');
+            var body = { base_url: baseEl ? baseEl.value.trim() : '', api_key: keyEl ? keyEl.value.trim() : '' };
+            if (!body.base_url) { toast('请先填写 API Base URL'); return; }
+            var btn = $('fetch-models-btn');
+            if (btn) { btn.disabled = true; btn.textContent = '拉取中…'; }
+            try {
+                var resp = await fetch('/api/settings/provider-models', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+                var json = await resp.json();
+                if (resp.ok && json.code === 200 && json.data && (json.data.models || []).length) {
+                    setModelOptions(json.data.models);
+                    toast('已拉取 ' + json.data.models.length + ' 个可用模型');
+                } else {
+                    toast(json.message || json.detail || '拉取失败，已保留离线候选');
+                }
+            } catch (e) { toast('网络错误，拉取失败'); }
+            finally { if (btn) { btn.disabled = false; btn.textContent = '🔄 拉取可用模型'; } }
+        }
 
         // 选择/初始化服务商：填 Base URL、模型候选、获取链接
         function applyProvider(resetToProviderDefaults) {
@@ -313,6 +339,7 @@
 
         // 组合框交互：▾ 展开全部候选 / 输入实时过滤 / 点选填入 / 点击外部或 Esc 关闭
         document.addEventListener('click', function (e) {
+            if (e.target.closest('#fetch-models-btn')) { fetchProviderModels(); return; }
             var toggle = e.target.closest('.combo-toggle');
             if (toggle) { var cb = toggle.closest('.combo'); cb.querySelector('.combo-menu').hidden ? openCombo(cb, true) : closeCombo(cb); return; }
             var item = e.target.closest('.combo-menu .combo-item');

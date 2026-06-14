@@ -121,3 +121,56 @@ def test_write_settings_noop_when_nothing_real(monkeypatch):
     monkeypatch.setattr(svc, "load_config", lambda: {})
     svc.write_settings({"llm.api_key": "", "llm.base_url": ""})
     assert called["save"] is False
+
+
+class _FakeResp:
+    """最小化的 requests 响应替身，仅供模型拉取测试。"""
+
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("not json")
+        return self._payload
+
+
+@pytest.mark.unit
+def test_fetch_provider_models_parses_sorts_and_falls_back_to_saved_key(monkeypatch):
+    # base_url/api_key 留空 -> 回退到配置里已保存的值；解析 OpenAI 风格响应并去重排序
+    monkeypatch.setattr(svc, "load_config", lambda: {
+        "llm": {"base_url": "https://api.x.com/v1", "api_key": "sk-saved-key"}})
+    seen = {}
+
+    def fake_get(url, headers=None, timeout=None):
+        seen["url"] = url
+        seen["auth"] = (headers or {}).get("Authorization")
+        return _FakeResp(200, {"data": [{"id": "m-b"}, {"id": "m-a"}, {"id": "m-a"}]})
+
+    monkeypatch.setattr(svc.requests, "get", fake_get)
+
+    models = svc.fetch_provider_models("", "")
+    assert models == ["m-a", "m-b"]
+    assert seen["url"] == "https://api.x.com/v1/models"
+    assert seen["auth"] == "Bearer sk-saved-key"
+
+
+@pytest.mark.unit
+def test_fetch_provider_models_raises_friendly_errors(monkeypatch):
+    # 无 base_url/无 key -> 友好报错，且不应发起网络请求
+    monkeypatch.setattr(svc, "load_config", lambda: {})
+
+    def boom(*a, **k):  # 若被调用即说明过早发起了请求
+        raise AssertionError("should not call network when config is empty")
+
+    monkeypatch.setattr(svc.requests, "get", boom)
+    with pytest.raises(RuntimeError):
+        svc.fetch_provider_models("", "")
+
+    # 401 -> 明确提示 Key 无效
+    monkeypatch.setattr(svc, "load_config", lambda: {
+        "llm": {"base_url": "https://api.x.com/v1", "api_key": "sk-x"}})
+    monkeypatch.setattr(svc.requests, "get", lambda *a, **k: _FakeResp(401, {}))
+    with pytest.raises(RuntimeError, match="401"):
+        svc.fetch_provider_models("https://api.x.com/v1", "sk-x")

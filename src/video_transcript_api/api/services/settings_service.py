@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import requests
+
 from ...utils.logging import (
     load_config,
     load_config_overrides,
@@ -186,6 +188,51 @@ def get_schema() -> dict[str, Any]:
 def read_settings() -> dict[str, Any]:
     """返回配置结构 + 当前生效值（密钥脱敏）。"""
     return {"providers": PROVIDERS, "groups": _schema_groups(with_values=True)}
+
+
+def fetch_provider_models(base_url: str, api_key: str) -> list[str]:
+    """实时拉取服务商可用模型 id 列表（OpenAI 兼容的 GET {base_url}/models）。
+
+    模型会持续迭代，写死的候选清单只作兜底；此处按当前 Key 拉取最新列表。
+    - base_url 为空 → 回退到配置中的 llm.base_url。
+    - api_key 为空 / 脱敏 / 占位 → 回退到配置中已保存的 llm.api_key。
+    - 网络、鉴权、响应异常统一抛出携带友好信息的 RuntimeError，由上层转成可展示的提示。
+    """
+    cfg = load_config()
+    base_url = (base_url or "").strip() or str(_get_by_path(cfg, "llm.base_url") or "").strip()
+    key = (api_key or "").strip()
+    if not key or "•" in key or key in _PLACEHOLDERS:
+        key = str(_get_by_path(cfg, "llm.api_key") or "").strip()
+
+    if not base_url or base_url in _PLACEHOLDERS:
+        raise RuntimeError("未填写 API Base URL")
+    if not key or key in _PLACEHOLDERS:
+        raise RuntimeError("未填写 API Key（页面留空时会用已保存的 Key，但当前也未配置）")
+
+    url = base_url.rstrip("/") + "/models"
+    try:
+        resp = requests.get(url, headers={"Authorization": f"Bearer {key}"}, timeout=12)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"无法连接服务商：{exc}") from exc
+
+    if resp.status_code == 401:
+        raise RuntimeError("API Key 无效（服务商返回 401）")
+    if resp.status_code != 200:
+        raise RuntimeError(f"服务商返回 HTTP {resp.status_code}")
+
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise RuntimeError("服务商响应不是合法 JSON") from exc
+
+    items = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        raise RuntimeError("响应缺少 data 列表（可能不是 OpenAI 兼容接口）")
+
+    ids = sorted({str(m.get("id")).strip() for m in items if isinstance(m, dict) and m.get("id")})
+    if not ids:
+        raise RuntimeError("服务商未返回任何模型")
+    return ids
 
 
 def _coerce(value: Any, kind: str) -> Any:

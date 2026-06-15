@@ -685,12 +685,14 @@ class UIManager {
         const input = document.getElementById('bearer-token');
         const btn = document.getElementById('toggle-token-visibility');
 
-        if (input.type === 'password') {
-            input.type = 'text';
+        if (input.classList.contains('secret-masked')) {
+            input.classList.remove('secret-masked');
             btn.textContent = '🙈';
+            btn.setAttribute('aria-label', '隐藏 API 令牌');
         } else {
-            input.type = 'password';
+            input.classList.add('secret-masked');
             btn.textContent = '👁️';
+            btn.setAttribute('aria-label', '显示 API 令牌');
         }
     }
 
@@ -792,8 +794,8 @@ function getSelectedURL() {
    ============================================================ */
 
 /**
- * 内容识别：从链接判断处理类型（视频转录 / 帖子洞察 / 即将支持）。
- * 作为识别横幅、提交路由、历史分类的单一事实源。
+ * 内容识别：从链接判断内容形态（视频深度学习 / 帖子洞察 / 未识别）。
+ * 业务入口由当前页面决定，这里不把普通解析流路由到 IP 对标模块。
  */
 function classifyContent(url) {
     let host = '';
@@ -815,16 +817,16 @@ function classifyContent(url) {
     if (host === 'mp.weixin.qq.com') {
         return { type: 'post', platform: 'weixin', label: '微信公众号', action: '帖子精华提炼', soon: false };
     }
+    // 小红书内容：留在深度学习流，不跳到 IP 对标工作台。
+    if (host === 'xiaohongshu.com' || host === 'xhslink.com') {
+        return { type: 'video', platform: 'xiaohongshu', label: '小红书内容', action: '视频转录 / 图文深度学习', soon: false };
+    }
     // 视频平台（已支持，走转录）
     const videoHosts = ['youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv',
         'douyin.com', 'v.douyin.com', 'iesdouyin.com', 'xiaoyuzhoufm.com',
         'tiktok.com', 'vm.tiktok.com'];
     if (videoHosts.some((h) => host === h || host.endsWith('.' + h))) {
         return { type: 'video', platform: host, label: '视频', action: '语音转录', soon: false };
-    }
-    // 小红书：作为图文帖走帖子洞察（分析笔记正文 + 可信度判断）
-    if (host === 'xiaohongshu.com' || host === 'xhslink.com') {
-        return { type: 'post', platform: 'xiaohongshu', label: '小红书', action: '帖子精华提炼', soon: false };
     }
     // 其它/短链：未知，尝试按视频处理
     return { type: 'unknown', platform: host || 'unknown', label: '未识别', action: '尝试按视频处理', soon: false };
@@ -836,7 +838,7 @@ function submitLabelForUrl(url) {
     const c = classifyContent(url);
     if (c.soon) return '该平台暂未支持';
     if (c.type === 'post') return '提炼精华';
-    if (c.type === 'video') return '开始转录';
+    if (c.type === 'video') return '开始深度学习';
     return '开始解析';
 }
 
@@ -901,7 +903,9 @@ function inDateRange(ts, rangeKey) {
 function histTypeOf(task) {
     if (task.type) return task.type;
     if (task.view_token) return 'video';
-    return classifyContent(task.url).type === 'post' ? 'post' : 'video';
+    const cls = classifyContent(task.url).type;
+    if (cls === 'post') return 'post';
+    return 'video';
 }
 
 function buildHistoryCard(task) {
@@ -936,8 +940,10 @@ function buildHistoryCard(task) {
         viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">👁️ 查看</a>`;
     } else if (task.view_token) {
         viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">👁️ 查看</a>`;
-    } else {
+    } else if (cls.type === 'post') {
         viewBtn = `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url)}">🔁 重新分析</a>`;
+    } else {
+        viewBtn = `<a class="hist-btn" href="/add_task_by_web">🔁 重新提交</a>`;
     }
 
     const tags = [];
@@ -1225,13 +1231,13 @@ async function submitTranscription(event) {
     const originalText = document.getElementById('share-content').value.trim();
 
     if (!selectedURL) {
-        UIManager.showStatus('error', '请先选择一个视频链接', '请在上方文本框中输入包含视频链接的内容，系统会自动提取并显示可选的链接');
+        UIManager.showStatus('error', '请先选择一个内容链接', '请在上方文本框中输入包含内容链接的文本，系统会自动提取并显示可选链接');
         setTimeout(UIManager.hideStatus, 5000);
         return;
     }
 
-    // 按识别类型路由：已支持的帖子（X / 小红书）→ 帖子洞察流程；
-    // 暂未支持的平台（公众号等）→ 友好提示；其余走视频转录。
+    // 按当前深度学习入口路由：已支持的帖子（X / 公众号）进入帖子洞察；
+    // 视频和未识别链接留在转录 / 深度学习流程。
     const detected = classifyContent(selectedURL);
     if (detected.type === 'post' && !detected.soon) {
         window.location.href = '/post?url=' + encodeURIComponent(selectedURL);

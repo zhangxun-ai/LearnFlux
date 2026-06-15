@@ -108,6 +108,126 @@ def _extract_document_text(path: str, ext: str) -> str:
     raise ValueError(f"不支持的文档格式: {ext}")
 
 
+def _queue_xiaohongshu_article_deep_learning(
+    *,
+    task_id: str,
+    url: str,
+    display_url: str,
+    use_speaker_recognition: bool,
+    wechat_webhook: Optional[str],
+    notification_channel: Optional[str],
+    notification_webhooks: Dict[str, Any],
+    include_comments: bool,
+    comment_limit: int,
+    tracker: PerfTracker,
+    task_notifier,
+    note_fetcher=None,
+) -> Optional[Dict[str, Any]]:
+    """Queue Xiaohongshu image/article notes as text deep-learning tasks.
+
+    Video notes return None so the existing download + ASR path continues.
+    """
+    from ...flywheel.models import MediaType
+    from ...flywheel.text_acquisition import fetch_note_detail, normalize_note_url
+
+    normalized_url = normalize_note_url(url)
+    if "xiaohongshu.com" not in normalized_url and "xhslink.com" not in normalized_url:
+        return None
+
+    fetcher = note_fetcher or fetch_note_detail
+    try:
+        detail = fetcher(normalized_url)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"[小红书图文检测] 笔记详情获取失败，回退视频路径: {exc}")
+        return None
+
+    if detail.media_type == MediaType.VIDEO:
+        logger.info("[小红书图文检测] 检测为视频笔记，继续原视频转录路径")
+        return None
+
+    article_text = (detail.body_text or "").strip()
+    if not article_text:
+        raise ValueError("小红书图文正文为空，暂无法生成深度学习笔记")
+
+    platform = "xiaohongshu"
+    media_id = detail.note_id
+    title = detail.title or f"小红书笔记 {media_id}"
+    author = detail.author or "unknown"
+    description = "小红书图文正文"
+
+    task_notifier.notify_task_status(
+        display_url,
+        "图文正文获取成功 - 正在校对和总结",
+        title=title,
+        author=author,
+        transcript=article_text,
+    )
+    _safe_update_progress(
+        task_id,
+        stage="calibrating",
+        stage_label="已获取图文正文，正在生成深度学习笔记",
+        basis="xiaohongshu_article_text",
+        confidence="high",
+        evidence={"transcript_chars": len(article_text)},
+    )
+
+    cache_result = cache_manager.save_cache(
+        platform=platform,
+        url=normalized_url,
+        media_id=media_id,
+        use_speaker_recognition=use_speaker_recognition,
+        transcript_data=article_text,
+        transcript_type="capswriter",
+        title=title,
+        author=author,
+        description=description,
+    )
+    if not cache_result:
+        raise ValueError("保存小红书图文正文缓存失败")
+
+    llm_task_queue.put(
+        {
+            "task_id": task_id,
+            "url": normalized_url,
+            "display_url": display_url,
+            "platform": platform,
+            "media_id": media_id,
+            "video_title": title,
+            "author": author,
+            "description": description,
+            "transcript": article_text,
+            "use_speaker_recognition": use_speaker_recognition,
+            "is_generic": False,
+            "wechat_webhook": wechat_webhook,
+            "notification_channel": notification_channel,
+            "notification_webhooks": notification_webhooks,
+            "include_comments": include_comments,
+            "comment_limit": comment_limit,
+            "perf_tracker": tracker,
+        }
+    )
+    tracker.count("xhs_article_text")
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.CALIBRATING,
+        platform=platform,
+        media_id=media_id,
+        title=title,
+        author=author,
+    )
+
+    return {
+        "status": "success",
+        "message": "小红书图文正文获取成功，正在生成深度学习笔记",
+        "data": {
+            "video_title": title,
+            "author": author,
+            "transcript": article_text,
+            "media_type": "article",
+        },
+    }
+
+
 def process_local_upload(
     task_id: str,
     file_path: str,
@@ -115,6 +235,7 @@ def process_local_upload(
     display_url: str,
     media_id: str,
     use_speaker_recognition: bool = False,
+    preserve_source_file: bool = False,
 ) -> Dict[str, Any]:
     """处理本地上传的音视频或文档，复用 LLM 后处理与结果页。
 
@@ -143,8 +264,8 @@ def process_local_upload(
             transcript = _extract_document_text(file_path, ext).strip()
             empty_msg = "未能从文档中提取到文本（可能是扫描件/图片型 PDF）"
         else:
-            # 音视频：省空间——先抽 16kHz 单声道小音频、立即删原视频，再转写音频，
-            # 避免几个 G 的视频在整个转写期间占盘。抽取失败则退回直接转写原文件。
+            # 音视频：默认省空间，先抽 16kHz 单声道小音频并删除原视频。
+            # 学习集合需要后续打开源文件时，会传 preserve_source_file=True。
             _safe_update_progress(
                 task_id, stage="transcribing", stage_label="正在提取音频",
                 basis="local_upload", confidence="high",
@@ -153,13 +274,14 @@ def process_local_upload(
             transcribe_target = file_path
             if audio_path:
                 transcribe_target = audio_path
-                try:
-                    os.remove(file_path)
-                    logger.info(
-                        f"已抽音频并删除原文件，省空间: task={task_id}, audio={os.path.basename(audio_path)}"
-                    )
-                except OSError:
-                    pass
+                if not preserve_source_file:
+                    try:
+                        os.remove(file_path)
+                        logger.info(
+                            f"已抽音频并删除原文件，省空间: task={task_id}, audio={os.path.basename(audio_path)}"
+                        )
+                    except OSError:
+                        pass
 
             _safe_update_progress(
                 task_id, stage="transcribing", stage_label="正在转录本地文件",
@@ -234,8 +356,10 @@ def process_local_upload(
         )
         return {"status": "failed", "message": str(exc)}
     finally:
-        # 清理全部临时文件：原上传文件 + 抽出的音频，不留任何重复存储
+        # 默认清理全部临时文件；学习集合会保留原 source 文件用于后续打开。
         for _p in (file_path, audio_path):
+            if preserve_source_file and _p == file_path:
+                continue
             if _p and os.path.exists(_p):
                 try:
                     os.remove(_p)
@@ -734,6 +858,7 @@ def process_transcription(
 
         # url 本身就是平台链接，直接解析
         check_url = url
+        parsed_normalized_url = check_url
         logger.info(f"[URL解析] 开始解析 URL: {check_url[:100]}")
         _safe_update_progress(
             task_id,
@@ -751,6 +876,7 @@ def process_transcription(
 
                 platform = parsed_url.platform
                 video_id = parsed_url.video_id
+                parsed_normalized_url = parsed_url.normalized_url
 
                 logger.info(
                     f"[URL解析] 解析成功: platform={platform}, video_id={video_id}, "
@@ -1019,6 +1145,23 @@ def process_transcription(
             }
         else:
             logger.info("[缓存检测] ❌ 缓存未命中，准备下载和转录")
+
+            if platform == "xiaohongshu" and not download_url:
+                article_result = _queue_xiaohongshu_article_deep_learning(
+                    task_id=task_id,
+                    url=parsed_normalized_url,
+                    display_url=display_url,
+                    use_speaker_recognition=use_speaker_recognition,
+                    wechat_webhook=wechat_webhook,
+                    notification_channel=notification_channel,
+                    notification_webhooks=notification_webhooks,
+                    include_comments=include_comments,
+                    comment_limit=comment_limit,
+                    tracker=tracker,
+                    task_notifier=task_notifier,
+                )
+                if article_result is not None:
+                    return article_result
 
             # ==================== 阶段3: 元数据获取（创建下载器实例）====================
             parsed_metadata = None

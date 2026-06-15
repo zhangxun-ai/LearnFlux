@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}帖子精华提炼{% endblock %}
-{% block meta_description %}粘贴一条帖子链接（X / 小红书），自动抓取正文与高赞回复，提炼精华并给出可信度判断{% endblock %}
+{% block title %}帖子/文章洞察{% endblock %}
+{% block meta_description %}粘贴一条帖子或文章链接（X / 小红书 / 微信公众号），自动抓取正文与高赞回复，提炼精华并给出可信度判断{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -128,9 +128,9 @@
 {% block content %}
 <!-- 入口 -->
 <div class="section post-entry" id="entry-section">
-    <div class="entry-label">粘贴一条帖子链接（X 推文 / 小红书笔记 / 微信公众号文章），自动提炼正文 + 高赞回复的精华，并给出可信度判断。</div>
+    <div class="entry-label">粘贴一条帖子或文章链接（X 推文 / 小红书笔记 / 微信公众号文章），自动提炼正文 + 高赞回复的精华，并给出可信度判断。</div>
     <div class="entry-row">
-        <input type="text" id="post-url" placeholder="X / 小红书 / 微信公众号 文章链接均可"
+        <input type="text" id="post-url" placeholder="X / 小红书 / 微信公众号帖子或文章链接均可"
                value="{{ prefill_url or '' }}" autocomplete="off" spellcheck="false">
         <button class="btn-analyze" id="analyze-btn">分析</button>
     </div>

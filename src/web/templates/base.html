@@ -951,8 +951,10 @@
             {% if author or url %}
             <div class="meta">
                 {% if author %}👤 {{ author }}{% endif %}
-                {% if url %}
-                    <br>🔗 <a href="{{ url }}" target="_blank" rel="noopener">查看原视频</a>
+                {% if source_link_url %}
+                    <br>🔗 <a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }}</a>
+                {% elif source_unavailable_message %}
+                    <br>🔗 <span>{{ source_unavailable_message }}</span>
                 {% endif %}
                 {% if created_at_display %}
                     <br>⏰ {{ created_at_display }}

@@ -56,6 +56,55 @@ _SITEMAP_XML_TEMPLATE = """\
 """
 
 
+def _source_files_dir() -> Path:
+    storage_cfg = get_config().get("storage", {}) or {}
+    source_dir = storage_cfg.get("source_files_dir") or "./data/source_files/collection_uploads"
+    return Path(source_dir)
+
+
+def _is_browser_source_url(url: str) -> bool:
+    return url.startswith("http://") or url.startswith("https://")
+
+
+def _media_id_from_local_url(url: str) -> str:
+    if not url.startswith("local://"):
+        return ""
+    parts = url.replace("local://", "", 1).split("/")
+    if len(parts) >= 2 and parts[0] == "collection-source":
+        return parts[1]
+    if len(parts) >= 3 and parts[0] == "collection":
+        return parts[2]
+    return ""
+
+
+def _local_source_file_path(view_data: Dict[str, Any]) -> Optional[Path]:
+    url = str(view_data.get("url") or "")
+    if not url.startswith("local://"):
+        return None
+    media_id = str(view_data.get("media_id") or _media_id_from_local_url(url)).strip()
+    if not media_id:
+        return None
+    title = str(view_data.get("title") or url)
+    ext = os.path.splitext(title)[1][:10] or ".bin"
+    path = _source_files_dir() / f"{media_id}{ext}"
+    return path if path.exists() else None
+
+
+def _decorate_source_link(view_data: Dict[str, Any]) -> None:
+    url = str(view_data.get("url") or "").strip()
+    if _is_browser_source_url(url):
+        view_data["source_link_url"] = url
+        view_data["source_link_label"] = "查看原视频"
+        return
+    if not url.startswith("local://"):
+        return
+    if _local_source_file_path(view_data) and view_data.get("view_token"):
+        view_data["source_link_url"] = f"/view/{view_data['view_token']}/source-file"
+        view_data["source_link_label"] = "查看原视频"
+        return
+    view_data["source_unavailable_message"] = "源视频未保存或已清理"
+
+
 def _parse_task_datetime(value) -> Optional[datetime]:
     """Parse DB/ISO task timestamps as UTC-aware datetimes."""
     if isinstance(value, datetime):
@@ -158,14 +207,14 @@ _HOME_HTML = """\
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>内容解析工作台 · 视频转录 / 帖子精华 / 文档解析</title>
-    <meta name="description" content="一站式内容解析：视频转录、X / 小红书 / 微信公众号帖子精华提炼（含可信度判断）、本地音视频与文档解析。">
+    <title>内容解析工作台 · 深度学习 / 系列学习 / IP 对标</title>
+    <meta name="description" content="一站式内容解析：视频/文档深度学习、系列深度学习、帖子/文章洞察、IP 对标拆解。">
     <meta name="theme-color" content="#0f172a">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <meta property="og:title" content="内容解析工作台">
-    <meta property="og:description" content="视频转录 · 帖子精华提炼 · 文档解析，附「是否属实」可信度判断">
+    <meta property="og:description" content="视频/文档深度学习 · 系列学习 · 帖子/文章洞察 · IP 对标拆解">
     <meta property="og:type" content="website">
     <meta property="og:image" content="/static/icon/og.png">
     <meta name="twitter:card" content="summary_large_image">
@@ -228,32 +277,32 @@ _HOME_HTML = """\
     <header class="hero">
         <div class="eyebrow">一站式内容解析</div>
         <h1 class="serif">把任意内容，<br>秒变<em>可读的精华</em></h1>
-        <p class="sub">视频转录、帖子精华提炼、本地音视频与文档解析——还能拆解小红书爆款，看懂它为什么火。</p>
+        <p class="sub">视频/文档深度学习、系列深度学习、帖子/文章洞察、IP 对标拆解，各模块独立使用。</p>
         <div class="cta-row">
-            <a class="btn" href="/add_task_by_web">开始使用 →</a>
-            <a class="btn ghost" href="/flywheel">🔥 学做小红书</a>
+            <a class="btn" href="/add_task_by_web">开始深度学习 →</a>
+            <a class="btn ghost" href="/flywheel">IP 对标工作台</a>
         </div>
     </header>
 
     <section class="section">
-        <a class="flagship" href="/flywheel">
-            <div class="k">新 · 拆解爆款</div>
-            <h3 class="serif">学做小红书</h3>
-            <p>贴一个博主或内容链接，自动拆出它「为什么火」——开头、留人、引导，再告诉你下一条该怎么改。视频自动转写。</p>
+        <a class="flagship" href="/add_task_by_web">
+            <div class="k">主入口 · 深度学习</div>
+            <h3 class="serif">视频/文档深度学习</h3>
+            <p>贴视频链接或上传文档，先拿到原文稿/转录稿，再让 AI 提炼高价值内容，方便复习和沉淀到知识库。</p>
             <span class="arrow">→</span>
         </a>
         <div class="grid">
-            <a class="card" href="/add_task_by_web">
-                <div class="ic">🎬</div><h3>视频链接转录</h3>
-                <p>YouTube / B站 / 抖音 / 小宇宙，自动转文字 + AI 校对总结。</p>
+            <a class="card" href="/collections">
+                <div class="ic">📚</div><h3>系列深度学习</h3>
+                <p>连续课程、专题视频或文档合集，按顺序解析并生成集合级方法论。</p>
             </a>
             <a class="card" href="/post">
-                <div class="ic">𝕏</div><h3>帖子精华提炼</h3>
+                <div class="ic">📝</div><h3>帖子/文章洞察</h3>
                 <p>X / 小红书 / 公众号，抓正文 + 高赞评论，提炼精华并标注可信度。</p>
             </a>
-            <a class="card" href="/add_task_by_web">
-                <div class="ic">📁</div><h3>本地音视频 / 文档</h3>
-                <p>拖拽本地视频、音频或 PDF / Word，本地转写 / 提取 + AI 提炼。</p>
+            <a class="card" href="/flywheel">
+                <div class="ic">🎯</div><h3>IP 对标工作台</h3>
+                <p>学习对标账号的选题、开头、留人、引导和迭代方法，当前先支持小红书。</p>
             </a>
         </div>
     </section>
@@ -938,6 +987,18 @@ async def export_content(view_token: str, export_type: str, request: Request):
         )
 
 
+@router.get("/view/{view_token}/source-file")
+async def view_source_file(view_token: str):
+    view_data = cache_manager.get_view_data_by_token(view_token)
+    if not view_data:
+        raise HTTPException(status_code=404, detail="view_token 无效或已过期")
+    file_path = _local_source_file_path(view_data)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="源视频未保存或已清理")
+    filename = os.path.basename(str(view_data.get("title") or file_path.name))
+    return FileResponse(path=str(file_path), filename=filename or file_path.name)
+
+
 @router.get("/view/{view_token}", response_class=HTMLResponse)
 async def view_transcript(
     view_token: str,
@@ -977,6 +1038,7 @@ async def view_transcript(
             return handle_page_export(view_data, page)
 
         _decorate_view_timing(view_data)
+        _decorate_source_link(view_data)
 
         if view_data["status"] == "processing":
             return templates.TemplateResponse(

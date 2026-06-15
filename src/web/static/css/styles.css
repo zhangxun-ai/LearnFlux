@@ -129,6 +129,10 @@ body {
     color: var(--text-tertiary);
 }
 
+.secret-masked {
+    -webkit-text-security: disc;
+}
+
 /* URL预览样式 */
 .url-preview {
     margin-top: 1rem;

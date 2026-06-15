@@ -21,6 +21,7 @@ from .models import MediaType
 logger = setup_logger("flywheel_text_acquisition")
 
 ApiRequest = Callable[[str, dict], dict]
+_URL_RE = re.compile(r"https?://[^\s，。；;、）)\]】》\"'<>]+")
 
 
 @dataclass(frozen=True)
@@ -36,12 +37,23 @@ class NoteDetail:
     comment_count: int = 0
 
 
+def normalize_note_url(value: str) -> str:
+    """Extract the real note URL from Xiaohongshu share text."""
+    raw = (value or "").strip()
+    match = _URL_RE.search(raw)
+    if not match:
+        return raw
+    return match.group(0).rstrip(".,，。；;、）)]】》\"'")
+
+
 def _note_id_from_url(url: str) -> str:
+    url = normalize_note_url(url)
     m = re.search(r"/(?:discovery/item|explore|item)/([0-9a-zA-Z]+)", url)
     return m.group(1) if m else ""
 
 
 def _xsec_from_url(url: str) -> str:
+    url = normalize_note_url(url)
     return parse_qs(urlparse(url).query).get("xsec_token", [""])[0]
 
 
@@ -105,6 +117,7 @@ def _media_type(note: dict) -> MediaType:
 
 def fetch_note_detail(url: str, *, api_request: Optional[ApiRequest] = None) -> NoteDetail:
     """Fetch a single note's type/title/body/stats via TikHub (tries several endpoints)."""
+    url = normalize_note_url(url)
     note_id = _note_id_from_url(url)
     if not note_id:
         raise ValueError(f"无法从链接解析 note_id: {url}")
@@ -154,6 +167,7 @@ def transcribe_video_url(url: str, *, config: Optional[dict] = None) -> str:
     from ..transcriber.transcriber import Transcriber
     from ..utils.logging import load_config
 
+    url = normalize_note_url(url)
     config = config or load_config()
     downloader = create_downloader(url)
     info = downloader.get_video_info(url)
@@ -180,6 +194,7 @@ def acquire_text(url: str, *, config: Optional[dict] = None,
 
     Article -> note body; Video -> spoken transcript.
     """
+    url = normalize_note_url(url)
     detail = fetch_note_detail(url, api_request=api_request)
     if detail.media_type is MediaType.VIDEO:
         text = transcribe_video_url(url, config=config)

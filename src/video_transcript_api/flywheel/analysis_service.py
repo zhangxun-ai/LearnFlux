@@ -50,9 +50,13 @@ def run_analysis(
         content_repo.set_analysis_status(content.id, AnalysisStatus.FAILED, failed.id)
         return failed
 
+    result_json = parse_sections(out.markdown)
+    result_json["source_text"] = text
+    result_json["source_label"] = "视频转写文字" if content.media_type.value == "video" else "图文正文"
+
     analysis = analysis_repo.create(Analysis(
         id=None, content_id=content.id, media_type=content.media_type,
-        status=AnalysisStatus.SUCCESS, result_json=parse_sections(out.markdown),
+        status=AnalysisStatus.SUCCESS, result_json=result_json,
         prompt_version=prompt_version, model=analyzer.model,
     ))
     in_tok, out_tok, cost = estimate_cost(out.in_chars, out.out_chars)

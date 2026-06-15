@@ -18,12 +18,12 @@ from ...flywheel.ingest import ingest_blogger
 from ...flywheel.models import (
     AnalysisStatus, Blogger, Content, ContentSource, MediaType,
 )
-from ...flywheel.prompts import DEFAULT_PROMPTS
+from ...flywheel.prompts import DEFAULT_PROMPTS, LEGACY_DEFAULT_PROMPTS, default_prompt
 from ...flywheel.repositories import (
     ContentQuery, SqliteAnalysisCostRepository, SqliteAnalysisRepository,
     SqliteBloggerRepository, SqliteContentRepository, SqlitePromptTemplateRepository,
 )
-from ...flywheel.text_acquisition import acquire_text
+from ...flywheel.text_acquisition import acquire_text, normalize_note_url
 from ...utils.logging import setup_logger
 
 logger = setup_logger("flywheel_service")
@@ -41,6 +41,12 @@ def repos() -> dict:
                 db = FlywheelDB()
                 prompt = SqlitePromptTemplateRepository(db)
                 prompt.seed_defaults(DEFAULT_PROMPTS)
+                for media_type, body in DEFAULT_PROMPTS.items():
+                    prompt.upgrade_default_if_legacy(
+                        media_type,
+                        body,
+                        LEGACY_DEFAULT_PROMPTS.get(media_type, ()),
+                    )
                 _repos = {
                     "db": db,
                     "blogger": SqliteBloggerRepository(db),
@@ -74,14 +80,62 @@ def _serialize_content(c: Content, handle: str) -> dict:
     }
 
 
+def _serialize_prompt(prompt) -> dict:
+    return {
+        "id": prompt.id,
+        "media_type": prompt.media_type.value,
+        "version": prompt.version,
+        "body": prompt.body,
+        "is_active": prompt.is_active,
+        "updated_at": prompt.updated_at.isoformat() if prompt.updated_at else None,
+    }
+
+
+def _media_type(value: str) -> MediaType:
+    try:
+        return MediaType(value)
+    except ValueError:
+        raise ValueError("media_type must be video or article")
+
+
+def get_prompts() -> dict:
+    r = repos()
+    items = []
+    for media_type in (MediaType.VIDEO, MediaType.ARTICLE):
+        active = r["prompt"].get_active(media_type)
+        versions = r["prompt"].list_versions(media_type)
+        items.append({
+            **_serialize_prompt(active),
+            "default_body": default_prompt(media_type),
+            "versions": [_serialize_prompt(version) for version in versions],
+        })
+    return {"items": items}
+
+
+def update_prompt(media_type: str, body: str) -> dict:
+    mt = _media_type(media_type)
+    text = (body or "").strip()
+    if not text:
+        raise ValueError("提示词不能为空")
+    prompt = repos()["prompt"].upsert(mt, text)
+    return _serialize_prompt(prompt)
+
+
+def reset_prompt(media_type: str) -> dict:
+    mt = _media_type(media_type)
+    prompt = repos()["prompt"].upsert(mt, default_prompt(mt))
+    return _serialize_prompt(prompt)
+
+
 # --------------------------------------------------------------------------- #
 # Quick analyze (one URL, end-to-end)
 # --------------------------------------------------------------------------- #
 
 def analyze_url(url: str, analyzer: ContentAnalyzer) -> dict:
     """Fetch a single note, acquire its text (transcribe video), analyze, persist."""
+    normalized_url = normalize_note_url(url)
     r = repos()
-    detail, text = acquire_text(url)
+    detail, text = acquire_text(normalized_url)
 
     uid = detail.author_user_id or f"adhoc:{detail.note_id}"
     blogger = r["blogger"].upsert(Blogger(
@@ -92,7 +146,7 @@ def analyze_url(url: str, analyzer: ContentAnalyzer) -> dict:
     content = r["content"].upsert(Content(
         id=None, blogger_id=blogger.id, platform="xiaohongshu",
         platform_item_id=detail.note_id, media_type=detail.media_type,
-        title=detail.title, original_url=url, like_count=detail.like_count,
+        title=detail.title, original_url=normalized_url, like_count=detail.like_count,
         collect_count=detail.collect_count, comment_count=detail.comment_count,
         source=ContentSource.ADHOC,
     ))
@@ -110,7 +164,7 @@ def analyze_url(url: str, analyzer: ContentAnalyzer) -> dict:
         "title": detail.title,
         "author": detail.author,
         "media_type": detail.media_type.value,
-        "original_url": url,
+        "original_url": normalized_url,
         "stats": {"like_count": detail.like_count, "collect_count": detail.collect_count,
                   "comment_count": detail.comment_count},
         "status": analysis.status.value,
@@ -118,6 +172,11 @@ def analyze_url(url: str, analyzer: ContentAnalyzer) -> dict:
         "sections": result.get("sections", []),
         "one_thing": result.get("one_thing", ""),
         "markdown": result.get("markdown", ""),
+        "source_text": result.get("source_text", text),
+        "source_label": result.get(
+            "source_label",
+            "视频转写文字" if detail.media_type is MediaType.VIDEO else "图文正文",
+        ),
     }
 
 
@@ -209,4 +268,9 @@ def get_analysis(content_id: int) -> dict:
         "sections": result.get("sections", []),
         "one_thing": result.get("one_thing", ""),
         "markdown": result.get("markdown", ""),
+        "source_text": result.get("source_text", ""),
+        "source_label": result.get(
+            "source_label",
+            "视频转写文字" if content.media_type is MediaType.VIDEO else "图文正文",
+        ),
     }

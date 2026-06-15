@@ -44,6 +44,24 @@ def test_upsert_dedups_by_platform_item(env):
 
 
 @pytest.mark.unit
+def test_upsert_refreshes_original_url_for_retry(env):
+    _, crepo, b = env
+    existing = crepo.upsert(_c(b, "n1"))
+    refreshed = crepo.upsert(Content(
+        id=None,
+        blogger_id=b.id,
+        platform="xiaohongshu",
+        platform_item_id="n1",
+        media_type=MediaType.VIDEO,
+        title="n1",
+        original_url="https://www.xiaohongshu.com/discovery/item/n1",
+    ))
+
+    assert refreshed.id == existing.id
+    assert crepo.get(existing.id).original_url == "https://www.xiaohongshu.com/discovery/item/n1"
+
+
+@pytest.mark.unit
 def test_filter_by_media_type(env):
     _, crepo, b = env
     crepo.upsert(_c(b, "v1", mt=MediaType.VIDEO))

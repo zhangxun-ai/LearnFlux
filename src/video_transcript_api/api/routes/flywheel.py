@@ -26,7 +26,7 @@ def _build_analyzer() -> ContentAnalyzer:
     return ContentAnalyzer(
         llm_client=coord.llm_client,
         model=coord.config.summary_model,
-        reasoning_effort=getattr(coord.config, "summary_reasoning_effort", None),
+        reasoning_effort=getattr(coord.config, "flywheel_reasoning_effort", None),
     )
 
 
@@ -34,11 +34,15 @@ class UrlBody(BaseModel):
     url: str
 
 
+class PromptBody(BaseModel):
+    body: str
+
+
 @router.get("/flywheel", response_class=HTMLResponse, include_in_schema=False)
 async def flywheel_page(request: Request):
     return templates.TemplateResponse(
         "flywheel.html",
-        {"request": request, "title": "学做小红书"},
+        {"request": request, "title": "IP 对标工作台"},
         headers={"Cache-Control": "no-cache"},
     )
 
@@ -93,6 +97,27 @@ async def get_content(content_id: int, user_info: dict = Depends(verify_token)):
         return await run_in_threadpool(svc.get_analysis, content_id)
     except ValueError as exc:
         return JSONResponse(status_code=404, content={"ok": False, "error": str(exc)})
+
+
+@router.get("/api/flywheel/prompts")
+async def prompts(user_info: dict = Depends(verify_token)):
+    return await run_in_threadpool(svc.get_prompts)
+
+
+@router.put("/api/flywheel/prompts/{media_type}")
+async def update_prompt(media_type: str, body: PromptBody, user_info: dict = Depends(verify_token)):
+    try:
+        return await run_in_threadpool(svc.update_prompt, media_type, body.body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/api/flywheel/prompts/{media_type}/reset")
+async def reset_prompt(media_type: str, user_info: dict = Depends(verify_token)):
+    try:
+        return await run_in_threadpool(svc.reset_prompt, media_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/api/flywheel/bloggers")

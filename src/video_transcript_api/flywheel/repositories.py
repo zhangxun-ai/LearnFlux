@@ -175,7 +175,8 @@ class SqliteContentRepository:
                     comment_count, share_count, source, analysis_status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(platform, platform_item_id) DO UPDATE SET
-                    title=excluded.title, cover_url=excluded.cover_url,
+                    title=excluded.title, original_url=excluded.original_url,
+                    cover_url=excluded.cover_url,
                     like_count=excluded.like_count, collect_count=excluded.collect_count,
                     comment_count=excluded.comment_count, share_count=excluded.share_count
                 """,
@@ -340,7 +341,11 @@ def _prompt_from_row(row) -> PromptTemplate:
 
 class PromptTemplateRepository(Protocol):
     def get_active(self, media_type: MediaType) -> Optional[PromptTemplate]: ...
+    def list_versions(self, media_type: MediaType, limit: int = 20) -> list[PromptTemplate]: ...
     def upsert(self, media_type: MediaType, body: str) -> PromptTemplate: ...
+    def upgrade_default_if_legacy(
+        self, media_type: MediaType, new_body: str, legacy_bodies: Sequence[str]
+    ) -> Optional[PromptTemplate]: ...
     def seed_defaults(self, defaults: dict) -> None: ...
 
 
@@ -358,6 +363,15 @@ class SqlitePromptTemplateRepository:
             row = cur.fetchone()
             return _prompt_from_row(row) if row else None
 
+    def list_versions(self, media_type: MediaType, limit: int = 20) -> list[PromptTemplate]:
+        with self._db.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM prompt_template WHERE media_type=? "
+                "ORDER BY version DESC LIMIT ?",
+                (media_type.value, limit),
+            )
+            return [_prompt_from_row(row) for row in cur.fetchall()]
+
     def upsert(self, media_type: MediaType, body: str) -> PromptTemplate:
         """Save a new active version, deactivating the previous active one."""
         with self._db.cursor() as cur:
@@ -374,6 +388,16 @@ class SqlitePromptTemplateRepository:
             new_id = cur.lastrowid
             cur.execute("SELECT * FROM prompt_template WHERE id=?", (new_id,))
             return _prompt_from_row(cur.fetchone())
+
+    def upgrade_default_if_legacy(
+        self, media_type: MediaType, new_body: str, legacy_bodies: Sequence[str]
+    ) -> Optional[PromptTemplate]:
+        active = self.get_active(media_type)
+        if not active:
+            return self.upsert(media_type, new_body)
+        if active.body != new_body and active.body in set(legacy_bodies):
+            return self.upsert(media_type, new_body)
+        return active
 
     def seed_defaults(self, defaults: dict) -> None:
         """Insert a v1 active prompt for any media type that has none yet."""

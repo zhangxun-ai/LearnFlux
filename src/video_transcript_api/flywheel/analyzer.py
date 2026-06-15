@@ -78,4 +78,4 @@ class ContentAnalyzer:
 {body_label}：
 {body}
 
-请按系统提示的四个小标题，拆出它为什么火。"""
+请严格按系统提示指定的 Markdown 二级标题输出，不要跳过证据、判断标准和可复用动作。"""

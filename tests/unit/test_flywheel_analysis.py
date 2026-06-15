@@ -18,8 +18,11 @@ from src.video_transcript_api.flywheel.analyzer import ContentAnalyzer, estimate
 from src.video_transcript_api.flywheel.analysis_service import run_analysis
 
 
-SAMPLE_MD = ("## 开头怎么抓人\n第一句抛冲突。\n\n## 中间怎么留住人\n每15秒一个反转。\n\n"
-             "## 结尾怎么促互动\n提问引导。\n\n## 你可以马上试的一件事\n把重点放第一句。")
+SAMPLE_MD = (
+    "## 01 内容定位\n写给副业新手，解决看不懂投资主线的问题。\n\n"
+    "## 02 对标价值判断\n可学的是把复杂概念讲成生活比喻。\n\n"
+    "## 12 下一条怎么插接\n把重点放第一句。"
+)
 
 
 class FakeLLM:
@@ -54,8 +57,36 @@ def env(tmp_path):
 def test_parse_sections_splits_and_finds_one_thing():
     parsed = parse_sections(SAMPLE_MD)
     assert [s["title"] for s in parsed["sections"]] == [
-        "开头怎么抓人", "中间怎么留住人", "结尾怎么促互动", "你可以马上试的一件事"]
+        "01 内容定位", "02 对标价值判断", "12 下一条怎么插接"]
     assert parsed["one_thing"] == "把重点放第一句。"
+
+
+@pytest.mark.unit
+def test_default_video_prompt_is_benchmark_teardown_prompt():
+    required = [
+        "对标插接拆解",
+        "原文证据",
+        "评分标准",
+        "可复制模板",
+        "不可复制部分",
+        "下一条怎么插接",
+        "输出前自查",
+    ]
+    for phrase in required:
+        assert phrase in VIDEO_SYSTEM_PROMPT
+
+
+@pytest.mark.unit
+def test_prompt_repo_seed_versioning_and_legacy_upgrade(env):
+    legacy_video = "你是爆款短视频拆解教练，说人话、不用术语。"
+    env.prepo.upsert(MediaType.VIDEO, legacy_video)
+    upgraded = env.prepo.upgrade_default_if_legacy(
+        MediaType.VIDEO,
+        VIDEO_SYSTEM_PROMPT,
+        legacy_bodies=(legacy_video,),
+    )
+    assert upgraded.body == VIDEO_SYSTEM_PROMPT
+    assert upgraded.version == 2
 
 
 @pytest.mark.unit
@@ -66,6 +97,8 @@ def test_prompt_repo_seed_and_versioning(env):
     updated = env.prepo.upsert(MediaType.VIDEO, "我的新规则")
     assert updated.version == 2
     assert env.prepo.get_active(MediaType.VIDEO).body == "我的新规则"
+    versions = env.prepo.list_versions(MediaType.VIDEO)
+    assert [p.version for p in versions] == [2, 1]
 
 
 @pytest.mark.unit
@@ -103,6 +136,7 @@ def test_run_analysis_success_persists_and_costs(env):
         content_repo=env.crepo, prompt_repo=env.prepo,
     )
     assert analysis.status is AnalysisStatus.SUCCESS
+    assert analysis.result_json["source_text"] == "转写文字"
     assert analysis.result_json["one_thing"] == "把重点放第一句。"
     assert env.crepo.get(env.content.id).analysis_status is AnalysisStatus.SUCCESS
     assert env.crepo.get(env.content.id).latest_analysis_id == analysis.id

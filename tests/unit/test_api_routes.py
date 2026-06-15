@@ -449,6 +449,106 @@ class TestViewProgressEndpoint:
         assert "正在下载音视频" in resp.text
         assert "已处理" in resp.text
 
+    def test_success_view_links_preserved_local_source_file(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        source_dir = tmp_path / "source-files"
+        source_dir.mkdir()
+        (source_dir / "media-1.mp4").write_bytes(b"fake video")
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "如何走出人生困局/1.mp4",
+            "author": "本地上传",
+            "url": "local://collection-source/media-1/如何走出人生困局/1.mp4",
+            "platform": "generic",
+            "media_id": "media-1",
+            "summary": "",
+            "transcript": "transcript",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-06-08T10:00:00",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={
+                "storage": {"source_files_dir": str(source_dir)},
+                "longcut": {"enabled": False},
+            },
+        ), patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>transcript</p>",
+        ):
+            resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert 'href="/view/vt-1/source-file"' in resp.text
+        assert "local://collection-source" not in resp.text
+
+    def test_view_source_file_serves_preserved_local_file(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        source_dir = tmp_path / "source-files"
+        source_dir.mkdir()
+        (source_dir / "media-1.mp4").write_bytes(b"fake video")
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "view_token": "vt-1",
+            "title": "如何走出人生困局/1.mp4",
+            "url": "local://collection-source/media-1/如何走出人生困局/1.mp4",
+            "platform": "generic",
+            "media_id": "media-1",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={"storage": {"source_files_dir": str(source_dir)}},
+        ):
+            resp = client.get("/view/vt-1/source-file")
+
+        assert resp.status_code == 200
+        assert resp.content == b"fake video"
+
+    def test_success_view_does_not_render_broken_local_source_link(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "如何走出人生困局/1.mp4",
+            "author": "本地上传",
+            "url": "local://collection-source/media-1/如何走出人生困局/1.mp4",
+            "platform": "generic",
+            "media_id": "media-1",
+            "summary": "",
+            "transcript": "transcript",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-06-08T10:00:00",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={
+                "storage": {"source_files_dir": str(tmp_path / "source-files")},
+                "longcut": {"enabled": False},
+            },
+        ), patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>transcript</p>",
+        ):
+            resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert "local://collection-source" not in resp.text
+        assert "源视频未保存或已清理" in resp.text
+
     def test_view_progress_returns_minimal_progress_payload(
         self, client, mock_cache_manager
     ):

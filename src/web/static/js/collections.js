@@ -4,8 +4,11 @@
     const VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.mp3', '.m4a', '.wav', '.aac', '.flac'];
     const DOC_EXTS = ['.txt', '.md', '.markdown', '.csv', '.log', '.pdf', '.docx'];
     const POLL_MS = 2500;
+    const DEFAULT_MAP_ZOOM = 1.16;
 
     const els = {
+        creator: document.getElementById('collection-creator'),
+        creatorOptions: document.getElementById('collection-creator-options'),
         title: document.getElementById('collection-title'),
         typeTabs: Array.from(document.querySelectorAll('.lc-type')),
         dropAction: document.getElementById('drop-action'),
@@ -18,17 +21,54 @@
         importPreview: document.getElementById('import-preview'),
         collectionHistoryList: document.getElementById('collection-history-list'),
         collectionHistoryCount: document.getElementById('collection-history-count'),
+        historyCreatorFilter: document.getElementById('history-creator-filter'),
+        historyTopicFilter: document.getElementById('history-topic-filter'),
+        historyDateFilter: document.getElementById('history-date-filter'),
+        historyTypeFilter: document.getElementById('history-type-filter'),
+        historyStatusFilter: document.getElementById('history-status-filter'),
+        historyReset: document.getElementById('history-reset'),
         tokenHint: document.getElementById('token-hint'),
         workspaceTitle: document.getElementById('workspace-title'),
         workspaceSubtitle: document.getElementById('workspace-subtitle'),
         progressValue: document.getElementById('progress-value'),
         progressFill: document.getElementById('progress-fill'),
+        metadataCreator: document.getElementById('metadata-creator'),
+        metadataType: document.getElementById('metadata-type'),
+        metadataDescription: document.getElementById('metadata-description'),
+        metadataStarted: document.getElementById('metadata-started'),
+        metadataCompleted: document.getElementById('metadata-completed'),
+        metadataElapsed: document.getElementById('metadata-elapsed'),
+        metadataImport: document.getElementById('metadata-import'),
+        metadataExport: document.getElementById('metadata-export'),
         sourceList: document.getElementById('source-list'),
         sourceCount: document.getElementById('source-count'),
         tabs: Array.from(document.querySelectorAll('.lc-tab')),
+        mapView: document.getElementById('map-view'),
         summaryView: document.getElementById('summary-view'),
         sourceView: document.getElementById('source-view'),
         markdownView: document.getElementById('markdown-view'),
+        mapTitle: document.getElementById('map-title'),
+        mapSubtitle: document.getElementById('map-subtitle'),
+        mapScopeCollection: document.getElementById('map-scope-collection'),
+        mapScopeSource: document.getElementById('map-scope-source'),
+        mapGenerate: document.getElementById('map-generate'),
+        mapFocus: document.getElementById('map-focus'),
+        mapStageFocus: document.getElementById('map-stage-focus'),
+        mapToggleLinks: document.getElementById('map-toggle-links'),
+        mapZoomOut: document.getElementById('map-zoom-out'),
+        mapFit: document.getElementById('map-fit'),
+        mapZoomIn: document.getElementById('map-zoom-in'),
+        mapEmpty: document.getElementById('map-empty'),
+        mapSvg: document.getElementById('knowledge-map-svg'),
+        mapNodeAnchor: document.getElementById('map-node-anchor'),
+        mapNodeTitle: document.getElementById('map-node-title'),
+        mapNodeSummary: document.getElementById('map-node-summary'),
+        mapNodeValue: document.getElementById('map-node-value'),
+        mapNodeEvidence: document.getElementById('map-node-evidence'),
+        mapJump: document.getElementById('map-jump'),
+        mapCopyNote: document.getElementById('map-copy-note'),
+        mapRelatedSources: document.getElementById('map-related-sources'),
+        mapPathList: document.getElementById('map-path-list'),
         summaryStatus: document.getElementById('summary-status'),
         summaryDescription: document.getElementById('summary-description'),
         summaryStructure: document.getElementById('summary-structure'),
@@ -41,19 +81,41 @@
         sourceMeta: document.getElementById('source-meta'),
         sourceTiming: document.getElementById('source-timing'),
         sourceSummary: document.getElementById('source-summary'),
+        sourceSummaryPreview: document.getElementById('source-summary-preview'),
+        sourceSummarySource: document.getElementById('source-summary-source'),
         sourceTranscript: document.getElementById('source-transcript'),
         openSource: document.getElementById('open-source'),
+        openSourceFile: document.getElementById('open-source-file'),
+        markdownRendered: document.getElementById('markdown-rendered'),
         markdownPreview: document.getElementById('markdown-preview'),
+        markdownPreviewMode: document.getElementById('markdown-preview-mode'),
+        markdownSourceMode: document.getElementById('markdown-source-mode'),
         toast: document.getElementById('toast')
     };
 
     let activeType = 'video_course';
     let collections = [];
+    let filterOptions = { creator_names: [], titles: [] };
     let currentCollection = null;
     let selectedSourceId = null;
-    let currentView = 'summary';
+    let currentView = 'map';
+    let knowledgeMapScope = 'collection';
+    let selectedMapNodeId = null;
+    let knowledgeMaps = { collection: null, sources: {} };
+    let knowledgeMapLoading = false;
+    let knowledgeMapError = '';
+    const knowledgeMapRequests = new Set();
+    let knowledgeMapLoadedKeys = new Set();
+    let customMapPositions = {};
+    let mapZoom = DEFAULT_MAP_ZOOM;
+    let mapFocused = false;
+    let mapLinksVisible = true;
     let sourceDetails = {};
+    let sourceSummaryDisplayMode = 'preview';
+    let markdownDisplayMode = 'preview';
+    const sourceDetailRequests = new Map();
     let busy = false;
+    let pendingImportMethod = 'local_files';
     let pollTimer = null;
     let toastTimer = null;
 
@@ -84,12 +146,16 @@
         [els.pickFolder, els.pickFiles, els.dropAction].forEach((button) => {
             button.disabled = busy;
         });
+        [els.creator, els.title].forEach((field) => {
+            field.disabled = busy;
+        });
         els.typeTabs.forEach((button) => {
             button.disabled = busy;
         });
         if (busy) {
             els.generateSummary.disabled = true;
             els.exportMarkdown.disabled = true;
+            if (els.mapGenerate) els.mapGenerate.disabled = true;
         }
     }
 
@@ -140,6 +206,7 @@
             tab.classList.toggle('active', tab.dataset.type === type);
         });
         els.filesInput.setAttribute('accept', config.accept);
+        els.folderInput.setAttribute('accept', config.accept);
         els.dropTitle.textContent = config.title;
         els.dropSubtitle.textContent = config.subtitle;
     }
@@ -192,6 +259,53 @@
         return `${secs}秒`;
     }
 
+    function formatDateTime(value) {
+        if (!value) return '-';
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 16);
+        return `${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')} ${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+    }
+
+    function formatDate(value) {
+        if (!value) return '';
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
+        return `${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+    }
+
+    function toDateParam(date) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    function dateRangeParams(value) {
+        if (!value) return {};
+        const now = new Date();
+        if (value === 'today') {
+            const today = toDateParam(now);
+            return { date_from: today, date_to: today };
+        }
+        if (value === '7d' || value === '30d') {
+            const days = value === '7d' ? 7 : 30;
+            const start = new Date(now);
+            start.setDate(start.getDate() - days + 1);
+            return { date_from: toDateParam(start), date_to: toDateParam(now) };
+        }
+        return {};
+    }
+
+    function collectionTypeLabel(type) {
+        return type === 'document_topic' ? '文档专题' : '视频课程';
+    }
+
+    function importMethodLabel(method) {
+        const labels = {
+            local_folder: '本地文件夹',
+            local_files: '本地多文件',
+            link_batch: '链接合集'
+        };
+        return labels[method] || method || '-';
+    }
+
     function sourceProgressPercent(source) {
         if (!source) return 0;
         if (source.task_status === 'success') return 100;
@@ -218,15 +332,160 @@
         return `${value.slice(0, max)}\n\n... 已截断，点击“原文/逐字稿”查看完整内容。`;
     }
 
+    function compactText(value, limit) {
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!text) return '';
+        const max = limit || 80;
+        return text.length > max ? `${text.slice(0, max).replace(/[，,。；;\s]+$/, '')}...` : text;
+    }
+
+    function stripMarkdownEnvelope(markdown) {
+        let text = String(markdown || '').trim();
+        const fenced = text.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i);
+        if (fenced) {
+            text = fenced[1].trim();
+        }
+        const lines = text.split(/\n/);
+        if (lines[0] && lines[0].trim() === '---') {
+            const end = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
+            if (end > 0) {
+                return lines.slice(end + 1).join('\n').trim();
+            }
+        }
+        return text;
+    }
+
+    function renderInlineMarkdown(value) {
+        return escapeHTML(value)
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/__(.+?)__/g, '<strong>$1</strong>');
+    }
+
+    function markdownToHTML(markdown) {
+        const text = stripMarkdownEnvelope(markdown);
+        if (!text) return '';
+
+        const output = [];
+        const paragraph = [];
+        let listTag = '';
+
+        const flushParagraph = () => {
+            if (!paragraph.length) return;
+            output.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`);
+            paragraph.length = 0;
+        };
+        const closeList = () => {
+            if (!listTag) return;
+            output.push(`</${listTag}>`);
+            listTag = '';
+        };
+        const openList = (tag) => {
+            flushParagraph();
+            if (listTag === tag) return;
+            closeList();
+            output.push(`<${tag}>`);
+            listTag = tag;
+        };
+
+        text.split(/\n/).forEach((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) {
+                flushParagraph();
+                closeList();
+                return;
+            }
+
+            const heading = trimmed.match(/^(#{1,6})\s+(.+)$/);
+            if (heading) {
+                flushParagraph();
+                closeList();
+                const level = heading[1].length;
+                output.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+                return;
+            }
+
+            const unordered = trimmed.match(/^[-*+]\s+(.+)$/);
+            if (unordered) {
+                openList('ul');
+                output.push(`<li>${renderInlineMarkdown(unordered[1])}</li>`);
+                return;
+            }
+
+            const ordered = trimmed.match(/^\d+[.、)]\s+(.+)$/);
+            if (ordered) {
+                openList('ol');
+                output.push(`<li>${renderInlineMarkdown(ordered[1])}</li>`);
+                return;
+            }
+
+            const quote = trimmed.match(/^>\s?(.+)$/);
+            if (quote) {
+                flushParagraph();
+                closeList();
+                output.push(`<blockquote>${renderInlineMarkdown(quote[1])}</blockquote>`);
+                return;
+            }
+
+            if (/^-{3,}$/.test(trimmed)) {
+                flushParagraph();
+                closeList();
+                output.push('<hr>');
+                return;
+            }
+
+            paragraph.push(trimmed);
+        });
+
+        flushParagraph();
+        closeList();
+        return output.join('');
+    }
+
+    function renderMarkdownPreview(target, markdown, fallback) {
+        if (!target) return;
+        const text = String(markdown || '').trim() || fallback;
+        target.classList.remove('lc-markdown-source');
+        target.innerHTML = markdownToHTML(text) || `<p>${escapeHTML(fallback || '')}</p>`;
+    }
+
+    function renderMarkdownSource(target, markdown, fallback) {
+        if (!target) return;
+        target.classList.add('lc-markdown-source');
+        target.textContent = String(markdown || '').trim() || fallback || '';
+    }
+
+    function setViewToggle(previewButton, sourceButton, mode) {
+        if (!previewButton || !sourceButton) return;
+        previewButton.classList.toggle('active', mode === 'preview');
+        sourceButton.classList.toggle('active', mode === 'source');
+    }
+
+    function selectedSource() {
+        const sources = currentCollection ? (currentCollection.sources || []) : [];
+        return sources.find((item) => item.id === selectedSourceId) || sources[0] || null;
+    }
+
     async function createCollection() {
-        const title = els.title.value.trim() || '未命名专题';
+        const creatorName = els.creator.value.trim();
+        const title = els.title.value.trim();
+        if (!creatorName) {
+            els.creator.focus();
+            throw new Error('请先填写 IP 名称');
+        }
+        if (!title) {
+            els.title.focus();
+            throw new Error('请先填写专题名称');
+        }
         const config = typeConfig(activeType);
         const payload = await apiJSON('/api/collections', {
             method: 'POST',
             body: JSON.stringify({
                 title,
+                creator_name: creatorName,
                 collection_type: activeType,
-                goal: config.goal
+                goal: config.goal,
+                import_method: pendingImportMethod
             })
         });
         return payload.data;
@@ -244,6 +503,38 @@
         });
     }
 
+    async function loadFilterOptions() {
+        if (!getToken()) {
+            filterOptions = { creator_names: [], titles: [] };
+            renderFilterOptions();
+            return;
+        }
+        try {
+            const payload = await apiJSON('/api/collections/filter-options');
+            filterOptions = payload.data || { creator_names: [], titles: [] };
+            renderFilterOptions();
+        } catch (error) {
+            filterOptions = { creator_names: [], titles: [] };
+            renderFilterOptions();
+        }
+    }
+
+    function selectedHistoryFilters() {
+        const params = new URLSearchParams();
+        const values = {
+            creator_name: els.historyCreatorFilter.value,
+            title: els.historyTopicFilter.value,
+            collection_type: els.historyTypeFilter.value,
+            status: els.historyStatusFilter.value
+        };
+        Object.keys(values).forEach((key) => {
+            if (values[key]) params.set(key, values[key]);
+        });
+        const dateParams = dateRangeParams(els.historyDateFilter.value);
+        Object.keys(dateParams).forEach((key) => params.set(key, dateParams[key]));
+        return params;
+    }
+
     async function loadCollections(options) {
         const opts = options || {};
         if (!getToken()) {
@@ -253,7 +544,9 @@
         }
 
         try {
-            const payload = await apiJSON('/api/collections');
+            const params = selectedHistoryFilters();
+            const query = params.toString();
+            const payload = await apiJSON(query ? `/api/collections?${query}` : '/api/collections');
             collections = (payload.data && payload.data.collections) || [];
             renderHistory();
             if (opts.selectLatest !== false && !currentCollection && collections.length) {
@@ -271,7 +564,17 @@
         window.clearInterval(pollTimer);
         selectedSourceId = null;
         sourceDetails = {};
-        currentView = 'summary';
+        knowledgeMaps = { collection: null, sources: {} };
+        knowledgeMapError = '';
+        knowledgeMapLoading = false;
+        knowledgeMapRequests.clear();
+        knowledgeMapLoadedKeys = new Set();
+        customMapPositions = {};
+        mapZoom = DEFAULT_MAP_ZOOM;
+        mapFocused = false;
+        currentView = 'map';
+        knowledgeMapScope = 'collection';
+        selectedMapNodeId = null;
         await refreshCollection(collectionId);
         const sources = currentCollection ? (currentCollection.sources || []) : [];
         const finished = sources.length > 0 && sources.every((source) => ['success', 'failed'].includes(source.task_status));
@@ -279,8 +582,9 @@
         if (!opts.silent) showToast('已打开历史专题');
     }
 
-    async function importFiles(fileList) {
+    async function importFiles(fileList, importMethod) {
         const files = normalizeFiles(fileList);
+        pendingImportMethod = importMethod || 'local_files';
         previewFiles(files);
         if (!files.length) {
             showToast('没有找到当前类型支持的文件');
@@ -292,11 +596,22 @@
             const collection = await createCollection();
             currentCollection = collection;
             selectedSourceId = null;
+            knowledgeMapScope = 'collection';
+            selectedMapNodeId = null;
             sourceDetails = {};
+            knowledgeMaps = { collection: null, sources: {} };
+            knowledgeMapError = '';
+            knowledgeMapLoading = false;
+            knowledgeMapRequests.clear();
+            knowledgeMapLoadedKeys = new Set();
+            customMapPositions = {};
+            mapZoom = DEFAULT_MAP_ZOOM;
+            mapFocused = false;
             render();
             await uploadFiles(collection.id, files);
             showToast('已开始解析专题文件');
             await refreshCollection(collection.id);
+            await loadFilterOptions();
             await loadCollections({ selectLatest: false });
             startPolling();
         } catch (error) {
@@ -315,6 +630,9 @@
         if (currentCollection.collection_type) {
             setActiveType(currentCollection.collection_type);
         }
+        if (currentCollection.creator_name) {
+            els.creator.value = currentCollection.creator_name;
+        }
         if (currentCollection.title) {
             els.title.value = currentCollection.title;
         }
@@ -325,9 +643,31 @@
     }
 
     function collectionStatusLabel(collection) {
-        if (collection.summary_status === 'success') return '已总结';
-        if (Number(collection.source_count || 0) > 0) return '已导入';
-        return '空专题';
+        const labels = {
+            summarized: '已总结',
+            ready: '待总结',
+            processing: '解析中',
+            failed: '有失败',
+            draft: '未导入'
+        };
+        return labels[collection.workflow_status] || (collection.summary_status === 'success' ? '已总结' : '未导入');
+    }
+
+    function renderFilterOptions() {
+        const creatorValue = els.historyCreatorFilter.value;
+        const topicValue = els.historyTopicFilter.value;
+        const creators = filterOptions.creator_names || [];
+        const titles = filterOptions.titles || [];
+
+        els.creatorOptions.innerHTML = creators.map((name) => `<option value="${escapeHTML(name)}"></option>`).join('');
+        els.historyCreatorFilter.innerHTML = '<option value="">全部 IP</option>' + creators.map((name) => {
+            const selected = name === creatorValue ? ' selected' : '';
+            return `<option value="${escapeHTML(name)}"${selected}>${escapeHTML(name)}</option>`;
+        }).join('');
+        els.historyTopicFilter.innerHTML = '<option value="">全部专题</option>' + titles.map((title) => {
+            const selected = title === topicValue ? ' selected' : '';
+            return `<option value="${escapeHTML(title)}"${selected}>${escapeHTML(title)}</option>`;
+        }).join('');
     }
 
     function renderHistory(errorMessage) {
@@ -349,13 +689,16 @@
 
         els.collectionHistoryList.innerHTML = collections.slice(0, 8).map((collection) => {
             const active = currentCollection && collection.id === currentCollection.id ? ' active' : '';
-            const type = collection.collection_type === 'document_topic' ? '文档专题' : '视频课程';
+            const type = collectionTypeLabel(collection.collection_type);
             const count = Number(collection.source_count || 0);
+            const metrics = collection.metrics || {};
+            const elapsed = metrics.elapsed_seconds ? ` · ${formatDuration(metrics.elapsed_seconds)}` : '';
+            const date = formatDate(collection.created_at);
             return `
                 <button class="lc-history-item${active}" type="button" data-collection-id="${escapeHTML(collection.id)}">
                     <span>
                         <strong>${escapeHTML(collection.title)}</strong>
-                        <small>${escapeHTML(type)} · ${count} 个 source</small>
+                        <small>${escapeHTML(collection.creator_name || '未归属')} · ${escapeHTML(type)} · ${count} 个 source${escapeHTML(elapsed)}${date ? ' · ' + escapeHTML(date) : ''}</small>
                     </span>
                     <em>${escapeHTML(collectionStatusLabel(collection))}</em>
                 </button>
@@ -401,6 +744,636 @@
         return labels[status] || '等待';
     }
 
+    function currentMapKey() {
+        if (!currentCollection) return '';
+        if (knowledgeMapScope === 'source') {
+            const source = selectedSource();
+            return source ? `source:${source.id}` : '';
+        }
+        return 'collection';
+    }
+
+    function currentStoredKnowledgeMap() {
+        if (knowledgeMapScope === 'source') {
+            const source = selectedSource();
+            return source ? knowledgeMaps.sources[source.id] || null : null;
+        }
+        return knowledgeMaps.collection || null;
+    }
+
+    function storeKnowledgeMap(record) {
+        if (!record || !record.map_json) return;
+        if (record.scope === 'source') {
+            const key = record.source_id || (record.map_json.nodes || [])
+                .flatMap((node) => node.source_ids || [])[0];
+            if (key) knowledgeMaps.sources[key] = record;
+            return;
+        }
+        knowledgeMaps.collection = record;
+    }
+
+    function mapEndpoint() {
+        const params = new URLSearchParams({ scope: knowledgeMapScope });
+        const source = selectedSource();
+        if (knowledgeMapScope === 'source' && source) {
+            params.set('source_id', source.id);
+        }
+        return `/api/collections/${currentCollection.id}/knowledge-map?${params.toString()}`;
+    }
+
+    async function loadKnowledgeMap() {
+        const key = currentMapKey();
+        if (!key || knowledgeMapRequests.has(key) || knowledgeMapLoadedKeys.has(key) || currentStoredKnowledgeMap()) return;
+        const source = selectedSource();
+        if (knowledgeMapScope === 'source' && (!source || source.task_status !== 'success')) return;
+
+        knowledgeMapRequests.add(key);
+        try {
+            const payload = await apiJSON(mapEndpoint());
+            knowledgeMapLoadedKeys.add(key);
+            if (payload.data && payload.data.status !== 'not_started') {
+                storeKnowledgeMap(payload.data);
+            }
+        } catch (error) {
+            if (currentMapKey() === key) {
+                knowledgeMapError = error.message || '读取知识地图失败';
+            }
+        } finally {
+            knowledgeMapRequests.delete(key);
+            render();
+        }
+    }
+
+    async function generateKnowledgeMap() {
+        if (!currentCollection) {
+            showToast('请先选择一个专题');
+            return;
+        }
+        const source = selectedSource();
+        if (knowledgeMapScope === 'source' && (!source || source.task_status !== 'success')) {
+            showToast('当前小节解析完成后才能生成地图');
+            return;
+        }
+        const key = currentMapKey();
+        const force = Boolean(currentStoredKnowledgeMap());
+        knowledgeMapLoading = true;
+        knowledgeMapError = '';
+        render();
+        try {
+            showToast(force ? '正在重新生成知识地图' : '正在生成知识地图，可能需要几十秒');
+            const payload = await apiJSON(`/api/collections/${currentCollection.id}/knowledge-map`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    scope: knowledgeMapScope,
+                    source_id: knowledgeMapScope === 'source' && source ? source.id : null,
+                    force
+                })
+            });
+            storeKnowledgeMap(payload.data);
+            if (key) knowledgeMapLoadedKeys.add(key);
+            selectedMapNodeId = null;
+            showToast('知识地图已生成');
+        } catch (error) {
+            knowledgeMapError = error.message || '生成知识地图失败';
+            showToast(knowledgeMapError);
+        } finally {
+            knowledgeMapLoading = false;
+            render();
+        }
+    }
+
+    function sourceById(sourceId) {
+        const sources = currentCollection ? (currentCollection.sources || []) : [];
+        return sources.find((source) => source.id === sourceId) || null;
+    }
+
+    function anchorLabel(anchor) {
+        if (!anchor) return '';
+        if (typeof anchor === 'string') return anchor;
+        return anchor.label || anchor.type || '';
+    }
+
+    function layoutKnowledgeMapNodes(nodes) {
+        if (!nodes.length) return [];
+        const key = currentMapKey();
+        const saved = customMapPositions[key] || {};
+        const centerIndex = Math.max(0, nodes.findIndex((node) => node.kind === 'core'));
+        const center = nodes[centerIndex];
+        const others = nodes.filter((_, index) => index !== centerIndex);
+        const positioned = [];
+        const centerPosition = saved[center.id] || { x: 430, y: 296 };
+        positioned[centerIndex] = { ...center, ...centerPosition, w: 300, h: 128 };
+
+        const rightCount = others.length <= 3 ? others.length : Math.ceil(others.length / 2);
+        const rightNodes = others.slice(0, rightCount);
+        const leftNodes = others.slice(rightCount);
+        const slots = (count, side) => {
+            if (!count) return [];
+            const top = count <= 2 ? 220 : 92;
+            const bottom = count <= 2 ? 390 : 552;
+            const span = count === 1 ? 0 : bottom - top;
+            return Array.from({ length: count }, (_, index) => ({
+                x: side === 'right' ? 780 : 110,
+                y: count === 1 ? 296 : top + (span * index) / (count - 1)
+            }));
+        };
+        const rightSlots = slots(rightNodes.length, 'right');
+        const leftSlots = slots(leftNodes.length, 'left');
+
+        rightNodes.concat(leftNodes).forEach((node, index) => {
+            const w = 270;
+            const h = 112;
+            const fallback = index < rightNodes.length
+                ? rightSlots[index]
+                : leftSlots[index - rightNodes.length];
+            const point = saved[node.id] || fallback || { x: 80, y: 96 };
+            const originalIndex = nodes.findIndex((item) => item.id === node.id);
+            positioned[originalIndex] = { ...node, ...point, w, h };
+        });
+        return positioned.filter(Boolean);
+    }
+
+    function normalizeMapRecord(record) {
+        const raw = record && record.map_json;
+        if (!raw || !Array.isArray(raw.nodes) || !raw.nodes.length) return null;
+        const scope = raw.scope || knowledgeMapScope;
+        const source = selectedSource();
+        const nodes = raw.nodes.map((node, index) => {
+            const sourceIds = Array.isArray(node.source_ids) && node.source_ids.length
+                ? node.source_ids
+                : (scope === 'source' && source ? [source.id] : []);
+            const firstSource = sourceIds.map(sourceById).find(Boolean) || null;
+            const anchor = node.anchor || {};
+            return {
+                id: node.id || `node-${index + 1}`,
+                kind: node.kind || 'concept',
+                title: node.title || `节点 ${index + 1}`,
+                summary: node.summary || '',
+                value: node.user_value || node.value || '',
+                evidence: node.evidence || '',
+                anchor: anchorLabel(anchor),
+                anchorSeconds: typeof anchor === 'object' ? anchor.seconds : null,
+                sourceIds,
+                sourceId: firstSource ? firstSource.id : null,
+                sourceTitle: firstSource ? firstSource.title : '',
+                sourceViewToken: firstSource ? firstSource.view_token : ''
+            };
+        });
+        const positioned = layoutKnowledgeMapNodes(nodes);
+        const nodeIds = new Set(positioned.map((node) => node.id));
+        let edges = (raw.edges || []).map((edge) => {
+            if (Array.isArray(edge)) return [edge[0], edge[1]];
+            return [edge.from, edge.to];
+        }).filter(([from, to]) => nodeIds.has(from) && nodeIds.has(to) && from !== to);
+        if (!edges.length && positioned.length > 1) {
+            const center = positioned.find((node) => node.kind === 'core') || positioned[0];
+            edges = positioned
+                .filter((node) => node.id !== center.id)
+                .map((node) => [center.id, node.id]);
+        }
+        return {
+            type: scope,
+            title: raw.title || (scope === 'collection' ? '集合知识地图' : `${source ? source.title : 'Source'} 知识地图`),
+            subtitle: raw.central_question
+                ? `中心问题：${raw.central_question}`
+                : (raw.user_value || '点击节点查看它讲什么、有什么用，以及对应的原文位置。'),
+            userValue: raw.user_value || '',
+            nodes: positioned,
+            edges,
+            path: raw.path || []
+        };
+    }
+
+    function currentKnowledgeMap() {
+        if (!currentCollection) {
+            return {
+                empty: true,
+                title: '知识地图',
+                subtitle: '选择一个专题后生成。',
+                message: '请选择历史专题，或先导入视频/文档。'
+            };
+        }
+        const sources = currentCollection.sources || [];
+        if (!sources.length) {
+            return {
+                empty: true,
+                title: '集合知识地图',
+                subtitle: '导入一个系列后生成集合地图。',
+                message: '暂无源内容，先导入视频或文档。'
+            };
+        }
+        const source = selectedSource();
+        if (knowledgeMapScope === 'source' && source && source.task_status !== 'success') {
+            return {
+                empty: true,
+                title: `${source.title} 知识地图`,
+                subtitle: '当前小节解析完成后才能生成。',
+                message: `当前状态：${statusLabel(source.task_status)}。解析完成后可生成小节地图。`
+            };
+        }
+        if (knowledgeMapLoading || knowledgeMapRequests.has(currentMapKey())) {
+            return {
+                empty: true,
+                title: knowledgeMapScope === 'collection' ? '集合知识地图' : `${source ? source.title : 'Source'} 知识地图`,
+                subtitle: '正在读取或生成高质量知识地图。',
+                message: 'AI 正在理解内容并提炼地图，请稍等。'
+            };
+        }
+        if (knowledgeMapError) {
+            return {
+                empty: true,
+                title: '知识地图',
+                subtitle: '知识地图暂时不可用。',
+                message: knowledgeMapError
+            };
+        }
+        const normalized = normalizeMapRecord(currentStoredKnowledgeMap());
+        if (normalized) return normalized;
+        return {
+            empty: true,
+            title: knowledgeMapScope === 'collection' ? '集合知识地图' : `${source ? source.title : 'Source'} 知识地图`,
+            subtitle: knowledgeMapScope === 'collection'
+                ? '生成后会展示系列主线、整体价值和每个 source 的贡献。'
+                : '生成后会展示这份内容最关键的节点，并绑定原文位置。',
+            message: knowledgeMapScope === 'collection'
+                ? '集合地图尚未生成。点击“生成知识地图”，AI 会先理解各小节再提炼系列主线。'
+                : '当前小节地图尚未生成。点击“生成知识地图”，AI 会基于摘要和逐字稿提炼关键节点。'
+        };
+    }
+
+    function clearMapSvg() {
+        if (els.mapSvg) els.mapSvg.innerHTML = '';
+    }
+
+    function svgEl(name, attrs) {
+        const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+        Object.keys(attrs || {}).forEach((key) => node.setAttribute(key, attrs[key]));
+        return node;
+    }
+
+    function nodeCenter(node) {
+        return [node.x + node.w / 2, node.y + node.h / 2];
+    }
+
+    function edgePath(from, to) {
+        const [x1, y1] = nodeCenter(from);
+        const [x2, y2] = nodeCenter(to);
+        const midX = (x1 + x2) / 2;
+        return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+    }
+
+    function findMapNode(map, nodeId) {
+        return map.nodes.find((node) => node.id === nodeId) || map.nodes[0];
+    }
+
+    function renderSvgText(parent, text, x, y, className) {
+        const label = svgEl('text', { x, y, class: className });
+        label.textContent = text;
+        parent.appendChild(label);
+    }
+
+    function textLines(value, maxChars, maxLines) {
+        const chars = Array.from(String(value || '').replace(/\s+/g, ' ').trim());
+        if (!chars.length) return [];
+        const lines = [];
+        let index = 0;
+        while (index < chars.length && lines.length < maxLines) {
+            lines.push(chars.slice(index, index + maxChars).join(''));
+            index += maxChars;
+        }
+        if (index < chars.length && lines.length) {
+            lines[lines.length - 1] = `${lines[lines.length - 1].replace(/[，,。；;\s]+$/, '')}...`;
+        }
+        return lines;
+    }
+
+    function renderWrappedSvgText(parent, text, x, y, className, maxChars, maxLines, lineHeight) {
+        const label = svgEl('text', { x, y, class: className });
+        textLines(text, maxChars, maxLines).forEach((line, index) => {
+            const tspan = svgEl('tspan', {
+                x,
+                dy: index === 0 ? 0 : lineHeight
+            });
+            tspan.textContent = line;
+            label.appendChild(tspan);
+        });
+        parent.appendChild(label);
+    }
+
+    function mapViewBox() {
+        const baseWidth = 1160;
+        const baseHeight = 720;
+        const width = baseWidth / mapZoom;
+        const height = baseHeight / mapZoom;
+        return `${(baseWidth - width) / 2} ${(baseHeight - height) / 2} ${width} ${height}`;
+    }
+
+    function visibleMapEdges(map, activeNode) {
+        if (!mapLinksVisible) return [];
+        const nodes = map.nodes || [];
+        const root = nodes.find((node) => node.kind === 'core') || nodes[0];
+        if (!root) return [];
+        return nodes
+            .filter((node) => node.id !== root.id)
+            .map((node) => [root.id, node.id]);
+    }
+
+    function saveMapNodePosition(node) {
+        const key = currentMapKey();
+        if (!key) return;
+        customMapPositions[key] = customMapPositions[key] || {};
+        customMapPositions[key][node.id] = {
+            x: Math.round(node.x),
+            y: Math.round(node.y)
+        };
+    }
+
+    function makeMapNodeDraggable(group, node) {
+        let dragging = false;
+        let moved = false;
+        let startX = 0;
+        let startY = 0;
+        let originX = node.x;
+        let originY = node.y;
+        group.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0) return;
+            dragging = true;
+            moved = false;
+            startX = event.clientX;
+            startY = event.clientY;
+            originX = node.x;
+            originY = node.y;
+            group.setPointerCapture(event.pointerId);
+        });
+        group.addEventListener('pointermove', (event) => {
+            if (!dragging) return;
+            const dx = (event.clientX - startX) / mapZoom;
+            const dy = (event.clientY - startY) / mapZoom;
+            if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
+            node.x = Math.max(16, Math.min(1120 - node.w, originX + dx));
+            node.y = Math.max(16, Math.min(690 - node.h, originY + dy));
+            group.setAttribute('transform', `translate(${node.x} ${node.y})`);
+        });
+        group.addEventListener('pointerup', (event) => {
+            if (!dragging) return;
+            dragging = false;
+            group.releasePointerCapture(event.pointerId);
+            group.dataset.dragged = moved ? '1' : '';
+            if (moved) {
+                saveMapNodePosition(node);
+                renderKnowledgeMap();
+            }
+        });
+    }
+
+    function renderMapSvg(map, activeNode) {
+        clearMapSvg();
+        if (!els.mapSvg || map.empty) return;
+        els.mapSvg.setAttribute('viewBox', mapViewBox());
+        visibleMapEdges(map, activeNode).forEach(([fromId, toId]) => {
+            const from = findMapNode(map, fromId);
+            const to = findMapNode(map, toId);
+            if (!from || !to) return;
+            const edgeActive = activeNode && activeNode.kind !== 'core' && (
+                from.id === activeNode.id || to.id === activeNode.id
+            );
+            const path = svgEl('path', {
+                d: edgePath(from, to),
+                class: `lc-map-edge${edgeActive ? ' active' : ''}`
+            });
+            els.mapSvg.appendChild(path);
+        });
+        map.nodes.forEach((node) => {
+            const group = svgEl('g', {
+                class: `lc-map-node ${node.kind || 'concept'}${node.id === activeNode.id ? ' active' : ''}`,
+                transform: `translate(${node.x} ${node.y})`,
+                role: 'button',
+                tabindex: '0',
+                'aria-label': node.title
+            });
+            group.dataset.nodeId = node.id;
+            group.appendChild(svgEl('rect', {
+                x: 0,
+                y: 0,
+                width: node.w,
+                height: node.h,
+                rx: 16,
+                ry: 16
+            }));
+            const titleChars = Math.max(10, Math.floor((node.w - 32) / 19));
+            const summaryChars = Math.max(14, Math.floor((node.w - 32) / 13));
+            renderSvgText(group, node.anchor || '', 16, 24, 'lc-map-node-anchor');
+            renderWrappedSvgText(group, node.title, 16, 52, 'lc-map-node-title', titleChars, 2, 22);
+            renderWrappedSvgText(group, node.summary, 16, 84, 'lc-map-node-summary', summaryChars, 2, 17);
+            group.addEventListener('click', () => {
+                if (group.dataset.dragged) {
+                    group.dataset.dragged = '';
+                    return;
+                }
+                selectedMapNodeId = node.id;
+                renderKnowledgeMap();
+            });
+            group.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectedMapNodeId = node.id;
+                    renderKnowledgeMap();
+                }
+            });
+            makeMapNodeDraggable(group, node);
+            els.mapSvg.appendChild(group);
+        });
+    }
+
+    function renderRelatedSources(node) {
+        if (!els.mapRelatedSources) return;
+        const sources = currentCollection ? (currentCollection.sources || []) : [];
+        const relatedIds = node && node.sourceIds && node.sourceIds.length
+            ? node.sourceIds
+            : (node && node.sourceId ? [node.sourceId] : []);
+        const related = relatedIds.length
+            ? relatedIds.map(sourceById).filter(Boolean)
+            : sources.slice(0, 4);
+        if (!related.length) {
+            els.mapRelatedSources.innerHTML = '<span class="lc-map-related-empty">暂无关联 source</span>';
+            return;
+        }
+        els.mapRelatedSources.innerHTML = related.map((source, index) => `
+            <button type="button" data-map-related-source="${escapeHTML(source.id)}" title="打开源内容">
+                <span>${index + 1}</span>
+                <div>
+                    <strong>${escapeHTML(compactText(source.title, 28))}</strong>
+                    <em>打开源内容</em>
+                </div>
+            </button>
+        `).join('');
+        els.mapRelatedSources.querySelectorAll('[data-map-related-source]').forEach((button) => {
+            button.addEventListener('click', () => {
+                openRelatedSource(button.dataset.mapRelatedSource).catch((error) => {
+                    showToast(error.message || '打开源内容失败');
+                });
+            });
+        });
+    }
+
+    function mapPathLabels(map) {
+        const nodes = map.nodes || [];
+        return (map.path || []).map((item) => {
+            const node = nodes.find((candidate) => candidate.id === item);
+            return node ? node.title : item;
+        });
+    }
+
+    function renderMapInspector(map, activeNode) {
+        if (!els.mapNodeTitle) return;
+        const node = activeNode || {};
+        els.mapNodeAnchor.textContent = node.anchor || '-';
+        els.mapNodeTitle.textContent = node.title || '选择一个节点';
+        els.mapNodeSummary.textContent = node.summary || '点击地图节点后，这里会显示它讲什么。';
+        els.mapNodeValue.textContent = node.value || '帮助你快速判断是否需要复看这段内容。';
+        els.mapNodeEvidence.textContent = node.evidence || '节点会绑定视频时间点或文档段落。';
+        els.mapJump.disabled = !activeNode;
+        els.mapCopyNote.disabled = !activeNode;
+        els.mapJump.textContent = map.type === 'collection' && (node.sourceId || (node.sourceIds || []).length) ? '进入小节地图' : '查看原文位置';
+        els.mapPathList.innerHTML = mapPathLabels(map).map((item, index) => `<li><span>${index + 1}</span>${escapeHTML(item)}</li>`).join('');
+        renderRelatedSources(node);
+    }
+
+    function setIconButtonState(button, label, icon) {
+        if (!button) return;
+        button.setAttribute('aria-label', label);
+        button.setAttribute('title', label);
+        const iconNode = button.querySelector('span');
+        if (iconNode) iconNode.textContent = icon;
+    }
+
+    function renderKnowledgeMap() {
+        if (!els.mapView) return;
+        const source = selectedSource();
+        els.mapView.classList.toggle('focused', mapFocused);
+        const key = currentMapKey();
+        if (key && !currentStoredKnowledgeMap() && !knowledgeMapLoadedKeys.has(key) && !knowledgeMapRequests.has(key) && !knowledgeMapError) {
+            loadKnowledgeMap();
+        }
+        const map = currentKnowledgeMap();
+        els.mapTitle.textContent = map.title;
+        els.mapSubtitle.textContent = map.subtitle;
+        els.mapScopeCollection.classList.toggle('active', knowledgeMapScope === 'collection');
+        els.mapScopeSource.classList.toggle('active', knowledgeMapScope === 'source');
+        els.mapScopeSource.disabled = !(currentCollection && (currentCollection.sources || []).length);
+        if (els.mapGenerate) {
+            const canGenerate = Boolean(currentCollection && (currentCollection.sources || []).length)
+                && !(knowledgeMapScope === 'source' && (!source || source.task_status !== 'success'));
+            els.mapGenerate.disabled = busy || knowledgeMapLoading || !canGenerate;
+            els.mapGenerate.textContent = currentStoredKnowledgeMap() ? '重新生成地图' : '生成知识地图';
+        }
+        if (els.mapFocus) {
+            els.mapFocus.textContent = mapFocused ? '退出全屏' : '全屏查看';
+        }
+        if (els.mapStageFocus) {
+            setIconButtonState(els.mapStageFocus, mapFocused ? '退出全屏' : '全屏查看', mapFocused ? '↙' : '⛶');
+        }
+        if (els.mapToggleLinks) {
+            setIconButtonState(els.mapToggleLinks, mapLinksVisible ? '隐藏连线' : '显示连线', mapLinksVisible ? '⛓' : '⋯');
+        }
+
+        if (map.empty) {
+            clearMapSvg();
+            els.mapEmpty.textContent = map.message;
+            els.mapEmpty.classList.remove('hidden');
+            renderMapInspector(map, null);
+            return;
+        }
+
+        els.mapEmpty.classList.add('hidden');
+        if (!selectedMapNodeId || !map.nodes.some((node) => node.id === selectedMapNodeId)) {
+            selectedMapNodeId = map.nodes[0].id;
+        }
+        const activeNode = findMapNode(map, selectedMapNodeId);
+        renderMapSvg(map, activeNode);
+        renderMapInspector(map, activeNode);
+    }
+
+    function activeMapNode() {
+        const map = currentKnowledgeMap();
+        if (map.empty) return null;
+        return findMapNode(map, selectedMapNodeId);
+    }
+
+    function setMapZoom(nextZoom) {
+        mapZoom = Math.max(0.72, Math.min(1.8, nextZoom));
+        renderKnowledgeMap();
+    }
+
+    function fitKnowledgeMap() {
+        mapZoom = DEFAULT_MAP_ZOOM;
+        renderKnowledgeMap();
+    }
+
+    function toggleMapFocus() {
+        mapFocused = !mapFocused;
+        renderKnowledgeMap();
+    }
+
+    function toggleMapLinks() {
+        mapLinksVisible = !mapLinksVisible;
+        renderKnowledgeMap();
+    }
+
+    function openMapNodeTarget() {
+        const node = activeMapNode();
+        if (!node) return;
+        const targetSourceId = node.sourceId || (node.sourceIds || [])[0];
+        if (knowledgeMapScope === 'collection' && targetSourceId) {
+            selectedSourceId = targetSourceId;
+            knowledgeMapScope = 'source';
+            selectedMapNodeId = null;
+            knowledgeMapError = '';
+            currentView = 'map';
+            render();
+            return;
+        }
+        if (node.sourceViewToken) {
+            const timeHash = Number.isFinite(Number(node.anchorSeconds)) ? `#t=${Math.floor(Number(node.anchorSeconds))}` : '';
+            window.open(`/view/${node.sourceViewToken}${timeHash}`, '_blank', 'noopener');
+            return;
+        }
+        currentView = 'source';
+        render();
+    }
+
+    function copyMapNodeNote() {
+        const node = activeMapNode();
+        if (!node) return;
+        const note = [
+            `## ${node.title}`,
+            '',
+            `- 位置：${node.anchor || '-'}`,
+            `- 讲什么：${node.summary || '-'}`,
+            `- 对我有什么用：${node.value || '-'}`,
+            `- 原文证据：${node.evidence || '-'}`
+        ].join('\n');
+        const done = () => showToast('节点笔记已复制');
+        const fallback = () => {
+            const textarea = document.createElement('textarea');
+            textarea.value = note;
+            textarea.setAttribute('readonly', 'readonly');
+            textarea.style.position = 'fixed';
+            textarea.style.top = '-1000px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            const copied = document.execCommand('copy');
+            textarea.remove();
+            if (copied) done();
+            else showToast('复制失败，请手动复制');
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(note).then(done).catch(fallback);
+            return;
+        }
+        fallback();
+    }
+
     function renderSources() {
         const sources = currentCollection ? (currentCollection.sources || []) : [];
         els.sourceCount.textContent = sources.length ? `${sources.length} 个 source` : '0 个';
@@ -430,7 +1403,10 @@
         els.sourceList.querySelectorAll('[data-source-id]').forEach((button) => {
             button.addEventListener('click', () => {
                 selectedSourceId = button.dataset.sourceId;
-                currentView = 'source';
+                knowledgeMapScope = 'source';
+                selectedMapNodeId = null;
+                knowledgeMapError = '';
+                currentView = currentView === 'source' ? 'source' : 'map';
                 render();
             });
         });
@@ -455,36 +1431,108 @@
         els.workspaceSubtitle.textContent = `${done}/${sources.length} 个 source 已完成${elapsed}${stage}`;
     }
 
+    function renderSummaryCard(target, markdown, fallback) {
+        renderMarkdownPreview(target, markdown, fallback);
+    }
+
+    function renderMarkdownExport(markdown, ready) {
+        const fallback = ready ? '集合已解析完成，请先点击“生成总结”。' : '生成专题总结后显示。';
+        setViewToggle(els.markdownPreviewMode, els.markdownSourceMode, markdownDisplayMode);
+        if (els.markdownRendered) {
+            els.markdownRendered.classList.toggle('hidden', markdownDisplayMode !== 'preview');
+        }
+        if (els.markdownPreview) {
+            els.markdownPreview.classList.toggle('hidden', markdownDisplayMode !== 'source');
+        }
+
+        if (markdownDisplayMode === 'source') {
+            renderMarkdownSource(els.markdownPreview, markdown, fallback);
+            return;
+        }
+        renderMarkdownPreview(els.markdownRendered, markdown, fallback);
+    }
+
+    function renderSourceSummary(markdown, fallback) {
+        const content = previewText(markdown, 12000);
+        setViewToggle(els.sourceSummaryPreview, els.sourceSummarySource, sourceSummaryDisplayMode);
+        if (sourceSummaryDisplayMode === 'source') {
+            renderMarkdownSource(els.sourceSummary, content, fallback);
+            return;
+        }
+        renderMarkdownPreview(els.sourceSummary, content, fallback);
+    }
+
     function renderSummary() {
         const markdown = currentCollection && currentCollection.summary_markdown;
         const sources = currentCollection ? (currentCollection.sources || []) : [];
         const ready = sources.length > 0 && sources.every((source) => source.task_status === 'success');
 
-        els.summaryStatus.textContent = markdown ? '专题总结已生成' : '等待生成集合级总结';
+        els.summaryStatus.textContent = markdown ? '学习提纲已生成' : '等待生成集合级提纲';
         els.summaryDescription.textContent = markdown
-            ? '已从整体视角整理主题、结构、递进关系、证据和行动清单。'
-            : (ready ? '所有 source 已解析完成，点击“生成总结”进行集合级综合分析。' : '导入并解析完成后，再从整体视角生成总结。');
-        const cardText = markdown ? '已生成，切换到 Markdown 查看完整内容。' : (ready ? '点击生成总结后展示。' : '解析完成后生成。');
-        els.summaryStructure.textContent = cardText;
-        els.summaryProgression.textContent = cardText;
-        els.summaryEvidence.textContent = cardText;
-        els.summarySop.textContent = cardText;
-        els.markdownPreview.textContent = markdown || (ready ? '集合已解析完成，请先点击“生成总结”。' : '生成专题总结后显示。');
+            ? '从整体视角提取了主题主线、结构、证据和行动要点。'
+            : (ready ? '所有源内容已解析完成，点击“生成总结”生成学习提纲。' : '导入并解析完成后，再从整体视角生成主线、结构和行动要点。');
+        const waitingText = ready ? '点击生成后展示。' : '解析完成后生成。';
+        renderSummaryCard(els.summaryStructure, markdown ? extractMarkdownSection(markdown, ['知识结构', '核心概念', '结构']) : '', waitingText);
+        renderSummaryCard(els.summaryProgression, markdown ? extractMarkdownSection(markdown, ['递进关系', '章节作用', '主线']) : '', waitingText);
+        renderSummaryCard(els.summaryEvidence, markdown ? extractMarkdownSection(markdown, ['论点与证据', '关键论点', '证据']) : '', waitingText);
+        renderSummaryCard(els.summarySop, markdown ? extractMarkdownSection(markdown, ['SOP', '行动清单', '判断标准']) : '', waitingText);
+        renderMarkdownExport(markdown, ready);
         els.generateSummary.disabled = busy || !ready;
         els.exportMarkdown.disabled = busy || !markdown;
     }
 
-    async function loadSourceDetail(sourceId) {
-        if (!currentCollection || !sourceId || sourceDetails[sourceId]) return;
+    function extractMarkdownSection(markdown, keywords) {
+        const text = String(markdown || '').trim();
+        if (!text) return '已生成，切换到导出笔记查看完整内容。';
+        const lines = text.split(/\n/);
+        for (let index = 0; index < lines.length; index += 1) {
+            const line = lines[index].replace(/^#{1,6}\s*/, '').trim();
+            if (!keywords.some((keyword) => line.includes(keyword))) continue;
+            const collected = [];
+            for (let cursor = index + 1; cursor < lines.length && collected.join('').length < 180; cursor += 1) {
+                if (/^#{1,6}\s+/.test(lines[cursor]) && collected.length) break;
+                const clean = lines[cursor].replace(/^[-*+]\s*/, '').replace(/^\d+[.、)]\s*/, '').trim();
+                if (clean) collected.push(clean);
+            }
+            if (collected.length) return compactText(collected.join(' '), 180);
+        }
+        const fallback = lines
+            .map((line) => line.replace(/^#{1,6}\s*/, '').replace(/^[-*+]\s*/, '').trim())
+            .filter(Boolean)
+            .slice(0, 4)
+            .join(' ');
+        return compactText(fallback, 180) || '已生成，切换到导出笔记查看完整内容。';
+    }
+
+    async function ensureSourceDetail(sourceId) {
+        if (!currentCollection || !sourceId) return null;
+        const existing = sourceDetails[sourceId];
+        if (existing && !existing.loading) return existing;
+        if (sourceDetailRequests.has(sourceId)) {
+            return sourceDetailRequests.get(sourceId);
+        }
         sourceDetails[sourceId] = { loading: true };
         render();
-        try {
-            const payload = await apiJSON(`/api/collections/${currentCollection.id}/sources/${sourceId}`);
-            sourceDetails[sourceId] = payload.data;
-        } catch (error) {
-            sourceDetails[sourceId] = { error: error.message || '加载 source 内容失败' };
-        }
-        render();
+        const request = apiJSON(`/api/collections/${currentCollection.id}/sources/${sourceId}`)
+            .then((payload) => {
+                sourceDetails[sourceId] = payload.data;
+                return payload.data;
+            })
+            .catch((error) => {
+                const detail = { error: error.message || '加载源内容失败' };
+                sourceDetails[sourceId] = detail;
+                return detail;
+            })
+            .finally(() => {
+                sourceDetailRequests.delete(sourceId);
+                render();
+            });
+        sourceDetailRequests.set(sourceId, request);
+        return request;
+    }
+
+    async function loadSourceDetail(sourceId) {
+        await ensureSourceDetail(sourceId);
     }
 
     function renderSelectedSource() {
@@ -492,12 +1540,16 @@
         const source = sources.find((item) => item.id === selectedSourceId) || sources[0];
 
         if (!source) {
-            els.sourceTitle.textContent = '选择一个 source';
+            els.sourceTitle.textContent = '选择一个源内容';
             els.sourceMeta.textContent = '左侧选择后查看详情。';
             els.sourceTiming.textContent = '';
-            els.sourceSummary.textContent = '解析完成后显示。';
+            renderSourceSummary('', '解析完成后显示。');
             els.sourceTranscript.textContent = '解析完成后显示。';
             els.openSource.classList.add('hidden');
+            if (els.openSourceFile) {
+                els.openSourceFile.disabled = true;
+                els.openSourceFile.textContent = '打开源内容';
+            }
             return;
         }
 
@@ -511,48 +1563,220 @@
         els.openSource.classList.toggle('hidden', !source.view_token);
 
         const detail = sourceDetails[source.id];
+        renderSourceFileButton(detail);
         if (source.task_status === 'success' && !detail) {
             loadSourceDetail(source.id);
-            els.sourceSummary.textContent = '正在加载 AI 解读摘要...';
+            renderSourceSummary('', '正在加载 AI 解读摘要...');
             els.sourceTranscript.textContent = '正在加载逐字稿...';
             return;
         }
         if (detail && detail.loading) {
-            els.sourceSummary.textContent = '正在加载 AI 解读摘要...';
+            renderSourceSummary('', '正在加载 AI 解读摘要...');
             els.sourceTranscript.textContent = '正在加载逐字稿...';
             return;
         }
         if (detail && detail.error) {
-            els.sourceSummary.textContent = detail.error;
+            renderSourceSummary('', detail.error);
             els.sourceTranscript.textContent = detail.error;
             return;
         }
 
-        els.sourceSummary.textContent = detail && detail.summary
-            ? previewText(detail.summary, 5000)
-            : (source.task_status === 'success' ? '这个 source 的单篇摘要还未生成或仍在处理中。' : '解析完成后显示。');
+        renderSourceSummary(
+            detail && detail.summary,
+            source.task_status === 'success' ? '这个源内容的单篇摘要还未生成或仍在处理中。' : '解析完成后显示。'
+        );
         els.sourceTranscript.textContent = detail && detail.transcript
             ? previewText(detail.transcript, 12000)
-            : (source.task_status === 'success' ? '未读取到逐字稿内容，请点击“原文/逐字稿”查看完整页。' : '解析完成后显示。');
+            : (source.task_status === 'success' ? '未读取到逐字稿内容，请点击“查看解读页”查看完整页。' : '解析完成后显示。');
+    }
+
+    function renderSourceFileButton(detail) {
+        if (!els.openSourceFile) return;
+        const access = detail && detail.source_access;
+        if (!access) {
+            els.openSourceFile.disabled = true;
+            els.openSourceFile.textContent = '源内容加载中';
+            return;
+        }
+        if (access.kind === 'online_url') {
+            els.openSourceFile.disabled = false;
+            els.openSourceFile.textContent = '打开源链接';
+            return;
+        }
+        if (access.kind === 'local_file') {
+            els.openSourceFile.disabled = false;
+            els.openSourceFile.textContent = '打开本地目录';
+            return;
+        }
+        els.openSourceFile.disabled = true;
+        els.openSourceFile.textContent = access.kind === 'local_missing' ? '源内容已清理' : '源内容不可用';
+    }
+
+    function openWaitingSourceWindow() {
+        const popup = window.open('about:blank', '_blank');
+        if (popup && popup.document) {
+            popup.document.title = '正在打开源内容';
+            popup.document.body.innerHTML = '<p style="font:16px system-ui;margin:24px;">正在打开源内容...</p>';
+        }
+        return popup;
+    }
+
+    function closeSourceWindow(popup) {
+        try {
+            if (popup && !popup.closed) popup.close();
+        } catch (error) {
+            // Ignore browser window cleanup failures.
+        }
+    }
+
+    function navigateSourceWindow(popup, url) {
+        if (popup && !popup.closed) {
+            try {
+                popup.opener = null;
+            } catch (error) {
+                // Some browsers block opener mutation; navigation can still continue.
+            }
+            popup.location.href = url;
+            return;
+        }
+        window.open(url, '_blank', 'noopener');
+    }
+
+    async function openSourceAccess(access, detail, pendingWindow) {
+        if (!access) {
+            closeSourceWindow(pendingWindow);
+            showToast('源内容信息还在加载');
+            return;
+        }
+        if (access.kind === 'online_url' && access.url) {
+            navigateSourceWindow(pendingWindow, access.url);
+            return;
+        }
+        if (access.kind === 'local_file' && access.reveal_url) {
+            try {
+                const token = getToken();
+                if (!token) throw new Error('请先在工作台设置 API 令牌');
+                const response = await fetch(access.reveal_url, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.detail || data.message || '打开本地目录失败');
+                }
+                closeSourceWindow(pendingWindow);
+                showToast('已在本地目录中定位源文件');
+                return;
+            } catch (error) {
+                closeSourceWindow(pendingWindow);
+                showToast(error.message || '打开本地目录失败');
+                return;
+            }
+        }
+        if (access.kind !== 'local_file' || !access.url) {
+            if (access.view_url) {
+                navigateSourceWindow(pendingWindow, access.view_url);
+                showToast(access.kind === 'local_missing' ? '旧 source 没有保留本地源内容，已打开解读页' : '源内容不可用，已打开解读页');
+                return;
+            }
+            closeSourceWindow(pendingWindow);
+            showToast(access.kind === 'local_missing' ? '这个旧 source 没有保留本地源内容' : '源内容不可用');
+            return;
+        }
+        try {
+            const token = getToken();
+            if (!token) throw new Error('请先在工作台设置 API 令牌');
+            const response = await fetch(access.url, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.detail || data.message || '打开源内容失败');
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            navigateSourceWindow(pendingWindow, url);
+            window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (error) {
+            closeSourceWindow(pendingWindow);
+            showToast(error.message || '打开源内容失败');
+        }
+    }
+
+    async function openRelatedSource(sourceId) {
+        if (!sourceId) return;
+        selectedSourceId = sourceId;
+        const pendingWindow = openWaitingSourceWindow();
+        const detail = await ensureSourceDetail(sourceId);
+        if (detail && detail.error) {
+            closeSourceWindow(pendingWindow);
+            showToast(detail.error);
+            return;
+        }
+        await openSourceAccess(detail && detail.source_access, detail, pendingWindow);
+    }
+
+    async function openSourceFile() {
+        const source = selectedSource();
+        if (!source) {
+            showToast('请先选择一个 source');
+            return;
+        }
+        const pendingWindow = openWaitingSourceWindow();
+        const detail = await ensureSourceDetail(source.id);
+        if (detail && detail.error) {
+            closeSourceWindow(pendingWindow);
+            showToast(detail.error);
+            return;
+        }
+        await openSourceAccess(detail && detail.source_access, detail, pendingWindow);
     }
 
     function renderTabs() {
         els.tabs.forEach((tab) => {
             tab.classList.toggle('active', tab.dataset.view === currentView);
         });
+        els.mapView.classList.toggle('hidden', currentView !== 'map');
         els.summaryView.classList.toggle('hidden', currentView !== 'summary');
         els.sourceView.classList.toggle('hidden', currentView !== 'source');
         els.markdownView.classList.toggle('hidden', currentView !== 'markdown');
     }
 
+    function renderMetadata() {
+        const collection = currentCollection;
+        if (!collection) {
+            els.metadataCreator.textContent = els.creator.value.trim() || '未选择';
+            els.metadataType.textContent = collectionTypeLabel(activeType);
+            els.metadataDescription.textContent = '解析完成后由 AI 生成';
+            els.metadataStarted.textContent = '-';
+            els.metadataCompleted.textContent = '-';
+            els.metadataElapsed.textContent = '-';
+            els.metadataImport.textContent = '-';
+            els.metadataExport.textContent = '-';
+            return;
+        }
+
+        const metrics = collection.metrics || {};
+        els.metadataCreator.textContent = collection.creator_name || '未归属';
+        els.metadataType.textContent = collectionTypeLabel(collection.collection_type);
+        els.metadataDescription.textContent = collection.description || '解析完成后由 AI 生成';
+        els.metadataStarted.textContent = formatDateTime(metrics.started_at || collection.created_at);
+        els.metadataCompleted.textContent = metrics.completed_at ? formatDateTime(metrics.completed_at) : '-';
+        els.metadataElapsed.textContent = metrics.elapsed_seconds ? formatDuration(metrics.elapsed_seconds) : '-';
+        els.metadataImport.textContent = importMethodLabel(collection.import_method);
+        els.metadataExport.textContent = collection.export_status === 'exported' ? '已导出 Obsidian' : '未导出';
+    }
+
     function render() {
-        const title = currentCollection ? currentCollection.title : (els.title.value.trim() || '如何走出人生困局');
+        const title = currentCollection ? currentCollection.title : (els.title.value.trim() || '未命名专题');
         els.workspaceTitle.textContent = title;
         renderHistory();
+        renderMetadata();
         renderProgress();
         renderSources();
         renderSummary();
         renderSelectedSource();
+        renderKnowledgeMap();
         renderTabs();
     }
 
@@ -603,7 +1827,7 @@
             link.click();
             link.remove();
             URL.revokeObjectURL(url);
-            showToast('Markdown 已导出');
+            showToast('笔记已导出');
         } catch (error) {
             showToast(error.message || '导出失败');
         }
@@ -614,15 +1838,64 @@
             tab.addEventListener('click', () => setActiveType(tab.dataset.type));
         });
 
-        els.title.addEventListener('input', () => {
-            if (!currentCollection) render();
+        [els.creator, els.title].forEach((field) => {
+            field.addEventListener('input', () => {
+                if (!currentCollection) render();
+            });
+        });
+
+        [els.historyCreatorFilter, els.historyTopicFilter, els.historyDateFilter, els.historyTypeFilter, els.historyStatusFilter].forEach((field) => {
+            field.addEventListener('change', () => {
+                currentCollection = null;
+                selectedSourceId = null;
+                knowledgeMapScope = 'collection';
+                selectedMapNodeId = null;
+                sourceDetails = {};
+                knowledgeMaps = { collection: null, sources: {} };
+                knowledgeMapError = '';
+                knowledgeMapLoading = false;
+                knowledgeMapRequests.clear();
+                knowledgeMapLoadedKeys = new Set();
+                customMapPositions = {};
+                mapZoom = DEFAULT_MAP_ZOOM;
+                mapFocused = false;
+                loadCollections({ selectLatest: false }).catch((error) => {
+                    showToast(error.message || '历史专题筛选失败');
+                });
+                render();
+            });
+        });
+
+        els.historyReset.addEventListener('click', () => {
+            els.historyCreatorFilter.value = '';
+            els.historyTopicFilter.value = '';
+            els.historyDateFilter.value = '';
+            els.historyTypeFilter.value = '';
+            els.historyStatusFilter.value = '';
+            currentCollection = null;
+            selectedSourceId = null;
+            knowledgeMapScope = 'collection';
+            selectedMapNodeId = null;
+            sourceDetails = {};
+            knowledgeMaps = { collection: null, sources: {} };
+            knowledgeMapError = '';
+            knowledgeMapLoading = false;
+            knowledgeMapRequests.clear();
+            knowledgeMapLoadedKeys = new Set();
+            customMapPositions = {};
+            mapZoom = DEFAULT_MAP_ZOOM;
+            mapFocused = false;
+            loadCollections({ selectLatest: false }).catch((error) => {
+                showToast(error.message || '历史专题加载失败');
+            });
+            render();
         });
 
         els.pickFolder.addEventListener('click', () => els.folderInput.click());
         els.pickFiles.addEventListener('click', () => els.filesInput.click());
         els.dropAction.addEventListener('click', () => els.filesInput.click());
-        els.folderInput.addEventListener('change', () => importFiles(els.folderInput.files));
-        els.filesInput.addEventListener('change', () => importFiles(els.filesInput.files));
+        els.folderInput.addEventListener('change', () => importFiles(els.folderInput.files, 'local_folder'));
+        els.filesInput.addEventListener('change', () => importFiles(els.filesInput.files, 'local_files'));
 
         ['dragenter', 'dragover'].forEach((eventName) => {
             els.dropAction.addEventListener(eventName, (event) => {
@@ -636,7 +1909,73 @@
                 els.dropAction.classList.remove('dragging');
             });
         });
-        els.dropAction.addEventListener('drop', (event) => importFiles(event.dataTransfer.files));
+        els.dropAction.addEventListener('drop', (event) => importFiles(event.dataTransfer.files, 'local_files'));
+
+        els.mapScopeCollection.addEventListener('click', () => {
+            knowledgeMapScope = 'collection';
+            selectedMapNodeId = null;
+            knowledgeMapError = '';
+            currentView = 'map';
+            render();
+        });
+        els.mapScopeSource.addEventListener('click', () => {
+            if (!(currentCollection && (currentCollection.sources || []).length)) return;
+            knowledgeMapScope = 'source';
+            selectedMapNodeId = null;
+            knowledgeMapError = '';
+            currentView = 'map';
+            render();
+        });
+        els.mapJump.addEventListener('click', openMapNodeTarget);
+        els.mapCopyNote.addEventListener('click', copyMapNodeNote);
+        if (els.mapGenerate) {
+            els.mapGenerate.addEventListener('click', generateKnowledgeMap);
+        }
+        if (els.mapFocus) {
+            els.mapFocus.addEventListener('click', toggleMapFocus);
+        }
+        if (els.mapStageFocus) {
+            els.mapStageFocus.addEventListener('click', toggleMapFocus);
+        }
+        if (els.mapToggleLinks) {
+            els.mapToggleLinks.addEventListener('click', toggleMapLinks);
+        }
+        if (els.mapZoomOut) {
+            els.mapZoomOut.addEventListener('click', () => setMapZoom(mapZoom - 0.16));
+        }
+        if (els.mapFit) {
+            els.mapFit.addEventListener('click', fitKnowledgeMap);
+        }
+        if (els.mapZoomIn) {
+            els.mapZoomIn.addEventListener('click', () => setMapZoom(mapZoom + 0.16));
+        }
+        if (els.openSourceFile) {
+            els.openSourceFile.addEventListener('click', openSourceFile);
+        }
+        if (els.sourceSummaryPreview) {
+            els.sourceSummaryPreview.addEventListener('click', () => {
+                sourceSummaryDisplayMode = 'preview';
+                renderSelectedSource();
+            });
+        }
+        if (els.sourceSummarySource) {
+            els.sourceSummarySource.addEventListener('click', () => {
+                sourceSummaryDisplayMode = 'source';
+                renderSelectedSource();
+            });
+        }
+        if (els.markdownPreviewMode) {
+            els.markdownPreviewMode.addEventListener('click', () => {
+                markdownDisplayMode = 'preview';
+                renderSummary();
+            });
+        }
+        if (els.markdownSourceMode) {
+            els.markdownSourceMode.addEventListener('click', () => {
+                markdownDisplayMode = 'source';
+                renderSummary();
+            });
+        }
 
         els.tabs.forEach((tab) => {
             tab.addEventListener('click', () => {
@@ -655,6 +1994,7 @@
         const token = getToken();
         els.tokenHint.textContent = token ? '' : '需要 API 令牌，请先在工作台设置。';
         render();
+        await loadFilterOptions();
         await loadCollections();
     }
 

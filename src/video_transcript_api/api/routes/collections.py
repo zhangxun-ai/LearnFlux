@@ -1,11 +1,15 @@
 import hashlib
 import os
+import subprocess
+import sys
 import uuid
 from functools import lru_cache
+from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
 from ..context import get_cache_manager, get_config, get_logger, get_static_dir
@@ -26,8 +30,18 @@ _UPLOAD_MAX_BYTES = _UPLOAD_MAX_MB * 1024 * 1024
 
 class CreateCollectionRequest(BaseModel):
     title: str
+    creator_name: str
     collection_type: str
     goal: str = ""
+    description: str = ""
+    import_method: str = ""
+    tags: str = ""
+
+
+class GenerateKnowledgeMapRequest(BaseModel):
+    scope: str = "collection"
+    source_id: Optional[str] = None
+    force: bool = False
 
 
 @lru_cache
@@ -39,6 +53,7 @@ def get_collection_service() -> LearningCollectionService:
         repository=repository,
         cache_manager=cache_manager,
         llm_config=llm_cfg,
+        source_file_dir=str(_source_files_dir()),
     )
 
 
@@ -60,12 +75,39 @@ async def collections_page():
 
 
 @router.get("/api/collections", response_model=TranscribeResponse)
-async def list_collections(user_info: dict = Depends(verify_token)):
+async def list_collections(
+    creator_name: Optional[str] = Query(None),
+    title: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    collection_type: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    user_info: dict = Depends(verify_token),
+):
     service = get_collection_service()
     return TranscribeResponse(
         code=200,
         message="学习集合列表",
-        data={"collections": service.list_collections()},
+        data={
+            "collections": service.list_collections(
+                creator_name=creator_name,
+                title=title,
+                date_from=date_from,
+                date_to=date_to,
+                collection_type=collection_type,
+                status=status,
+            )
+        },
+    )
+
+
+@router.get("/api/collections/filter-options", response_model=TranscribeResponse)
+async def get_collection_filter_options(user_info: dict = Depends(verify_token)):
+    service = get_collection_service()
+    return TranscribeResponse(
+        code=200,
+        message="学习集合筛选选项",
+        data=service.get_filter_options(),
     )
 
 
@@ -78,8 +120,12 @@ async def create_collection(
         service = get_collection_service()
         collection = service.create_collection(
             title=body.title,
+            creator_name=body.creator_name,
             collection_type=body.collection_type,
             goal=body.goal,
+            description=body.description,
+            import_method=body.import_method,
+            tags=body.tags,
         )
         return TranscribeResponse(code=200, message="学习集合已创建", data=collection)
     except ValueError as exc:
@@ -145,7 +191,7 @@ async def upload_collection_sources(
                 "generic", media_id, use_speaker_recognition
             )
             if reusable_task and reusable_task.get("status") != "failed":
-                _remove_file_quietly(temp_path)
+                _stable_upload_path(temp_path, media_id, filename)
                 source = service.add_existing_source(
                     collection_id=collection_id,
                     task_id=reusable_task["task_id"],
@@ -180,6 +226,7 @@ async def upload_collection_sources(
                 display_url,
                 media_id,
                 use_speaker_recognition,
+                True,
             )
             uploaded.append({**source, "size": size, "reused": False})
     except ValueError as exc:
@@ -200,10 +247,57 @@ async def generate_collection_summary(
 ):
     try:
         service = get_collection_service()
-        detail = service.generate_summary(collection_id)
+        detail = await run_in_threadpool(service.generate_summary, collection_id)
         return TranscribeResponse(code=200, message="专题总结已生成", data=detail)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/api/collections/{collection_id}/knowledge-map", response_model=TranscribeResponse)
+async def get_collection_knowledge_map(
+    collection_id: str,
+    scope: str = Query("collection"),
+    source_id: Optional[str] = Query(None),
+    user_info: dict = Depends(verify_token),
+):
+    try:
+        service = get_collection_service()
+        knowledge_map = service.get_knowledge_map(
+            collection_id=collection_id,
+            scope=scope,
+            source_id=source_id,
+        )
+        if not knowledge_map:
+            return TranscribeResponse(
+                code=200,
+                message="知识地图尚未生成",
+                data={"status": "not_started", "map_json": None},
+            )
+        return TranscribeResponse(code=200, message="知识地图", data=knowledge_map)
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc))
+
+
+@router.post("/api/collections/{collection_id}/knowledge-map", response_model=TranscribeResponse)
+async def generate_collection_knowledge_map(
+    collection_id: str,
+    body: GenerateKnowledgeMapRequest,
+    user_info: dict = Depends(verify_token),
+):
+    try:
+        service = get_collection_service()
+        knowledge_map = await run_in_threadpool(
+            service.generate_knowledge_map,
+            collection_id=collection_id,
+            scope=body.scope,
+            source_id=body.source_id,
+            force=body.force,
+        )
+        return TranscribeResponse(code=200, message="知识地图已生成", data=knowledge_map)
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc))
 
 
 @router.get("/api/collections/{collection_id}/export/markdown")
@@ -214,6 +308,7 @@ async def export_collection_markdown(
     try:
         service = get_collection_service()
         markdown = service.get_export_markdown(collection_id)
+        service.mark_exported(collection_id)
         return Response(
             content=markdown.encode("utf-8"),
             media_type="text/markdown; charset=utf-8",
@@ -224,6 +319,67 @@ async def export_collection_markdown(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/api/collections/{collection_id}/sources/{source_id}/file")
+async def open_collection_source_file(
+    collection_id: str,
+    source_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    try:
+        service = get_collection_service()
+        file_path = service.get_source_file_path(collection_id, source_id)
+        if not file_path:
+            raise HTTPException(status_code=404, detail="源文件未保存或已被清理")
+        return FileResponse(path=file_path, filename=os.path.basename(file_path))
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc))
+
+
+@router.post("/api/collections/{collection_id}/sources/{source_id}/reveal", response_model=TranscribeResponse)
+async def reveal_collection_source_file(
+    collection_id: str,
+    source_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    try:
+        service = get_collection_service()
+        file_path = service.get_source_file_path(collection_id, source_id)
+        if not file_path:
+            raise HTTPException(status_code=404, detail="源文件未保存或已被清理")
+        await run_in_threadpool(_reveal_path_in_file_manager, file_path)
+        return TranscribeResponse(
+            code=200,
+            message="已打开源文件所在目录",
+            data={"filename": os.path.basename(file_path)},
+        )
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc))
+    except OSError as exc:
+        logger.warning(f"reveal collection source failed: {exc}")
+        raise HTTPException(status_code=500, detail="打开本地目录失败")
+
+
+def _reveal_path_in_file_manager(file_path: str) -> None:
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(file_path)
+
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)])
+        return
+    if os.name == "nt":
+        subprocess.Popen(["explorer", f"/select,{path}"])
+        return
+    target = path.parent if path.is_file() else path
+    subprocess.Popen(["xdg-open", str(target)])
 
 
 async def _save_upload_file(file: UploadFile, filename: str) -> tuple[str, int, str]:
@@ -274,9 +430,10 @@ def _media_id_for_upload_hash(file_hash: str) -> str:
 
 
 def _stable_upload_path(temp_path: str, media_id: str, filename: str) -> str:
-    upload_dir = os.path.dirname(temp_path)
     ext = os.path.splitext(filename)[1][:10] or ".bin"
-    stable_path = os.path.join(upload_dir, f"{media_id}{ext}")
+    upload_dir = _source_files_dir()
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    stable_path = str(upload_dir / f"{media_id}{ext}")
     if os.path.abspath(temp_path) == os.path.abspath(stable_path):
         return stable_path
     if os.path.exists(stable_path):
@@ -285,9 +442,7 @@ def _stable_upload_path(temp_path: str, media_id: str, filename: str) -> str:
     return stable_path
 
 
-def _remove_file_quietly(path: str):
-    if path and os.path.exists(path):
-        try:
-            os.remove(path)
-        except OSError:
-            pass
+def _source_files_dir() -> Path:
+    storage_cfg = config.get("storage", {}) or {}
+    source_dir = storage_cfg.get("source_files_dir") or "./data/source_files/collection_uploads"
+    return Path(source_dir)

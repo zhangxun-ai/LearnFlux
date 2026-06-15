@@ -29,24 +29,65 @@ async def health_check():
     """
     checks = {}
 
-    # 并发检查各组件
     checks["sqlite"] = _check_sqlite()
-    checks["capswriter"] = await _check_websocket_service(
-        config.get("capswriter", {}).get("server_url", "ws://localhost:6016"),
-        "CapsWriter",
-    )
-    checks["funasr"] = await _check_websocket_service(
-        config.get("funasr_spk_server", {}).get("server_url", "ws://localhost:8767"),
-        "FunASR",
-    )
+
+    local_whisper = config.get("local_whisper", {})
+    if local_whisper.get("enabled", False):
+        checks["local_whisper"] = _check_local_whisper(local_whisper)
+        checks["local_whisper"]["required"] = True
+        checks["capswriter"] = {
+            "healthy": True,
+            "skipped": True,
+            "required": False,
+            "reason": "local_whisper enabled",
+        }
+    else:
+        capswriter_url = config.get("capswriter", {}).get("server_url")
+        if capswriter_url:
+            checks["capswriter"] = await _check_websocket_service(
+                capswriter_url, "CapsWriter"
+            )
+            checks["capswriter"]["required"] = True
+        else:
+            checks["capswriter"] = {
+                "healthy": True,
+                "skipped": True,
+                "required": False,
+                "reason": "not configured",
+            }
+
+    funasr_cfg = config.get("funasr_spk_server", {})
+    funasr_required = bool(funasr_cfg.get("required", False))
+    funasr_url = funasr_cfg.get("server_url")
+    if funasr_url:
+        checks["funasr"] = await _check_websocket_service(funasr_url, "FunASR")
+        checks["funasr"]["required"] = funasr_required
+        checks["funasr"]["feature"] = "speaker_recognition"
+    else:
+        checks["funasr"] = {
+            "healthy": True,
+            "skipped": True,
+            "required": False,
+            "feature": "speaker_recognition",
+            "reason": "not configured",
+        }
     checks["disk_space"] = _check_disk_space()
 
-    all_healthy = all(c.get("healthy", False) for c in checks.values())
+    required_checks = [
+        c for c in checks.values()
+        if c.get("required", True)
+    ]
+    all_healthy = all(c.get("healthy", False) for c in required_checks)
     status = "healthy" if all_healthy else "degraded"
+    optional_unhealthy = [
+        name for name, check in checks.items()
+        if not check.get("required", True) and not check.get("healthy", False)
+    ]
 
     return {
         "status": status,
         "checks": checks,
+        "optional_unhealthy": optional_unhealthy,
     }
 
 
@@ -62,6 +103,24 @@ def _check_sqlite() -> Dict[str, Any]:
         return {"healthy": True}
     except Exception as e:
         logger.warning(f"SQLite health check failed: {e}")
+        return {"healthy": False, "error": str(e)}
+
+
+def _check_local_whisper(local_whisper: Dict[str, Any]) -> Dict[str, Any]:
+    """检查本地 mlx-whisper 可执行文件是否可用。"""
+    try:
+        binary = os.path.expanduser(
+            local_whisper.get("binary", "~/.venvs/mlx-whisper/bin/mlx_whisper")
+        )
+        if not os.path.isfile(binary):
+            return {"healthy": False, "error": f"missing binary: {binary}"}
+        return {
+            "healthy": True,
+            "binary": binary,
+            "model": local_whisper.get("model"),
+        }
+    except Exception as e:
+        logger.warning(f"Local whisper health check failed: {e}")
         return {"healthy": False, "error": str(e)}
 
 

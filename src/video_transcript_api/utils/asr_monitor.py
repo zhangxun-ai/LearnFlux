@@ -270,13 +270,20 @@ def start_asr_monitor(config: dict) -> Optional[ASRMonitor]:
     """
     services = {}
 
+    local_whisper_enabled = config.get("local_whisper", {}).get("enabled", False)
     capswriter_url = config.get("capswriter", {}).get("server_url")
-    if capswriter_url:
+    if capswriter_url and not local_whisper_enabled:
         services["CapsWriter"] = capswriter_url
+    elif capswriter_url:
+        logger.info("CapsWriter monitor skipped because local_whisper is enabled")
 
-    funasr_url = config.get("funasr_spk_server", {}).get("server_url")
-    if funasr_url:
+    funasr_cfg = config.get("funasr_spk_server", {})
+    funasr_url = funasr_cfg.get("server_url")
+    funasr_monitor_enabled = funasr_cfg.get("required", False) or funasr_cfg.get("monitor", False)
+    if funasr_url and funasr_monitor_enabled:
         services["FunASR"] = funasr_url
+    elif funasr_url:
+        logger.info("FunASR monitor skipped because speaker_recognition is optional")
 
     if not services:
         logger.info("no ASR services configured, monitor not started")

@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-from video_transcript_api.utils.asr_monitor import ASRMonitor
+from video_transcript_api.utils.asr_monitor import ASRMonitor, start_asr_monitor
 
 
 @pytest.fixture
@@ -152,3 +152,28 @@ class TestServiceCheck:
         assert monitor._running is True
         monitor.stop()
         assert monitor._running is False
+
+    def test_start_monitor_skips_optional_asr_when_local_whisper_enabled(self):
+        """Local whisper covers default transcription, optional ASR is not monitored."""
+        monitor = start_asr_monitor({
+            "local_whisper": {"enabled": True},
+            "capswriter": {"server_url": "ws://localhost:6016"},
+            "funasr_spk_server": {"server_url": "ws://localhost:8767"},
+        })
+
+        assert monitor is None
+
+    @patch("video_transcript_api.utils.asr_monitor.ASRMonitor.start")
+    def test_start_monitor_includes_required_funasr(self, mock_start):
+        """Required FunASR should still be monitored."""
+        monitor = start_asr_monitor({
+            "local_whisper": {"enabled": True},
+            "funasr_spk_server": {
+                "server_url": "ws://localhost:8767",
+                "required": True,
+            },
+        })
+
+        assert monitor is not None
+        assert monitor.services == {"FunASR": "ws://localhost:8767"}
+        mock_start.assert_called_once()

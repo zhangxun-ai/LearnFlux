@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>学习内容库管理草图</title>
+  <style>
+    :root {
+      --bg: #f7f4ef;
+      --panel: #fffdf9;
+      --panel-soft: #fbf7f0;
+      --ink: #191714;
+      --muted: #817b70;
+      --line: #e4dbce;
+      --accent: #e54e39;
+      --accent-soft: #fde9e4;
+      --green: #1f8a5b;
+      --green-soft: #e9f7ef;
+      --blue: #2f6f9f;
+      --blue-soft: #eaf3fb;
+      --shadow: 0 20px 50px rgba(64, 45, 26, 0.10);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    button, input, select {
+      font: inherit;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 12px;
+      top: -80px;
+      z-index: 20;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 900;
+    }
+
+    .skip-link:focus {
+      top: 12px;
+    }
+
+    .app-nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 249, 0.92);
+      backdrop-filter: blur(16px);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      width: min(1440px, calc(100% - 40px));
+      min-height: 64px;
+      margin: 0 auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 950;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 15px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .nav-links a {
+      padding: 9px 12px;
+      border-radius: 999px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .nav-links a.active,
+    .nav-links a:hover {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .nav-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .page {
+      width: min(1440px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 26px 0 34px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .title h1 {
+      margin: 0 0 4px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    .title p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      min-height: 42px;
+      padding: 0 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .btn.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .create-strip {
+      display: grid;
+      grid-template-columns: 1.05fr 1.35fr 0.75fr auto;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .create-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      grid-column: 1 / -1;
+      margin-bottom: 2px;
+    }
+
+    .create-head h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .create-head span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: 1.2fr 1.2fr 0.9fr 0.9fr 0.8fr auto;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .field label.required::after {
+      content: " *";
+      color: var(--accent);
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      min-height: 42px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+      outline: none;
+      font-weight: 750;
+    }
+
+    .create-actions {
+      display: flex;
+      align-items: end;
+      gap: 8px;
+    }
+
+    .filter-actions {
+      display: flex;
+      align-items: end;
+      gap: 8px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 246px minmax(0, 1fr) 360px;
+      gap: 14px;
+      min-height: 690px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 15px 16px 11px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-head h2 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+
+    .panel-head span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .creator-list {
+      display: grid;
+      gap: 6px;
+      padding: 10px;
+    }
+
+    .creator {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      min-height: 58px;
+      padding: 8px;
+      border: 1px solid transparent;
+      border-radius: 13px;
+      background: transparent;
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .creator.active,
+    .creator:hover {
+      border-color: var(--line);
+      background: var(--panel-soft);
+    }
+
+    .avatar {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 11px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 950;
+    }
+
+    .creator strong,
+    .creator small,
+    .topic-title strong,
+    .topic-title small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .creator small {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .center {
+      overflow: hidden;
+    }
+
+    .collection-table {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+    }
+
+    .topic-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.5fr) 96px 98px 110px 116px 92px;
+      gap: 10px;
+      align-items: center;
+      min-height: 74px;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      background: var(--panel-soft);
+    }
+
+    .topic-row.header {
+      min-height: auto;
+      padding: 6px 12px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .topic-row.active {
+      border-color: #d9cfc0;
+      background: #fff;
+    }
+
+    .topic-title strong {
+      margin-bottom: 3px;
+      font-size: 15px;
+    }
+
+    .topic-title small {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .metric {
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      min-height: 26px;
+      padding: 0 9px;
+      border-radius: 999px;
+      background: #f0ebe3;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .badge.done {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .badge.work {
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .progress {
+      display: grid;
+      gap: 6px;
+    }
+
+    .bar {
+      overflow: hidden;
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: #eee6db;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+    }
+
+    .detail-body {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .detail-title {
+      display: grid;
+      gap: 5px;
+    }
+
+    .detail-title h3 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .detail-title p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+      font-weight: 650;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .kv div,
+    .source-mini,
+    .note-box {
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--panel-soft);
+    }
+
+    .kv div {
+      padding: 10px;
+    }
+
+    .kv span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .kv strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 14px;
+    }
+
+    .note-box {
+      padding: 12px;
+    }
+
+    .note-box strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .note-box p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+      font-weight: 650;
+    }
+
+    .source-mini {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+    }
+
+    .source-line {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .source-line i {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-style: normal;
+    }
+
+    .source-line span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .detail-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    @media (max-width: 1120px) {
+      .nav-inner {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 12px 0;
+      }
+
+      .nav-links {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+      }
+
+      .nav-meta {
+        display: none;
+      }
+
+      .create-strip,
+      .filters {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .create-head,
+      .create-actions {
+        grid-column: 1 / -1;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .topic-row {
+        grid-template-columns: 1fr 90px 90px;
+      }
+
+      .topic-row.header,
+      .hide-mobile {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <nav class="app-nav" aria-label="全局导航">
+    <div class="nav-inner">
+      <div class="brand">
+        <span class="brand-mark">VT</span>
+        <span>AI 学习工作台</span>
+      </div>
+      <div class="nav-links">
+        <a href="#">单个解析</a>
+        <a href="#">学习集合</a>
+        <a class="active" href="#">内容库</a>
+        <a href="#">任务记录</a>
+        <a href="#">设置</a>
+      </div>
+      <div class="nav-meta">本地优先 · 复用已解析内容</div>
+    </div>
+  </nav>
+
+  <main id="main-content" class="page">
+    <header class="topbar">
+      <div class="title">
+        <h1>学习内容库</h1>
+        <p>按 IP、专题和日期管理所有已解析的视频课程与文档专题。</p>
+      </div>
+      <div class="actions">
+        <button class="btn">导入历史</button>
+        <button class="btn primary">继续解析</button>
+      </div>
+    </header>
+
+    <form class="create-strip" aria-label="新建专题解析入口">
+      <div class="create-head">
+        <h2>新建专题解析</h2>
+        <span>解析前先确定归属，后续历史筛选会自动复用这些值。</span>
+      </div>
+      <div class="field">
+        <label class="required" for="new-creator">IP 名称</label>
+        <input id="new-creator" list="creator-options" required placeholder="例如：屠龙胭脂">
+        <datalist id="creator-options">
+          <option value="屠龙胭脂"></option>
+          <option value="富贵"></option>
+          <option value="吴恩达"></option>
+          <option value="Naval"></option>
+        </datalist>
+      </div>
+      <div class="field">
+        <label class="required" for="new-topic">专题名称</label>
+        <input id="new-topic" required placeholder="例如：如何走出人生困局">
+      </div>
+      <div class="field">
+        <label for="new-type">内容类型</label>
+        <select id="new-type">
+          <option>视频课程</option>
+          <option>文档专题</option>
+          <option>链接合集</option>
+        </select>
+      </div>
+      <div class="create-actions">
+        <button class="btn primary" type="submit">开始导入</button>
+      </div>
+    </form>
+
+    <section class="filters" aria-label="历史专题筛选">
+      <div class="field">
+        <label for="creator">IP 名称</label>
+        <select id="creator">
+          <option>全部 IP</option>
+          <option selected>屠龙胭脂</option>
+          <option>富贵</option>
+          <option>吴恩达</option>
+          <option>Naval</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="topic">专题名称</label>
+        <select id="topic">
+          <option>全部专题</option>
+          <option selected>如何走出人生困局</option>
+          <option>屠龙职场课：流量变现</option>
+          <option>大脑开发课</option>
+          <option>富贵的一人 IP 课程</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="date">解析日期</label>
+        <select id="date">
+          <option>最近 30 天</option>
+          <option>今天</option>
+          <option>本周</option>
+          <option>自定义范围</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="type">内容类型</label>
+        <select id="type">
+          <option>全部类型</option>
+          <option>视频课程</option>
+          <option>文档专题</option>
+          <option>链接合集</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="status">状态</label>
+        <select id="status">
+          <option>全部状态</option>
+          <option>已总结</option>
+          <option>已解析待总结</option>
+          <option>解析中</option>
+          <option>失败待处理</option>
+        </select>
+      </div>
+      <div class="filter-actions">
+        <button class="btn">重置</button>
+        <button class="btn primary">筛选</button>
+      </div>
+    </section>
+
+    <section class="layout">
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>IP / 博主</h2>
+          <span>12 个</span>
+        </div>
+        <div class="creator-list">
+          <button class="creator active">
+            <span class="avatar">屠</span>
+            <span><strong>屠龙胭脂</strong><small>4 个专题 · 33 个 source</small></span>
+          </button>
+          <button class="creator">
+            <span class="avatar">富</span>
+            <span><strong>富贵</strong><small>2 个专题 · 18 篇文档</small></span>
+          </button>
+          <button class="creator">
+            <span class="avatar">吴</span>
+            <span><strong>吴恩达</strong><small>3 个专题 · 27 个 source</small></span>
+          </button>
+          <button class="creator">
+            <span class="avatar">N</span>
+            <span><strong>Naval</strong><small>1 个专题 · 6 篇文章</small></span>
+          </button>
+        </div>
+      </aside>
+
+      <section class="panel center">
+        <div class="panel-head">
+          <h2>专题记录</h2>
+          <span>筛选结果 6 个</span>
+        </div>
+        <div class="collection-table">
+          <div class="topic-row header">
+            <span>专题</span>
+            <span>状态</span>
+            <span>来源</span>
+            <span>解析耗时</span>
+            <span>日期</span>
+            <span>总结</span>
+          </div>
+          <article class="topic-row active">
+            <div class="topic-title">
+              <strong>如何走出人生困局</strong>
+              <small>提炼破局判断标准、行动顺序和复盘方法</small>
+            </div>
+            <span class="badge work">待总结</span>
+            <div class="metric">8 视频<span>8/8 完成</span></div>
+            <div class="metric hide-mobile">12分02秒<span>总解析时长</span></div>
+            <div class="metric hide-mobile">06-11<span>19:25-19:38</span></div>
+            <div class="progress">
+              <span class="badge done">已解析</span>
+              <div class="bar"><span style="width:100%"></span></div>
+            </div>
+          </article>
+          <article class="topic-row">
+            <div class="topic-title">
+              <strong>屠龙职场课：流量变现</strong>
+              <small>从定位、内容、转化链路提炼方法论</small>
+            </div>
+            <span class="badge done">已总结</span>
+            <div class="metric">12 视频<span>12/12 完成</span></div>
+            <div class="metric hide-mobile">21分18秒<span>总解析时长</span></div>
+            <div class="metric hide-mobile">06-10<span>22:11-22:32</span></div>
+            <div class="progress">
+              <span class="badge done">Markdown</span>
+              <div class="bar"><span style="width:100%"></span></div>
+            </div>
+          </article>
+          <article class="topic-row">
+            <div class="topic-title">
+              <strong>大脑开发课</strong>
+              <small>关于注意力、学习策略和认知训练</small>
+            </div>
+            <span class="badge">解析中</span>
+            <div class="metric">9 视频<span>5/9 完成</span></div>
+            <div class="metric hide-mobile">进行中<span>已用 18分</span></div>
+            <div class="metric hide-mobile">06-11<span>20:02 开始</span></div>
+            <div class="progress">
+              <span class="badge work">56%</span>
+              <div class="bar"><span style="width:56%"></span></div>
+            </div>
+          </article>
+          <article class="topic-row">
+            <div class="topic-title">
+              <strong>富贵的一人 IP 课程</strong>
+              <small>文档专题，沉淀一人公司内容资产 SOP</small>
+            </div>
+            <span class="badge done">已总结</span>
+            <div class="metric">18 文档<span>18/18 完成</span></div>
+            <div class="metric hide-mobile">3分44秒<span>总解析时长</span></div>
+            <div class="metric hide-mobile">06-09<span>13:56-14:00</span></div>
+            <div class="progress">
+              <span class="badge done">Markdown</span>
+              <div class="bar"><span style="width:100%"></span></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>专题元数据</h2>
+          <span>选中项</span>
+        </div>
+        <div class="detail-body">
+          <div class="detail-title">
+            <h3>如何走出人生困局</h3>
+            <p>本专题用于提炼“人生低谷/困局”中的判断标准、可控变量拆解、行动优先级和复盘方法。</p>
+          </div>
+
+          <div class="kv">
+            <div><span>IP / 博主</span><strong>屠龙胭脂</strong></div>
+            <div><span>内容类型</span><strong>视频课程</strong></div>
+            <div><span>开始时间</span><strong>06-11 19:25</strong></div>
+            <div><span>结束时间</span><strong>06-11 19:38</strong></div>
+            <div><span>素材总时长</span><strong>8课 · 6小时42分</strong></div>
+            <div><span>处理耗时</span><strong>12分02秒</strong></div>
+            <div><span>导入方式</span><strong>本地文件夹</strong></div>
+            <div><span>导出状态</span><strong>未导出 Obsidian</strong></div>
+          </div>
+
+          <div class="note-box">
+            <strong>管理标签</strong>
+            <p>人生策略 · 低谷破局 · 个人成长 · 可沉淀 SOP · 优先复习</p>
+          </div>
+
+          <div class="source-mini">
+            <div class="source-line"><i>1</i><span>1.mp4 破局前先停止内耗</span><em class="badge done">完成</em></div>
+            <div class="source-line"><i>2</i><span>2.mp4 找出真正可控变量</span><em class="badge done">完成</em></div>
+            <div class="source-line"><i>3</i><span>3.mp4 重新排序行动优先级</span><em class="badge done">完成</em></div>
+            <div class="source-line"><i>8</i><span>8.mp4 建立复盘闭环</span><em class="badge done">完成</em></div>
+          </div>
+
+          <div class="detail-actions">
+            <button class="btn">查看 source</button>
+            <button class="btn primary">生成总结</button>
+            <button class="btn">编辑元数据</button>
+            <button class="btn">导出 Markdown</button>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>

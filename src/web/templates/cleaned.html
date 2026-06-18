@@ -2,6 +2,28 @@
 
 {% block title %}内容已清理 - 视频转录查看器{% endblock %}
 
+{% block extra_css %}
+<style>
+.focus-open-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border: 1px solid var(--border-primary, #ddd);
+    border-radius: 6px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #333);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.focus-open-link:hover {
+    border-color: #6b7f76;
+    background: rgba(107, 127, 118, 0.08);
+    text-decoration: none;
+}
+</style>
+{% endblock %}
+
 {% block content %}
     <div class="section">
         <div class="status-cleaned">
@@ -14,6 +36,7 @@
                 <li>📎 <a href="{{ url }}" target="_blank" rel="noopener">查看原始视频链接</a></li>
                 {% endif %}
                 <li>🔄 重新提交转录任务（将原始链接发送到API重新处理）</li>
+                <li><a class="focus-open-link" href="/static/focus-studio.html" target="_blank" rel="noopener">打开空白心流写作</a></li>
             </ul>
             
             {% if created_at_display %}

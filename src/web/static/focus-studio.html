@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus Studio - 心流写作</title>
+    <meta name="description" content="沉浸式空白写作与学习笔记空间">
+    <meta name="theme-color" content="#000000">
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css">
+    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260617-3">
+</head>
+<body class="focus-body" data-mode="rainy" data-font="handwriting" data-size="small">
+    <main class="focus-stage" aria-label="心流写作空间">
+        <canvas id="focus-canvas" class="focus-canvas" aria-hidden="true"></canvas>
+        <div class="focus-vignette" aria-hidden="true"></div>
+
+        <section class="mode-zone" aria-label="天气模式">
+            <div class="mode-switch" role="group" aria-label="切换背景模式">
+                <button type="button" class="mode-button active" data-mode="rainy" aria-pressed="true">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14.6A7 7 0 0 1 16 8h1.4A4.6 4.6 0 0 1 20 16.4M8 15v4M12 16v5M16 15v4"/></svg>
+                    <span>Rainy</span>
+                </button>
+                <span class="mode-divider" aria-hidden="true"></span>
+                <button type="button" class="mode-button" data-mode="snowy" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.6 5.4l14.8 13.2M19.4 5.4 4.6 18.6M2 12h20M7 3.5l5 8.5 5-8.5M7 20.5l5-8.5 5 8.5"/></svg>
+                    <span>Snowy</span>
+                </button>
+            </div>
+        </section>
+
+        <section class="type-zone" aria-label="字体设置">
+            <button type="button" class="type-orb" aria-label="字体设置">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5h16v2M12 5v14M9 19h6"/></svg>
+            </button>
+            <aside class="type-panel" aria-label="字体与字号">
+                <p class="panel-kicker">字体</p>
+                <button type="button" class="type-option" data-font="serif">Serif</button>
+                <button type="button" class="type-option" data-font="sans">Sans</button>
+                <button type="button" class="type-option" data-font="mono">Mono</button>
+                <button type="button" class="type-option active" data-font="handwriting">Klee</button>
+                <div class="panel-line" aria-hidden="true"></div>
+                <p class="panel-kicker">字号</p>
+                <div class="size-options" role="group" aria-label="字号">
+                    <button type="button" class="size-option active" data-size="small">小</button>
+                    <button type="button" class="size-option" data-size="medium">中</button>
+                    <button type="button" class="size-option" data-size="large">大</button>
+                </div>
+            </aside>
+        </section>
+
+        <section class="deck-wrap" aria-label="写作区">
+            <div class="focus-deck">
+                <textarea id="focus-editor" class="focus-editor" spellcheck="false" autocomplete="off" placeholder="开始你的心流写作..."></textarea>
+                <div class="deck-actions">
+                    <span class="save-status" id="save-status" aria-live="polite">Saved</span>
+                    <div class="export-group">
+                        <button type="button" id="focus-export" aria-haspopup="true" aria-expanded="false">Export</button>
+                        <div class="export-menu" id="export-menu" role="menu">
+                            <button type="button" data-export-format="txt">TXT</button>
+                            <button type="button" data-export-format="md">Markdown</button>
+                        </div>
+                    </div>
+                    <button type="button" id="focus-clear">Release</button>
+                </div>
+                <div class="deck-glow" aria-hidden="true"></div>
+            </div>
+        </section>
+
+        <section class="mixer-zone" aria-label="氛围控制台">
+            <button type="button" class="mixer-orb" aria-label="氛围设置">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H3M21 5h-7M14 3v4M8 12H3M21 12h-9M8 10v4M12 19H3M21 19h-5M16 17v4"/></svg>
+            </button>
+            <aside class="mixer-panel">
+                <div class="mix-group">
+                    <div class="mix-row">
+                        <span class="mix-name" id="weather-name">Rain</span>
+                        <span class="mix-value" id="weather-value">80%</span>
+                    </div>
+                    <input id="weather-slider" type="range" min="0" max="100" value="80" aria-label="背景强度">
+                </div>
+                <span class="mixer-divider" aria-hidden="true"></span>
+                <div class="mix-group sound-group">
+                    <div class="mix-row">
+                        <button type="button" class="sound-current" id="sound-current" aria-haspopup="true" aria-expanded="false">
+                            <span id="sound-name">Volume</span>
+                        </button>
+                        <span class="mix-value" id="volume-value">40%</span>
+                    </div>
+                    <input id="volume-slider" type="range" min="0" max="100" value="40" aria-label="背景音量">
+                    <div class="sound-menu" id="sound-menu" role="menu">
+                        <button type="button" data-sound="rain" class="active">雨声</button>
+                        <button type="button" data-sound="snow">雪夜</button>
+                        <button type="button" data-sound="ocean">海洋</button>
+                        <button type="button" data-sound="stream">溪流</button>
+                        <button type="button" data-sound="night">夜晚</button>
+                        <button type="button" data-sound="noise">平衡噪声</button>
+                        <button type="button" id="audio-import">导入录音</button>
+                    </div>
+                    <input id="audio-file" type="file" accept="audio/*" hidden>
+                </div>
+            </aside>
+        </section>
+
+        <button type="button" class="sound-start" id="sound-start">Start Sound</button>
+
+        <aside class="focus-brand" aria-label="当前模式">
+            <span>Focus Studio v1.0</span>
+            <span id="brand-mode">Rainy Mode</span>
+        </aside>
+
+        <a class="focus-exit" href="/" aria-label="返回工作台">Back</a>
+    </main>
+
+    <script src="/static/js/focus-studio.js?v=20260617-3"></script>
+</body>
+</html>

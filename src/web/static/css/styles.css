@@ -46,6 +46,33 @@ body {
     color: var(--text-secondary);
 }
 
+.header-actions {
+    margin-top: 1rem;
+}
+
+.focus-entry {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 1rem;
+    border: 1px solid var(--border-primary);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.42);
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.92rem;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgba(35, 31, 26, 0.08);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.focus-entry:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 12px 30px rgba(35, 31, 26, 0.12);
+    transform: translateY(-1px);
+}
+
 /* 主要内容区域 */
 .main-content {
     flex: 1;

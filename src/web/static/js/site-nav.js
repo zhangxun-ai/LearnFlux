@@ -8,6 +8,7 @@
         { href: '/', label: '首页' },
         { href: '/add_task_by_web', label: '单篇深度学习' },
         { href: '/collections', label: '系列深度学习' },
+        { href: '/static/focus-studio.html', label: '心流写作' },
         { href: '/post', label: '帖子洞察' },
         { href: '/flywheel', label: 'IP 对标' },
         { href: '/static/history.html', label: '历史' },

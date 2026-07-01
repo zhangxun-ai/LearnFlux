@@ -30,6 +30,15 @@ CANONICAL_URL = (
     "&xsec_token=AB3QEOb5z9P0yoHf_sTyqtJjdG8FkMi8sipAXf2xvoS6o="
     "&xsec_source=pc_share"
 )
+SHORT_SHARE_TEXT = (
+    "韩红站台被骂背后的商业大洗牌 最近韩红给冯小刚站台... "
+    "http://xhslink.com/o/3NQcpZvI5GG \n"
+    "戳进【小红书】看看这篇好文！"
+)
+SHORT_CANONICAL_URL = (
+    "https://www.xiaohongshu.com/discovery/item/6a2fd6d1000000001702f4b6"
+    "?xsec_token=tok123"
+)
 
 
 @pytest.mark.unit
@@ -38,6 +47,43 @@ def test_normalize_note_url_extracts_url_from_share_text():
     assert normalize_note_url is not None
     assert normalize_note_url(SHARE_TEXT) == CANONICAL_URL
     assert normalize_note_url(CANONICAL_URL) == CANONICAL_URL
+
+
+@pytest.mark.unit
+def test_fetch_note_detail_resolves_xhslink_share_text(monkeypatch):
+    def fake_resolve(url):
+        assert url == "http://xhslink.com/o/3NQcpZvI5GG"
+        return SHORT_CANONICAL_URL
+
+    calls = []
+
+    def fake_api_request(endpoint, params):
+        calls.append((endpoint, params))
+        return {
+            "code": 0,
+            "data": [{
+                "note_list": [{
+                    "title": "韩红站台被骂背后的商业大洗牌",
+                    "desc": "正文",
+                    "type": "normal",
+                    "user": {"nickname": "作者"},
+                }],
+            }],
+        }
+
+    monkeypatch.setattr(text_acquisition, "_resolve_short_url", fake_resolve, raising=False)
+
+    detail = text_acquisition.fetch_note_detail(
+        SHORT_SHARE_TEXT,
+        api_request=fake_api_request,
+    )
+
+    assert detail.note_id == "6a2fd6d1000000001702f4b6"
+    assert detail.title == "韩红站台被骂背后的商业大洗牌"
+    assert calls[0] == (
+        "/api/v1/xiaohongshu/web_v3/fetch_note_detail",
+        {"note_id": "6a2fd6d1000000001702f4b6", "xsec_token": "tok123"},
+    )
 
 
 @pytest.mark.unit
@@ -125,6 +171,9 @@ def test_flywheel_page_exposes_prompt_editor():
     assert "恢复默认提示词" in html
     assert "result-toc" in html
     assert "source-text" in html
+    assert "基于拆解生成新帖" in html
+    assert "/api/flywheel/content/'+contentId+'/draft" in html
+    assert "复制全文" in html
 
 
 @pytest.mark.unit

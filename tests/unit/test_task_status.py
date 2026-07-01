@@ -20,6 +20,7 @@ class TestTaskStatusValues:
         assert TaskStatus.CALIBRATING == "calibrating"
         assert TaskStatus.SUCCESS == "success"
         assert TaskStatus.FAILED == "failed"
+        assert TaskStatus.CANCELED == "canceled"
 
     def test_str_renders_plain_value(self):
         # StrEnum must serialize as the bare value (not "TaskStatus.SUCCESS"),
@@ -34,6 +35,7 @@ class TestStatusGroups:
     def test_terminal_set(self):
         assert TaskStatus.SUCCESS in TERMINAL_STATUSES
         assert TaskStatus.FAILED in TERMINAL_STATUSES
+        assert TaskStatus.CANCELED in TERMINAL_STATUSES
         assert TaskStatus.CALIBRATING not in TERMINAL_STATUSES
 
     def test_non_terminal_set(self):
@@ -65,10 +67,14 @@ class TestHttpCodeMapping:
     def test_failed_maps_to_500(self):
         assert http_code_for_status(TaskStatus.FAILED) == 500
 
+    def test_canceled_maps_to_200(self):
+        assert http_code_for_status(TaskStatus.CANCELED) == 200
+
     def test_accepts_plain_strings(self):
         assert http_code_for_status("calibrating") == 202
         assert http_code_for_status("success") == 200
         assert http_code_for_status("failed") == 500
+        assert http_code_for_status("canceled") == 200
 
     def test_unknown_status_defaults_to_200(self):
         assert http_code_for_status("weird-unknown") == 200

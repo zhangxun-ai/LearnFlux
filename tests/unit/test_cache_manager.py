@@ -662,3 +662,30 @@ class TestTaskProgress:
         assert view_data["platform"] == "youtube"
         assert view_data["media_id"] == "vid1"
         assert view_data["completed_at"]
+
+    def test_success_view_data_marks_missing_summary(self, cm):
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="calibrated body",
+        )
+        task = cm.create_task(
+            url="https://example.com/vid1",
+            platform="youtube",
+            media_id="vid1",
+        )
+        cm.update_task_status(
+            task["task_id"],
+            "success",
+            platform="youtube",
+            media_id="vid1",
+        )
+
+        view_data = cm.get_view_data_by_token(task["view_token"])
+
+        assert view_data["status"] == "success"
+        assert view_data["summary"] == ""
+        assert view_data["summary_missing"] is True

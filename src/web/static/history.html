@@ -4,8 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>任务历史 - 内容解析工作台</title>
+    <meta name="theme-color" content="#FBF8F3">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/editorial.css">
     <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/js/pwa-register.js" defer></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -971,8 +981,9 @@ function buildRow(item, readSet) {
     const isRead = isCompleted && item.view_token && readSet.has(item.view_token);
     const canClick = isCompleted && item.view_token;
 
-    const time = item.request_time
-        ? item.request_time.replace('T', ' ').slice(0, 16)
+    const rawTime = item.request_time_display || item.request_time;
+    const time = rawTime
+        ? rawTime.replace('T', ' ').slice(0, 16)
         : '—';
 
     const titleHtml = item.title

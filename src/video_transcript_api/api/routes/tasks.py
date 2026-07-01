@@ -386,6 +386,7 @@ async def get_task_status(
             TaskStatus.CALIBRATING: "转录完成，校对/总结生成中",
             TaskStatus.SUCCESS: "任务已完成",
             TaskStatus.FAILED: "任务处理失败",
+            TaskStatus.CANCELED: "任务已取消",
         }
         message = message_map.get(status, "获取任务状态成功")
 
@@ -575,6 +576,7 @@ async def recalibrate(
         "wechat_webhook": recal_webhooks.get("wechat"),
         "notification_webhooks": recal_webhooks,
         "calibrate_only": True,
+        "regenerate_summary": request_body.regenerate_summary,
     }
 
     try:

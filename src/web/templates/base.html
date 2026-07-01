@@ -11,6 +11,12 @@
     <meta name="robots" content="noindex">
     <meta name="description" content="{% block meta_description %}Video Transcript API - 多平台视频转录与 AI 校对服务{% endblock %}">
     <meta name="theme-color" content="#E4503A">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
@@ -23,6 +29,7 @@
     <meta property="og:site_name" content="内容解析工作台">
     <meta property="og:image" content="/static/icon/og.png">
     <title>{% block title %}视频转录查看器{% endblock %}</title>
+    <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
     <style>
         /* 配色 token 统一来自 editorial.css（单一来源） */
 
@@ -953,8 +960,6 @@
                 {% if author %}👤 {{ author }}{% endif %}
                 {% if source_link_url %}
                     <br>🔗 <a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }}</a>
-                {% elif source_unavailable_message %}
-                    <br>🔗 <span>{{ source_unavailable_message }}</span>
                 {% endif %}
                 {% if created_at_display %}
                     <br>⏰ {{ created_at_display }}

@@ -10,6 +10,7 @@ are individually flaky, so several are tried).
 from __future__ import annotations
 
 import re
+import requests
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 from urllib.parse import parse_qs, urlparse
@@ -50,6 +51,20 @@ def _note_id_from_url(url: str) -> str:
     url = normalize_note_url(url)
     m = re.search(r"/(?:discovery/item|explore|item)/([0-9a-zA-Z]+)", url)
     return m.group(1) if m else ""
+
+
+def _resolve_short_url(url: str) -> str:
+    try:
+        resp = requests.head(url, allow_redirects=True, timeout=10)
+        resolved = resp.url
+        if resp.status_code == 404 or (resolved == url and resp.status_code != 200):
+            resp = requests.get(url, allow_redirects=True, timeout=10, stream=True)
+            resolved = resp.url
+            resp.close()
+        return resolved
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"resolve xhs short url failed: url={url}, error={exc}")
+        return url
 
 
 def _xsec_from_url(url: str) -> str:
@@ -119,6 +134,9 @@ def fetch_note_detail(url: str, *, api_request: Optional[ApiRequest] = None) -> 
     """Fetch a single note's type/title/body/stats via TikHub (tries several endpoints)."""
     url = normalize_note_url(url)
     note_id = _note_id_from_url(url)
+    if not note_id and "xhslink.com" in url:
+        url = normalize_note_url(_resolve_short_url(url))
+        note_id = _note_id_from_url(url)
     if not note_id:
         raise ValueError(f"无法从链接解析 note_id: {url}")
     xsec = _xsec_from_url(url)

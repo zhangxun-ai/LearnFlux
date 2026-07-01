@@ -78,6 +78,14 @@ class TestWebhookURLValidation:
         )
         assert req.wechat_webhook is not None
 
+    def test_recalibrate_accepts_regenerate_summary_flag(self):
+        """RecalibrateRequest should allow forcing summary regeneration."""
+        req = RecalibrateRequest(
+            view_token="test-token",
+            regenerate_summary=True,
+        )
+        assert req.regenerate_summary is True
+
 
 class TestMetadataLengthLimits:
     """Verify metadata field length limits."""

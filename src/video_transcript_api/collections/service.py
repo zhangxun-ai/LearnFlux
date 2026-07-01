@@ -2,12 +2,13 @@ import os
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from typing import Any, Callable, Dict, List, Optional
 
 from ..cache.cache_manager import CacheManager
 from ..llm import call_llm_api
 from ..utils.logging import setup_logger
+from ..utils.task_status import NON_TERMINAL_STATUSES, TaskStatus
 from .repository import LearningCollectionRepository
 
 logger = setup_logger("learning_collection_service")
@@ -139,6 +140,74 @@ class LearningCollectionService:
             "source_access": source_access,
         }
 
+    def get_source_navigation_by_view_token(
+        self, view_token: str
+    ) -> Optional[Dict[str, Any]]:
+        view_token = (view_token or "").strip()
+        if not view_token:
+            return None
+
+        source_context = self.repository.get_source_with_collection_by_view_token(
+            view_token
+        )
+        if not source_context:
+            return None
+
+        collection_id = source_context["collection_id"]
+        detail = self.get_collection_detail(collection_id)
+        sources = detail.get("sources", [])
+        if len(sources) < 2:
+            return None
+
+        current_index = next(
+            (
+                index
+                for index, source in enumerate(sources)
+                if source.get("view_token") == view_token
+            ),
+            -1,
+        )
+        if current_index < 0:
+            return None
+
+        items = [
+            {
+                "id": source["id"],
+                "title": source.get("title") or f"Source {index + 1}",
+                "position": source.get("position"),
+                "task_status": source.get("task_status"),
+                "view_token": source.get("view_token") or "",
+                "view_url": (
+                    f"/view/{source['view_token']}" if source.get("view_token") else ""
+                ),
+                "is_current": index == current_index,
+            }
+            for index, source in enumerate(sources)
+        ]
+        current = items[current_index]
+        collection_url = (
+            f"/collections?collection_id={quote(collection_id)}"
+            f"&source_id={quote(current['id'])}"
+        )
+
+        return {
+            "collection": {
+                "id": collection_id,
+                "title": detail.get("title") or "学习合集",
+                "url": collection_url,
+            },
+            "items": items,
+            "current": current,
+            "previous": items[current_index - 1] if current_index > 0 else None,
+            "next": (
+                items[current_index + 1]
+                if current_index < len(items) - 1
+                else None
+            ),
+            "current_number": current_index + 1,
+            "total": len(items),
+        }
+
     def add_existing_source(
         self,
         collection_id: str,
@@ -156,6 +225,25 @@ class LearningCollectionService:
             source_type=source_type,
             position=position,
         )
+
+    def cancel_collection_processing(self, collection_id: str) -> Dict[str, Any]:
+        detail = self.get_collection_detail(collection_id)
+        canceled_count = 0
+        for source in detail["sources"]:
+            if source.get("task_status") not in NON_TERMINAL_STATUSES:
+                continue
+            self.cache_manager.update_task_status(
+                source["task_id"],
+                TaskStatus.CANCELED,
+                error_message="用户取消合集解析",
+            )
+            canceled_count += 1
+
+        updated = self.get_collection_detail(collection_id)
+        return {
+            "collection": updated,
+            "canceled_count": canceled_count,
+        }
 
     def source_type_for_filename(self, filename: str) -> str:
         ext = os.path.splitext(filename or "")[1].lower()
@@ -213,6 +301,56 @@ class LearningCollectionService:
             raise ValueError("source not found")
         task_info = self.cache_manager.get_task_by_id(source["task_id"]) or {}
         return self._local_source_file_path(source, task_info)
+
+    def retry_source(self, collection_id: str, source_id: str) -> Dict[str, Any]:
+        detail = self.repository.get_collection_detail(collection_id)
+        if not detail:
+            raise ValueError("collection not found")
+        source = next((item for item in detail["sources"] if item["id"] == source_id), None)
+        if not source:
+            raise ValueError("source not found")
+
+        old_task = self.cache_manager.get_task_by_id(source["task_id"]) or {}
+        old_status = old_task.get("status") or "queued"
+        if old_status in NON_TERMINAL_STATUSES:
+            raise ValueError("source is still processing")
+
+        file_path = self._local_source_file_path(source, old_task)
+        if not file_path:
+            raise ValueError("源文件未保存或已被清理，无法重新解析")
+
+        raw_url = old_task.get("url") or ""
+        media_id = old_task.get("media_id") or _media_id_from_local_url(raw_url)
+        if not media_id:
+            raise ValueError("source media_id missing")
+        display_url = raw_url or f"local://collection-source/{media_id}/{source.get('title', '')}"
+        use_speaker_recognition = bool(old_task.get("use_speaker_recognition"))
+        task_info = self.cache_manager.create_task(
+            url=display_url,
+            use_speaker_recognition=use_speaker_recognition,
+            platform="generic",
+            media_id=media_id,
+        )
+        self.repository.update_source_task(
+            source_id=source_id,
+            task_id=task_info["task_id"],
+            view_token=task_info["view_token"],
+        )
+        updated = self.get_collection_detail(collection_id)
+        updated_source = next(
+            (item for item in updated["sources"] if item["id"] == source_id),
+            None,
+        )
+        return {
+            "collection": updated,
+            "source": updated_source,
+            "task_id": task_info["task_id"],
+            "file_path": file_path,
+            "original_name": source.get("title") or os.path.basename(file_path),
+            "display_url": display_url,
+            "media_id": media_id,
+            "use_speaker_recognition": use_speaker_recognition,
+        }
 
     def get_knowledge_map(
         self,
@@ -312,6 +450,8 @@ class LearningCollectionService:
             return "failed"
         if sources and all(source.get("task_status") == "success" for source in sources):
             return "ready"
+        if any(source.get("task_status") == "canceled" for source in sources):
+            return "stopped"
         if sources:
             return "processing"
         return "draft"

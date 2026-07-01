@@ -396,6 +396,52 @@ class TestGetTaskStatus:
         assert body["data"]["error"] == "ASR timeout"
 
 
+class TestRecalibrateEndpoint:
+    """Tests for POST /api/recalibrate."""
+
+    def test_recalibrate_can_force_summary_regeneration(
+        self, client, mock_cache_manager
+    ):
+        cursor = MagicMock()
+        mock_cache_manager._get_cursor.return_value.__enter__.return_value = cursor
+        mock_cache_manager.generate_task_id.return_value = "task-recal-1"
+        mock_cache_manager.get_cache_by_view_token.return_value = {
+            "platform": "generic",
+            "media_id": "media-1",
+            "use_speaker_recognition": False,
+            "title": "Demo",
+            "author": "Author",
+            "description": "",
+            "file_path": "/tmp/cache",
+            "transcript_type": "capswriter",
+            "transcript_data": "transcript body",
+            "task_info": {"url": "local://collection-source/media-1/Demo.mp4"},
+        }
+        llm_queue = MagicMock()
+        user_manager = MagicMock()
+        user_manager.check_permission.return_value = True
+
+        with patch(
+            "video_transcript_api.api.routes.tasks.get_user_manager",
+            return_value=user_manager,
+        ), patch(
+            "video_transcript_api.api.context.get_llm_queue",
+            return_value=llm_queue,
+        ):
+            resp = client.post(
+                "/api/recalibrate",
+                json={"view_token": "vt-1", "regenerate_summary": True},
+            )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["code"] == 202
+        queued_task = llm_queue.put.call_args.args[0]
+        assert queued_task["task_id"] == "task-recal-1"
+        assert queued_task["calibrate_only"] is True
+        assert queued_task["regenerate_summary"] is True
+
+
 class TestViewProgressEndpoint:
     """Tests for public view-token progress polling."""
 
@@ -547,7 +593,117 @@ class TestViewProgressEndpoint:
 
         assert resp.status_code == 200
         assert "local://collection-source" not in resp.text
-        assert "源视频未保存或已清理" in resp.text
+        assert "源视频未保存或已清理" not in resp.text
+
+    def test_success_view_with_missing_summary_does_not_show_processing(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "author": "Author",
+            "url": "local://collection-source/media-1/Demo.mp4",
+            "platform": "generic",
+            "media_id": "media-1",
+            "summary": "",
+            "summary_missing": True,
+            "transcript": "transcript",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-06-08T10:00:00",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={
+                "storage": {"source_files_dir": str(tmp_path / "source-files")},
+                "longcut": {"enabled": False},
+            },
+        ), patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>transcript</p>",
+        ):
+            resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert "总结未生成" in resp.text
+        assert "总结处理中" not in resp.text
+
+    def test_success_view_renders_collection_navigation(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-2",
+            "view_token": "vt-2",
+            "title": "如何走出人生困局/2.mp4",
+            "author": "本地上传",
+            "url": "local://collection-source/media-2/如何走出人生困局/2.mp4",
+            "platform": "generic",
+            "media_id": "media-2",
+            "summary": "## 内容总结",
+            "transcript": "transcript",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-06-08T10:00:00",
+        }
+        navigation = {
+            "collection": {
+                "id": "collection-1",
+                "title": "如何走出人生困局",
+                "url": "/collections?collection_id=collection-1&source_id=source-2",
+            },
+            "items": [
+                {
+                    "id": "source-1",
+                    "title": "1.mp4",
+                    "view_url": "/view/vt-1",
+                    "is_current": False,
+                },
+                {
+                    "id": "source-2",
+                    "title": "2.mp4",
+                    "view_url": "/view/vt-2",
+                    "is_current": True,
+                },
+                {
+                    "id": "source-3",
+                    "title": "3.mp4",
+                    "view_url": "/view/vt-3",
+                    "is_current": False,
+                },
+            ],
+            "current": {"title": "2.mp4", "view_url": "/view/vt-2"},
+            "previous": {"title": "1.mp4", "view_url": "/view/vt-1"},
+            "next": {"title": "3.mp4", "view_url": "/view/vt-3"},
+            "current_number": 2,
+            "total": 3,
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={"longcut": {"enabled": False}},
+        ), patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>transcript</p>",
+        ), patch(
+            "video_transcript_api.api.routes.views._build_collection_navigation",
+            return_value=navigation,
+        ) as build_navigation:
+            resp = client.get("/view/vt-2")
+
+        assert resp.status_code == 200
+        build_navigation.assert_called_once_with("vt-2")
+        assert 'aria-label="同合集章节导航"' in resp.text
+        assert "如何走出人生困局" in resp.text
+        assert 'href="/view/vt-1"' in resp.text
+        assert 'href="/view/vt-3"' in resp.text
+        assert "第 2 / 3 节" in resp.text
+        assert "/collections?collection_id=collection-1&amp;source_id=source-2" in resp.text
 
     def test_view_progress_returns_minimal_progress_payload(
         self, client, mock_cache_manager

@@ -7,9 +7,17 @@
     <meta name="description" content="沉浸式空白写作与学习笔记空间">
     <meta name="theme-color" content="#000000">
     <meta name="robots" content="noindex">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="心流写作">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css">
-    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260617-3">
+    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260630-1">
+    <script src="/static/js/pwa-register.js?v=20260630-1" defer></script>
 </head>
 <body class="focus-body" data-mode="rainy" data-font="handwriting" data-size="small">
     <main class="focus-stage" aria-label="心流写作空间">
@@ -68,9 +76,18 @@
             </div>
         </section>
 
-        <section class="mixer-zone" aria-label="氛围控制台">
-            <button type="button" class="mixer-orb" aria-label="氛围设置">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H3M21 5h-7M14 3v4M8 12H3M21 12h-9M8 10v4M12 19H3M21 19h-5M16 17v4"/></svg>
+        <section class="mixer-zone" id="mixer-zone" aria-label="氛围控制台">
+            <div class="timer-readout" id="timer-readout" aria-hidden="true">
+                <span class="timer-phase" id="timer-phase">专注</span>
+                <span class="timer-time" id="timer-time">25:00</span>
+                <span class="timer-hint">长按重置</span>
+            </div>
+            <button type="button" class="mixer-orb" id="timer-toggle" aria-pressed="false" aria-label="开始或暂停番茄钟，长按重置">
+                <svg class="mixer-orb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H3M21 5h-7M14 3v4M8 12H3M21 12h-9M8 10v4M12 19H3M21 19h-5M16 17v4"/></svg>
+                <svg class="timer-ring" viewBox="0 0 64 64" aria-hidden="true">
+                    <circle class="timer-ring-track" cx="32" cy="32" r="24"></circle>
+                    <circle class="timer-ring-progress" id="timer-ring-progress" cx="32" cy="32" r="24"></circle>
+                </svg>
             </button>
             <aside class="mixer-panel">
                 <div class="mix-group">
@@ -90,12 +107,7 @@
                     </div>
                     <input id="volume-slider" type="range" min="0" max="100" value="40" aria-label="背景音量">
                     <div class="sound-menu" id="sound-menu" role="menu">
-                        <button type="button" data-sound="rain" class="active">雨声</button>
-                        <button type="button" data-sound="snow">雪夜</button>
-                        <button type="button" data-sound="ocean">海洋</button>
-                        <button type="button" data-sound="stream">溪流</button>
-                        <button type="button" data-sound="night">夜晚</button>
-                        <button type="button" data-sound="noise">平衡噪声</button>
+                        <!-- 背景音按钮由 JS 依据 SOUNDS 配置生成 -->
                         <button type="button" id="audio-import">导入录音</button>
                     </div>
                     <input id="audio-file" type="file" accept="audio/*" hidden>
@@ -103,16 +115,14 @@
             </aside>
         </section>
 
-        <button type="button" class="sound-start" id="sound-start">Start Sound</button>
-
-        <aside class="focus-brand" aria-label="当前模式">
-            <span>Focus Studio v1.0</span>
-            <span id="brand-mode">Rainy Mode</span>
-        </aside>
-
-        <a class="focus-exit" href="/" aria-label="返回工作台">Back</a>
+        <a class="focus-exit" href="/" aria-label="返回落地页" title="返回落地页">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 18 9 12l6-6M9 12h11M5 12h.01"></path>
+            </svg>
+            <span>返回落地页</span>
+        </a>
     </main>
 
-    <script src="/static/js/focus-studio.js?v=20260617-3"></script>
+    <script src="/static/js/focus-studio.js?v=20260620-5"></script>
 </body>
 </html>

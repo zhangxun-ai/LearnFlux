@@ -1,0 +1,163 @@
+from video_transcript_api.cache.cache_manager import CacheManager
+
+
+def _create_successful_local_task(cache_manager: CacheManager, url: str = "local://study-source/local_abc/lesson.mp4"):
+    task = cache_manager.create_task(
+        url=url,
+        use_speaker_recognition=False,
+        platform="generic",
+        media_id="local_abc",
+    )
+    cache_manager.save_cache(
+        platform="generic",
+        url=url,
+        media_id="local_abc",
+        use_speaker_recognition=False,
+        transcript_data="第一段内容。\n第二段内容。",
+        transcript_type="capswriter",
+        title="lesson.mp4",
+        author="本地上传",
+        description="",
+    )
+    cache_manager.save_llm_result(
+        platform="generic",
+        media_id="local_abc",
+        use_speaker_recognition=False,
+        llm_type="summary",
+        content="## 总结\n这一节讲核心概念。",
+    )
+    cache_manager.update_task_status(
+        task["task_id"],
+        "success",
+        platform="generic",
+        media_id="local_abc",
+        title="lesson.mp4",
+        author="本地上传",
+    )
+    return task
+
+
+def test_study_service_builds_ready_session_with_source_file(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+    from video_transcript_api.study.source_files import build_study_source_path
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = _create_successful_local_task(cache_manager)
+    source = build_study_source_path(tmp_path / "sources", "local_abc", "lesson.mp4")
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"video")
+
+    repo = StudyRepository(db_path=str(tmp_path / "study.db"))
+    repo.create_note(task["view_token"], 12, "重点复看")
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=repo,
+        source_root=tmp_path / "sources",
+    )
+
+    session = service.get_session(task["view_token"])
+
+    assert session["state"] == "ready"
+    assert session["metadata"]["title"] == "lesson.mp4"
+    assert session["playback"]["source_available"] is True
+    assert session["playback"]["source_url"].endswith("/api/study/" + task["view_token"] + "/source-file")
+    assert "核心概念" in session["ai"]["overview"]
+    assert session["transcript"]["lines"][0]["text"] == "第一段内容。"
+    assert session["notes"][0]["body"] == "重点复看"
+
+
+def test_study_service_reports_source_missing_without_failing(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = _create_successful_local_task(cache_manager)
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=StudyRepository(db_path=str(tmp_path / "study.db")),
+        source_root=tmp_path / "sources",
+    )
+
+    session = service.get_session(task["view_token"])
+
+    assert session["state"] == "source_missing"
+    assert session["playback"]["source_available"] is False
+    assert session["transcript"]["lines"]
+
+
+def test_study_service_maps_non_terminal_states_for_ui(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = cache_manager.create_task(
+        url="local://study-source/local_processing/lesson.mp4",
+        use_speaker_recognition=False,
+        platform="generic",
+        media_id="local_processing",
+    )
+    cache_manager.update_task_progress(
+        task["task_id"],
+        stage="transcribing",
+        stage_label="正在转录本地文件",
+        fraction=0.4,
+        basis="local_upload",
+        confidence="high",
+    )
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=StudyRepository(db_path=str(tmp_path / "study.db")),
+        source_root=tmp_path / "sources",
+    )
+
+    processing = service.get_session(task["view_token"])
+    assert processing["state"] == "transcribing"
+    assert processing["progress"]["stage_label"] == "正在转录本地文件"
+
+    cache_manager.update_task_status(
+        task["task_id"],
+        "calibrating",
+        platform="generic",
+        media_id="local_processing",
+    )
+    generating_ai = service.get_session(task["view_token"])
+    assert generating_ai["state"] == "generating_ai"
+
+
+def test_study_service_returns_none_for_unknown_token(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+
+    service = StudyService(
+        cache_manager=CacheManager(cache_dir=str(tmp_path / "cache")),
+        repository=StudyRepository(db_path=str(tmp_path / "study.db")),
+        source_root=tmp_path / "sources",
+    )
+
+    assert service.get_session("missing") is None
+
+
+def test_study_service_exports_markdown(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = _create_successful_local_task(cache_manager)
+    repo = StudyRepository(db_path=str(tmp_path / "study.db"))
+    repo.create_note(task["view_token"], 12, "重点复看")
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=repo,
+        source_root=tmp_path / "sources",
+    )
+
+    markdown = service.export_markdown(task["view_token"])
+
+    assert "# lesson.mp4" in markdown
+    assert "## AI 看" in markdown
+    assert "核心概念" in markdown
+    assert "## 文稿" in markdown
+    assert "第一段内容" in markdown
+    assert "## 我的笔记" in markdown
+    assert "重点复看" in markdown

@@ -16,8 +16,13 @@
         dropSubtitle: document.getElementById('drop-subtitle'),
         pickFolder: document.getElementById('pick-folder'),
         pickFiles: document.getElementById('pick-files'),
+        appendFolder: document.getElementById('append-folder'),
+        appendFiles: document.getElementById('append-files'),
         folderInput: document.getElementById('folder-input'),
         filesInput: document.getElementById('files-input'),
+        appendFolderInput: document.getElementById('append-folder-input'),
+        appendFilesInput: document.getElementById('append-files-input'),
+        cancelCollection: document.getElementById('cancel-collection'),
         importPreview: document.getElementById('import-preview'),
         collectionHistoryList: document.getElementById('collection-history-list'),
         collectionHistoryCount: document.getElementById('collection-history-count'),
@@ -80,12 +85,15 @@
         sourceTitle: document.getElementById('source-title'),
         sourceMeta: document.getElementById('source-meta'),
         sourceTiming: document.getElementById('source-timing'),
+        sourceError: document.getElementById('source-error'),
         sourceSummary: document.getElementById('source-summary'),
         sourceSummaryPreview: document.getElementById('source-summary-preview'),
         sourceSummarySource: document.getElementById('source-summary-source'),
+        regenerateSourceSummary: document.getElementById('regenerate-source-summary'),
         sourceTranscript: document.getElementById('source-transcript'),
         openSource: document.getElementById('open-source'),
         openSourceFile: document.getElementById('open-source-file'),
+        retrySource: document.getElementById('retry-source'),
         markdownRendered: document.getElementById('markdown-rendered'),
         markdownPreview: document.getElementById('markdown-preview'),
         markdownPreviewMode: document.getElementById('markdown-preview-mode'),
@@ -103,7 +111,7 @@
     let selectedMapNodeId = null;
     let knowledgeMaps = { collection: null, sources: {} };
     let knowledgeMapLoading = false;
-    let knowledgeMapError = '';
+    const knowledgeMapErrors = new Map();
     const knowledgeMapRequests = new Set();
     let knowledgeMapLoadedKeys = new Set();
     let customMapPositions = {};
@@ -118,6 +126,15 @@
     let pendingImportMethod = 'local_files';
     let pollTimer = null;
     let toastTimer = null;
+    let initialTarget = readInitialTarget();
+
+    function readInitialTarget() {
+        const params = new URLSearchParams(window.location.search);
+        return {
+            collectionId: params.get('collection_id') || '',
+            sourceId: params.get('source_id') || ''
+        };
+    }
 
     function decryptToken(encoded) {
         if (!encoded) return '';
@@ -143,8 +160,8 @@
 
     function setBusy(nextBusy) {
         busy = nextBusy;
-        [els.pickFolder, els.pickFiles, els.dropAction].forEach((button) => {
-            button.disabled = busy;
+        [els.pickFolder, els.pickFiles, els.dropAction, els.appendFolder, els.appendFiles, els.cancelCollection].forEach((button) => {
+            if (button) button.disabled = busy;
         });
         [els.creator, els.title].forEach((field) => {
             field.disabled = busy;
@@ -205,8 +222,9 @@
         els.typeTabs.forEach((tab) => {
             tab.classList.toggle('active', tab.dataset.type === type);
         });
-        els.filesInput.setAttribute('accept', config.accept);
-        els.folderInput.setAttribute('accept', config.accept);
+        [els.filesInput, els.folderInput, els.appendFilesInput, els.appendFolderInput].forEach((input) => {
+            if (input) input.setAttribute('accept', config.accept);
+        });
         els.dropTitle.textContent = config.title;
         els.dropSubtitle.textContent = config.subtitle;
     }
@@ -304,6 +322,10 @@
             link_batch: '链接合集'
         };
         return labels[method] || method || '-';
+    }
+
+    function isTerminalSourceStatus(status) {
+        return ['success', 'failed', 'canceled'].includes(status);
     }
 
     function sourceProgressPercent(source) {
@@ -562,22 +584,22 @@
         if (!collectionId) return;
         const opts = options || {};
         window.clearInterval(pollTimer);
-        selectedSourceId = null;
+        selectedSourceId = opts.sourceId || null;
         sourceDetails = {};
         knowledgeMaps = { collection: null, sources: {} };
-        knowledgeMapError = '';
+        knowledgeMapErrors.clear();
         knowledgeMapLoading = false;
         knowledgeMapRequests.clear();
         knowledgeMapLoadedKeys = new Set();
         customMapPositions = {};
         mapZoom = DEFAULT_MAP_ZOOM;
         mapFocused = false;
-        currentView = 'map';
-        knowledgeMapScope = 'collection';
+        currentView = opts.sourceId ? 'source' : 'map';
+        knowledgeMapScope = opts.sourceId ? 'source' : 'collection';
         selectedMapNodeId = null;
         await refreshCollection(collectionId);
         const sources = currentCollection ? (currentCollection.sources || []) : [];
-        const finished = sources.length > 0 && sources.every((source) => ['success', 'failed'].includes(source.task_status));
+        const finished = sources.length > 0 && sources.every((source) => isTerminalSourceStatus(source.task_status));
         if (!finished) startPolling();
         if (!opts.silent) showToast('已打开历史专题');
     }
@@ -600,7 +622,7 @@
             selectedMapNodeId = null;
             sourceDetails = {};
             knowledgeMaps = { collection: null, sources: {} };
-            knowledgeMapError = '';
+            knowledgeMapErrors.clear();
             knowledgeMapLoading = false;
             knowledgeMapRequests.clear();
             knowledgeMapLoadedKeys = new Set();
@@ -621,6 +643,67 @@
             render();
             els.folderInput.value = '';
             els.filesInput.value = '';
+        }
+    }
+
+    async function appendFilesToCurrentCollection(fileList, importMethod) {
+        if (!currentCollection) {
+            showToast('请先打开或创建一个专题');
+            return;
+        }
+        const files = normalizeFiles(fileList);
+        pendingImportMethod = importMethod || currentCollection.import_method || 'local_files';
+        if (!files.length) {
+            showToast('没有找到当前类型支持的文件');
+            return;
+        }
+
+        setBusy(true);
+        try {
+            await uploadFiles(currentCollection.id, files);
+            showToast('已追加 source，开始解析新增内容');
+            await refreshCollection(currentCollection.id);
+            await loadFilterOptions();
+            await loadCollections({ selectLatest: false });
+            startPolling();
+        } catch (error) {
+            showToast(error.message || '追加失败');
+        } finally {
+            setBusy(false);
+            render();
+            if (els.appendFolderInput) els.appendFolderInput.value = '';
+            if (els.appendFilesInput) els.appendFilesInput.value = '';
+        }
+    }
+
+    async function cancelCurrentCollection() {
+        if (!currentCollection) {
+            showToast('请先打开一个专题');
+            return;
+        }
+        const sources = currentCollection.sources || [];
+        const activeCount = sources.filter((source) => !isTerminalSourceStatus(source.task_status)).length;
+        if (!activeCount) {
+            showToast('当前没有正在解析的 source');
+            return;
+        }
+        if (!window.confirm(`停止 ${activeCount} 个未完成 source 的解析？已完成内容会保留。`)) {
+            return;
+        }
+
+        setBusy(true);
+        try {
+            const payload = await apiJSON(`/api/collections/${currentCollection.id}/cancel`, { method: 'POST' });
+            window.clearInterval(pollTimer);
+            await refreshCollection(currentCollection.id);
+            await loadCollections({ selectLatest: false });
+            const canceledCount = payload.data && payload.data.canceled_count;
+            showToast(`已停止 ${canceledCount || activeCount} 个未完成 source`);
+        } catch (error) {
+            showToast(error.message || '停止解析失败');
+        } finally {
+            setBusy(false);
+            render();
         }
     }
 
@@ -647,6 +730,7 @@
             summarized: '已总结',
             ready: '待总结',
             processing: '解析中',
+            stopped: '已停止',
             failed: '有失败',
             draft: '未导入'
         };
@@ -721,7 +805,7 @@
             try {
                 await refreshCollection(currentCollection.id);
                 const sources = currentCollection.sources || [];
-                const finished = sources.length > 0 && sources.every((source) => ['success', 'failed'].includes(source.task_status));
+                const finished = sources.length > 0 && sources.every((source) => isTerminalSourceStatus(source.task_status));
                 if (finished) {
                     window.clearInterval(pollTimer);
                 }
@@ -739,7 +823,8 @@
             processing: '解析中',
             calibrating: 'AI处理中',
             success: '完成',
-            failed: '失败'
+            failed: '失败',
+            canceled: '已取消'
         };
         return labels[status] || '等待';
     }
@@ -751,6 +836,17 @@
             return source ? `source:${source.id}` : '';
         }
         return 'collection';
+    }
+
+    function currentKnowledgeMapError() {
+        const key = currentMapKey();
+        return key ? (knowledgeMapErrors.get(key) || '') : '';
+    }
+
+    function setKnowledgeMapError(key, message) {
+        if (!key) return;
+        if (message) knowledgeMapErrors.set(key, message);
+        else knowledgeMapErrors.delete(key);
     }
 
     function currentStoredKnowledgeMap() {
@@ -790,13 +886,14 @@
         knowledgeMapRequests.add(key);
         try {
             const payload = await apiJSON(mapEndpoint());
+            setKnowledgeMapError(key, '');
             knowledgeMapLoadedKeys.add(key);
             if (payload.data && payload.data.status !== 'not_started') {
                 storeKnowledgeMap(payload.data);
             }
         } catch (error) {
             if (currentMapKey() === key) {
-                knowledgeMapError = error.message || '读取知识地图失败';
+                setKnowledgeMapError(key, error.message || '读取知识地图失败');
             }
         } finally {
             knowledgeMapRequests.delete(key);
@@ -817,7 +914,7 @@
         const key = currentMapKey();
         const force = Boolean(currentStoredKnowledgeMap());
         knowledgeMapLoading = true;
-        knowledgeMapError = '';
+        setKnowledgeMapError(key, '');
         render();
         try {
             showToast(force ? '正在重新生成知识地图' : '正在生成知识地图，可能需要几十秒');
@@ -830,12 +927,14 @@
                 })
             });
             storeKnowledgeMap(payload.data);
+            setKnowledgeMapError(key, '');
             if (key) knowledgeMapLoadedKeys.add(key);
             selectedMapNodeId = null;
             showToast('知识地图已生成');
         } catch (error) {
-            knowledgeMapError = error.message || '生成知识地图失败';
-            showToast(knowledgeMapError);
+            const message = error.message || '生成知识地图失败';
+            setKnowledgeMapError(key, message);
+            showToast(message);
         } finally {
             knowledgeMapLoading = false;
             render();
@@ -979,16 +1078,18 @@
                 message: 'AI 正在理解内容并提炼地图，请稍等。'
             };
         }
-        if (knowledgeMapError) {
+        const normalized = normalizeMapRecord(currentStoredKnowledgeMap());
+        if (normalized) return normalized;
+
+        const mapError = currentKnowledgeMapError();
+        if (mapError) {
             return {
                 empty: true,
                 title: '知识地图',
                 subtitle: '知识地图暂时不可用。',
-                message: knowledgeMapError
+                message: mapError
             };
         }
-        const normalized = normalizeMapRecord(currentStoredKnowledgeMap());
-        if (normalized) return normalized;
         return {
             empty: true,
             title: knowledgeMapScope === 'collection' ? '集合知识地图' : `${source ? source.title : 'Source'} 知识地图`,
@@ -1252,7 +1353,7 @@
         const source = selectedSource();
         els.mapView.classList.toggle('focused', mapFocused);
         const key = currentMapKey();
-        if (key && !currentStoredKnowledgeMap() && !knowledgeMapLoadedKeys.has(key) && !knowledgeMapRequests.has(key) && !knowledgeMapError) {
+        if (key && !currentStoredKnowledgeMap() && !knowledgeMapLoadedKeys.has(key) && !knowledgeMapRequests.has(key) && !currentKnowledgeMapError()) {
             loadKnowledgeMap();
         }
         const map = currentKnowledgeMap();
@@ -1328,7 +1429,7 @@
             selectedSourceId = targetSourceId;
             knowledgeMapScope = 'source';
             selectedMapNodeId = null;
-            knowledgeMapError = '';
+            setKnowledgeMapError(currentMapKey(), '');
             currentView = 'map';
             render();
             return;
@@ -1405,7 +1506,7 @@
                 selectedSourceId = button.dataset.sourceId;
                 knowledgeMapScope = 'source';
                 selectedMapNodeId = null;
-                knowledgeMapError = '';
+                setKnowledgeMapError(currentMapKey(), '');
                 currentView = currentView === 'source' ? 'source' : 'map';
                 render();
             });
@@ -1426,9 +1527,23 @@
         }
         const metrics = currentCollection.metrics || {};
         const elapsed = metrics.elapsed_seconds ? ` · 总耗时 ${formatDuration(metrics.elapsed_seconds)}` : '';
-        const active = sources.find((source) => !['success', 'failed'].includes(source.task_status));
+        const canceled = sources.filter((source) => source.task_status === 'canceled').length;
+        const stopped = canceled ? ` · 已停止 ${canceled} 个` : '';
+        const active = sources.find((source) => !isTerminalSourceStatus(source.task_status));
         const stage = active ? ` · 当前：${sourceStageText(active)}` : '';
-        els.workspaceSubtitle.textContent = `${done}/${sources.length} 个 source 已完成${elapsed}${stage}`;
+        els.workspaceSubtitle.textContent = `${done}/${sources.length} 个 source 已完成${stopped}${elapsed}${stage}`;
+    }
+
+    function renderWorkspaceActions() {
+        const sources = currentCollection ? (currentCollection.sources || []) : [];
+        const hasCollection = Boolean(currentCollection);
+        const hasActive = sources.some((source) => !isTerminalSourceStatus(source.task_status));
+        [els.appendFolder, els.appendFiles].forEach((button) => {
+            if (button) button.disabled = busy || !hasCollection;
+        });
+        if (els.cancelCollection) {
+            els.cancelCollection.disabled = busy || !hasActive;
+        }
     }
 
     function renderSummaryCard(target, markdown, fallback) {
@@ -1460,6 +1575,25 @@
             return;
         }
         renderMarkdownPreview(els.sourceSummary, content, fallback);
+    }
+
+    function sourceFailureReason(source, detail) {
+        return (detail && detail.error_message)
+            || (source && source.error_message)
+            || (source && source.progress && source.progress.message)
+            || '';
+    }
+
+    function renderSourceError(source, detail) {
+        if (!els.sourceError) return;
+        const failed = source && source.task_status === 'failed';
+        const reason = failed ? sourceFailureReason(source, detail) : '';
+        els.sourceError.classList.toggle('hidden', !failed);
+        if (!failed) {
+            els.sourceError.textContent = '';
+            return;
+        }
+        els.sourceError.innerHTML = `<strong>失败原因</strong><span>${escapeHTML(reason || '任务处理失败，暂无更具体原因。')}</span>`;
     }
 
     function renderSummary() {
@@ -1543,9 +1677,12 @@
             els.sourceTitle.textContent = '选择一个源内容';
             els.sourceMeta.textContent = '左侧选择后查看详情。';
             els.sourceTiming.textContent = '';
+            renderSourceError(null, null);
             renderSourceSummary('', '解析完成后显示。');
             els.sourceTranscript.textContent = '解析完成后显示。';
             els.openSource.classList.add('hidden');
+            renderSourceSummaryAction(null, null);
+            renderSourceRetryAction(null);
             if (els.openSourceFile) {
                 els.openSourceFile.disabled = true;
                 els.openSourceFile.textContent = '打开源内容';
@@ -1563,6 +1700,12 @@
         els.openSource.classList.toggle('hidden', !source.view_token);
 
         const detail = sourceDetails[source.id];
+        if (['failed', 'canceled'].includes(source.task_status) && !detail) {
+            loadSourceDetail(source.id);
+        }
+        renderSourceError(source, detail);
+        renderSourceSummaryAction(source, detail);
+        renderSourceRetryAction(source);
         renderSourceFileButton(detail);
         if (source.task_status === 'success' && !detail) {
             loadSourceDetail(source.id);
@@ -1581,6 +1724,13 @@
             return;
         }
 
+        if (source.task_status === 'failed') {
+            const reason = sourceFailureReason(source, detail);
+            renderSourceSummary('', reason ? `解析失败：${reason}` : '解析失败，暂无摘要。');
+            els.sourceTranscript.textContent = reason ? `解析失败：${reason}` : '解析失败，暂无逐字稿。';
+            return;
+        }
+
         renderSourceSummary(
             detail && detail.summary,
             source.task_status === 'success' ? '这个源内容的单篇摘要还未生成或仍在处理中。' : '解析完成后显示。'
@@ -1588,6 +1738,31 @@
         els.sourceTranscript.textContent = detail && detail.transcript
             ? previewText(detail.transcript, 12000)
             : (source.task_status === 'success' ? '未读取到逐字稿内容，请点击“查看解读页”查看完整页。' : '解析完成后显示。');
+    }
+
+    function renderSourceSummaryAction(source, detail) {
+        if (!els.regenerateSourceSummary) return;
+        const canRegenerate = Boolean(
+            source
+            && source.view_token
+            && source.task_status === 'success'
+            && !(detail && detail.loading)
+        );
+        els.regenerateSourceSummary.classList.toggle('hidden', !(source && source.view_token));
+        els.regenerateSourceSummary.disabled = busy || !canRegenerate;
+        els.regenerateSourceSummary.textContent = detail && detail.summary
+            ? '重新生成 AI 解读'
+            : '生成 AI 解读';
+    }
+
+    function renderSourceRetryAction(source) {
+        if (!els.retrySource) return;
+        const canRetry = Boolean(
+            source
+            && ['failed', 'canceled'].includes(source.task_status)
+        );
+        els.retrySource.classList.toggle('hidden', !canRetry);
+        els.retrySource.disabled = busy || !canRetry;
     }
 
     function renderSourceFileButton(detail) {
@@ -1732,6 +1907,89 @@
         await openSourceAccess(detail && detail.source_access, detail, pendingWindow);
     }
 
+    async function regenerateSourceSummary() {
+        const source = selectedSource();
+        if (!source || !source.view_token) {
+            showToast('当前源内容还没有可重新生成的解读页');
+            return;
+        }
+        if (source.task_status !== 'success') {
+            showToast('源内容解析完成后才能重新生成 AI 解读');
+            return;
+        }
+
+        setBusy(true);
+        renderSelectedSource();
+        try {
+            await apiJSON('/api/recalibrate', {
+                method: 'POST',
+                body: JSON.stringify({
+                    view_token: source.view_token,
+                    regenerate_summary: true
+                })
+            });
+            source.task_status = 'calibrating';
+            source.progress = {
+                stage: 'calibrating',
+                stage_label: '正在重新生成 AI 解读',
+                percent: 84
+            };
+            if (sourceDetails[source.id]) {
+                sourceDetails[source.id] = {
+                    ...sourceDetails[source.id],
+                    summary: '',
+                    loading: false
+                };
+            }
+            showToast('已提交重新生成 AI 解读');
+            startPolling();
+        } catch (error) {
+            showToast(error.message || '重新生成 AI 解读失败');
+        } finally {
+            setBusy(false);
+            render();
+        }
+    }
+
+    async function retrySelectedSource() {
+        const source = selectedSource();
+        if (!currentCollection || !source) {
+            showToast('请先选择一个 source');
+            return;
+        }
+        if (!['failed', 'canceled'].includes(source.task_status)) {
+            showToast('只有失败或已取消的 source 可以重新解析');
+            return;
+        }
+
+        setBusy(true);
+        renderSelectedSource();
+        try {
+            const payload = await apiJSON(`/api/collections/${currentCollection.id}/sources/${source.id}/retry`, {
+                method: 'POST'
+            });
+            if (payload.data && payload.data.collection) {
+                currentCollection = payload.data.collection;
+            } else if (payload.data && payload.data.source) {
+                const sources = currentCollection.sources || [];
+                currentCollection.sources = sources.map((item) => (
+                    item.id === payload.data.source.id ? payload.data.source : item
+                ));
+            }
+            delete sourceDetails[source.id];
+            sourceDetailRequests.delete(source.id);
+            selectedSourceId = source.id;
+            showToast('已重新提交解析');
+            await loadCollections({ selectLatest: false });
+            startPolling();
+        } catch (error) {
+            showToast(error.message || '重新解析失败');
+        } finally {
+            setBusy(false);
+            render();
+        }
+    }
+
     function renderTabs() {
         els.tabs.forEach((tab) => {
             tab.classList.toggle('active', tab.dataset.view === currentView);
@@ -1773,6 +2031,7 @@
         renderHistory();
         renderMetadata();
         renderProgress();
+        renderWorkspaceActions();
         renderSources();
         renderSummary();
         renderSelectedSource();
@@ -1852,14 +2111,14 @@
                 selectedMapNodeId = null;
                 sourceDetails = {};
                 knowledgeMaps = { collection: null, sources: {} };
-                knowledgeMapError = '';
+                knowledgeMapErrors.clear();
                 knowledgeMapLoading = false;
                 knowledgeMapRequests.clear();
                 knowledgeMapLoadedKeys = new Set();
                 customMapPositions = {};
                 mapZoom = DEFAULT_MAP_ZOOM;
                 mapFocused = false;
-                loadCollections({ selectLatest: false }).catch((error) => {
+                loadCollections().catch((error) => {
                     showToast(error.message || '历史专题筛选失败');
                 });
                 render();
@@ -1878,7 +2137,7 @@
             selectedMapNodeId = null;
             sourceDetails = {};
             knowledgeMaps = { collection: null, sources: {} };
-            knowledgeMapError = '';
+            knowledgeMapErrors.clear();
             knowledgeMapLoading = false;
             knowledgeMapRequests.clear();
             knowledgeMapLoadedKeys = new Set();
@@ -1894,8 +2153,23 @@
         els.pickFolder.addEventListener('click', () => els.folderInput.click());
         els.pickFiles.addEventListener('click', () => els.filesInput.click());
         els.dropAction.addEventListener('click', () => els.filesInput.click());
+        if (els.appendFolder) {
+            els.appendFolder.addEventListener('click', () => els.appendFolderInput.click());
+        }
+        if (els.appendFiles) {
+            els.appendFiles.addEventListener('click', () => els.appendFilesInput.click());
+        }
+        if (els.cancelCollection) {
+            els.cancelCollection.addEventListener('click', cancelCurrentCollection);
+        }
         els.folderInput.addEventListener('change', () => importFiles(els.folderInput.files, 'local_folder'));
         els.filesInput.addEventListener('change', () => importFiles(els.filesInput.files, 'local_files'));
+        if (els.appendFolderInput) {
+            els.appendFolderInput.addEventListener('change', () => appendFilesToCurrentCollection(els.appendFolderInput.files, 'local_folder'));
+        }
+        if (els.appendFilesInput) {
+            els.appendFilesInput.addEventListener('change', () => appendFilesToCurrentCollection(els.appendFilesInput.files, 'local_files'));
+        }
 
         ['dragenter', 'dragover'].forEach((eventName) => {
             els.dropAction.addEventListener(eventName, (event) => {
@@ -1914,7 +2188,7 @@
         els.mapScopeCollection.addEventListener('click', () => {
             knowledgeMapScope = 'collection';
             selectedMapNodeId = null;
-            knowledgeMapError = '';
+            setKnowledgeMapError(currentMapKey(), '');
             currentView = 'map';
             render();
         });
@@ -1922,7 +2196,7 @@
             if (!(currentCollection && (currentCollection.sources || []).length)) return;
             knowledgeMapScope = 'source';
             selectedMapNodeId = null;
-            knowledgeMapError = '';
+            setKnowledgeMapError(currentMapKey(), '');
             currentView = 'map';
             render();
         });
@@ -1951,6 +2225,12 @@
         }
         if (els.openSourceFile) {
             els.openSourceFile.addEventListener('click', openSourceFile);
+        }
+        if (els.regenerateSourceSummary) {
+            els.regenerateSourceSummary.addEventListener('click', regenerateSourceSummary);
+        }
+        if (els.retrySource) {
+            els.retrySource.addEventListener('click', retrySelectedSource);
         }
         if (els.sourceSummaryPreview) {
             els.sourceSummaryPreview.addEventListener('click', () => {
@@ -1995,7 +2275,16 @@
         els.tokenHint.textContent = token ? '' : '需要 API 令牌，请先在工作台设置。';
         render();
         await loadFilterOptions();
-        await loadCollections();
+        if (initialTarget.collectionId) {
+            await selectCollection(initialTarget.collectionId, {
+                silent: true,
+                sourceId: initialTarget.sourceId
+            });
+            initialTarget = { collectionId: '', sourceId: '' };
+            await loadCollections({ selectLatest: false });
+        } else {
+            await loadCollections();
+        }
     }
 
     init().catch((error) => showToast(error.message || '初始化失败'));

@@ -1063,12 +1063,42 @@ function initWorkbenchUI() {
             if (panel) { panel.classList.add('active'); panel.hidden = false; }
         });
     });
+    if (window.location.hash === '#local-video-study') {
+        const fileTab = document.getElementById('tab-file');
+        if (fileTab) fileTab.click();
+    }
 
     // 本地文件：上传 → 转录 → 跳结果页
     const dz = document.getElementById('file-dropzone');
     const fileInput = document.getElementById('file-input');
     if (dz && fileInput) {
         const hint = document.getElementById('dropzone-hint');
+        const mediaExtensions = new Set(['mp3', 'm4a', 'wav', 'aac', 'flac', 'mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v']);
+
+        const isMediaFile = (fileObj) => {
+            const type = (fileObj.type || '').toLowerCase();
+            if (type.startsWith('audio/') || type.startsWith('video/')) return true;
+            const ext = (fileObj.name || '').split('.').pop().toLowerCase();
+            return mediaExtensions.has(ext);
+        };
+
+        const readUploadResponse = async (response) => {
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            if (contentType.includes('application/json')) {
+                return {
+                    status: response.status,
+                    ok: response.ok,
+                    d: await response.json().catch(() => ({})),
+                    text: '',
+                };
+            }
+            return {
+                status: response.status,
+                ok: response.ok,
+                d: {},
+                text: (await response.text().catch(() => '')).trim(),
+            };
+        };
 
         const uploadLocalFile = (fileObj) => {
             if (!fileObj) return;
@@ -1080,31 +1110,38 @@ function initWorkbenchUI() {
                 setTimeout(UIManager.hideStatus, 5000);
                 return;
             }
-            if (hint) hint.textContent = '上传中… ' + fileObj.name;
+            const mediaFile = isMediaFile(fileObj);
+            if (hint) hint.textContent = mediaFile ? '上传中… 将进入本地学习模式' : '上传中… ' + fileObj.name;
             dz.classList.add('uploading');
             const fd = new FormData();
             fd.append('file', fileObj);
             fd.append('use_speaker_recognition', 'false');
-            fetch('/api/upload-transcribe', {
+            fetch(mediaFile ? '/api/study/upload' : '/api/upload-transcribe', {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + token },
                 body: fd,
-            }).then((resp) => resp.json().then((d) => ({ status: resp.status, d })))
-              .then(({ status, d }) => {
+            }).then(readUploadResponse)
+              .then(({ status, ok, d, text }) => {
                   dz.classList.remove('uploading');
                   if (status === 401 || status === 403) {
                       if (hint) hint.textContent = '令牌无效，请在高级设置重新填写';
                       return;
                   }
+                  if (!ok) {
+                      if (hint) {
+                          hint.textContent = (d && (d.detail || d.message)) || text || ('上传失败（HTTP ' + status + '）');
+                      }
+                      return;
+                  }
                   if (d && d.code === 202 && d.data && d.data.view_token) {
-                      if (hint) hint.textContent = '上传成功，正在转录…';
-                      window.location.href = '/view/' + d.data.view_token;
+                      if (hint) hint.textContent = mediaFile ? '上传成功，正在打开学习模式…' : '上传成功，正在转录…';
+                      window.location.href = (mediaFile ? '/study/' : '/view/') + d.data.view_token;
                   } else if (hint) {
                       hint.textContent = (d && (d.detail || d.message)) || '上传失败，请重试';
                   }
-              }).catch(() => {
+              }).catch((error) => {
                   dz.classList.remove('uploading');
-                  if (hint) hint.textContent = '网络错误，请重试';
+                  if (hint) hint.textContent = (error && error.message) || '网络错误，请重试';
               });
         };
 

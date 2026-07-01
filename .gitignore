@@ -50,6 +50,11 @@ tests/llm/output
 *.wav
 *.flac
 
+# 例外：心流写作内置环境音需随应用一起发布
+!src/web/static/audio/rain.mp3
+!src/web/static/audio/snow.mp3
+!src/web/static/audio/stream.mp3
+
 # 模型文件
 models/
 

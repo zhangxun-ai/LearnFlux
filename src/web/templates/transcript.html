@@ -247,11 +247,153 @@
     font-size: 0.88rem;
 }
 
+.collection-nav {
+    display: grid;
+    gap: 10px;
+    padding: 14px 30px;
+    background: #fffaf3;
+    border-bottom: 1px solid rgba(159, 113, 58, 0.18);
+}
+
+.collection-nav,
+.collection-nav * {
+    box-sizing: border-box;
+}
+
+.collection-nav-top,
+.collection-nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.collection-nav-top {
+    justify-content: space-between;
+}
+
+.collection-nav-context {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.collection-nav-kicker {
+    color: var(--text-secondary, #666);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.collection-nav-return,
+.collection-nav-collection {
+    color: #8b4f20;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.collection-nav-return:hover,
+.collection-nav-collection:hover {
+    color: #5f3517;
+    text-decoration: underline;
+}
+
+.collection-nav-count {
+    color: var(--text-secondary, #666);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.collection-nav-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 1.08fr) minmax(0, 1fr);
+    align-items: stretch;
+}
+
+.collection-nav-link,
+.collection-nav-disabled,
+.collection-nav-select {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid rgba(159, 113, 58, 0.22);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text-primary, #333);
+    font-size: 0.86rem;
+    min-width: 0;
+}
+
+.collection-nav-link,
+.collection-nav-disabled {
+    display: grid;
+    gap: 2px;
+    padding: 7px 10px;
+    text-decoration: none;
+}
+
+.collection-nav-select-wrap {
+    min-width: 0;
+}
+
+.collection-nav-link:hover {
+    border-color: rgba(139, 79, 32, 0.45);
+    background: #fff7ed;
+}
+
+.collection-nav-disabled {
+    color: var(--text-secondary, #777);
+    opacity: 0.58;
+}
+
+.collection-nav-dir {
+    color: var(--text-secondary, #666);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.collection-nav-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.collection-nav-select {
+    display: block;
+    height: 100%;
+    padding: 0 10px;
+}
+
+.collection-nav-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
 @media (max-width: 720px) {
     .learning-action-bar {
         align-items: flex-start;
         flex-direction: column;
         padding: 12px 18px;
+    }
+
+    .collection-nav {
+        padding: 12px 18px;
+    }
+
+    .collection-nav-top {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .collection-nav-controls {
+        grid-template-columns: 1fr;
     }
 }
 </style>
@@ -270,6 +412,53 @@
             {% if stats.summary_length > 0 and stats.summary_length != stats.calibrated_length %} | 内容总结 {{ "{:,}".format(stats.summary_length) }} 字{% endif %}
         </span>
     </div>
+    {% endif %}
+
+    {% if collection_navigation %}
+    <nav class="collection-nav" aria-label="同合集章节导航">
+        <div class="collection-nav-top">
+            <div class="collection-nav-context">
+                <span class="collection-nav-kicker">合集学习</span>
+                <a class="collection-nav-collection" href="{{ collection_navigation.collection.url }}">{{ collection_navigation.collection.title }}</a>
+                <a class="collection-nav-return" href="{{ collection_navigation.collection.url }}">返回合集</a>
+            </div>
+            <span class="collection-nav-count">第 {{ collection_navigation.current_number }} / {{ collection_navigation.total }} 节</span>
+        </div>
+        <div class="collection-nav-controls">
+            {% if collection_navigation.previous and collection_navigation.previous.view_url %}
+            <a class="collection-nav-link" href="{{ collection_navigation.previous.view_url }}" aria-label="上一节：{{ collection_navigation.previous.title }}">
+                <span class="collection-nav-dir">上一节</span>
+                <span class="collection-nav-title">{{ collection_navigation.previous.title }}</span>
+            </a>
+            {% else %}
+            <span class="collection-nav-disabled" aria-disabled="true">
+                <span class="collection-nav-dir">上一节</span>
+                <span class="collection-nav-title">已经是第一节</span>
+            </span>
+            {% endif %}
+
+            <div class="collection-nav-select-wrap">
+                <label class="collection-nav-sr-only" for="collection-source-jump">切换到同合集其他章节</label>
+                <select class="collection-nav-select" id="collection-source-jump" onchange="if (this.value) window.location.href = this.value">
+                    {% for item in collection_navigation["items"] %}
+                    <option value="{{ item.view_url }}" {% if item.is_current %}selected{% endif %}>{{ loop.index }}. {{ item.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {% if collection_navigation.next and collection_navigation.next.view_url %}
+            <a class="collection-nav-link" href="{{ collection_navigation.next.view_url }}" aria-label="下一节：{{ collection_navigation.next.title }}">
+                <span class="collection-nav-dir">下一节</span>
+                <span class="collection-nav-title">{{ collection_navigation.next.title }}</span>
+            </a>
+            {% else %}
+            <span class="collection-nav-disabled" aria-disabled="true">
+                <span class="collection-nav-dir">下一节</span>
+                <span class="collection-nav-title">已经是最后一节</span>
+            </span>
+            {% endif %}
+        </div>
+    </nav>
     {% endif %}
 
     {% if longcut_action %}
@@ -418,6 +607,8 @@
         <div class="content" data-focus-section="summary">
             {% if summary_html %}
                 {{ summary_html|safe }}
+            {% elif summary_missing %}
+                <p style="color: var(--text-secondary); font-style: italic;">总结未生成，请重新校对后查看。</p>
             {% else %}
                 <p style="color: var(--text-secondary); font-style: italic;">总结处理中...</p>
             {% endif %}

@@ -41,7 +41,7 @@ class TestErrorMessage:
 
 
 class TestTerminalStickiness:
-    """success / failed are terminal and must not be overwritten by late writes."""
+    """success / failed / canceled are terminal and must not be overwritten by late writes."""
 
     def test_success_not_overwritten_by_processing(self, cm):
         task_id = _new_task(cm)
@@ -61,6 +61,12 @@ class TestTerminalStickiness:
         cm.update_task_status(task_id, TaskStatus.FAILED)
         cm.update_task_status(task_id, TaskStatus.SUCCESS)
         assert cm.get_task_by_id(task_id)["status"] == "failed"
+
+    def test_canceled_not_overwritten_by_processing(self, cm):
+        task_id = _new_task(cm)
+        cm.update_task_status(task_id, TaskStatus.CANCELED)
+        cm.update_task_status(task_id, TaskStatus.PROCESSING)
+        assert cm.get_task_by_id(task_id)["status"] == "canceled"
 
     def test_non_terminal_transitions_allowed(self, cm):
         task_id = _new_task(cm)

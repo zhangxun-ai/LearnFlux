@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List, Union
 from contextlib import contextmanager
 import threading
 from ..utils.logging import setup_logger
-from ..utils.task_status import TaskStatus
+from ..utils.task_status import TERMINAL_STATUSES, TaskStatus
 from ..utils.task_progress import build_progress
 
 logger = setup_logger("cache_manager")
@@ -841,13 +841,13 @@ class CacheManager:
         """
         更新任务状态
 
-        终态黏性:默认情况下,已处于终态(success/failed)的任务不会被覆写,
+        终态黏性:默认情况下,已处于终态(success/failed/canceled)的任务不会被覆写,
         防止慢半拍的旧 worker、重复任务或异常重试把已完成的任务覆回处理中。
         recalibrate 等需要显式重置的场景传 force=True 绕过该保护。
 
         Args:
             task_id: 任务ID
-            status: 状态 (queued/processing/calibrating/success/failed)
+            status: 状态 (queued/processing/calibrating/success/failed/canceled)
             platform: 平台名称
             media_id: 媒体ID
             title: 视频标题
@@ -888,13 +888,21 @@ class CacheManager:
                     update_fields.append("error_message = ?")
                     params.append(error_message)
 
-                if status in ['success', 'failed']:
+                if status in TERMINAL_STATUSES:
                     update_fields.append("completed_at = CURRENT_TIMESTAMP")
                     if status == TaskStatus.SUCCESS:
                         progress = build_progress(
                             stage="completed",
                             basis="task_completed",
                             confidence="high",
+                        )
+                    elif status == TaskStatus.CANCELED:
+                        progress = build_progress(
+                            stage="canceled",
+                            stage_label="任务已取消",
+                            basis="task_canceled",
+                            confidence="high",
+                            message=error_message or "用户已取消任务",
                         )
                     else:
                         progress = build_progress(
@@ -908,11 +916,12 @@ class CacheManager:
 
                 params.append(task_id)
 
-                # 终态黏性:非 force 时,已是 success/failed 的行不被覆写
+                # 终态黏性:非 force 时,已是 success/failed/canceled 的行不被覆写
                 where = "task_id = ?"
                 if not force:
-                    where += " AND status NOT IN (?, ?)"
-                    params.extend([TaskStatus.SUCCESS, TaskStatus.FAILED])
+                    placeholders = ", ".join("?" for _ in TERMINAL_STATUSES)
+                    where += f" AND status NOT IN ({placeholders})"
+                    params.extend(TERMINAL_STATUSES)
 
                 query = f"UPDATE task_status SET {', '.join(update_fields)} WHERE {where}"
                 cursor.execute(query, params)
@@ -958,13 +967,14 @@ class CacheManager:
                     """
                     UPDATE task_status
                     SET progress_json = ?
-                    WHERE task_id = ? AND status NOT IN (?, ?)
+                    WHERE task_id = ? AND status NOT IN (?, ?, ?)
                     """,
                     (
                         json.dumps(progress, ensure_ascii=False),
                         task_id,
                         TaskStatus.SUCCESS,
                         TaskStatus.FAILED,
+                        TaskStatus.CANCELED,
                     ),
                 )
             return progress
@@ -1175,9 +1185,12 @@ class CacheManager:
                 if cache_data:
                     # 缓存存在，返回完整数据
                     # 确保返回的是字符串类型
-                    summary = cache_data.get('llm_summary', '总结处理中...')
+                    raw_summary = cache_data.get('llm_summary')
+                    summary_missing = raw_summary is None
+                    summary = raw_summary or ''
                     if not isinstance(summary, str):
-                        summary = str(summary) if summary is not None else '总结处理中...'
+                        summary = str(summary) if summary is not None else ''
+                    summary_missing = summary_missing or not summary.strip()
 
                     transcript = cache_data.get('llm_calibrated') or cache_data.get('transcript_data', '转录文本获取中...')
                     if not isinstance(transcript, str):
@@ -1199,6 +1212,7 @@ class CacheManager:
                         'description': cache_data.get('description', ''),
                         'url': display_url,
                         'summary': summary,
+                        'summary_missing': summary_missing,
                         'transcript': transcript,
                         'use_speaker_recognition': cache_data.get('use_speaker_recognition', False),
                         'created_at': task_info['created_at'],

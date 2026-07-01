@@ -298,6 +298,15 @@ class LearningCollectionRepository:
 
         source_id = uuid.uuid4().hex
         with self._get_cursor() as cursor:
+            if position is not None:
+                cursor.execute(
+                    """
+                    UPDATE learning_collection_sources
+                    SET position = position + 1
+                    WHERE collection_id = ? AND position >= ?
+                    """,
+                    (collection_id, int(position)),
+                )
             cursor.execute(
                 """
                 INSERT INTO learning_collection_sources
@@ -317,10 +326,69 @@ class LearningCollectionRepository:
             cursor.execute(
                 """
                 UPDATE learning_collections
-                SET status = 'processing', updated_at = CURRENT_TIMESTAMP
+                SET status = 'processing',
+                    summary_status = 'not_started',
+                    summary_markdown = NULL,
+                    exported_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
                 (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_knowledge_maps
+                WHERE collection_id = ? AND scope = 'collection'
+                """,
+                (collection_id,),
+            )
+        return self.get_source(source_id)
+
+    def update_source_task(
+        self,
+        source_id: str,
+        task_id: str,
+        view_token: str,
+    ) -> Dict[str, Any]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT collection_id FROM learning_collection_sources
+                WHERE id = ?
+                """,
+                (source_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise ValueError("source not found")
+            collection_id = row["collection_id"]
+            cursor.execute(
+                """
+                UPDATE learning_collection_sources
+                SET task_id = ?, view_token = ?
+                WHERE id = ?
+                """,
+                (task_id, view_token, source_id),
+            )
+            cursor.execute(
+                """
+                UPDATE learning_collections
+                SET status = 'processing',
+                    summary_status = 'not_started',
+                    summary_markdown = NULL,
+                    exported_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_knowledge_maps
+                WHERE collection_id = ?
+                  AND (scope = 'collection' OR (scope = 'source' AND source_id = ?))
+                """,
+                (collection_id, source_id),
             )
         return self.get_source(source_id)
 
@@ -356,6 +424,27 @@ class LearningCollectionRepository:
                 (collection_id,),
             )
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_source_with_collection_by_view_token(
+        self, view_token: str
+    ) -> Optional[Dict[str, Any]]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    s.*,
+                    c.title AS collection_title,
+                    c.creator_name AS collection_creator_name,
+                    c.collection_type AS collection_type
+                FROM learning_collection_sources s
+                JOIN learning_collections c ON c.id = s.collection_id
+                WHERE s.view_token = ?
+                LIMIT 1
+                """,
+                (view_token,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
     def get_collection_detail(self, collection_id: str) -> Optional[Dict[str, Any]]:
         collection = self.get_collection(collection_id)

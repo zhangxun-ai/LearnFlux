@@ -48,14 +48,16 @@ def _llm_task(task_id):
     }
 
 
-def _patches(cm, coordinator):
+def _patches(cm, coordinator, build_result_dict=None):
     """Patch llm_ops module globals to isolate the state-transition logic."""
+    if build_result_dict is None:
+        build_result_dict = lambda r: {}
     return [
         patch.object(llm_ops, "cache_manager", cm),
         patch.object(llm_ops, "llm_coordinator", coordinator),
         # _handle_llm_task calls llm_task_queue.task_done() in finally; isolate it.
         patch.object(llm_ops, "llm_task_queue", MagicMock()),
-        patch.object(llm_ops, "_build_result_dict", lambda r: {}),
+        patch.object(llm_ops, "_build_result_dict", build_result_dict),
         patch.object(llm_ops, "_save_llm_results", MagicMock()),
         patch.object(llm_ops, "_send_notification", MagicMock()),
         patch.object(llm_ops, "get_notification_router", lambda: MagicMock()),
@@ -99,3 +101,60 @@ class TestLlmTerminalWriteback:
         row = cm.get_task_by_id(task_id)
         assert row["status"] == "failed"
         assert "boom" in (row["error_message"] or "")
+
+    def test_normal_task_missing_required_summary_sets_db_failed(self, cm):
+        task_id = _calibrating_task(cm)
+        coordinator = MagicMock()
+        coordinator.config.min_summary_threshold = 500
+        coordinator.process.return_value = {
+            "calibrated_text": "x" * 600,
+            "summary_text": None,
+            "stats": {},
+            "models_used": {},
+        }
+
+        ctxs = _patches(cm, coordinator, llm_ops._build_result_dict)
+        for c in ctxs:
+            c.start()
+        try:
+            llm_ops._handle_llm_task(_llm_task(task_id))
+        finally:
+            for c in ctxs:
+                c.stop()
+
+        row = cm.get_task_by_id(task_id)
+        assert row["status"] == "failed"
+        assert "summary generation returned empty" in (row["error_message"] or "")
+
+    def test_recalibrate_regenerate_summary_forces_summary_backfill(self, cm):
+        task_id = _calibrating_task(cm)
+        coordinator = MagicMock()
+        coordinator.process.return_value = {
+            "calibrated_text": "calibrated",
+            "summary_text": "fresh summary",
+            "stats": {},
+            "models_used": {},
+        }
+        save_results = MagicMock()
+        task = {
+            **_llm_task(task_id),
+            "calibrate_only": True,
+            "regenerate_summary": True,
+        }
+
+        with patch.object(llm_ops, "cache_manager", cm), patch.object(
+            llm_ops, "llm_coordinator", coordinator
+        ), patch.object(llm_ops, "llm_task_queue", MagicMock()), patch.object(
+            llm_ops, "_save_llm_results", save_results
+        ), patch.object(llm_ops, "_send_notification", MagicMock()), patch.object(
+            llm_ops, "get_notification_router", lambda: MagicMock()
+        ), patch.object(
+            llm_ops, "_generate_title_if_needed", lambda t, title, tr: title
+        ), patch.object(
+            llm_ops, "_prepare_llm_content", lambda t, tr, spk: "content"
+        ):
+            llm_ops._handle_llm_task(task)
+
+        assert coordinator.process.call_args.kwargs["skip_summary"] is False
+        assert save_results.call_args.kwargs["summary_backfill"] is True
+        assert cm.get_task_by_id(task_id)["status"] == "success"

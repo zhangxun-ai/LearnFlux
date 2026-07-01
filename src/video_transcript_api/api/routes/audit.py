@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..context import get_audit_logger, get_cache_manager, get_logger
 from ..services.transcription import TranscribeResponse, verify_token
+from ...utils.timeutil import format_datetime_with_timezone
 
 logger = get_logger()
 audit_logger = get_audit_logger()
@@ -84,7 +85,7 @@ async def get_history(
     cache_db_path = str(cache_manager.db_path)
 
     # 构建 WHERE 条件
-    conditions = ["a.api_key_masked = ?"]
+    conditions = ["a.api_key_masked = ?", "a.task_id IS NOT NULL"]
     params: list = [api_key_masked]
 
     if webhook:
@@ -132,29 +133,56 @@ async def get_history(
 
     where_clause = " AND ".join(conditions + cache_conditions)
 
-    base_sql = f"""
-        SELECT
-            a.task_id,
-            a.video_url,
-            a.wechat_webhook,
-            a.request_time,
-            a.api_key_masked,
-            t.view_token,
-            t.title,
-            t.author,
-            t.platform,
-            t.status
-        FROM api_audit_logs a
-        LEFT JOIN cache.task_status t ON a.task_id = t.task_id
-        WHERE {where_clause}
-        ORDER BY a.request_time DESC
+    history_cte = f"""
+        WITH filtered AS (
+            SELECT
+                a.id AS audit_id,
+                a.task_id,
+                COALESCE(NULLIF(a.video_url, ''), t.url) AS video_url,
+                a.wechat_webhook,
+                COALESCE(t.created_at, a.request_time) AS request_time,
+                a.api_key_masked,
+                t.view_token,
+                t.title,
+                t.author,
+                t.platform,
+                t.status,
+                COALESCE(t.view_token, a.task_id) AS dedupe_key,
+                ROW_NUMBER() OVER (
+                    PARTITION BY COALESCE(t.view_token, a.task_id)
+                    ORDER BY
+                        COALESCE(t.created_at, a.request_time) DESC,
+                        CASE WHEN a.video_url IS NOT NULL AND a.video_url != '' THEN 0 ELSE 1 END,
+                        a.request_time DESC,
+                        a.id DESC
+                ) AS rn
+            FROM api_audit_logs a
+            LEFT JOIN cache.task_status t ON a.task_id = t.task_id
+            WHERE {where_clause}
+        )
     """
 
-    count_sql = f"""
+    base_sql = history_cte + """
+        SELECT
+            task_id,
+            video_url,
+            wechat_webhook,
+            request_time,
+            api_key_masked,
+            view_token,
+            title,
+            author,
+            platform,
+            status
+        FROM filtered
+        WHERE rn = 1
+        ORDER BY request_time DESC, audit_id DESC
+    """
+
+    count_sql = history_cte + """
         SELECT COUNT(*)
-        FROM api_audit_logs a
-        LEFT JOIN cache.task_status t ON a.task_id = t.task_id
-        WHERE {where_clause}
+        FROM filtered
+        WHERE rn = 1
     """
 
     def _run_query():
@@ -174,11 +202,15 @@ async def get_history(
 
             items = []
             for row in rows:
+                request_time = row[3]
                 items.append({
                     "task_id": row[0],
                     "video_url": row[1],
                     "wechat_webhook": row[2],
-                    "request_time": row[3],
+                    "request_time": request_time,
+                    "request_time_display": format_datetime_with_timezone(
+                        request_time, "%Y-%m-%d %H:%M"
+                    ),
                     "api_key_masked": row[4],
                     "view_token": row[5],
                     "title": row[6],

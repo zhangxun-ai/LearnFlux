@@ -54,6 +54,11 @@ def _safe_update_progress(task_id: str, **kwargs):
         return None
 
 
+def _is_task_canceled(task_id: str) -> bool:
+    task_info = cache_manager.get_task_by_id(task_id) or {}
+    return task_info.get("status") == TaskStatus.CANCELED
+
+
 def _extract_audio_to_file(src_path: str, out_dir: str, media_id: str) -> Optional[str]:
     """用 ffmpeg 抽取 16kHz 单声道压缩音频(m4a)，体积远小于原视频。
 
@@ -236,6 +241,7 @@ def process_local_upload(
     media_id: str,
     use_speaker_recognition: bool = False,
     preserve_source_file: bool = False,
+    preserve_transcript_timestamps: bool = False,
 ) -> Dict[str, Any]:
     """处理本地上传的音视频或文档，复用 LLM 后处理与结果页。
 
@@ -244,8 +250,13 @@ def process_local_upload(
     """
     tracker = PerfTracker(task_id=task_id)
     audio_path = None
+    structured_transcript = None
     try:
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
         cache_manager.update_task_status(task_id, TaskStatus.PROCESSING)
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
 
         if not os.path.exists(file_path):
             cache_manager.update_task_status(
@@ -301,6 +312,7 @@ def process_local_upload(
             )
             result = transcriber.transcribe(transcribe_target, output_base)
             transcript = (result.get("transcript") or "").strip()
+            structured_transcript = result.get("funasr_json_data")
             empty_msg = "转录结果为空"
 
         if not transcript:
@@ -309,13 +321,27 @@ def process_local_upload(
             )
             return {"status": "failed", "message": empty_msg}
 
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
+
+        transcript_payload = (
+            structured_transcript
+            if preserve_transcript_timestamps and structured_transcript
+            else transcript
+        )
+        transcript_type = (
+            "funasr"
+            if preserve_transcript_timestamps and structured_transcript
+            else "capswriter"
+        )
+
         cache_manager.save_cache(
             platform="generic",
             url=display_url,
             media_id=media_id,
             use_speaker_recognition=False,
-            transcript_data=transcript,
-            transcript_type="capswriter",
+            transcript_data=transcript_payload,
+            transcript_type=transcript_type,
             title=original_name,
             author="本地上传",
             description="",
@@ -351,9 +377,10 @@ def process_local_upload(
         return {"status": "success", "message": "本地转录成功"}
     except Exception as exc:
         logger.exception(f"本地上传转录失败: {task_id}, error={exc}")
-        cache_manager.update_task_status(
-            task_id, TaskStatus.FAILED, error_message=f"本地转录失败: {exc}"
-        )
+        if not _is_task_canceled(task_id):
+            cache_manager.update_task_status(
+                task_id, TaskStatus.FAILED, error_message=f"本地转录失败: {exc}"
+            )
         return {"status": "failed", "message": str(exc)}
     finally:
         # 默认清理全部临时文件；学习集合会保留原 source 文件用于后续打开。
@@ -542,6 +569,9 @@ class RecalibrateRequest(BaseModel):
     """重新校对请求数据模型"""
 
     view_token: str = Field(..., description="查看页面的 view_token")
+    regenerate_summary: bool = Field(
+        False, description="是否强制重新生成内容总结/AI 解读"
+    )
     wechat_webhook: Optional[str] = Field(
         None, description="企业微信webhook地址，用于发送通知"
     )
@@ -717,7 +747,13 @@ async def process_task_queue():
             comment_limit = task.get("comment_limit", 100)
 
             try:
+                if _is_task_canceled(task_id):
+                    logger.info(f"任务已取消，跳过处理: {task_id}")
+                    continue
                 cache_manager.update_task_status(task_id, TaskStatus.PROCESSING, download_url=download_url)
+                if _is_task_canceled(task_id):
+                    logger.info(f"任务已取消，跳过线程池提交: {task_id}")
+                    continue
                 _safe_update_progress(
                     task_id,
                     stage="url_parsing",
@@ -813,6 +849,8 @@ def process_transcription(
     tracker = PerfTracker(task_id=task_id)
 
     try:
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
         # 规范化 download_url：将空字符串转换为 None
         if download_url is not None and isinstance(download_url, str) and not download_url.strip():
             download_url = None

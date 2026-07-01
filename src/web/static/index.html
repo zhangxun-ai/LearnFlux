@@ -12,12 +12,19 @@
     <meta name="description" content="视频转录、文档解析、AI 精华提炼，把内容沉淀成可复习的学习笔记">
     <meta name="theme-color" content="#FBF8F3">
     <meta name="robots" content="noindex">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/styles.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/workbench.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
 </head>
 <body>
     <div id="site-nav"></div>
@@ -167,8 +174,8 @@
                     <div class="file-dropzone" id="file-dropzone" tabindex="0">
                         <div class="dropzone-icon">📁</div>
                         <div class="dropzone-title">拖拽视频 / 音频 / 文档到此处，或点击选择</div>
-                        <div class="dropzone-sub">音视频 → 转录总结　·　文档(pdf/docx/txt/md) → 提取分析</div>
-                        <div class="dropzone-badge" id="dropzone-hint">支持 视频 / 音频 / 文档 · 大文件长视频均可 · 自动 AI 提炼</div>
+                        <div class="dropzone-sub">音视频 → 本地学习模式　·　文档(pdf/docx/txt/md) → 提取分析</div>
+                        <div class="dropzone-badge" id="dropzone-hint">支持 视频 / 音频 / 文档 · 本地长视频可边看边读文稿</div>
                     </div>
                 </div>
             </div>

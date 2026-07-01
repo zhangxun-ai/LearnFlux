@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <script>
+    document.documentElement.setAttribute('data-theme', 'light');
+    window.STUDY_VIEW_TOKEN = '__VIEW_TOKEN__';
+    window.STUDY_ASSET_VERSION = '__ASSET_VERSION__';
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#FBF8F3">
+    <title>本地视频学习 - 内容解析工作台</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/study.css?v=__ASSET_VERSION__">
+    <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
+</head>
+<body>
+    <div id="site-nav"></div>
+    <script src="/static/js/site-nav.js?v=__ASSET_VERSION__"></script>
+
+    <main class="study-page">
+        <header class="study-head">
+            <div>
+                <p class="study-kicker">本地视频学习</p>
+                <h1 id="study-title">正在加载学习内容...</h1>
+                <p id="study-subtitle">视频、逐字稿、AI 解读和个人笔记会围绕同一条时间轴组织。</p>
+            </div>
+            <div class="study-status" aria-label="学习状态">
+                <div class="study-stat"><span>状态</span><strong id="study-state">加载中</strong></div>
+                <div class="study-stat"><span>文稿</span><strong id="study-transcript-count">0 段</strong></div>
+                <div class="study-stat"><span>记录</span><strong id="study-note-count">0 条</strong></div>
+            </div>
+        </header>
+
+        <section class="study-shell" aria-label="本地视频学习工作台">
+            <div class="study-toolbar">
+                <div class="breadcrumbs" id="study-breadcrumbs">本地视频 / 学习模式</div>
+                <div class="toolbar-actions">
+                    <button class="btn ghost" id="copy-current-line" type="button">复制当前段</button>
+                    <button class="btn primary" id="export-markdown" type="button" disabled>导出 Markdown</button>
+                </div>
+            </div>
+
+            <div class="layout-focus">
+                <section class="surface" aria-label="视频播放区">
+                    <div class="surface-head">
+                        <div>
+                            <h2 id="video-title">正在加载...</h2>
+                            <span id="video-meta">等待学习数据</span>
+                        </div>
+                        <div class="mini-actions">
+                            <button class="btn blue" id="capture-note" type="button">记当前点</button>
+                        </div>
+                    </div>
+                    <div class="video-frame" id="video-frame">
+                        <video id="study-video" controls playsinline preload="metadata"></video>
+                        <div class="video-empty" id="video-empty">
+                            <strong>视频暂不可播放</strong>
+                            <span>如果这是旧任务，源视频可能没有被保留；逐字稿和 AI 解读仍可学习。</span>
+                        </div>
+                    </div>
+                    <div class="play-strip">
+                        <div class="time-row">
+                            <button class="play-btn" id="play-toggle" type="button" aria-label="播放">▶</button>
+                            <div class="progress" id="video-progress" style="--value: 0%"></div>
+                            <span id="video-time">00:00 / 00:00</span>
+                        </div>
+                    </div>
+                </section>
+
+                <aside class="panel" aria-label="右侧学习面板">
+                    <div class="right-tabs" role="tablist" aria-label="学习内容视图">
+                        <button class="is-active" type="button" data-tab="ai">AI 看</button>
+                        <button type="button" data-tab="visual">笔记</button>
+                        <button type="button" data-tab="transcript">文稿</button>
+                        <button type="button" data-tab="notes">记录</button>
+                    </div>
+
+                    <div class="study-panel-view is-active" id="tab-ai">
+                        <div class="status-card" id="study-progress-card" hidden>
+                            <strong id="study-progress-title">正在处理</strong>
+                            <span id="study-progress-detail">学习内容正在生成，页面会自动刷新。</span>
+                            <div class="status-progress"><i id="study-progress-fill"></i></div>
+                        </div>
+                        <div class="overview-card">
+                            <h3>总览总结</h3>
+                            <div class="markdown-content" id="ai-overview">加载中...</div>
+                        </div>
+                    </div>
+
+                    <div class="study-panel-view" id="tab-visual">
+                        <div class="note-tools" aria-label="AI 笔记工具栏">
+                            <span>AI 图文笔记</span>
+                        </div>
+                        <div class="panel-head">
+                            <div>
+                                <h3>笔记</h3>
+                                <span>以下为 AI 生成的图文笔记内容</span>
+                            </div>
+                        </div>
+                        <div class="ai-note-list" id="ai-notes-list">
+                            <div class="empty-panel"><strong>正在加载</strong><span>学习内容加载完成后会显示 AI 图文笔记。</span></div>
+                        </div>
+                    </div>
+
+                    <div class="study-panel-view" id="tab-transcript">
+                        <div class="panel-head">
+                            <div>
+                                <h3>文稿</h3>
+                                <span>正文可点击跳转，当前播放句会高亮</span>
+                            </div>
+                        </div>
+                        <div class="transcript-panel" id="transcript-list">
+                            <div class="empty-panel"><strong>正在加载</strong><span>学习内容加载完成后会显示文稿。</span></div>
+                        </div>
+                    </div>
+
+                    <div class="study-panel-view" id="tab-notes">
+                        <div class="panel-head">
+                            <div>
+                                <h3>我的记录</h3>
+                                <span>保存时自动关联当前播放时间</span>
+                            </div>
+                        </div>
+                        <textarea id="note-body" class="note-compose" placeholder="写下当前时间点的理解、问题或行动项"></textarea>
+                        <button class="btn primary note-save" id="save-note" type="button">保存笔记</button>
+                        <div class="notes-list" id="notes-list">
+                            <div class="empty-panel"><strong>正在加载</strong><span>学习内容加载完成后会显示你的记录。</span></div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+    </main>
+
+    <div class="toast" id="study-toast" role="status" aria-live="polite"></div>
+    <script src="/static/js/study.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

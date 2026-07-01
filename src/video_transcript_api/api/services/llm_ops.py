@@ -50,6 +50,11 @@ def _safe_update_progress(task_id: str, **kwargs):
         return None
 
 
+def _is_task_canceled(task_id: str) -> bool:
+    task_info = cache_manager.get_task_by_id(task_id) or {}
+    return task_info.get("status") == TaskStatus.CANCELED
+
+
 def process_llm_queue():
     """处理LLM队列的后台任务"""
     logger.info("启动LLM队列处理器")
@@ -83,7 +88,13 @@ def _handle_llm_task(llm_task: dict):
     tracker: PerfTracker = llm_task.pop("perf_tracker", None) or PerfTracker(task_id=task_id)
 
     try:
+        if _is_task_canceled(task_id):
+            logger.info(f"LLM任务已取消，跳过处理: {task_id}")
+            return
         with task_lock(task_id):
+            if _is_task_canceled(task_id):
+                logger.info(f"LLM任务已取消，跳过处理: {task_id}")
+                return
             url = llm_task["url"]
             display_url = llm_task.get("display_url", url)
             platform = llm_task.get("platform")
@@ -177,13 +188,19 @@ def _handle_llm_task(llm_task: dict):
                 # 是否为仅校对模式（重新校对场景）
                 # 仅校对模式下，若缓存里 llm_summary.txt 缺失/为空，顺手补跑一次 summary
                 # 避免老任务卡在 view 页的 "总结处理中..." 状态
-                summary_backfill = False
+                force_summary_regeneration = bool(llm_task.get("regenerate_summary"))
+                summary_backfill = force_summary_regeneration
+                if force_summary_regeneration:
+                    logger.info(f"recalibrate: forced summary regeneration enabled for {task_id}")
                 if calibrate_only and platform and media_id:
                     cache_snapshot = cache_manager.get_cache(
                         platform, media_id,
                         use_speaker_recognition=use_speaker_recognition,
                     )
-                    if _should_backfill_summary(cache_snapshot or {}, calibrate_only=True):
+                    if (
+                        not summary_backfill
+                        and _should_backfill_summary(cache_snapshot or {}, calibrate_only=True)
+                    ):
                         summary_backfill = True
                         logger.info(
                             f"recalibrate: llm_summary missing for {task_id}, "
@@ -208,8 +225,30 @@ def _handle_llm_task(llm_task: dict):
                 # 适配返回格式
                 result_dict = _build_result_dict(coordinator_result)
 
+                summary_error_message = None
+                summary_expected = (not calibrate_only) or summary_backfill
+                if summary_expected and result_dict.get("内容总结") is None:
+                    calibrated_text = result_dict.get("校对文本") or ""
+                    min_summary_threshold = getattr(
+                        llm_coordinator.config, "min_summary_threshold", 500
+                    )
+                    try:
+                        min_summary_threshold = int(min_summary_threshold)
+                    except (TypeError, ValueError):
+                        min_summary_threshold = 500
+                    if len(calibrated_text) < min_summary_threshold:
+                        result_dict["skip_summary"] = True
+                        result_dict["summary_success"] = True
+                        result_dict.setdefault("stats", {})["summary_length"] = len(
+                            calibrated_text
+                        )
+                    else:
+                        summary_error_message = (
+                            "summary generation returned empty for required summary"
+                        )
+
                 # 可选评论洞察：失败不影响主转录/总结链路
-                if not calibrate_only:
+                if not calibrate_only and not summary_error_message:
                     models_used = result_dict.get("models_used", {})
                     if llm_task.get("include_comments"):
                         _safe_update_progress(
@@ -251,6 +290,8 @@ def _handle_llm_task(llm_task: dict):
                     calibrate_only=calibrate_only,
                     summary_backfill=summary_backfill,
                 )
+                if summary_error_message:
+                    raise RuntimeError(summary_error_message)
 
                 # 发送通知（多渠道）
                 if not calibrate_only:

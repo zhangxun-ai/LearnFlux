@@ -237,6 +237,24 @@ select:focus-visible,
     background: #fbf8f3;
 }
 
+.lc-btn.danger {
+    border-color: #d86d5e;
+    background: #fff7f5;
+    color: #b33a2b;
+}
+
+.lc-btn.danger:hover {
+    border-color: #b33a2b;
+    background: #ffe9e5;
+}
+
+.lc-btn.compact {
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+}
+
 .lc-btn:disabled,
 .lc-type:disabled {
     cursor: not-allowed;
@@ -460,6 +478,26 @@ select:focus-visible,
     margin-bottom: 16px;
 }
 
+.lc-workspace-tools {
+    display: grid;
+    gap: 12px;
+    justify-items: end;
+}
+
+.lc-workspace-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.lc-workspace-actions .lc-btn {
+    min-height: 38px;
+    padding: 0 13px;
+    border-radius: 12px;
+    font-size: 13px;
+}
+
 .lc-metadata {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -652,6 +690,11 @@ select:focus-visible,
 .lc-status.failed {
     background: var(--error-bg);
     color: var(--error-text);
+}
+
+.lc-status.canceled {
+    background: #f3ede4;
+    color: var(--muted);
 }
 
 .lc-status.processing,
@@ -1240,6 +1283,25 @@ select:focus-visible,
     font-weight: 800;
 }
 
+.lc-source-error {
+    display: grid;
+    gap: 4px;
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid rgba(179, 58, 43, 0.28);
+    border-radius: 14px;
+    background: var(--error-bg);
+    color: var(--error-text);
+}
+
+.lc-source-error strong {
+    font-size: 13px;
+}
+
+.lc-source-error span {
+    overflow-wrap: anywhere;
+}
+
 .lc-source-content {
     display: grid;
     gap: 14px;
@@ -1267,6 +1329,14 @@ select:focus-visible,
 
 .lc-section-head h4 {
     margin: 0;
+}
+
+.lc-summary-tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
 }
 
 .lc-markdown-head {
@@ -1512,6 +1582,15 @@ select:focus-visible,
         min-width: 0;
     }
 
+    .lc-workspace-tools {
+        width: 100%;
+        justify-items: stretch;
+    }
+
+    .lc-workspace-actions {
+        justify-content: flex-start;
+    }
+
     .lc-map-scope {
         width: 100%;
         min-width: 0;
@@ -1603,6 +1682,10 @@ select:focus-visible,
 
     .lc-view-toggle {
         align-self: flex-start;
+    }
+
+    .lc-summary-tools {
+        justify-content: flex-start;
     }
 
     .lc-import-preview {

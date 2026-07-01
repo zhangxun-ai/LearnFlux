@@ -5,9 +5,11 @@
 
 状态机:
     queued ──► processing ──► calibrating ──► success
+       │            │              │
+       └────────────┴──────────────┴──► canceled
                     │              │
                     └──► failed ◄──┘
-    (success / failed 为终态,具备黏性,除 recalibrate 显式重置外不被覆写)
+    (success / failed / canceled 为终态,具备黏性,除 recalibrate 显式重置外不被覆写)
 
 HTTP 映射:
     queued / processing / calibrating → 202 (处理中,继续轮询)
@@ -33,10 +35,13 @@ class TaskStatus(StrEnum):
     CALIBRATING = "calibrating"
     SUCCESS = "success"
     FAILED = "failed"
+    CANCELED = "canceled"
 
 
 # 终态:任务生命周期结束,不应再被非显式流程覆写
-TERMINAL_STATUSES = frozenset({TaskStatus.SUCCESS, TaskStatus.FAILED})
+TERMINAL_STATUSES = frozenset(
+    {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELED}
+)
 
 # 非终态:仍在处理中,崩溃后可被启动恢复扫描标记为 failed
 NON_TERMINAL_STATUSES = frozenset(

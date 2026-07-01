@@ -4,9 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#FBF8F3">
+<meta name="application-name" content="内容解析工作台">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="内容解析工作台">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>IP 对标工作台 · 内容拆解</title>
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+<link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
+<script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
 <style>
   :root{
     --paper:#FBF8F3; --ink:#1B1A17; --ink-soft:#4A463F; --muted:#9A938A;
@@ -78,6 +87,15 @@
   .ty.video{background:rgba(228,80,58,.1);color:var(--video)}.ty.article{background:rgba(47,143,107,.1);color:var(--article)}
   .src .tt{font-weight:600;font-size:1.05rem}.src .by{color:var(--muted);font-size:.88rem}
   .src .link{margin-left:auto;color:var(--accent-ink);text-decoration:none;font-size:.88rem;font-weight:600}
+  .draft-panel{margin:14px 0 18px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow)}
+  .draft-head{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+  .draft-title{font-weight:700;font-size:1rem}
+  .draft-meta{font-size:.82rem;color:var(--muted);margin-top:2px}
+  .draft-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .draft-status{font-size:.86rem;color:var(--muted);margin-top:10px}
+  .draft-output{margin-top:14px;border-top:1px solid var(--line);padding-top:14px;color:var(--ink-soft);line-height:1.85;overflow-wrap:break-word}
+  .draft-output h2{font-size:1.05rem;color:var(--ink);margin:16px 0 7px}
+  .draft-output h2:first-child{margin-top:0}
   .result-layout{display:grid;grid-template-columns:170px minmax(0,1fr);gap:26px;align-items:start}
   .result-toc{position:sticky;top:18px;padding:14px 0;border-right:1px solid var(--line)}
   .result-toc .toc-title{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:9px}
@@ -269,7 +287,7 @@
   }
 
   // ---------- analyze ----------
-  var timers=[];
+  var timers=[], lastDraftMarkdown='';
   function startLoad(){var steps=['正在抓取内容…','视频会下载并本地转写（约 1 分钟）…','正在让 AI 拆解…'];
     $('loading-text').textContent=steps[0];
     timers.push(setTimeout(function(){$('loading-text').textContent=steps[1];},3500));
@@ -281,6 +299,15 @@
     var h='<div class="src"><span class="ty '+tc+'">'+tt+'</span><span class="tt">'+esc(d.title)+'</span>'+
       '<span class="by">@'+esc(d.author)+(d.stats?(' · 👍 '+(d.stats.like_count||0)):'')+'</span>'+
       '<a class="link" href="'+esc(d.original_url)+'" target="_blank" rel="noopener">看原内容 ↗</a></div>';
+    if(d.content_id){
+      h+='<section class="draft-panel" aria-labelledby="draft-title"><div class="draft-head"><div>'+
+        '<div class="draft-title" id="draft-title">基于拆解生成新帖</div>'+
+        '<div class="draft-meta">使用 DeepSeek v4 Pro 创作模型，复用结构但不复制原文。</div></div>'+
+        '<div class="draft-actions"><button class="act primary" id="draft-btn" type="button" onclick="fwDraft('+d.content_id+')">生成新帖</button>'+
+        '<button class="act hidden" id="draft-copy" type="button" onclick="fwCopyDraft()">复制全文</button></div></div>'+
+        '<div class="draft-status" id="draft-status" aria-live="polite"></div>'+
+        '<div class="draft-output hidden" id="draft-output"></div></section>';
+    }
     var n=1, ot=d.one_thing||'', source=d.source_text||'', sourceLabel=d.source_label||(d.media_type==='video'?'视频转写文字':'图文正文');
     var toc='<nav class="result-toc" aria-label="结果目录"><div class="toc-title">目录</div><a href="#source-text">'+esc(sourceLabel)+'</a>';
     var body='<div class="result-main"><section class="source-text" id="source-text" tabindex="-1"><h2>'+esc(sourceLabel)+'</h2>'+
@@ -298,6 +325,38 @@
     h+='<div class="result-layout">'+toc+body+'</div>';
     $('result').innerHTML=h;show($('result'));
   }
+  function renderDraft(mdText){
+    return esc(mdText)
+      .replace(/^## (.+)$/gm,'<h2>$1</h2>')
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\n/g,'<br>');
+  }
+  window.fwDraft=function(contentId){
+    if(!getToken()){fwV('settings');return;}
+    var btn=$('draft-btn'), out=$('draft-output'), status=$('draft-status'), copy=$('draft-copy');
+    if(!btn||!out||!status)return;
+    btn.disabled=true;btn.textContent='生成中…';status.textContent='正在调用 DeepSeek v4 Pro 生成新帖…';
+    out.classList.add('hidden');out.innerHTML='';if(copy)copy.classList.add('hidden');
+    fetch('/api/flywheel/content/'+contentId+'/draft',{method:'POST',headers:hdrs()})
+      .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+      .then(function(r){btn.disabled=false;btn.textContent='重新生成';
+        if(r.s===401||r.s===403){status.textContent='令牌无效，请到「设置」重新填写。';return;}
+        if(!r.j||r.j.ok!==true){status.textContent=(r.j&&r.j.error)||'生成失败，请重试。';return;}
+        lastDraftMarkdown=r.j.markdown||'';out.innerHTML=renderDraft(lastDraftMarkdown);out.classList.remove('hidden');
+        status.textContent='已生成，可直接复制后再人工润色。';if(copy)copy.classList.remove('hidden');})
+      .catch(function(){btn.disabled=false;btn.textContent='重新生成';status.textContent='网络错误，请重试。';});
+  };
+  window.fwCopyDraft=function(){
+    if(!lastDraftMarkdown)return;
+    function copied(){var s=$('draft-status');if(s)s.textContent='已复制到剪贴板。';}
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(lastDraftMarkdown).then(copied).catch(function(){});
+    }else{
+      var ta=document.createElement('textarea');ta.value=lastDraftMarkdown;document.body.appendChild(ta);ta.select();
+      try{document.execCommand('copy');copied();}catch(e){}
+      document.body.removeChild(ta);
+    }
+  };
   function showErr(m){stopLoad();hide($('loading'));hide($('result'));$('err').innerHTML=esc(m);show($('err'));$('go').disabled=false;}
 
   function analyze(url){

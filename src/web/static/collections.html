@@ -9,10 +9,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#FBF8F3">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>系列深度学习 - 内容解析工作台</title>
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/collections.css?v=__ASSET_VERSION__">
+    <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
 </head>
 <body>
     <div id="site-nav"></div>
@@ -67,6 +76,8 @@
 
             <input id="folder-input" type="file" webkitdirectory multiple hidden>
             <input id="files-input" type="file" multiple hidden>
+            <input id="append-folder-input" type="file" webkitdirectory multiple hidden>
+            <input id="append-files-input" type="file" multiple hidden>
 
             <div class="lc-import-preview" id="import-preview">
                 <strong>尚未选择文件</strong>
@@ -104,6 +115,7 @@
                     <option value="summarized">已总结</option>
                     <option value="ready">待总结</option>
                     <option value="processing">解析中</option>
+                    <option value="stopped">已停止</option>
                     <option value="failed">有失败</option>
                     <option value="draft">未导入</option>
                 </select>
@@ -120,9 +132,16 @@
                     <h2 id="workspace-title">如何走出人生困局</h2>
                     <p id="workspace-subtitle">选择一个专题文件夹，开始逐个解析。</p>
                 </div>
-                <div class="lc-progress">
-                    <div><span>解析进度</span><strong id="progress-value">0%</strong></div>
-                    <div class="lc-progress-track"><span id="progress-fill"></span></div>
+                <div class="lc-workspace-tools">
+                    <div class="lc-workspace-actions" aria-label="当前专题操作">
+                        <button class="lc-btn ghost" id="append-folder" type="button">追加文件夹</button>
+                        <button class="lc-btn ghost" id="append-files" type="button">追加文件</button>
+                        <button class="lc-btn danger" id="cancel-collection" type="button">停止解析</button>
+                    </div>
+                    <div class="lc-progress">
+                        <div><span>解析进度</span><strong id="progress-value">0%</strong></div>
+                        <div class="lc-progress-track"><span id="progress-fill"></span></div>
+                    </div>
                 </div>
             </header>
 
@@ -247,17 +266,22 @@
                         <h3 id="source-title">选择一个源内容</h3>
                         <p id="source-meta">左侧选择后查看详情。</p>
                         <div class="lc-source-timing" id="source-timing"></div>
+                        <div class="lc-source-error hidden" id="source-error" role="alert"></div>
                         <div class="lc-source-actions">
                             <button class="lc-btn primary" id="open-source-file" type="button">打开源内容</button>
                             <a class="lc-btn" id="open-source" href="#" target="_blank" rel="noopener">查看解读页</a>
+                            <button class="lc-btn danger hidden" id="retry-source" type="button">重新解析</button>
                         </div>
                         <div class="lc-source-content">
                             <section>
                                 <div class="lc-section-head">
                                     <h4>AI 解读摘要</h4>
-                                    <div class="lc-view-toggle" role="group" aria-label="AI 解读摘要显示方式">
-                                        <button class="active" id="source-summary-preview" type="button">预览</button>
-                                        <button id="source-summary-source" type="button">源码</button>
+                                    <div class="lc-summary-tools">
+                                        <button class="lc-btn compact" id="regenerate-source-summary" type="button">重新生成 AI 解读</button>
+                                        <div class="lc-view-toggle" role="group" aria-label="AI 解读摘要显示方式">
+                                            <button class="active" id="source-summary-preview" type="button">预览</button>
+                                            <button id="source-summary-source" type="button">源码</button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div id="source-summary" class="lc-text-preview lc-markdown-preview">解析完成后显示。</div>

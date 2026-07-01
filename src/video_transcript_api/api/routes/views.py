@@ -101,8 +101,16 @@ def _decorate_source_link(view_data: Dict[str, Any]) -> None:
     if _local_source_file_path(view_data) and view_data.get("view_token"):
         view_data["source_link_url"] = f"/view/{view_data['view_token']}/source-file"
         view_data["source_link_label"] = "查看原视频"
-        return
-    view_data["source_unavailable_message"] = "源视频未保存或已清理"
+
+
+def _build_collection_navigation(view_token: str) -> Optional[Dict[str, Any]]:
+    try:
+        from .collections import get_collection_service
+
+        return get_collection_service().get_source_navigation_by_view_token(view_token)
+    except Exception as exc:
+        logger.debug(f"collection navigation unavailable: {exc}")
+        return None
 
 
 def _parse_task_datetime(value) -> Optional[datetime]:
@@ -200,6 +208,35 @@ async def sitemap_xml():
     return Response(content=content, media_type="application/xml")
 
 
+@router.get("/manifest.webmanifest", include_in_schema=False)
+async def web_manifest():
+    """返回 PWA manifest，供手机端添加到主屏幕。"""
+    manifest_path = static_dir / "manifest.webmanifest"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="manifest not found")
+    return FileResponse(
+        path=str(manifest_path),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/service-worker.js", include_in_schema=False)
+async def service_worker():
+    """从根路径提供 service worker，保证 scope 覆盖整个站点。"""
+    sw_path = static_dir / "service-worker.js"
+    if not sw_path.exists():
+        raise HTTPException(status_code=404, detail="service worker not found")
+    return FileResponse(
+        path=str(sw_path),
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "no-cache",
+            "Service-Worker-Allowed": "/",
+        },
+    )
+
+
 # 首页 HTML：简洁的服务介绍页，供搜索引擎收录以建立域名信任
 _HOME_HTML = """\
 <!DOCTYPE html>
@@ -210,6 +247,12 @@ _HOME_HTML = """\
     <title>内容解析工作台 · 深度学习 / 系列学习 / IP 对标</title>
     <meta name="description" content="一站式内容解析：视频/文档深度学习、系列深度学习、帖子/文章洞察、IP 对标拆解。">
     <meta name="theme-color" content="#0f172a">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
@@ -273,25 +316,31 @@ _HOME_HTML = """\
 <body>
     <div id="site-nav"></div>
     <script src="/static/js/site-nav.js"></script>
+    <script src="/static/js/pwa-register.js" defer></script>
 
     <header class="hero">
         <div class="eyebrow">一站式内容解析</div>
         <h1 class="serif">把任意内容，<br>秒变<em>可读的精华</em></h1>
         <p class="sub">视频/文档深度学习、系列深度学习、帖子/文章洞察、IP 对标拆解，各模块独立使用。</p>
         <div class="cta-row">
-            <a class="btn" href="/add_task_by_web">开始深度学习 →</a>
+            <a class="btn" href="/add_task_by_web#local-video-study">本地视频学习 →</a>
+            <a class="btn ghost" href="/add_task_by_web">链接/文档解析</a>
             <a class="btn ghost" href="/flywheel">IP 对标工作台</a>
         </div>
     </header>
 
     <section class="section">
-        <a class="flagship" href="/add_task_by_web">
-            <div class="k">主入口 · 深度学习</div>
-            <h3 class="serif">视频/文档深度学习</h3>
-            <p>贴视频链接或上传文档，先拿到原文稿/转录稿，再让 AI 提炼高价值内容，方便复习和沉淀到知识库。</p>
+        <a class="flagship" href="/add_task_by_web#local-video-study">
+            <div class="k">主入口 · 本地视频学习</div>
+            <h3 class="serif">本地视频播放学习</h3>
+            <p>上传本地长视频，进入播放器 + 逐字稿 + AI 解读 + 时间点笔记的一体化学习界面，边看边沉淀重点。</p>
             <span class="arrow">→</span>
         </a>
         <div class="grid">
+            <a class="card" href="/add_task_by_web">
+                <div class="ic">🔗</div><h3>链接/文档解析</h3>
+                <p>贴视频链接或上传文档，先拿到原文稿/转录稿，再让 AI 提炼高价值内容。</p>
+            </a>
             <a class="card" href="/collections">
                 <div class="ic">📚</div><h3>系列深度学习</h3>
                 <p>连续课程、专题视频或文档合集，按顺序解析并生成集合级方法论。</p>
@@ -864,6 +913,7 @@ async def add_task_by_web(request: Request):
                 static_dir / "css" / "styles.css",
                 static_dir / "css" / "workbench.css",
                 static_dir / "css" / "nav.css",
+                static_dir / "js" / "pwa-register.js",
             ]
             version = str(int(max(
                 (f.stat().st_mtime for f in asset_files if f.exists()),
@@ -881,6 +931,37 @@ async def add_task_by_web(request: Request):
     except Exception as exc:
         logger.exception("访问Web任务添加页面异常: %s", exc)
         raise HTTPException(status_code=500, detail="访问页面失败，请稍后重试")
+
+
+@router.get("/study/{view_token}", response_class=HTMLResponse, include_in_schema=False)
+async def study_page(view_token: str):
+    """本地视频学习页面。"""
+    view_data = cache_manager.get_view_data_by_token(view_token)
+    if not view_data:
+        raise HTTPException(status_code=404, detail="study page not found")
+
+    page = static_dir / "study.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="study page not found")
+
+    asset_files = [
+        page,
+        static_dir / "css" / "study.css",
+        static_dir / "js" / "study.js",
+        static_dir / "css" / "editorial.css",
+        static_dir / "js" / "site-nav.js",
+        static_dir / "js" / "pwa-register.js",
+    ]
+    version = str(int(max(
+        (f.stat().st_mtime for f in asset_files if f.exists()),
+        default=0,
+    )))
+    content = (
+        page.read_text(encoding="utf-8")
+        .replace("__VIEW_TOKEN__", view_token)
+        .replace("__ASSET_VERSION__", version)
+    )
+    return HTMLResponse(content=content, headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/export/{view_token}/{export_type}")
@@ -1165,6 +1246,9 @@ async def view_transcript(
             view_data["longcut_action"] = build_longcut_action(
                 view_data,
                 longcut_settings,
+            )
+            view_data["collection_navigation"] = _build_collection_navigation(
+                view_token
             )
 
         return templates.TemplateResponse(

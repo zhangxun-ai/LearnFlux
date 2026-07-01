@@ -59,9 +59,10 @@ button {
     inset: 0;
     z-index: -2;
     pointer-events: none;
+    /* 着色器已自带暗角，这里只做极轻的边缘收束，避免与底图叠加后过暗 */
     background:
-        radial-gradient(ellipse at center, transparent 0%, transparent 42%, rgba(0,0,0,0.42) 72%, rgba(0,0,0,0.86) 100%),
-        linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.28));
+        radial-gradient(ellipse at center, transparent 0%, transparent 58%, rgba(0,0,0,0.22) 84%, rgba(0,0,0,0.52) 100%),
+        linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.14));
 }
 
 .deck-wrap {
@@ -239,8 +240,7 @@ button {
 }
 
 .deck-actions button,
-.focus-exit,
-.sound-start {
+.focus-exit {
     border: 0;
     background: transparent;
     color: rgba(255, 255, 255, 0.36);
@@ -252,8 +252,7 @@ button {
 }
 
 .deck-actions button:hover,
-.focus-exit:hover,
-.sound-start:hover {
+.focus-exit:hover {
     color: rgba(255, 255, 255, 0.78);
 }
 
@@ -598,53 +597,139 @@ input[type="range"] {
     background: rgba(255,255,255,0.10);
 }
 
-.sound-start {
-    position: fixed;
+/* 番茄钟：进度环包裹底部中央的氛围 orb（参考 flow-space，环随时间顺时针填满，起始仅顶部一个发光圆点） */
+.mixer-orb .timer-ring {
+    position: absolute;
+    top: 50%;
     left: 50%;
-    bottom: 1.1rem;
-    z-index: 14;
-    transform: translateX(-50%);
-    opacity: 0.36;
+    width: 64px;
+    height: 64px;
+    transform: translate(-50%, -50%);
+    overflow: visible;
+    pointer-events: none;
 }
 
-.sound-start.is-playing {
-    opacity: 0.10;
+.timer-ring-track {
+    fill: none;
+    stroke: rgba(255, 255, 240, 0.06);
+    stroke-width: 1;
 }
 
-.focus-brand {
-    position: fixed;
-    right: 2rem;
-    bottom: 2rem;
-    z-index: 11;
+.timer-ring-progress {
+    fill: none;
+    stroke: rgba(255, 255, 240, 0.42);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: center;
+    /* 空环基线：周长 2π·24≈150.8，dashoffset=周长 → 静默时只剩顶部一个圆点 */
+    stroke-dasharray: 150.8;
+    stroke-dashoffset: 150.8;
+    transition: stroke-dashoffset 1s linear;
+    filter: drop-shadow(0 0 3px rgba(255, 255, 240, 0.45));
+}
+
+.mixer-zone.is-running .timer-ring-progress {
+    stroke: rgba(255, 255, 240, 0.78);
+}
+
+.mixer-zone.is-break .timer-ring-progress {
+    stroke: rgba(150, 200, 255, 0.8);
+}
+
+/* 时间读数：静默隐藏，hover 或运行中淡入（保持 orb 极简） */
+.timer-readout {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    align-items: baseline;
     gap: 0.5rem;
-    color: rgba(255,255,255,0.20);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-    font-size: 0.625rem;
-    letter-spacing: 0.30em;
-    text-transform: uppercase;
-    opacity: 0.75;
-    transition: opacity 0.35s ease;
+    margin-bottom: 0.7rem;
+    opacity: 0;
+    transform: translateY(0.35rem);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
 }
 
-.focus-brand:hover {
+.mixer-zone:hover .timer-readout,
+.mixer-zone.is-running .timer-readout {
     opacity: 1;
+    transform: translateY(0);
+}
+
+.timer-phase {
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.timer-time {
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.timer-hint {
+    font-size: 0.58rem;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.26);
 }
 
 .focus-exit {
     position: fixed;
     left: 2rem;
     bottom: 2rem;
-    z-index: 11;
+    z-index: 16;
+    width: 2.75rem;
+    height: 2.75rem;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--focus-line);
+    border-radius: 999px;
+    background: var(--focus-glass);
+    box-shadow: 0 16px 34px rgba(0,0,0,0.28);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     text-decoration: none;
-    opacity: 0.16;
+    opacity: 0.42;
+}
+
+.focus-exit svg {
+    width: 1.125rem;
+    height: 1.125rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.focus-exit span {
+    position: absolute;
+    left: calc(100% + 0.75rem);
+    top: 50%;
+    transform: translateY(-50%) translateX(-0.25rem);
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--focus-line);
+    border-radius: 999px;
+    background: rgba(10, 13, 12, 0.62);
+    color: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 12px 26px rgba(0,0,0,0.28);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
 .focus-exit:hover,
-.focus-exit:focus {
+.focus-exit:focus-visible {
     opacity: 1;
+    background: rgba(255, 255, 255, 0.065);
+}
+
+.focus-exit:hover span,
+.focus-exit:focus-visible span {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
 }
 
 @media (max-width: 760px) {
@@ -676,9 +761,9 @@ input[type="range"] {
         padding-inline: 1rem;
     }
 
-    .focus-brand,
     .focus-exit {
-        display: none;
+        left: 1rem;
+        bottom: 1rem;
     }
 }
 

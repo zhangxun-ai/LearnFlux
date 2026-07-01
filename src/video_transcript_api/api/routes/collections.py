@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -67,6 +68,7 @@ async def collections_page():
         static_dir / "css" / "collections.css",
         static_dir / "js" / "collections.js",
         static_dir / "js" / "site-nav.js",
+        static_dir / "js" / "pwa-register.js",
         static_dir / "css" / "editorial.css",
     ]
     version = str(int(max((f.stat().st_mtime for f in version_files if f.exists()), default=0)))
@@ -163,6 +165,43 @@ async def get_collection_source(
 
 
 @router.post(
+    "/api/collections/{collection_id}/sources/{source_id}/retry",
+    response_model=TranscribeResponse,
+    status_code=202,
+)
+async def retry_collection_source(
+    collection_id: str,
+    source_id: str,
+    background_tasks: BackgroundTasks,
+    user_info: dict = Depends(verify_token),
+):
+    try:
+        service = get_collection_service()
+        result = service.retry_source(collection_id, source_id)
+        background_tasks.add_task(
+            process_local_upload,
+            result["task_id"],
+            result["file_path"],
+            result["original_name"],
+            result["display_url"],
+            result["media_id"],
+            result["use_speaker_recognition"],
+            True,
+        )
+        return TranscribeResponse(
+            code=202,
+            message="已重新提交 source 解析",
+            data={
+                "collection": result["collection"],
+                "source": result["source"],
+            },
+        )
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc))
+
+
+@router.post(
     "/api/collections/{collection_id}/sources/upload",
     response_model=TranscribeResponse,
     status_code=202,
@@ -181,8 +220,16 @@ async def upload_collection_sources(
     service = get_collection_service()
     uploaded = []
     try:
-        for position, file in enumerate(files, start=1):
+        detail = service.get_collection_detail(collection_id)
+        existing_positions = [
+            int(source.get("position") or 0) for source in detail.get("sources", [])
+        ]
+        next_position = (max(existing_positions) if existing_positions else 0) + 1
+        append_position = next_position
+        for file in files:
             filename = (file.filename or "upload").strip() or "upload"
+            position = _source_position_from_filename(filename) or append_position
+            append_position = max(append_position, position + 1)
             source_type = service.validate_source_type_for_collection(collection_id, filename)
             temp_path, size, file_hash = await _save_upload_file(file, filename)
             media_id = _media_id_for_upload_hash(file_hash)
@@ -238,6 +285,24 @@ async def upload_collection_sources(
         message="专题文件已上传，正在逐个解析",
         data={"sources": uploaded},
     )
+
+
+@router.post("/api/collections/{collection_id}/cancel", response_model=TranscribeResponse)
+async def cancel_collection_processing(
+    collection_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    try:
+        service = get_collection_service()
+        result = service.cancel_collection_processing(collection_id)
+        return TranscribeResponse(
+            code=200,
+            message="已停止未完成的专题解析任务",
+            data=result,
+        )
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc))
 
 
 @router.post("/api/collections/{collection_id}/summary", response_model=TranscribeResponse)
@@ -427,6 +492,15 @@ def _sha256_bytes(content: bytes) -> str:
 
 def _media_id_for_upload_hash(file_hash: str) -> str:
     return f"local_{file_hash[:32]}"
+
+
+def _source_position_from_filename(filename: str) -> Optional[int]:
+    basename = os.path.basename(filename or "")
+    match = re.match(r"^\s*(\d{1,4})(?=[\s._\-－—、])", basename)
+    if not match:
+        return None
+    value = int(match.group(1))
+    return value if value > 0 else None
 
 
 def _stable_upload_path(temp_path: str, media_id: str, filename: str) -> str:

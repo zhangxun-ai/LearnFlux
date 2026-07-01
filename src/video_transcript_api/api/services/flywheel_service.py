@@ -14,6 +14,7 @@ from typing import Optional
 from ...flywheel.analyzer import ContentAnalyzer
 from ...flywheel.analysis_service import run_analysis
 from ...flywheel.db import FlywheelDB
+from ...flywheel.draft_generator import DraftGenerator
 from ...flywheel.ingest import ingest_blogger
 from ...flywheel.models import (
     AnalysisStatus, Blogger, Content, ContentSource, MediaType,
@@ -273,4 +274,41 @@ def get_analysis(content_id: int) -> dict:
             "source_label",
             "视频转写文字" if content.media_type is MediaType.VIDEO else "图文正文",
         ),
+    }
+
+
+def generate_draft(content_id: int, generator: DraftGenerator) -> dict:
+    """Generate a new Xiaohongshu draft from a successful saved teardown."""
+    r = repos()
+    content = r["content"].get(content_id)
+    if not content:
+        raise ValueError("内容不存在")
+    analysis = r["analysis"].get_by_content(content_id)
+    if (
+        content.analysis_status is not AnalysisStatus.SUCCESS
+        or not analysis
+        or analysis.status is not AnalysisStatus.SUCCESS
+    ):
+        raise ValueError("请先完成解析成功的内容拆解")
+
+    blogger = r["blogger"].get(content.blogger_id)
+    result = analysis.result_json or {}
+    draft = generator.generate(
+        title=content.title,
+        author=blogger.handle if blogger else "",
+        media_type=content.media_type,
+        stats={
+            "like_count": content.like_count,
+            "collect_count": content.collect_count,
+            "comment_count": content.comment_count,
+        },
+        source_text=result.get("source_text", ""),
+        analysis_result=result,
+    )
+    return {
+        "ok": True,
+        "content_id": content.id,
+        "source_title": content.title,
+        "source_author": blogger.handle if blogger else "",
+        **draft,
     }

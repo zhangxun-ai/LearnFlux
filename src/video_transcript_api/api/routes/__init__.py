@@ -1,3 +1,3 @@
-from . import audit, tasks, users, views
+from . import audit, study, tasks, users, views
 
-__all__ = ["audit", "tasks", "users", "views"]
+__all__ = ["audit", "study", "tasks", "users", "views"]

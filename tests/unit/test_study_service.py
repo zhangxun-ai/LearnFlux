@@ -161,3 +161,42 @@ def test_study_service_exports_markdown(tmp_path):
     assert "第一段内容" in markdown
     assert "## 我的笔记" in markdown
     assert "重点复看" in markdown
+
+
+def test_study_service_ai_chat_uses_deepseek_v4_and_video_context(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = _create_successful_local_task(cache_manager)
+    calls = {}
+
+    def fake_answerer(**kwargs):
+        calls.update(kwargs)
+        return "稳定系统指的是在压力下更不容易被激发的系统。"
+
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=StudyRepository(db_path=str(tmp_path / "study.db")),
+        source_root=tmp_path / "sources",
+        llm_config={},
+        llm_answerer=fake_answerer,
+    )
+
+    result = service.ask_ai(
+        task["view_token"],
+        "稳定系统是什么意思？",
+        history=[{"role": "user", "content": "我没理解前面的比喻"}],
+    )
+
+    assert result["model"] == "deepseek-v4-pro"
+    assert result["reasoning_effort"] == "high"
+    assert result["answer"].startswith("稳定系统")
+    assert calls["model"] == "deepseek-v4-pro"
+    assert calls["reasoning_effort"] == "high"
+    assert calls["task_type"] == "study_chat"
+    assert "稳定系统是什么意思？" in calls["prompt"]
+    assert "我没理解前面的比喻" in calls["prompt"]
+    assert "这一节讲核心概念" in calls["prompt"]
+    assert "第一段内容" in calls["prompt"]
+    assert "不要输出 Markdown 分隔线" in calls["prompt"]

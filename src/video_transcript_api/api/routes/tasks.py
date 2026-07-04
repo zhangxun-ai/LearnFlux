@@ -78,6 +78,7 @@ async def transcribe_video(
     logger.info(
         f"收到转录API请求 - URL: {url}, 说话人识别: {request_body.use_speaker_recognition}, "
         f"评论洞察: {request_body.include_comments}, 评论上限: {request_body.comment_limit}, "
+        f"保存源内容: {request_body.preserve_source_file}, "
         f"自定义企微webhook: {request_body.wechat_webhook is not None}, "
         f"download_url: {normalized_download_url}, metadata_override: {normalized_metadata_override}"
     )
@@ -158,6 +159,7 @@ async def transcribe_video(
                 "metadata_override": normalized_metadata_override,
                 "include_comments": request_body.include_comments,
                 "comment_limit": request_body.comment_limit,
+                "preserve_source_file": request_body.preserve_source_file,
             }
 
             try:

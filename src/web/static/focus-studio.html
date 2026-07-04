@@ -16,7 +16,7 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css">
-    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260630-1">
+    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260702-1">
     <script src="/static/js/pwa-register.js?v=20260630-1" defer></script>
 </head>
 <body class="focus-body" data-mode="rainy" data-font="handwriting" data-size="small">
@@ -60,6 +60,17 @@
 
         <section class="deck-wrap" aria-label="写作区">
             <div class="focus-deck">
+                <div class="journal-meta" aria-label="记录信息">
+                    <span id="journal-date-label">今天</span>
+                    <select id="journal-type-select" aria-label="记录类型">
+                        <option value="daily">日记</option>
+                        <option value="note">随笔</option>
+                        <option value="weekly_plan">周计划</option>
+                        <option value="weekly_review">周复盘</option>
+                        <option value="monthly_plan">月计划</option>
+                        <option value="monthly_review">月复盘</option>
+                    </select>
+                </div>
                 <textarea id="focus-editor" class="focus-editor" spellcheck="false" autocomplete="off" placeholder="开始你的心流写作..."></textarea>
                 <div class="deck-actions">
                     <span class="save-status" id="save-status" aria-live="polite">Saved</span>
@@ -115,6 +126,43 @@
             </aside>
         </section>
 
+        <aside class="journal-shell" aria-label="历史和复盘">
+            <div class="journal-dock" aria-label="打开侧边栏">
+                <button class="journal-dock-button" type="button" data-journal-open="history" aria-controls="journal-sidecar" aria-expanded="false">历史</button>
+                <button class="journal-dock-button" type="button" data-journal-open="review" aria-controls="journal-sidecar" aria-expanded="false">复盘</button>
+            </div>
+
+            <section class="journal-sidecar" id="journal-sidecar" aria-label="记录侧边栏" aria-hidden="true">
+                <div class="journal-sidecar-head">
+                    <div class="journal-tabs" role="tablist" aria-label="记录侧边栏">
+                        <button class="journal-tab active" type="button" data-journal-tab="history" role="tab" aria-selected="true">历史</button>
+                        <button class="journal-tab" type="button" data-journal-tab="review" role="tab" aria-selected="false">复盘</button>
+                    </div>
+                    <button class="journal-sidecar-close" id="journal-sidecar-close" type="button" aria-label="关闭侧边栏">×</button>
+                </div>
+
+                <div class="journal-panel active" data-journal-panel="history" role="tabpanel">
+                    <h2>历史记录</h2>
+                    <p id="journal-history-note">按日期回看记录，选中后回到对应正文。</p>
+                    <div class="journal-history-list" id="journal-history-list">
+                        <div class="journal-empty">正在读取本月记录...</div>
+                    </div>
+                </div>
+
+                <div class="journal-panel" data-journal-panel="review" role="tabpanel" hidden>
+                    <h2>AI 复盘</h2>
+                    <p>需要整理时，把这段时间的记录和问题交给 AI。</p>
+                    <div class="journal-review-actions">
+                        <button type="button" data-review-range="week">本周复盘</button>
+                        <button type="button" data-review-range="month">本月复盘</button>
+                    </div>
+                    <label class="journal-question-label" for="journal-review-question">这次想问 AI 的问题</label>
+                    <textarea id="journal-review-question" class="journal-review-question" rows="5">我最近真正推进了什么？哪些地方反复卡住？下周最应该保留的动作是什么？</textarea>
+                    <div class="journal-review-result" id="journal-review-result" aria-live="polite"></div>
+                </div>
+            </section>
+        </aside>
+
         <a class="focus-exit" href="/" aria-label="返回落地页" title="返回落地页">
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M15 18 9 12l6-6M9 12h11M5 12h.01"></path>
@@ -123,6 +171,7 @@
         </a>
     </main>
 
-    <script src="/static/js/focus-studio.js?v=20260620-5"></script>
+    <script src="/static/js/focus-studio.js?v=20260702-1"></script>
+    <script src="/static/js/focus-journal.js?v=20260702-1"></script>
 </body>
 </html>

@@ -78,6 +78,49 @@ def test_create_study_note(monkeypatch):
     service.create_note.assert_called_once_with("view-123", 8.5, "重点")
 
 
+def test_ask_study_ai(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    service = MagicMock()
+    threadpool_call = {}
+    service.ask_ai.return_value = {
+        "answer": "这是 AI 回答",
+        "model": "deepseek-v4-pro",
+        "reasoning_effort": "high",
+        "time_seconds": None,
+    }
+
+    async def fake_run_in_threadpool(func, *args, **kwargs):
+        threadpool_call["func"] = func
+        threadpool_call["args"] = args
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(study, "get_study_service", lambda: service)
+    monkeypatch.setattr(study, "run_in_threadpool", fake_run_in_threadpool)
+
+    client = TestClient(_build_app())
+    response = client.post(
+        "/api/study/view-123/ai-chat",
+        json={
+            "question": "这段视频讲的稳定系统是什么意思？",
+            "history": [{"role": "user", "content": "先前问题"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["answer"] == "这是 AI 回答"
+    assert body["data"]["model"] == "deepseek-v4-pro"
+    assert body["data"]["reasoning_effort"] == "high"
+    assert threadpool_call["func"] == service.ask_ai
+    service.ask_ai.assert_called_once_with(
+        "view-123",
+        "这段视频讲的稳定系统是什么意思？",
+        None,
+        [{"role": "user", "content": "先前问题"}],
+    )
+
+
 def test_study_upload_preserves_source_file(monkeypatch, tmp_path):
     from video_transcript_api.api.routes import study
 

@@ -269,6 +269,33 @@ class TestTranscribeEndpoint:
         assert queued_task["include_comments"] is True
         assert queued_task["comment_limit"] == 50
 
+    def test_transcribe_enqueues_source_preservation_when_requested(
+        self, client, mock_task_queue
+    ):
+        resp = client.post(
+            "/api/transcribe",
+            json={
+                "url": "https://www.youtube.com/watch?v=abc123",
+                "preserve_source_file": True,
+            },
+        )
+
+        assert resp.status_code == 200
+        queued_task = mock_task_queue.get_nowait()
+        assert queued_task["preserve_source_file"] is True
+
+    def test_transcribe_source_preservation_defaults_to_false(
+        self, client, mock_task_queue
+    ):
+        resp = client.post(
+            "/api/transcribe",
+            json={"url": "https://www.youtube.com/watch?v=abc123"},
+        )
+
+        assert resp.status_code == 200
+        queued_task = mock_task_queue.get_nowait()
+        assert queued_task["preserve_source_file"] is False
+
     def test_transcribe_with_download_url(self, client, mock_cache_manager):
         resp = client.post(
             "/api/transcribe",
@@ -558,6 +585,92 @@ class TestViewProgressEndpoint:
 
         assert resp.status_code == 200
         assert resp.content == b"fake video"
+
+    def test_view_source_file_serves_online_preserved_file_path(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"online video")
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "view_token": "vt-1",
+            "title": "WeChat Demo",
+            "url": "https://weixin.qq.com/sph/A1kpVPJjiX",
+            "platform": "wechat_channels",
+            "media_id": "A1kpVPJjiX",
+            "source_file_path": str(source_file),
+        }
+
+        resp = client.get("/view/vt-1/source-file")
+
+        assert resp.status_code == 200
+        assert resp.content == b"online video"
+        assert "wechat.mp4" in resp.headers.get("content-disposition", "")
+
+    def test_success_view_renders_download_and_reveal_for_online_source_file(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"online video")
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "WeChat Demo",
+            "author": "Author",
+            "url": "https://weixin.qq.com/sph/A1kpVPJjiX",
+            "platform": "wechat_channels",
+            "media_id": "A1kpVPJjiX",
+            "summary": "",
+            "transcript": "transcript",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-07-04T10:00:00",
+            "source_file_path": str(source_file),
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>transcript</p>",
+        ):
+            resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert 'href="/view/vt-1/source-file"' in resp.text
+        assert "下载源文件" in resp.text
+        assert 'data-source-reveal-url="/view/vt-1/source-file/reveal"' in resp.text
+        assert "在本机显示" in resp.text
+
+    def test_view_source_file_reveal_opens_online_preserved_file(
+        self, client, mock_cache_manager, tmp_path, monkeypatch
+    ):
+        from video_transcript_api.api.routes import views
+
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"online video")
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "view_token": "vt-1",
+            "title": "WeChat Demo",
+            "url": "https://weixin.qq.com/sph/A1kpVPJjiX",
+            "platform": "wechat_channels",
+            "media_id": "A1kpVPJjiX",
+            "source_file_path": str(source_file),
+        }
+        opened = {}
+        monkeypatch.setattr(
+            views,
+            "_reveal_path_in_file_manager",
+            lambda path: opened.setdefault("path", str(path)),
+            raising=False,
+        )
+
+        resp = client.post("/view/vt-1/source-file/reveal")
+
+        assert resp.status_code == 200
+        assert opened["path"] == str(source_file)
+        assert resp.json()["data"]["filename"] == "wechat.mp4"
 
     def test_success_view_does_not_render_broken_local_source_link(
         self, client, mock_cache_manager, tmp_path

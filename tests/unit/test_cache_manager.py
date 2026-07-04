@@ -119,6 +119,49 @@ class TestSaveCache:
         assert data["compat"] is True
 
 
+class TestTaskSourceFilePath:
+    """Tests for optional preserved source file metadata on tasks."""
+
+    def test_update_task_status_persists_source_file_path(self, cm, tmp_path):
+        task = cm.create_task(
+            url="https://weixin.qq.com/sph/A1kpVPJjiX",
+            platform="wechat_channels",
+            media_id="A1kpVPJjiX",
+        )
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"video")
+
+        cm.update_task_status(
+            task["task_id"],
+            "calibrating",
+            source_file_path=str(source_file),
+        )
+
+        row = cm.get_task_by_id(task["task_id"])
+        assert row["source_file_path"] == str(source_file)
+
+    def test_view_data_includes_source_file_path(self, cm, tmp_path):
+        task = cm.create_task(
+            url="https://weixin.qq.com/sph/A1kpVPJjiX",
+            platform="wechat_channels",
+            media_id="A1kpVPJjiX",
+        )
+        _save_sample_capswriter(cm, media_id="A1kpVPJjiX", platform="wechat_channels")
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"video")
+        cm.update_task_status(
+            task["task_id"],
+            "success",
+            platform="wechat_channels",
+            media_id="A1kpVPJjiX",
+            source_file_path=str(source_file),
+        )
+
+        view_data = cm.get_view_data_by_token(task["view_token"])
+
+        assert view_data["source_file_path"] == str(source_file)
+
+
 # ---------------------------------------------------------------------------
 # get_cache
 # ---------------------------------------------------------------------------

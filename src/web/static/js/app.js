@@ -237,7 +237,7 @@ class APIManager {
     /**
      * 提交转录任务
      */
-    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100) {
+    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100, preserveSourceFile = false) {
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
 
         if (!token) {
@@ -248,7 +248,8 @@ class APIManager {
             url: url,
             use_speaker_recognition: useSpeakerRecognition,
             include_comments: Boolean(includeComments),
-            comment_limit: Number.parseInt(commentLimit, 10) || 100
+            comment_limit: Number.parseInt(commentLimit, 10) || 100,
+            preserve_source_file: Boolean(preserveSourceFile)
         };
 
         // 只有当 webhook 不为空时才添加到请求体中
@@ -1262,6 +1263,7 @@ async function submitTranscription(event) {
 
     const selectedURL = getSelectedURL();
     const useSpeakerRecognition = document.getElementById('speaker-recognition').checked;
+    const preserveSourceFile = document.getElementById('preserve-source-file').checked;
     const includeComments = document.getElementById('include-comments').checked;
     const commentLimit = Number.parseInt(document.getElementById('comment-limit').value, 10) || 100;
     const wechatWebhook = document.getElementById('wechat-webhook').value.trim();
@@ -1320,7 +1322,8 @@ async function submitTranscription(event) {
             useSpeakerRecognition,
             wechatWebhook,
             includeComments,
-            commentLimit
+            commentLimit,
+            preserveSourceFile
         );
 
         if (response.code === 202 && response.data && response.data.task_id) {
@@ -1330,6 +1333,7 @@ async function submitTranscription(event) {
                 url: selectedURL,
                 original_text: originalText,
                 use_speaker_recognition: useSpeakerRecognition,
+                preserve_source_file: preserveSourceFile,
                 include_comments: includeComments
             };
 

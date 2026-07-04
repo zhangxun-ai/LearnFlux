@@ -110,6 +110,7 @@ class CacheManager:
                     error_message TEXT,
                     progress_json TEXT,
                     progress_reminders_json TEXT,
+                    source_file_path TEXT,
                     FOREIGN KEY (cache_id) REFERENCES video_cache(id)
                 )
             ''')
@@ -188,6 +189,15 @@ class CacheManager:
                     logger.info("添加 progress_reminders_json 字段到 task_status 表...")
                     cursor.execute("ALTER TABLE task_status ADD COLUMN progress_reminders_json TEXT")
                     logger.info("progress_reminders_json 字段添加成功")
+
+                # 迁移7: 添加 source_file_path 字段（可选保存在线源文件）
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [col[1] for col in cursor.fetchall()]
+
+                if 'source_file_path' not in columns:
+                    logger.info("添加 source_file_path 字段到 task_status 表...")
+                    cursor.execute("ALTER TABLE task_status ADD COLUMN source_file_path TEXT")
+                    logger.info("source_file_path 字段添加成功")
                 else:
                     logger.debug("数据库结构正常，无需迁移")
 
@@ -229,6 +239,7 @@ class CacheManager:
                 error_message TEXT,
                 progress_json TEXT,
                 progress_reminders_json TEXT,
+                source_file_path TEXT,
                 FOREIGN KEY (cache_id) REFERENCES video_cache(id)
             )
         ''')
@@ -261,14 +272,15 @@ class CacheManager:
                 row_map.get("error_message"),
                 row_map.get("progress_json"),
                 row_map.get("progress_reminders_json"),
+                row_map.get("source_file_path"),
             ]
 
             cursor.execute('''
                 INSERT INTO task_status
                 (task_id, view_token, url, download_url, platform, media_id, use_speaker_recognition,
                  status, title, author, created_at, completed_at, cache_id, llm_config,
-                 error_message, progress_json, progress_reminders_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 error_message, progress_json, progress_reminders_json, source_file_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', new_row_data)
 
         logger.info(f"数据库迁移完成，恢复了 {len(existing_data)} 条记录")
@@ -837,7 +849,8 @@ class CacheManager:
     def update_task_status(self, task_id: str, status: str, platform: str = None,
                           media_id: str = None, title: str = None, author: str = None,
                           cache_id: int = None, download_url: str = None,
-                          force: bool = False, error_message: str = None):
+                          force: bool = False, error_message: str = None,
+                          source_file_path: str = None):
         """
         更新任务状态
 
@@ -855,6 +868,7 @@ class CacheManager:
             cache_id: 关联的缓存ID
             download_url: 实际下载地址
             force: 是否绕过终态黏性保护(recalibrate 显式重置时为 True)
+            source_file_path: 可选，本地保存的源内容文件路径
         """
         try:
             # 将空字符串转换为 None，避免存储无意义的空字符串
@@ -887,6 +901,9 @@ class CacheManager:
                 if error_message is not None:
                     update_fields.append("error_message = ?")
                     params.append(error_message)
+                if source_file_path is not None:
+                    update_fields.append("source_file_path = ?")
+                    params.append(source_file_path)
 
                 if status in TERMINAL_STATUSES:
                     update_fields.append("completed_at = CURRENT_TIMESTAMP")
@@ -1144,6 +1161,7 @@ class CacheManager:
                 return None
 
             display_url = task_info.get('url') or task_info.get('download_url') or ""
+            source_file_path = task_info.get('source_file_path')
 
             # 如果任务还在进行中（calibrating 表示转录已完成、LLM 校对/总结进行中）
             if task_info['status'] in ['queued', 'processing', 'calibrating']:
@@ -1157,6 +1175,7 @@ class CacheManager:
                     'media_id': task_info.get('media_id'),
                     'created_at': task_info['created_at'],
                     'progress': task_info.get('progress'),
+                    'source_file_path': source_file_path,
                 }
 
             # 如果任务失败
@@ -1172,6 +1191,7 @@ class CacheManager:
                     'message': task_info.get('error_message') or '转录任务失败，请重新提交',
                     'completed_at': task_info.get('completed_at'),
                     'progress': task_info.get('progress'),
+                    'source_file_path': source_file_path,
                 }
 
             # 任务成功，获取缓存数据
@@ -1224,6 +1244,7 @@ class CacheManager:
                         'comment_insight': cache_data.get('comment_insight'),
                         'comment_samples': cache_data.get('comment_samples', []),
                         'progress': task_info.get('progress'),
+                        'source_file_path': source_file_path,
                     }
                 else:
                     # 底层文件已清理
@@ -1238,6 +1259,7 @@ class CacheManager:
                         'created_at': task_info['created_at'],
                         'completed_at': task_info.get('completed_at'),
                         'progress': task_info.get('progress'),
+                        'source_file_path': source_file_path,
                     }
             else:
                 # 任务信息不完整
@@ -1251,6 +1273,7 @@ class CacheManager:
                     'media_id': task_info.get('media_id'),
                     'created_at': task_info['created_at'],
                     'progress': task_info.get('progress'),
+                    'source_file_path': source_file_path,
                 }
 
         except Exception as e:

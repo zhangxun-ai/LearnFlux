@@ -945,6 +945,22 @@
                 font-size: 0.8rem;
             }
         }
+
+        .source-reveal-button {
+            appearance: none;
+            border: 0;
+            background: transparent;
+            color: #E4503A;
+            cursor: pointer;
+            font: inherit;
+            padding: 0;
+            text-decoration: underline;
+        }
+
+        .source-reveal-button:disabled {
+            cursor: wait;
+            opacity: 0.65;
+        }
     </style>
     <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
     {% block extra_css %}{% endblock %}
@@ -960,6 +976,9 @@
                 {% if author %}👤 {{ author }}{% endif %}
                 {% if source_link_url %}
                     <br>🔗 <a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }}</a>
+                {% endif %}
+                {% if source_reveal_url %}
+                    <br>📁 <button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button>
                 {% endif %}
                 {% if created_at_display %}
                     <br>⏰ {{ created_at_display }}
@@ -978,6 +997,39 @@
     </div>
 
     {% block extra_js %}{% endblock %}
+
+    <!-- 本机源文件定位脚本 -->
+    <script>
+        document.addEventListener('click', async function(event) {
+            const button = event.target.closest('[data-source-reveal-url]');
+            if (!button) return;
+            event.preventDefault();
+
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.textContent = '正在打开...';
+
+            try {
+                const response = await fetch(button.dataset.sourceRevealUrl, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(function() { return {}; });
+                    throw new Error(data.detail || '打开本地位置失败');
+                }
+                button.textContent = '已打开';
+                setTimeout(function() {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }, 1600);
+            } catch (error) {
+                button.textContent = originalText;
+                button.disabled = false;
+                alert(error.message || '打开本地位置失败');
+            }
+        });
+    </script>
 
     <!-- 主题切换脚本 -->
     <script>

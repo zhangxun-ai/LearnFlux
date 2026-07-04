@@ -27,6 +27,7 @@ data/logs/
 
 # 本地 Agent / 设计运行产物
 .superpowers/
+.playwright-cli/
 data/xianyu_listing_assets/
 
 # 数据目录
@@ -38,6 +39,8 @@ data/*.db-wal
 data/output
 data/risk_control/
 data/flywheel/
+data/services/
+data/source_files/
 data/server.pid
 tests/llm/output
 

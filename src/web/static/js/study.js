@@ -6,9 +6,11 @@
         session: null,
         currentLineId: '',
         pollTimer: null,
+        chatThinkingTimer: null,
         estimatedToken: '',
         noteFrameToken: '',
         noteFrames: {},
+        chatMessages: [],
     };
 
     const els = {
@@ -16,7 +18,7 @@
         subtitle: document.getElementById('study-subtitle'),
         state: document.getElementById('study-state'),
         transcriptCount: document.getElementById('study-transcript-count'),
-        noteCount: document.getElementById('study-note-count'),
+        aiModel: document.getElementById('study-ai-model'),
         breadcrumbs: document.getElementById('study-breadcrumbs'),
         videoTitle: document.getElementById('video-title'),
         videoMeta: document.getElementById('video-meta'),
@@ -33,10 +35,10 @@
         aiOverview: document.getElementById('ai-overview'),
         aiNotesList: document.getElementById('ai-notes-list'),
         transcriptList: document.getElementById('transcript-list'),
-        noteBody: document.getElementById('note-body'),
-        saveNote: document.getElementById('save-note'),
-        notesList: document.getElementById('notes-list'),
-        captureNote: document.getElementById('capture-note'),
+        chatQuestion: document.getElementById('chat-question'),
+        sendChat: document.getElementById('send-chat'),
+        chatList: document.getElementById('chat-list'),
+        askAiEntry: document.getElementById('ask-ai-entry'),
         toast: document.getElementById('study-toast'),
         exportMarkdown: document.getElementById('export-markdown'),
         copyCurrentLine: document.getElementById('copy-current-line'),
@@ -78,7 +80,9 @@
         const response = await fetch(url, { ...init, headers });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.code >= 400) {
-            throw new Error(payload.detail || payload.message || '请求失败');
+            const error = new Error(payload.detail || payload.message || '请求失败');
+            error.status = response.status;
+            throw error;
         }
         return payload.data;
     }
@@ -109,6 +113,13 @@
         }[value] || value || '未知';
     }
 
+    function modelLabel(value) {
+        const model = String(value || 'deepseek-v4-pro');
+        if (model === 'deepseek-v4-pro') return 'V4 Pro';
+        if (model === 'deepseek-v4-flash') return 'V4 Flash';
+        return model.replace(/^deepseek-/, '');
+    }
+
     function isPendingState(value) {
         return ['queued', 'processing', 'downloading', 'transcribing', 'generating_ai'].includes(value);
     }
@@ -118,15 +129,14 @@
         const metadata = session.metadata || {};
         const playback = session.playback || {};
         const transcript = session.transcript || { lines: [] };
-        const notes = session.notes || [];
 
         els.title.textContent = metadata.title || '本地视频学习';
         els.videoTitle.textContent = metadata.title || '本地视频';
         els.breadcrumbs.textContent = `本地视频 / ${metadata.title || '学习模式'}`;
-        els.subtitle.textContent = metadata.author ? `作者：${metadata.author}` : '视频、文稿、AI 解读和时间点记录围绕同一条时间轴组织。';
+        els.subtitle.textContent = metadata.author ? `作者：${metadata.author}` : '视频、文稿、AI 解读和问答围绕同一条时间轴组织。';
         els.state.textContent = stateLabel(session.state);
         els.transcriptCount.textContent = `${transcript.lines.length} 段`;
-        els.noteCount.textContent = `${notes.length} 条`;
+        els.aiModel.textContent = modelLabel(session.ai && session.ai.chat_model);
         els.aiOverview.innerHTML = renderMarkdown(aiOverviewText(session));
         els.exportMarkdown.disabled = isPendingState(session.state) && !transcript.lines.length;
 
@@ -134,7 +144,7 @@
         renderProgress(session);
         renderTranscript(transcript.lines || [], session);
         renderAINotes(session);
-        renderNotes(notes);
+        renderChat();
         applyEstimatedTranscriptTimes();
         generateNoteFrames(session);
         scheduleNextPoll(session);
@@ -224,6 +234,11 @@
                 return;
             }
 
+            if (/^[-*_]{3,}$/.test(line)) {
+                flushList();
+                return;
+            }
+
             const heading = line.match(/^(#{1,5})\s+(.+)$/);
             if (heading) {
                 flushList();
@@ -239,6 +254,13 @@
                 if (listItems.length && listTag !== nextTag) flushList();
                 listTag = nextTag;
                 listItems.push(`<li>${inlineMarkdown((unordered || ordered)[1])}</li>`);
+                return;
+            }
+
+            const quote = line.match(/^>\s?(.+)$/);
+            if (quote) {
+                flushList();
+                html.push(`<blockquote>${inlineMarkdown(quote[1])}</blockquote>`);
                 return;
             }
 
@@ -475,17 +497,39 @@
         });
     }
 
-    function renderNotes(notes) {
-        if (!notes.length) {
-            els.notesList.innerHTML = '<div class="empty-panel"><strong>暂无记录</strong><span>播放视频时点击“记当前点”，或直接写下你的理解。</span></div>';
+    function renderChat() {
+        if (!state.chatMessages.length) {
+            els.chatList.innerHTML = '<div class="chat-empty"><strong>问任何看不懂的地方</strong><span>AI 会先读视频全文和总结，再结合专业知识回答。</span></div>';
             return;
         }
-        els.notesList.innerHTML = notes.map((note) => (
-            `<article class="note-item">
-                <strong>${formatTime(note.time_seconds)}</strong>
-                <p>${escapeHTML(note.body || '')}</p>
-            </article>`
-        )).join('');
+        els.chatList.innerHTML = state.chatMessages.map((message) => {
+            const meta = message.role === 'assistant'
+                ? escapeHTML(message.pending ? '正在思考' : modelLabel(message.model))
+                : '你';
+            const content = message.pending
+                ? renderThinking(message.thinkingStep || 0)
+                : message.role === 'assistant'
+                ? `<div class="markdown-content chat-answer">${renderMarkdown(message.content || '')}</div>`
+                : `<p>${escapeHTML(message.content || '')}</p>`;
+            const stateClass = message.pending ? ' is-pending' : (message.error ? ' is-error' : '');
+            return `<article class="chat-message is-${escapeHTML(message.role)}${stateClass}">
+                <strong>${meta}</strong>
+                ${content}
+            </article>`;
+        }).join('');
+        els.chatList.scrollTop = els.chatList.scrollHeight;
+    }
+
+    function renderThinking(stepIndex) {
+        const steps = ['阅读视频全文', '定位相关上下文', '组织回答'];
+        const items = steps.map((step, index) => {
+            const stateClass = index < stepIndex ? ' is-done' : (index === stepIndex ? ' is-active' : '');
+            return `<li class="${stateClass}">${escapeHTML(step)}</li>`;
+        }).join('');
+        return `<div class="chat-thinking-box">
+            <div class="chat-thinking" aria-label="AI 正在思考"><span></span><span></span><span></span></div>
+            <ol class="chat-thinking-steps">${items}</ol>
+        </div>`;
     }
 
     function escapeHTML(value) {
@@ -639,12 +683,25 @@
         generateNoteFrames(session);
     }
 
-    function bindNotes() {
-        els.captureNote.addEventListener('click', () => {
-            activateTab('notes');
-            els.noteBody.focus();
+    function bindChat() {
+        els.askAiEntry.addEventListener('click', () => {
+            activateTab('chat');
+            els.chatQuestion.focus();
         });
-        els.saveNote.addEventListener('click', saveNote);
+        els.sendChat.addEventListener('click', sendChat);
+        els.chatQuestion.addEventListener('input', autosizeChatInput);
+        els.chatQuestion.addEventListener('keydown', (event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault();
+                sendChat();
+            }
+        });
+    }
+
+    function autosizeChatInput() {
+        els.chatQuestion.style.height = 'auto';
+        const nextHeight = Math.min(150, Math.max(46, els.chatQuestion.scrollHeight));
+        els.chatQuestion.style.height = `${nextHeight}px`;
     }
 
     function bindActions() {
@@ -657,30 +714,95 @@
         if (button) button.click();
     }
 
-    async function saveNote() {
-        const body = els.noteBody.value.trim();
-        if (!body) {
-            showToast('请先写下笔记内容');
+    async function sendChat() {
+        if (els.sendChat.disabled) return;
+        const question = els.chatQuestion.value.trim();
+        if (!question) {
+            showToast('请先输入问题');
             return;
         }
-        els.saveNote.disabled = true;
+        const history = state.chatMessages
+            .filter((message) => message.role === 'user' || message.role === 'assistant')
+            .slice(-8)
+            .map((message) => ({ role: message.role, content: message.content }));
+        const userMessage = {
+            role: 'user',
+            content: question,
+        };
+        const pendingId = `pending-${Date.now()}`;
+        state.chatMessages.push(userMessage);
+        state.chatMessages.push({
+            id: pendingId,
+            role: 'assistant',
+            pending: true,
+            content: '',
+            model: 'deepseek-v4-pro',
+            thinkingStep: 0,
+        });
+        els.chatQuestion.value = '';
+        autosizeChatInput();
+        renderChat();
+        startChatThinking(pendingId);
+        els.sendChat.disabled = true;
         try {
-            await apiJSON(`/api/study/${encodeURIComponent(viewToken)}/notes`, {
+            const result = await apiJSON(`/api/study/${encodeURIComponent(viewToken)}/ai-chat`, {
                 method: 'POST',
                 body: JSON.stringify({
-                    time_seconds: els.video.src ? Number(els.video.currentTime || 0) : null,
-                    body,
+                    question,
+                    history,
                 }),
             });
-            els.noteBody.value = '';
-            showToast('记录已保存');
-            await loadSession();
-            activateTab('notes');
+            state.chatMessages = state.chatMessages.filter((message) => message.id !== pendingId);
+            state.chatMessages.push({
+                role: 'assistant',
+                content: result.answer || '暂无回答。',
+                model: result.model || 'deepseek-v4-pro',
+            });
+            renderChat();
         } catch (error) {
-            showToast(error.message || '保存笔记失败');
+            state.chatMessages = state.chatMessages.filter((message) => message.id !== pendingId);
+            const message = chatErrorMessage(error);
+            state.chatMessages.push({
+                role: 'assistant',
+                content: message,
+                model: 'deepseek-v4-pro',
+                error: true,
+            });
+            renderChat();
+            showToast(message);
         } finally {
-            els.saveNote.disabled = false;
+            stopChatThinking();
+            els.sendChat.disabled = false;
         }
+    }
+
+    function startChatThinking(pendingId) {
+        stopChatThinking();
+        state.chatThinkingTimer = window.setInterval(() => {
+            const pending = state.chatMessages.find((message) => message.id === pendingId);
+            if (!pending) {
+                stopChatThinking();
+                return;
+            }
+            pending.thinkingStep = Math.min(2, Number(pending.thinkingStep || 0) + 1);
+            renderChat();
+        }, 1800);
+    }
+
+    function stopChatThinking() {
+        if (!state.chatThinkingTimer) return;
+        window.clearInterval(state.chatThinkingTimer);
+        state.chatThinkingTimer = null;
+    }
+
+    function chatErrorMessage(error) {
+        if (error && (error.status === 404 || error.status === 405)) {
+            return 'AI 接口还没有被当前运行中的服务加载。请重启服务后再试。';
+        }
+        if (error && error.status === 401) {
+            return 'API 令牌不可用或已过期，请回到工作台重新设置令牌。';
+        }
+        return (error && error.message) || 'AI 回答生成失败，请稍后重试。';
     }
 
     async function copyCurrentLine() {
@@ -749,7 +871,7 @@
                 els.aiNotesList.innerHTML = `<div class="empty-panel"><strong>笔记加载失败</strong><span>${message}</span></div>`;
             }
             els.transcriptList.innerHTML = `<div class="empty-panel"><strong>文稿加载失败</strong><span>${message}</span></div>`;
-            els.notesList.innerHTML = `<div class="empty-panel"><strong>记录加载失败</strong><span>${message}</span></div>`;
+            els.chatList.innerHTML = `<div class="empty-panel"><strong>问答加载失败</strong><span>${message}</span></div>`;
             els.exportMarkdown.disabled = true;
             showToast(error.message || '学习内容加载失败');
         }
@@ -767,7 +889,7 @@
         bindTranscript();
         bindPanelSeek();
         bindVideo();
-        bindNotes();
+        bindChat();
         bindActions();
         loadSession();
     }

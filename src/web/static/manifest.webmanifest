@@ -1,7 +1,7 @@
 {
   "name": "内容解析工作台",
   "short_name": "解析工作台",
-  "description": "视频/文档深度学习、系列学习、帖子/文章洞察与心流写作。",
+  "description": "视频/文档深度学习、系列学习、帖子/文章洞察与心流写作复盘。",
   "lang": "zh-CN",
   "dir": "ltr",
   "id": "/",
@@ -55,7 +55,7 @@
     {
       "name": "心流写作",
       "short_name": "写作",
-      "description": "打开沉浸式写作空间。",
+      "description": "打开沉浸式写作与复盘记录空间。",
       "url": "/static/focus-studio.html",
       "icons": [{ "src": "/static/icon/favicon.png", "sizes": "256x256" }]
     }

@@ -25,12 +25,12 @@
             <div>
                 <p class="study-kicker">本地视频学习</p>
                 <h1 id="study-title">正在加载学习内容...</h1>
-                <p id="study-subtitle">视频、逐字稿、AI 解读和个人笔记会围绕同一条时间轴组织。</p>
+                <p id="study-subtitle">视频、逐字稿、AI 解读和问答会围绕同一条时间轴组织。</p>
             </div>
             <div class="study-status" aria-label="学习状态">
                 <div class="study-stat"><span>状态</span><strong id="study-state">加载中</strong></div>
                 <div class="study-stat"><span>文稿</span><strong id="study-transcript-count">0 段</strong></div>
-                <div class="study-stat"><span>记录</span><strong id="study-note-count">0 条</strong></div>
+                <div class="study-stat"><span>AI</span><strong id="study-ai-model">DeepSeek</strong></div>
             </div>
         </header>
 
@@ -51,7 +51,7 @@
                             <span id="video-meta">等待学习数据</span>
                         </div>
                         <div class="mini-actions">
-                            <button class="btn blue" id="capture-note" type="button">记当前点</button>
+                            <button class="btn blue" id="ask-ai-entry" type="button">问 AI</button>
                         </div>
                     </div>
                     <div class="video-frame" id="video-frame">
@@ -75,7 +75,7 @@
                         <button class="is-active" type="button" data-tab="ai">AI 看</button>
                         <button type="button" data-tab="visual">笔记</button>
                         <button type="button" data-tab="transcript">文稿</button>
-                        <button type="button" data-tab="notes">记录</button>
+                        <button type="button" data-tab="chat">问 AI</button>
                     </div>
 
                     <div class="study-panel-view is-active" id="tab-ai">
@@ -117,17 +117,22 @@
                         </div>
                     </div>
 
-                    <div class="study-panel-view" id="tab-notes">
-                        <div class="panel-head">
+                    <div class="study-panel-view" id="tab-chat">
+                        <div class="panel-head chat-head">
                             <div>
-                                <h3>我的记录</h3>
-                                <span>保存时自动关联当前播放时间</span>
+                                <h3>问 AI</h3>
+                                <span>基于全文上下文回答，可补充专业背景</span>
                             </div>
                         </div>
-                        <textarea id="note-body" class="note-compose" placeholder="写下当前时间点的理解、问题或行动项"></textarea>
-                        <button class="btn primary note-save" id="save-note" type="button">保存笔记</button>
-                        <div class="notes-list" id="notes-list">
-                            <div class="empty-panel"><strong>正在加载</strong><span>学习内容加载完成后会显示你的记录。</span></div>
+                        <div class="chat-list" id="chat-list" aria-live="polite">
+                            <div class="chat-empty"><strong>问任何看不懂的地方</strong><span>AI 会先读视频全文和总结，再结合专业知识回答。</span></div>
+                        </div>
+                        <div class="chat-composer" aria-label="AI 提问区">
+                            <div class="chat-input-row">
+                                <label class="sr-only" for="chat-question">输入你想问的问题</label>
+                                <textarea id="chat-question" class="chat-compose" rows="1" placeholder="Ask another question..."></textarea>
+                                <button class="chat-send" id="send-chat" type="button" aria-label="发送问题">↑</button>
+                            </div>
                         </div>
                     </div>
                 </aside>

@@ -2,9 +2,11 @@ import hashlib
 import os
 import uuid
 from pathlib import Path
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
@@ -33,6 +35,17 @@ class StudyNoteRequest(BaseModel):
     body: str = Field(..., min_length=1, max_length=20000)
 
 
+class StudyChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=12000)
+
+
+class StudyChatRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=4000)
+    time_seconds: float | None = Field(None, ge=0)
+    history: list[StudyChatMessage] = Field(default_factory=list, max_length=12)
+
+
 def get_source_root() -> Path:
     storage_cfg = config.get("storage", {}) or {}
     return Path(storage_cfg.get("source_files_dir") or "./data/source_files")
@@ -43,6 +56,7 @@ def get_study_service() -> StudyService:
         cache_manager=cache_manager,
         repository=StudyRepository(db_path=str(cache_manager.db_path)),
         source_root=get_source_root(),
+        llm_config=config.get("llm", {}) or {},
     )
 
 
@@ -143,6 +157,32 @@ async def create_study_note(
         request.body,
     )
     return TranscribeResponse(code=200, message="笔记已保存", data=note)
+
+
+@router.post("/{view_token}/ai-chat", response_model=TranscribeResponse)
+async def ask_study_ai(
+    view_token: str,
+    request: StudyChatRequest,
+    user_info: dict = Depends(verify_token),
+):
+    service = get_study_service()
+    try:
+        answer = await run_in_threadpool(
+            service.ask_ai,
+            view_token,
+            request.question,
+            request.time_seconds,
+            [item.model_dump() for item in request.history],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("study ai chat failed: %s", exc)
+        raise HTTPException(status_code=502, detail="AI 回答生成失败，请稍后重试")
+
+    if not answer:
+        raise HTTPException(status_code=404, detail="学习内容不存在")
+    return TranscribeResponse(code=200, message="AI 回答已生成", data=answer)
 
 
 async def _save_temp_upload(file: UploadFile, filename: str) -> tuple[str, int, str]:

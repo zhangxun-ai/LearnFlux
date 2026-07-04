@@ -3,9 +3,12 @@ import copy
 import datetime
 import inspect
 import os
+import re
+import shutil
 import subprocess
 import threading
 import time
+from pathlib import Path
 from typing import Optional, Dict, Any
 
 from fastapi import HTTPException, Header, Request
@@ -113,6 +116,112 @@ def _extract_document_text(path: str, ext: str) -> str:
     raise ValueError(f"不支持的文档格式: {ext}")
 
 
+def _online_source_files_dir() -> Path:
+    storage_cfg = get_config().get("storage", {}) or {}
+    source_root = Path(storage_cfg.get("source_files_dir") or "./data/source_files")
+    return source_root / "online_downloads"
+
+
+def _safe_source_stem(platform: str, media_id: str, title: str) -> str:
+    raw = "_".join(part for part in (platform, media_id) if part)
+    if not raw:
+        raw = title or "source"
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", raw).strip("._-")
+    return safe[:160] or "source"
+
+
+def _read_text_source(path: str, ext: str) -> str:
+    if ext in _DOC_EXTS:
+        return _extract_document_text(path, ext)
+    raw = Path(path).read_bytes()
+    for enc in ("utf-8", "gb18030", "latin-1"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="ignore")
+
+
+def _preserve_source_file(
+    source_path: Optional[str] = None,
+    *,
+    platform: str,
+    media_id: str,
+    title: str,
+    source_kind: str = "media",
+    source_text: Optional[str] = None,
+) -> Optional[str]:
+    """Persist an online source file outside temp storage and return its path."""
+    source_ext = Path(source_path).suffix.lower() if source_path else ""
+    if source_kind == "video":
+        target_ext = ".mp4"
+    elif source_kind == "document":
+        target_ext = ".pdf" if source_ext == ".pdf" else ".md"
+    else:
+        target_ext = source_ext if source_ext and len(source_ext) <= 10 else ".bin"
+
+    target_dir = _online_source_files_dir()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / f"{_safe_source_stem(platform, media_id, title)}{target_ext}"
+
+    if source_text is not None:
+        target_path.write_text(source_text, encoding="utf-8")
+        return str(target_path)
+
+    if not source_path or not os.path.exists(source_path):
+        return None
+
+    if source_kind == "document" and target_ext == ".md":
+        target_path.write_text(
+            _read_text_source(source_path, source_ext).strip(),
+            encoding="utf-8",
+        )
+    else:
+        shutil.copy2(source_path, target_path)
+    return str(target_path)
+
+
+def _source_kind_for_path(path: str) -> str:
+    ext = Path(path).suffix.lower()
+    if ext in _DOC_EXTS:
+        return "document"
+    if ext in {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".flv", ".avi"}:
+        return "video"
+    return "media"
+
+
+def _persist_downloaded_source_if_requested(
+    *,
+    preserve_source_file: bool,
+    task_id: str,
+    local_file: str,
+    platform: str,
+    media_id: str,
+    title: str,
+) -> Optional[str]:
+    if not preserve_source_file:
+        return None
+    try:
+        saved_path = _preserve_source_file(
+            source_path=local_file,
+            platform=platform,
+            media_id=media_id,
+            title=title,
+            source_kind=_source_kind_for_path(local_file),
+        )
+        if saved_path:
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.PROCESSING,
+                source_file_path=saved_path,
+            )
+            logger.info(f"已保存源内容文件: {saved_path}")
+        return saved_path
+    except Exception as exc:
+        logger.warning(f"保存源内容文件失败，继续转录: {exc}")
+        return None
+
+
 def _queue_xiaohongshu_article_deep_learning(
     *,
     task_id: str,
@@ -126,6 +235,7 @@ def _queue_xiaohongshu_article_deep_learning(
     comment_limit: int,
     tracker: PerfTracker,
     task_notifier,
+    preserve_source_file: bool = False,
     note_fetcher=None,
 ) -> Optional[Dict[str, Any]]:
     """Queue Xiaohongshu image/article notes as text deep-learning tasks.
@@ -190,6 +300,16 @@ def _queue_xiaohongshu_article_deep_learning(
     if not cache_result:
         raise ValueError("保存小红书图文正文缓存失败")
 
+    source_file_path = None
+    if preserve_source_file:
+        source_file_path = _preserve_source_file(
+            platform=platform,
+            media_id=media_id,
+            title=title,
+            source_kind="document",
+            source_text=article_text,
+        )
+
     llm_task_queue.put(
         {
             "task_id": task_id,
@@ -219,6 +339,7 @@ def _queue_xiaohongshu_article_deep_learning(
         media_id=media_id,
         title=title,
         author=author,
+        source_file_path=source_file_path,
     )
 
     return {
@@ -550,6 +671,9 @@ class TranscribeRequest(BaseModel):
     comment_limit: int = Field(
         100, ge=1, le=200, description="热评拉取上限，仅在 include_comments=true 时生效"
     )
+    preserve_source_file: bool = Field(
+        False, description="是否保存解析过程中下载到的源内容文件"
+    )
 
     @field_validator("wechat_webhook", "feishu_webhook")
     @classmethod
@@ -745,6 +869,7 @@ async def process_task_queue():
             metadata_override = task.get("metadata_override")
             include_comments = task.get("include_comments", False)
             comment_limit = task.get("comment_limit", 100)
+            preserve_source_file = task.get("preserve_source_file", False)
 
             try:
                 if _is_task_canceled(task_id):
@@ -774,6 +899,7 @@ async def process_task_queue():
                     notification_webhooks=notification_webhooks,
                     include_comments=include_comments,
                     comment_limit=comment_limit,
+                    preserve_source_file=preserve_source_file,
                 )
 
                 def task_completed(future_result):
@@ -827,6 +953,7 @@ def process_transcription(
     task_id, url, use_speaker_recognition=False, wechat_webhook=None,
     download_url=None, metadata_override=None, notification_channel=None,
     notification_webhooks=None, include_comments=False, comment_limit=100,
+    preserve_source_file=False,
 ):
     """
     处理视频转录
@@ -842,6 +969,7 @@ def process_transcription(
         notification_webhooks: per-channel webhook dict {"wechat": "...", "feishu": "..."}
         include_comments: 是否在 LLM 阶段生成高赞评论洞察
         comment_limit: 热评拉取上限
+        preserve_source_file: 是否把解析过程中下载到的源内容保存到本地
     """
     if notification_webhooks is None:
         notification_webhooks = {}
@@ -1195,6 +1323,7 @@ def process_transcription(
                     notification_webhooks=notification_webhooks,
                     include_comments=include_comments,
                     comment_limit=comment_limit,
+                    preserve_source_file=preserve_source_file,
                     tracker=tracker,
                     task_notifier=task_notifier,
                 )
@@ -1446,6 +1575,14 @@ def process_transcription(
                         local_file = api_result["audio_path"]
                         logger.info(
                             f"[youtube-api] Audio downloaded, need transcription: {local_file}"
+                        )
+                        _persist_downloaded_source_if_requested(
+                            preserve_source_file=preserve_source_file,
+                            task_id=task_id,
+                            local_file=local_file,
+                            platform=platform,
+                            media_id=media_id,
+                            title=video_title,
                         )
 
                         task_notifier.notify_task_status(
@@ -1833,6 +1970,15 @@ def process_transcription(
                         display_url, "下载失败", error_msg, title=video_title, author=author
                     )
                     return {"status": "failed", "message": error_msg}
+
+                _persist_downloaded_source_if_requested(
+                    preserve_source_file=preserve_source_file,
+                    task_id=task_id,
+                    local_file=local_file,
+                    platform=platform,
+                    media_id=media_id,
+                    title=video_title,
+                )
 
                 try:
                     # 开始转录

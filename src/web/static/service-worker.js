@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vta-pwa-20260630-1';
+const CACHE_NAME = 'vta-pwa-20260702-1';
 
 const PRECACHE_URLS = [
   '/',
@@ -20,6 +20,7 @@ const PRECACHE_URLS = [
   '/static/js/app.js',
   '/static/js/collections.js',
   '/static/js/focus-studio.js',
+  '/static/js/focus-journal.js',
   '/static/js/pwa-register.js',
   '/static/audio/rain.mp3',
   '/static/audio/snow.mp3',

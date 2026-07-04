@@ -1,10 +1,13 @@
 import os
+import subprocess
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 from ..services.longcut import (
@@ -78,6 +81,12 @@ def _media_id_from_local_url(url: str) -> str:
 
 
 def _local_source_file_path(view_data: Dict[str, Any]) -> Optional[Path]:
+    explicit_path = str(view_data.get("source_file_path") or "").strip()
+    if explicit_path:
+        path = Path(explicit_path)
+        if path.exists() and path.is_file():
+            return path
+
     url = str(view_data.get("url") or "")
     if not url.startswith("local://"):
         return None
@@ -92,15 +101,18 @@ def _local_source_file_path(view_data: Dict[str, Any]) -> Optional[Path]:
 
 def _decorate_source_link(view_data: Dict[str, Any]) -> None:
     url = str(view_data.get("url") or "").strip()
+    if _local_source_file_path(view_data) and view_data.get("view_token"):
+        view_data["source_link_url"] = f"/view/{view_data['view_token']}/source-file"
+        view_data["source_link_label"] = "下载源文件"
+        view_data["source_reveal_url"] = f"/view/{view_data['view_token']}/source-file/reveal"
+        view_data["source_reveal_label"] = "在本机显示"
+        return
     if _is_browser_source_url(url):
         view_data["source_link_url"] = url
         view_data["source_link_label"] = "查看原视频"
         return
     if not url.startswith("local://"):
         return
-    if _local_source_file_path(view_data) and view_data.get("view_token"):
-        view_data["source_link_url"] = f"/view/{view_data['view_token']}/source-file"
-        view_data["source_link_label"] = "查看原视频"
 
 
 def _build_collection_navigation(view_token: str) -> Optional[Dict[str, Any]]:
@@ -1077,7 +1089,51 @@ async def view_source_file(view_token: str):
     if not file_path:
         raise HTTPException(status_code=404, detail="源视频未保存或已清理")
     filename = os.path.basename(str(view_data.get("title") or file_path.name))
+    if not os.path.splitext(filename)[1]:
+        filename = file_path.name
     return FileResponse(path=str(file_path), filename=filename or file_path.name)
+
+
+@router.post("/view/{view_token}/source-file/reveal")
+async def reveal_view_source_file(view_token: str, request: Request):
+    if not _is_local_reveal_request(request):
+        raise HTTPException(status_code=403, detail="仅允许从本机打开本地源文件")
+    view_data = cache_manager.get_view_data_by_token(view_token)
+    if not view_data:
+        raise HTTPException(status_code=404, detail="view_token 无效或已过期")
+    file_path = _local_source_file_path(view_data)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="源视频未保存或已清理")
+    try:
+        await run_in_threadpool(_reveal_path_in_file_manager, str(file_path))
+    except OSError as exc:
+        logger.warning(f"reveal view source failed: {exc}")
+        raise HTTPException(status_code=500, detail="打开本地目录失败")
+    return {
+        "code": 200,
+        "message": "已打开源文件所在目录",
+        "data": {"filename": file_path.name},
+    }
+
+
+def _is_local_reveal_request(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
+def _reveal_path_in_file_manager(file_path: str) -> None:
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(file_path)
+
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)])
+        return
+    if os.name == "nt":
+        subprocess.Popen(["explorer", f"/select,{path}"])
+        return
+    target = path.parent if path.is_file() else path
+    subprocess.Popen(["xdg-open", str(target)])
 
 
 @router.get("/view/{view_token}", response_class=HTMLResponse)

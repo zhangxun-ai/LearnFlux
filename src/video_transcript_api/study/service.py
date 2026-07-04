@@ -1,10 +1,14 @@
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from ..cache.cache_manager import CacheManager
+from ..llm import call_llm_api
 from .repository import StudyRepository
 from .source_files import find_study_source_file
 from .transcript import normalize_transcript
+
+_DEFAULT_STUDY_CHAT_MODEL = "deepseek-v4-pro"
+_DEFAULT_STUDY_CHAT_REASONING_EFFORT = "high"
 
 
 class StudyService:
@@ -15,10 +19,14 @@ class StudyService:
         cache_manager: CacheManager,
         repository: StudyRepository,
         source_root: str | Path,
+        llm_config: Optional[dict] = None,
+        llm_answerer: Optional[Callable[..., str]] = None,
     ):
         self.cache_manager = cache_manager
         self.repository = repository
         self.source_root = Path(source_root)
+        self.llm_config = llm_config or {}
+        self.llm_answerer = llm_answerer or call_llm_api
 
     def get_session(self, view_token: str) -> Optional[dict]:
         view_data = self.cache_manager.get_view_data_by_token(view_token)
@@ -57,6 +65,7 @@ class StudyService:
             "ai": {
                 "overview": view_data.get("summary") or "",
                 "summary_missing": bool(view_data.get("summary_missing")),
+                "chat_model": self._study_chat_model(),
             },
             "notes": self.repository.list_notes(view_token),
             "progress": progress,
@@ -81,6 +90,48 @@ class StudyService:
 
     def delete_note(self, view_token: str, note_id: str) -> bool:
         return self.repository.delete_note(note_id, view_token)
+
+    def ask_ai(
+        self,
+        view_token: str,
+        question: str,
+        time_seconds=None,
+        history: Optional[list[dict[str, str]]] = None,
+    ) -> Optional[dict[str, Any]]:
+        session = self.get_session(view_token)
+        if not session:
+            return None
+
+        clean_question = (question or "").strip()
+        if not clean_question:
+            raise ValueError("question is required")
+
+        prompt = self._build_chat_prompt(session, clean_question, time_seconds, history or [])
+        if not prompt:
+            raise ValueError("当前学习内容还没有可供 AI 参考的文稿")
+
+        model = self._study_chat_model()
+        reasoning_effort = self.llm_config.get("study_chat_reasoning_effort")
+        if reasoning_effort is None:
+            reasoning_effort = _DEFAULT_STUDY_CHAT_REASONING_EFFORT
+
+        answer = self.llm_answerer(
+            model=model,
+            prompt=prompt,
+            reasoning_effort=reasoning_effort,
+            task_type="study_chat",
+            system_prompt=(
+                "你是专业、严谨的中文视频学习助教。回答必须优先基于给定视频上下文；"
+                "可以补充相关领域的专业知识，但要明确区分“视频中提到”和“背景补充”。"
+                "如果上下文不足以支持结论，直接说明不足，不要编造。"
+            ),
+        )
+        return {
+            "answer": str(answer).strip(),
+            "model": model,
+            "reasoning_effort": reasoning_effort,
+            "time_seconds": time_seconds,
+        }
 
     def export_markdown(self, view_token: str) -> Optional[str]:
         session = self.get_session(view_token)
@@ -132,6 +183,118 @@ class StudyService:
         if cache_data and cache_data.get("transcript_data") is not None:
             return cache_data.get("transcript_data")
         return view_data.get("transcript") or ""
+
+    def _build_chat_prompt(
+        self,
+        session: dict,
+        question: str,
+        time_seconds,
+        history: list[dict[str, str]],
+    ) -> str:
+        metadata = session.get("metadata") or {}
+        ai = session.get("ai") or {}
+        lines = ((session.get("transcript") or {}).get("lines")) or []
+        summary = (ai.get("overview") or "").strip()
+        transcript = self._format_transcript_for_prompt(lines)
+        if not summary and not transcript:
+            return ""
+
+        nearby = self._nearby_transcript(lines, time_seconds)
+        history_block = self._format_chat_history(history)
+        time_block = ""
+        if time_seconds is not None:
+            time_block = (
+                f"\n用户选择参考的播放位置：{self._format_timestamp(time_seconds)}\n"
+                f"该位置附近文稿：\n{nearby or '未找到可定位文稿'}\n"
+            )
+
+        return f"""请回答用户关于这个视频的问题。
+
+视频标题：{metadata.get("title") or "未命名视频"}
+
+用户问题：
+{question}
+{time_block}
+最近对话：
+{history_block or "无"}
+
+视频 AI 总结：
+{self._clip_text(summary, 12000) or "无"}
+
+视频全文文稿：
+{transcript}
+
+回答要求：
+1. 先直接回答问题。
+2. 引用视频上下文中的关键依据，不要只泛泛解释。
+3. 需要专业背景时可以补充，但要标明这是背景补充。
+4. 如果用户的问题和视频内容关系不明确，先说明你基于哪个理解来回答。
+5. 使用中文，结构清晰，避免空泛套话。
+6. 不要输出 Markdown 分隔线、引用前缀符号、代码块或表格；可以使用简短小标题和短段落。
+"""
+
+    def _format_transcript_for_prompt(self, lines: list[dict]) -> str:
+        entries = []
+        for line in lines:
+            text = (line.get("text") or "").strip()
+            if not text:
+                continue
+            if line.get("seekable"):
+                entries.append(f"[{self._format_timestamp(line.get('start_seconds'))}] {text}")
+            else:
+                entries.append(text)
+        return self._clip_text("\n".join(entries), 60000)
+
+    def _nearby_transcript(self, lines: list[dict], time_seconds) -> str:
+        if time_seconds is None:
+            return ""
+        try:
+            target = float(time_seconds)
+        except (TypeError, ValueError):
+            return ""
+
+        seekable = [
+            (index, line)
+            for index, line in enumerate(lines)
+            if line.get("seekable") and line.get("start_seconds") is not None
+        ]
+        if not seekable:
+            return ""
+
+        active_index = seekable[0][0]
+        for index, line in seekable:
+            if float(line.get("start_seconds") or 0) <= target:
+                active_index = index
+            else:
+                break
+
+        start = max(0, active_index - 5)
+        end = min(len(lines), active_index + 8)
+        return "\n".join(
+            f"[{self._format_timestamp(line.get('start_seconds'))}] {line.get('text') or ''}"
+            if line.get("seekable")
+            else (line.get("text") or "")
+            for line in lines[start:end]
+            if (line.get("text") or "").strip()
+        )
+
+    def _format_chat_history(self, history: list[dict[str, str]]) -> str:
+        rows = []
+        for item in history[-8:]:
+            role = "用户" if item.get("role") == "user" else "AI"
+            content = self._clip_text((item.get("content") or "").strip(), 1000)
+            if content:
+                rows.append(f"{role}: {content}")
+        return "\n".join(rows)
+
+    def _study_chat_model(self) -> str:
+        return self.llm_config.get("study_chat_model") or _DEFAULT_STUDY_CHAT_MODEL
+
+    @staticmethod
+    def _clip_text(text: str, max_chars: int) -> str:
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars].rstrip() + "\n...[已截断]"
 
     @staticmethod
     def _state_for(status: str, source_available: bool, progress: Optional[dict] = None) -> str:

@@ -13,9 +13,33 @@
     // ============================================================
     "tikhub": {
         "api_key": "your-tikhub-api-key-here",  // TikHub API 密钥
+        "base_url": "https://api.tikhub.io",    // API 基础地址，国内网络可尝试 https://api.tikhub.dev
+        "cache_enabled": true,           // 是否缓存成功的 TikHub JSON 响应，降低重复请求成本
+        "cache_ttl_seconds": 21600,      // TikHub 响应缓存时长（秒），默认 6 小时
+        "cache_dir": "./data/cache/tikhub", // TikHub 响应缓存目录
         "max_retries": 2,                // 最大重试次数
         "retry_delay": 5,                // 重试间隔（秒）
         "timeout": 30                    // 请求超时时间（秒）
+    },
+
+    // ============================================================
+    // 趋势机会雷达配置（手动触发，默认单次预算不超过 $5）
+    // ============================================================
+    "trend_radar": {
+        "max_run_budget_usd": 5.0,       // 单次报告最高预算，路由也会强制限制到 $5
+        "request_cost_usd": 0.01,        // TikHub 单请求保守估算；知道实际价格后可下调
+        "llm_reserved_usd": 0.2,         // DeepSeek 终审预留估算；实际还会按预算比例收敛
+        "llm_reserved_max_ratio": 0.1,   // 小预算时最多把 10% 留给 LLM，其余给 TikHub 采集
+        "report_dir": "./data/trend_radar/reports",
+        "llm_model": null,               // 为空时复用 summary_model
+        "llm_reasoning_effort": null,    // 为空时复用 summary_reasoning_effort
+        "collector": {
+            "sources": ["x", "xiaohongshu", "douyin"],
+            "x_country": "UnitedStates",
+            "max_keywords_per_topic": 3,
+            "max_items_per_call": 25,
+            "x_elite_accounts": []       // 可放英文 X 高质量账号 screen_name，作为精英信号源
+        }
     },
 
     // ============================================================
@@ -182,6 +206,12 @@
         //         延迟和 token 成本会上升（思考模式），请按任务重要性选择级别。
         "summary_model": "deepseek-v4-flash",   // 总结使用的模型
         "summary_reasoning_effort": "high",     // 总结推理强度（v4-flash 下触发思考模式）
+        "collection_summary_model": "deepseek-v4-pro",  // 全系列解读优先使用长上下文强模型
+        "collection_summary_reasoning_effort": "high",  // 全系列解读推理强度
+        "collection_summary_context_tokens": 1000000,   // DeepSeek V4 Pro/Flash 官方 1M 上下文
+        "collection_summary_reserved_output_tokens": 100000,  // 为最终长文和思考预留 token
+        "collection_summary_context_safety_ratio": 0.85, // 超过可用上下文才进入分层处理
+        "collection_summary_chars_per_token": 1.2,       // 中文源内容的保守字符/token 估算
         "study_chat_model": "deepseek-v4-pro",  // 本地视频学习页“问 AI”使用的模型
         "study_chat_reasoning_effort": "high",  // “问 AI”推理强度
 

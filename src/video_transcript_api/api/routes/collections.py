@@ -313,7 +313,7 @@ async def generate_collection_summary(
     try:
         service = get_collection_service()
         detail = await run_in_threadpool(service.generate_summary, collection_id)
-        return TranscribeResponse(code=200, message="专题总结已生成", data=detail)
+        return TranscribeResponse(code=200, message="全系列解读已生成", data=detail)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

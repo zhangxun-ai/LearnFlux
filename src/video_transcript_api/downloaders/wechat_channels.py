@@ -12,6 +12,7 @@ import requests
 
 from .base import BaseDownloader
 from .models import VideoMetadata, DownloadInfo
+from ..tikhub import TikHubClient, TikHubError
 from ..utils.logging import setup_logger
 
 logger = setup_logger("wechat_channels_downloader")
@@ -350,63 +351,12 @@ class WeChatChannelsDownloader(BaseDownloader):
         return decrypted_path
 
     def _post_tikhub_request(self, endpoint: str, payload: dict) -> dict:
-        if not self.api_key:
-            raise ValueError("TikHub API key is not configured")
-
-        tikhub_config = self.config.get("tikhub", {})
-        max_retries = tikhub_config.get("max_retries", 3)
-        retry_delay = tikhub_config.get("retry_delay", 2)
-        timeout = max(tikhub_config.get("timeout", 30), 30)
-
-        url = f"https://api.tikhub.io{endpoint}"
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {self.api_key.strip()}",
-            "Content-Type": "application/json",
-        }
-        last_error = None
-
-        for attempt in range(1, max_retries + 1):
-            try:
-                logger.info(
-                    f"Requesting TikHub WeChat Channels detail "
-                    f"(attempt {attempt}/{max_retries})"
-                )
-                response = requests.post(
-                    url,
-                    headers=headers,
-                    json=payload,
-                    timeout=timeout,
-                )
-                if response.status_code == 200:
-                    result = response.json()
-                    if not isinstance(result, dict):
-                        raise ValueError("TikHub response is not a JSON object")
-                    return result
-
-                error_message = f"TikHub request failed with HTTP {response.status_code}"
-                try:
-                    error_data = response.json()
-                    error_message += f": {error_data.get('message') or error_data}"
-                except Exception:
-                    if response.text:
-                        error_message += f": {response.text[:200]}"
-                last_error = ValueError(error_message)
-
-                if response.status_code in (401, 403, 404):
-                    break
-                if response.status_code >= 500 and attempt < max_retries:
-                    time.sleep(retry_delay)
-                    continue
-                break
-            except requests.RequestException as exc:
-                last_error = exc
-                if attempt < max_retries:
-                    time.sleep(retry_delay)
-                    continue
-                break
-
-        raise ValueError(f"TikHub WeChat Channels request failed: {last_error}")
+        tikhub_config = dict(self.config.get("tikhub", {}) or {})
+        tikhub_config["api_key"] = self.api_key
+        try:
+            return TikHubClient(tikhub_config).post(endpoint, payload, min_timeout=30)
+        except TikHubError as exc:
+            raise ValueError(f"TikHub WeChat Channels request failed: {exc}") from exc
 
     @staticmethod
     def _validate_response(response: dict) -> None:

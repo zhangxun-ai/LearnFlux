@@ -19,6 +19,7 @@ from ...flywheel.ingest import ingest_blogger
 from ...flywheel.models import (
     AnalysisStatus, Blogger, Content, ContentSource, MediaType,
 )
+from ...flywheel.opportunities import build_opportunity
 from ...flywheel.prompts import DEFAULT_PROMPTS, LEGACY_DEFAULT_PROMPTS, default_prompt
 from ...flywheel.repositories import (
     ContentQuery, SqliteAnalysisCostRepository, SqliteAnalysisRepository,
@@ -214,6 +215,40 @@ def list_contents(*, subscribe=None, blogger_ids=(), statuses=(), media_type=Non
         "items": [_serialize_content(c, handles.get(c.blogger_id, "")) for c in pg.items],
         "total": pg.total, "page": pg.page, "page_size": pg.page_size, "pages": pg.pages,
     }
+
+
+def list_opportunities(*, subscribe=None, media_type=None, date_preset=None,
+                       limit=20, now: Optional[datetime] = None) -> dict:
+    """Rank already-analyzed content by immediate opportunity signal."""
+    r = repos()
+    now = now or datetime.now()
+    cap = max(1, min(int(limit or 20), 50))
+    q = ContentQuery(
+        subscribed={"subscribed": True, "adhoc": False}.get(subscribe),
+        statuses=(AnalysisStatus.SUCCESS,),
+        media_type=MediaType(media_type) if media_type else None,
+        date_from=_date_from(date_preset, now),
+        sort="like_count",
+        page=1,
+        page_size=max(cap * 3, cap),
+    )
+    pg = r["content"].list(q)
+    items = []
+    for content in pg.items:
+        analysis = r["analysis"].get_by_content(content.id)
+        if not analysis or analysis.status is not AnalysisStatus.SUCCESS:
+            continue
+        blogger = r["blogger"].get(content.blogger_id)
+        items.append(
+            build_opportunity(
+                content,
+                analysis.result_json or {},
+                blogger_handle=blogger.handle if blogger else "",
+                now=now,
+            )
+        )
+    items.sort(key=lambda item: item["score"], reverse=True)
+    return {"items": items[:cap], "total": len(items), "limit": cap}
 
 
 def list_bloggers() -> list[dict]:

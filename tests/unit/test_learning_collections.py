@@ -116,6 +116,293 @@ def test_collection_summary_requires_all_sources_ready(tmp_path):
         raise AssertionError("Expected collection summary to wait for parsed sources")
 
 
+def test_collection_summary_prompt_builds_full_series_interpretation():
+    from video_transcript_api.collections.service import build_collection_summary_prompt
+
+    prompt = build_collection_summary_prompt(
+        {
+            "title": "如何走出人生困局",
+            "collection_type": "video_course",
+            "goal": "先建立全局视角，再选择性深度学习",
+        },
+        [
+            {
+                "title": "01 开篇.mp4",
+                "source_type": "video",
+                "position": 1,
+                "single_summary": "第一节说明困局要先拆出可控变量。",
+                "transcript": "原文A" * 400,
+            },
+            {
+                "title": "02 行动.mp4",
+                "source_type": "video",
+                "position": 2,
+                "single_summary": "",
+                "transcript": "第二节用行动闭环把判断变成实践。",
+            },
+        ],
+    )
+
+    assert "全系列解读" in prompt
+    assert "课前导览" in prompt
+    assert "课后复习" in prompt
+    assert "这个系列解决什么问题" in prompt
+    assert "为什么值得学" in prompt
+    assert "全系列主线" in prompt
+    assert "章节地图" in prompt
+    assert "核心框架" in prompt
+    assert "复习索引" in prompt
+    assert "第一节说明困局要先拆出可控变量。" in prompt
+    assert "原文补充" in prompt
+    assert "不要使用 ```" in prompt
+    assert len(prompt) < 18000
+
+
+def test_collection_summary_prompt_keeps_all_sources_in_long_series():
+    from video_transcript_api.collections.service import build_collection_summary_prompt
+
+    sources = [
+        {
+            "title": f"{index:02d} 创业中的 100 件事.mp4",
+            "source_type": "video",
+            "position": index,
+            "single_summary": f"第 {index} 节讲创业关键问题。" * 80,
+            "transcript": f"第 {index} 节原文补充。" * 120,
+        }
+        for index in range(1, 76)
+    ]
+
+    prompt = build_collection_summary_prompt(
+        {
+            "title": "创业中的 100 件事",
+            "collection_type": "video_course",
+            "goal": "先建立创业知识全局视角，再选择性复习具体章节",
+        },
+        sources,
+    )
+
+    assert "## Source 1: 01 创业中的 100 件事.mp4" in prompt
+    assert "## Source 75: 75 创业中的 100 件事.mp4" in prompt
+    assert "位置: 75" in prompt
+    assert len(prompt) < 65000
+
+
+def test_collection_summary_llm_uses_full_source_content_for_small_collection(monkeypatch):
+    from video_transcript_api.collections import service as collection_service
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    calls = []
+
+    def fake_call_llm_api(**kwargs):
+        calls.append(kwargs)
+        return "# 全系列解读\n\n## 章节地图\n第 1 节：完整覆盖。"
+
+    monkeypatch.setattr(collection_service, "call_llm_api", fake_call_llm_api)
+    service = LearningCollectionService(
+        repository=None,
+        cache_manager=None,
+        llm_config={"model": "fake", "collection_direct_char_limit": 10000},
+    )
+
+    markdown = service._generate_summary_with_llm(
+        {"title": "小合集", "collection_type": "video_course"},
+        [
+            {
+                "title": "01 小课.mp4",
+                "source_type": "video",
+                "position": 1,
+                "single_summary": "短摘要",
+                "transcript": "完整源内容开头。FULL_SOURCE_TAIL",
+            }
+        ],
+    )
+
+    assert markdown.startswith("# 全系列解读")
+    assert [call["task_type"] for call in calls] == ["collection_summary"]
+    assert "FULL_SOURCE_TAIL" in calls[0]["prompt"]
+
+
+def test_collection_summary_defaults_to_direct_until_model_context_is_exceeded(monkeypatch):
+    from video_transcript_api.collections import service as collection_service
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    calls = []
+
+    def fake_call_llm_api(**kwargs):
+        calls.append(kwargs)
+        positions = "、".join(str(index) for index in range(1, 76))
+        return f"# 全系列解读\n\n## 章节地图\n第 {positions} 节：默认直接处理。"
+
+    monkeypatch.setattr(collection_service, "call_llm_api", fake_call_llm_api)
+    service = LearningCollectionService(
+        repository=None,
+        cache_manager=None,
+        llm_config={"collection_summary_model": "deepseek-v4-pro"},
+    )
+    sources = [
+        {
+            "title": f"{index:02d} 创业课.mp4",
+            "source_type": "video",
+            "position": index,
+            "single_summary": f"第 {index} 节摘要",
+            "transcript": f"FULL_CONTEXT_SOURCE_{index} " * 120,
+        }
+        for index in range(1, 76)
+    ]
+
+    service._generate_summary_with_llm(
+        {"title": "创业中的 100 件事", "collection_type": "video_course"},
+        sources,
+    )
+
+    assert [call["task_type"] for call in calls] == ["collection_summary"]
+    assert calls[0]["model"] == "deepseek-v4-pro"
+    assert "FULL_CONTEXT_SOURCE_75" in calls[0]["prompt"]
+
+
+def test_collection_summary_llm_layers_large_collection_with_full_module_sources(monkeypatch):
+    from video_transcript_api.collections import service as collection_service
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    class FakeStructuredResult:
+        def __init__(self, data):
+            self.success = True
+            self.data = data
+            self.error = None
+
+    calls = []
+
+    def fake_call_llm_api(**kwargs):
+        calls.append(kwargs)
+        task_type = kwargs["task_type"]
+        if task_type == "collection_module_plan":
+            return FakeStructuredResult(
+                {
+                    "mainline": "先校准认知，再进入方法。",
+                    "modules": [
+                        {
+                            "title": "认知校准",
+                            "role": "建立创业底层判断",
+                            "rationale": "前 3 节都在校准创业认知。",
+                            "source_numbers": [1, 2, 3],
+                        },
+                        {
+                            "title": "方法展开",
+                            "role": "进入具体行动方法",
+                            "rationale": "后 3 节开始讲验证和行动。",
+                            "source_numbers": [4, 5, 6],
+                        },
+                    ],
+                }
+            )
+        if task_type == "collection_module_summary":
+            return f"模块解读：{kwargs['prompt'].split('模块名称：', 1)[1].splitlines()[0]}"
+        if task_type == "collection_summary":
+            return "# 全系列解读\n\n## 章节地图\n第 1、2、3、4、5、6 节：全部纳入模块。"
+        raise AssertionError(f"Unexpected task type: {task_type}")
+
+    monkeypatch.setattr(collection_service, "call_llm_api", fake_call_llm_api)
+    service = LearningCollectionService(
+        repository=None,
+        cache_manager=None,
+        llm_config={
+            "model": "fake",
+            "collection_direct_char_limit": 10,
+            "collection_module_source_char_limit": 10000,
+        },
+    )
+    sources = [
+        {
+            "title": f"{index:02d} 创业课.mp4",
+            "source_type": "video",
+            "position": index,
+            "single_summary": f"第 {index} 节摘要",
+            "transcript": f"FULL_TRANSCRIPT_{index} " * 20,
+        }
+        for index in range(1, 7)
+    ]
+
+    markdown = service._generate_summary_with_llm(
+        {"title": "创业中的 100 件事", "collection_type": "video_course"},
+        sources,
+    )
+
+    assert "第 1、2、3、4、5、6 节" in markdown
+    assert [call["task_type"] for call in calls] == [
+        "collection_module_plan",
+        "collection_module_summary",
+        "collection_module_summary",
+        "collection_summary",
+    ]
+    module_prompts = [
+        call["prompt"] for call in calls if call["task_type"] == "collection_module_summary"
+    ]
+    assert "FULL_TRANSCRIPT_1" in module_prompts[0]
+    assert "FULL_TRANSCRIPT_6" in module_prompts[1]
+
+
+def test_collection_summary_llm_repairs_missing_source_coverage(monkeypatch):
+    from video_transcript_api.collections import service as collection_service
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    class FakeStructuredResult:
+        success = True
+        error = None
+        data = {
+            "mainline": "从认知到行动。",
+            "modules": [
+                {
+                    "title": "完整模块",
+                    "role": "覆盖全部章节",
+                    "rationale": "三节共同构成一个小闭环。",
+                    "source_numbers": [1, 2, 3],
+                }
+            ],
+        }
+
+    calls = []
+
+    def fake_call_llm_api(**kwargs):
+        calls.append(kwargs)
+        task_type = kwargs["task_type"]
+        if task_type == "collection_module_plan":
+            return FakeStructuredResult()
+        if task_type == "collection_module_summary":
+            return "模块解读：覆盖 1-3 节。"
+        if task_type == "collection_summary":
+            return "# 全系列解读\n\n## 章节地图\n第 1 节：只写了开头。"
+        if task_type == "collection_summary_repair":
+            return "# 全系列解读\n\n## 章节地图\n第 1、2、3 节：修正后全部覆盖。"
+        raise AssertionError(f"Unexpected task type: {task_type}")
+
+    monkeypatch.setattr(collection_service, "call_llm_api", fake_call_llm_api)
+    service = LearningCollectionService(
+        repository=None,
+        cache_manager=None,
+        llm_config={"model": "fake", "collection_direct_char_limit": 10},
+    )
+    sources = [
+        {
+            "title": f"{index:02d} 创业课.mp4",
+            "source_type": "video",
+            "position": index,
+            "single_summary": f"第 {index} 节摘要",
+            "transcript": f"FULL_TRANSCRIPT_{index} " * 20,
+        }
+        for index in range(1, 4)
+    ]
+
+    markdown = service._generate_summary_with_llm(
+        {"title": "创业中的 100 件事", "collection_type": "video_course"},
+        sources,
+    )
+
+    assert "修正后全部覆盖" in markdown
+    assert calls[-1]["task_type"] == "collection_summary_repair"
+    assert "第 2 节" in calls[-1]["prompt"]
+    assert "FULL_TRANSCRIPT_3" in calls[-1]["prompt"]
+
+
 def test_collection_source_detail_returns_content_and_timing(tmp_path):
     from video_transcript_api.collections.repository import LearningCollectionRepository
     from video_transcript_api.collections.service import LearningCollectionService
@@ -1256,6 +1543,7 @@ def test_collections_page_restores_existing_collections():
     project_root = Path(__file__).resolve().parents[2]
     html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
     js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+    css = (project_root / "src/web/static/css/collections.css").read_text(encoding="utf-8")
 
     assert "collection-history-list" in html
     assert "collection-creator" in html
@@ -1282,7 +1570,49 @@ def test_collections_page_restores_existing_collections():
     assert "append-files" in html
     assert "cancel-collection" in html
     assert "map-related-sources" in html
-    assert "学习提纲" in html
+    assert "全系列解读" in html
+    assert "学习提纲" not in html
+    assert "学习提纲" not in js
+    assert "summary-problem" in html
+    assert "summary-review" in html
+    assert "summaryProblem" in js
+    assert "summaryReview" in js
+    assert "summaryToc" in js
+    assert "summaryStructured" in js
+    assert "summary-reader" in html
+    assert "summary-toc" in html
+    assert "summary-structured" in html
+    assert "renderSummaryReader" in js
+    assert "buildSummarySections" in js
+    assert "renderSummaryToc" in js
+    assert "renderStructuredSummaryBlocks" in js
+    assert "splitInlineNumberedItems" in js
+    assert "data-summary-anchor" in js
+    assert ".lc-summary-reader" in css
+    assert ".lc-summary-toc" in css
+    assert ".lc-summary-article" in css
+    assert ".lc-inline-numbered" in css
+    assert "grid-template-columns: minmax(0, 1fr) 220px" in css
+    assert "normalizeMarkdownForPreview" in js
+    assert "summarizeMarkdownSection" in js
+    assert "startSummaryProgress" in js
+    assert "summaryProgressByCollection" in js
+    assert "function isSummaryGenerating(collectionId)" in js
+    assert "startSummaryProgress(collectionId)" in js
+    assert "stopSummaryProgress(collectionId" in js
+    assert "currentCollection.id === collectionId" in js
+    generate_summary_body = js[
+        js.index("async function generateSummary()") : js.index("async function exportMarkdown()")
+    ]
+    assert "setBusy(true);" not in generate_summary_body
+    assert "lc-btn-progress" in html
+    assert "summary-progress-text" in html
+    assert "这个系列解决什么问题" in html
+    assert "为什么值得学" in html
+    assert "全系列主线" in html
+    assert "章节地图" in html
+    assert "核心框架" in html
+    assert "复习索引" in html
     assert "源内容" in html
     assert "导出笔记" in html
     assert ">Markdown<" not in html

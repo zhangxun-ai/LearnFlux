@@ -9,6 +9,7 @@ transcription pipeline.
 from dataclasses import asdict, dataclass
 from typing import Any, Optional
 
+from ...comments.demand_miner import mine_comment_demands
 from ...comments.post_analyzer import PostInsightAnalyzer
 from ...comments.selector import CommentItem, select_high_value_comments
 from ...comments.twitter_post import TwitterPostFetcher
@@ -40,6 +41,7 @@ class PostInsightResult:
     thread_text: str
     insight_markdown: str
     comment_samples: list[dict[str, Any]]
+    demand_signals: dict[str, list[dict[str, Any]]]
     fetched_comment_count: int
 
 
@@ -77,6 +79,7 @@ def generate_post_insight(
     post = fetcher.fetch(parsed.normalized_url, parsed.video_id)
 
     selected = select_high_value_comments(post.comments, max_items=analysis_limit)
+    demand_signals = mine_comment_demands(selected)
 
     # PostInsightAnalyzer tolerates an empty reply list: a post with no replies
     # is still analyzed on its content alone.
@@ -85,6 +88,7 @@ def generate_post_insight(
         author=post.author,
         summary_text=post.thread_text,
         comments=selected,
+        demand_signals=demand_signals,
     )
     if not insight:
         raise ValueError("Failed to generate post insight")
@@ -101,6 +105,7 @@ def generate_post_insight(
         thread_text=post.thread_text,
         insight_markdown=insight,
         comment_samples=[_comment_to_dict(c) for c in selected],
+        demand_signals=demand_signals,
         fetched_comment_count=len(post.comments),
     )
 

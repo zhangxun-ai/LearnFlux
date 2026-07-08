@@ -35,15 +35,16 @@
   ::selection{background:var(--accent);color:#fff}
 
   /* top bar */
-  .top{max-width:1040px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;gap:10px}
+  .top{max-width:760px;margin:0 auto;padding:18px 28px 2px}
+  .top-label{font-size:.76rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px}
   .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:1.02rem;letter-spacing:.2px}
   .brand .mark{width:26px;height:26px;border-radius:8px;background:var(--accent);color:#fff;display:flex;
     align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:.95rem}
-  .nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
-  .nav a{font-size:.9rem;color:var(--ink-soft);text-decoration:none;padding:7px 12px;border-radius:8px;cursor:pointer;transition:.15s}
-  .nav a:hover{background:rgba(27,26,23,.05)}
-  .nav a.on{color:var(--accent-ink);font-weight:600}
-  .nav .home{color:var(--muted)}
+  .nav{display:flex;gap:4px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:10px}
+  .nav button{border:0;background:transparent;font-family:inherit;font-size:.9rem;color:var(--ink-soft);text-decoration:none;
+    min-height:36px;padding:7px 12px;border-radius:8px;cursor:pointer;transition:.15s}
+  .nav button:hover{background:rgba(27,26,23,.05);color:var(--ink)}
+  .nav button.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
 
   .wrap{max-width:760px;margin:0 auto;padding:0 28px 100px}
   .view{display:none;animation:rise .4s cubic-bezier(.2,.7,.2,1) both}
@@ -129,6 +130,16 @@
   .row .tt{font-weight:600;font-size:1rem}
   .row .meta{color:var(--muted);font-size:.85rem;margin-top:4px}
   .row .meta a{color:var(--accent-ink);text-decoration:none}
+  .opp-score{width:52px;height:52px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--accent-soft);color:var(--accent-ink);font-weight:700;line-height:1}
+  .opp-score span{font-size:1.05rem}
+  .opp-score small{font-size:.68rem;margin-top:4px;color:var(--muted)}
+  .opp-score.high{background:rgba(228,80,58,.12);color:var(--accent-ink)}
+  .opp-score.medium{background:rgba(47,143,107,.12);color:var(--article)}
+  .opp-score.low{background:rgba(27,26,23,.06);color:var(--ink-soft)}
+  .opp-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .opp-tag{font-size:.72rem;border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--ink-soft);background:var(--card)}
+  .opp-action{margin-top:8px;color:var(--ink-soft);font-size:.9rem}
   .st{font-size:.7rem;font-weight:600;padding:2px 9px;border-radius:999px;margin-left:8px;white-space:nowrap}
   .st.pending{background:rgba(27,26,23,.06);color:var(--ink-soft)}
   .st.processing{background:rgba(228,80,58,.1);color:var(--accent-ink)}
@@ -166,11 +177,13 @@
   <div id="site-nav"></div>
   <script src="/static/js/site-nav.js?v={{ asset_ver }}"></script>
   <div class="top">
-    <nav class="nav">
-      <a class="on" data-v="analyze" onclick="fwV('analyze')">拆解</a>
-      <a data-v="history" onclick="fwV('history')">我拆解过的</a>
-      <a data-v="bloggers" onclick="fwV('bloggers')">我的对标</a>
-      <a data-v="settings" onclick="fwV('settings')">设置</a>
+    <div class="top-label">IP 对标工作台</div>
+    <nav class="nav" aria-label="IP 对标工作台">
+      <button type="button" class="on" data-v="analyze" onclick="fwV('analyze')" aria-selected="true">拆解</button>
+      <button type="button" data-v="opportunities" onclick="fwV('opportunities')" aria-selected="false">选题机会</button>
+      <button type="button" data-v="history" onclick="fwV('history')" aria-selected="false">历史记录</button>
+      <button type="button" data-v="bloggers" onclick="fwV('bloggers')" aria-selected="false">对标账号</button>
+      <button type="button" data-v="settings" onclick="fwV('settings')" aria-selected="false">IP 设置</button>
     </nav>
   </div>
 
@@ -204,7 +217,7 @@
 
     <!-- HISTORY -->
     <div class="view" id="v-history">
-      <div class="head"><h2 class="serif">我拆解过的</h2><p>原内容和对标拆解结果都能回看。</p></div>
+      <div class="head"><h2 class="serif">历史记录</h2><p>已拆解内容和对标结果都能回看。</p></div>
       <div class="filters">
         <select id="f-subscribe"><option value="">全部来源</option><option value="subscribed">已订阅</option><option value="adhoc">临时解析</option></select>
         <select id="f-blogger"><option value="">全部博主</option></select>
@@ -216,9 +229,20 @@
       <div id="contents"><div class="empty">加载中…</div></div>
     </div>
 
+    <!-- OPPORTUNITIES -->
+    <div class="view" id="v-opportunities">
+      <div class="head"><h2 class="serif">选题机会</h2><p>把已拆解成功的内容按可复用价值和互动信号排序，帮你决定下一条该跟进什么。它不抓新热点，也不额外调用 LLM。</p></div>
+      <div class="filters">
+        <select id="o-date"><option value="">全部时间</option><option value="7d">近 7 天</option><option value="30d">近 30 天</option><option value="90d">近 90 天</option></select>
+        <select id="o-type"><option value="">全部类型</option><option value="video">视频</option><option value="article">图文</option></select>
+        <select id="o-subscribe"><option value="">全部来源</option><option value="subscribed">已订阅</option><option value="adhoc">临时解析</option></select>
+      </div>
+      <div id="opportunities"><div class="empty">加载中…</div></div>
+    </div>
+
     <!-- BLOGGERS -->
     <div class="view" id="v-bloggers">
-      <div class="head"><h2 class="serif">我的对标</h2><p>订阅博主只抓取最近内容（默认不解析），你在「我解析过的」里挑值得的再拆。</p></div>
+      <div class="head"><h2 class="serif">对标账号</h2><p>订阅博主只抓取最近内容（默认不解析），你在「历史记录」里挑值得的再拆。</p></div>
       <div class="box" style="margin-top:22px">
         <input id="sub-url" placeholder="粘贴博主主页链接，订阅追更…" autocomplete="off">
         <button class="go" id="sub">订阅</button>
@@ -229,7 +253,7 @@
 
     <!-- SETTINGS -->
     <div class="view" id="v-settings">
-      <div class="head"><h2 class="serif">设置</h2><p>填入 API 令牌后即可使用（保存在你本地浏览器）。</p></div>
+      <div class="head"><h2 class="serif">IP 设置</h2><p>填入 API 令牌后即可使用（保存在你本地浏览器）。</p></div>
       <div class="field">
         <input id="token-input" class="secret-input" name="api-token-local" type="text" placeholder="粘贴 API 令牌…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
         <button class="go" id="save-token">保存</button>
@@ -274,9 +298,15 @@
   // view switch
   window.fwV=function(v){
     document.querySelectorAll('.view').forEach(function(e){e.classList.remove('on');});
-    document.querySelectorAll('.nav a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v);});
+    document.querySelectorAll('.nav [data-v]').forEach(function(a){
+      var active=a.dataset.v===v;
+      a.classList.toggle('on',active);
+      a.setAttribute('aria-selected',active?'true':'false');
+    });
+    if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);
     $('v-'+v).classList.add('on');window.scrollTo({top:0,behavior:'smooth'});
     if(v==='history'){fwLoadBloggerOptions();fwLoadContents();}
+    if(v==='opportunities')fwLoadOpportunities();
     if(v==='bloggers')fwLoadBloggers();
     if(v==='settings')fwLoadPrompts();
   };
@@ -390,7 +420,7 @@
     for(var k in map){var v=$(map[k]).value;if(v)qs.set(k,v);}
     $('contents').innerHTML='<div class="empty">加载中…</div>';
     fetch('/api/flywheel/contents?'+qs.toString(),{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
-      if(!d.items||!d.items.length){$('contents').innerHTML='<div class="empty">没有匹配的内容。去「拆解」试一条，或「我的对标」订阅博主。</div>';return;}
+      if(!d.items||!d.items.length){$('contents').innerHTML='<div class="empty">没有匹配的内容。去「拆解」试一条，或在「对标账号」订阅博主。</div>';return;}
       var h='<div class="cnt">共 '+d.total+' 条</div>';
       d.items.forEach(function(c){
         var stTxt={pending:'待解析',processing:'解析中',success:'已解析',failed:'解析失败'}[c.analysis_status]||c.analysis_status;
@@ -420,6 +450,34 @@
     }).catch(function(){showErr('加载失败');});
   };
   window.fwRun=function(u){fwV('analyze');analyze(decodeURIComponent(u));};
+
+  // ---------- topic opportunity ranking ----------
+  window.fwLoadOpportunities=function(){
+    if(!getToken()){fwV('settings');return;}
+    var qs=new URLSearchParams();
+    var date=$('o-date').value, type=$('o-type').value, subscribe=$('o-subscribe').value;
+    if(date)qs.set('date',date);if(type)qs.set('media_type',type);if(subscribe)qs.set('subscribe',subscribe);
+    qs.set('limit','20');
+    $('opportunities').innerHTML='<div class="empty">加载中…</div>';
+    fetch('/api/flywheel/opportunities?'+qs.toString(),{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
+      if(!d.items||!d.items.length){$('opportunities').innerHTML='<div class="empty">还没有可排序的内容。先在「拆解」里解析几条对标内容。</div>';return;}
+      var typeTxt={template:'模板/清单',product:'工具/产品',content_angle:'选题角度'};
+      var lvlTxt={high:'优先跟进',medium:'可观察',low:'弱信号'};
+      var h='<div class="cnt">共 '+d.items.length+' 条可跟进内容</div>';
+      d.items.forEach(function(o){
+        h+='<div class="row"><div class="opp-score '+esc(o.level)+'"><span>'+esc(o.score)+'</span><small>分</small></div>'+
+          '<div class="main"><div class="tt">'+esc(o.title)+'<span class="st success">'+esc(lvlTxt[o.level]||o.level)+'</span></div>'+
+          '<div class="meta">@'+esc(o.blogger_handle||'')+' · 👍 '+((o.stats&&o.stats.like_count)||0)+' · 收藏 '+((o.stats&&o.stats.collect_count)||0)+' · 评论 '+((o.stats&&o.stats.comment_count)||0)+' · <a href="'+esc(o.original_url)+'" target="_blank" rel="noopener">看原内容↗</a></div>'+
+          '<div class="opp-tags"><span class="opp-tag">'+esc(typeTxt[o.opportunity_type]||o.opportunity_type)+'</span><span class="opp-tag">'+esc(o.reason||'')+'</span></div>'+
+          '<div class="opp-action">建议动作：'+esc(o.next_action||'打开解析结果继续判断')+'</div></div>'+
+          '<button class="act primary" onclick="fwView('+o.content_id+')">看解析</button></div>';
+      });
+      $('opportunities').innerHTML=h;
+    }).catch(function(){$('opportunities').innerHTML='<div class="err">加载失败，请检查令牌。</div>';});
+  };
+  ['o-date','o-type','o-subscribe'].forEach(function(id){
+    $(id).addEventListener('change',fwLoadOpportunities);
+  });
 
   // ---------- bloggers ----------
   window.fwLoadBloggers=function(){
@@ -497,6 +555,8 @@
     $('url').value=startUrl;
     if(startParams.get('run')==='1')setTimeout(function(){analyze(startUrl);},0);
   }
+  var startView=(location.hash||'').replace('#','');
+  if(['opportunities','history','bloggers','settings'].indexOf(startView)>=0)fwV(startView);
   checkToken();
 })();
 </script>

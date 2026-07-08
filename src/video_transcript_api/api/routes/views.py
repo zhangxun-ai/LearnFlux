@@ -257,7 +257,7 @@ _HOME_HTML = """\
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>内容解析工作台 · 深度学习 / 系列学习 / IP 对标</title>
-    <meta name="description" content="一站式内容解析：视频/文档深度学习、系列深度学习、帖子/文章洞察、IP 对标拆解。">
+    <meta name="description" content="一站式内容解析：视频/文档深度学习、系列深度学习、帖子/文章洞察和 IP 对标拆解。">
     <meta name="theme-color" content="#0f172a">
     <meta name="application-name" content="内容解析工作台">
     <meta name="mobile-web-app-capable" content="yes">
@@ -333,7 +333,7 @@ _HOME_HTML = """\
     <header class="hero">
         <div class="eyebrow">一站式内容解析</div>
         <h1 class="serif">把任意内容，<br>秒变<em>可读的精华</em></h1>
-        <p class="sub">视频/文档深度学习、系列深度学习、帖子/文章洞察、IP 对标拆解，各模块独立使用。</p>
+        <p class="sub">视频/文档深度学习、系列深度学习、帖子/文章洞察和 IP 对标拆解，各模块独立使用。</p>
         <div class="cta-row">
             <a class="btn" href="/add_task_by_web#local-video-study">本地视频学习 →</a>
             <a class="btn ghost" href="/add_task_by_web">链接/文档解析</a>
@@ -363,7 +363,7 @@ _HOME_HTML = """\
             </a>
             <a class="card" href="/flywheel">
                 <div class="ic">🎯</div><h3>IP 对标工作台</h3>
-                <p>学习对标账号的选题、开头、留人、引导和迭代方法，当前先支持小红书。</p>
+                <p>学习对标账号的选题、开头、留人、引导和迭代方法，并从已拆解内容里挑选题机会。</p>
             </a>
         </div>
     </section>

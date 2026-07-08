@@ -5,6 +5,14 @@ def test_home_page_exposes_local_video_study_entry():
     assert "/add_task_by_web#local-video-study" in _HOME_HTML
 
 
+def test_home_page_keeps_opportunity_entry_inside_flywheel():
+    from video_transcript_api.api.routes.views import _HOME_HTML
+
+    assert "选题机会" in _HOME_HTML
+    assert "机会雷达" not in _HOME_HTML
+    assert "/flywheel#opportunities" not in _HOME_HTML
+
+
 def test_workbench_opens_local_file_panel_from_study_hash():
     from pathlib import Path
 
@@ -37,3 +45,17 @@ def test_workbench_link_form_exposes_optional_source_preservation():
     assert 'id="preserve-source-file"' in html
     assert "preserve_source_file" in app_js
     assert "preserveSourceFile" in app_js
+
+
+def test_workbench_history_cards_show_content_preview():
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+    css = (project_root / "src/web/static/css/workbench.css").read_text(encoding="utf-8")
+
+    assert "getTaskSummary" in app_js
+    assert "/api/audit/summary?view_token=" in app_js
+    assert "summaryPreview" in app_js
+    assert "hist-preview" in app_js
+    assert ".hist-preview" in css

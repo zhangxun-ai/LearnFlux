@@ -76,11 +76,19 @@
         mapPathList: document.getElementById('map-path-list'),
         summaryStatus: document.getElementById('summary-status'),
         summaryDescription: document.getElementById('summary-description'),
-        summaryStructure: document.getElementById('summary-structure'),
-        summaryProgression: document.getElementById('summary-progression'),
-        summaryEvidence: document.getElementById('summary-evidence'),
-        summarySop: document.getElementById('summary-sop'),
+        summaryProblem: document.getElementById('summary-problem'),
+        summaryValue: document.getElementById('summary-value'),
+        summaryMainline: document.getElementById('summary-mainline'),
+        summaryChapters: document.getElementById('summary-chapters'),
+        summaryFramework: document.getElementById('summary-framework'),
+        summaryReview: document.getElementById('summary-review'),
+        summaryReader: document.getElementById('summary-reader'),
+        summaryStructured: document.getElementById('summary-structured'),
+        summaryArticle: document.getElementById('summary-article'),
+        summaryToc: document.getElementById('summary-toc'),
         generateSummary: document.getElementById('generate-summary'),
+        summaryProgressText: document.getElementById('summary-progress-text'),
+        summaryProgressFill: document.getElementById('summary-progress-fill'),
         exportMarkdown: document.getElementById('export-markdown'),
         sourceTitle: document.getElementById('source-title'),
         sourceMeta: document.getElementById('source-meta'),
@@ -123,6 +131,7 @@
     let markdownDisplayMode = 'preview';
     const sourceDetailRequests = new Map();
     let busy = false;
+    const summaryProgressByCollection = new Map();
     let pendingImportMethod = 'local_files';
     let pollTimer = null;
     let toastTimer = null;
@@ -174,6 +183,109 @@
             els.exportMarkdown.disabled = true;
             if (els.mapGenerate) els.mapGenerate.disabled = true;
         }
+    }
+
+    function selectedCollectionKey() {
+        return currentCollection && currentCollection.id ? String(currentCollection.id) : '';
+    }
+
+    function summaryProgressState(collectionId) {
+        const key = String(collectionId || '');
+        return key ? summaryProgressByCollection.get(key) : null;
+    }
+
+    function isSummaryGenerating(collectionId) {
+        const state = summaryProgressState(collectionId);
+        return Boolean(state && state.active);
+    }
+
+    function renderVisibleSummaryProgress() {
+        const collectionId = selectedCollectionKey();
+        const state = summaryProgressState(collectionId);
+        const active = Boolean(state && state.active);
+        const value = active ? Math.max(0, Math.min(100, state.percent || 0)) : 0;
+        if (els.summaryProgressFill) {
+            els.summaryProgressFill.style.width = `${value}%`;
+        }
+        if (els.summaryProgressText) {
+            if (active) {
+                els.summaryProgressText.textContent = state.label || 'AI 生成中';
+            } else {
+                const markdown = currentCollection && currentCollection.summary_markdown;
+                els.summaryProgressText.textContent = markdown ? '重新生成全系列解读' : '生成全系列解读';
+            }
+        }
+        if (els.generateSummary) {
+            els.generateSummary.classList.toggle('generating', active);
+            els.generateSummary.setAttribute('aria-busy', active ? 'true' : 'false');
+            els.generateSummary.setAttribute('aria-valuenow', String(value));
+            if (active) {
+                els.generateSummary.disabled = true;
+            }
+        }
+    }
+
+    function updateSummaryProgress(collectionId, percent, label) {
+        const key = String(collectionId || '');
+        if (!key) return;
+        const state = summaryProgressByCollection.get(key) || {
+            active: true,
+            startedAt: Date.now(),
+            timer: null,
+            percent: 0,
+            label: ''
+        };
+        state.active = true;
+        state.percent = Math.max(0, Math.min(100, percent || 0));
+        if (label) state.label = label;
+        summaryProgressByCollection.set(key, state);
+        if (selectedCollectionKey() === key) renderVisibleSummaryProgress();
+    }
+
+    function startSummaryProgress(collectionId) {
+        const key = String(collectionId || '');
+        if (!key) return;
+        const previous = summaryProgressByCollection.get(key);
+        if (previous && previous.timer) window.clearInterval(previous.timer);
+        const state = {
+            active: true,
+            startedAt: Date.now(),
+            timer: null,
+            percent: 8,
+            label: '准备生成...'
+        };
+        summaryProgressByCollection.set(key, state);
+        if (selectedCollectionKey() === key) renderVisibleSummaryProgress();
+        state.timer = window.setInterval(() => {
+            const latest = summaryProgressByCollection.get(key);
+            if (!latest || !latest.active) {
+                window.clearInterval(state.timer);
+                return;
+            }
+            const elapsedSeconds = Math.max(1, Math.floor((Date.now() - latest.startedAt) / 1000));
+            const percent = Math.min(92, 16 + elapsedSeconds * 3);
+            latest.percent = percent;
+            latest.label = `AI 生成中 ${elapsedSeconds}s`;
+            summaryProgressByCollection.set(key, latest);
+            if (selectedCollectionKey() === key) renderVisibleSummaryProgress();
+        }, 1000);
+    }
+
+    function stopSummaryProgress(collectionId, label) {
+        const key = String(collectionId || '');
+        if (!key) return;
+        const state = summaryProgressByCollection.get(key);
+        if (state && state.timer) {
+            window.clearInterval(state.timer);
+        }
+        if (state) {
+            state.active = false;
+            state.percent = 100;
+            state.label = label || '生成完成';
+            summaryProgressByCollection.set(key, state);
+        }
+        summaryProgressByCollection.delete(key);
+        if (selectedCollectionKey() === key) renderVisibleSummaryProgress();
     }
 
     async function apiJSON(url, options) {
@@ -361,12 +473,13 @@
         return text.length > max ? `${text.slice(0, max).replace(/[，,。；;\s]+$/, '')}...` : text;
     }
 
-    function stripMarkdownEnvelope(markdown) {
+    function normalizeMarkdownForPreview(markdown) {
         let text = String(markdown || '').trim();
         const fenced = text.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i);
         if (fenced) {
             text = fenced[1].trim();
         }
+        text = text.replace(/^```ya?ml\s*\n[\s\S]*?\n```\s*/i, '').trim();
         const lines = text.split(/\n/);
         if (lines[0] && lines[0].trim() === '---') {
             const end = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
@@ -374,7 +487,10 @@
                 return lines.slice(end + 1).join('\n').trim();
             }
         }
-        return text;
+        return text
+            .replace(/^```(?:markdown|md|ya?ml)?\s*/i, '')
+            .replace(/```\s*$/i, '')
+            .trim();
     }
 
     function renderInlineMarkdown(value) {
@@ -384,8 +500,67 @@
             .replace(/__(.+?)__/g, '<strong>$1</strong>');
     }
 
+    function splitInlineNumberedItems(value) {
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!text) return null;
+        const matches = Array.from(text.matchAll(/(?:^|[\s：:；;。])(\d{1,2})[.、)]\s+/g));
+        if (matches.length < 2) return null;
+        const firstIndex = matches[0].index || 0;
+        const intro = text.slice(0, firstIndex).trim().replace(/[：:；;，,。]$/, '');
+        const items = matches.map((match, index) => {
+            const start = (match.index || 0) + match[0].length;
+            const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
+            return text.slice(start, end).trim().replace(/[；;]\s*$/, '');
+        }).filter(Boolean);
+        return items.length > 1 ? { intro, items } : null;
+    }
+
+    function summaryAnchorId(title, index) {
+        const slug = String(title || '')
+            .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 40);
+        return `summary-section-${index}-${slug || 'section'}`;
+    }
+
+    function buildSummarySections(markdown) {
+        const text = normalizeMarkdownForPreview(markdown);
+        if (!text) return [];
+        const sections = [];
+        let current = null;
+        text.split(/\n/).forEach((line) => {
+            const heading = line.trim().match(/^##\s+(.+)$/);
+            if (heading) {
+                if (current) sections.push(current);
+                current = {
+                    title: heading[1].trim(),
+                    lines: []
+                };
+                return;
+            }
+            if (!current) {
+                if (!sections.length) {
+                    current = { title: '全系列导览', lines: [] };
+                } else {
+                    return;
+                }
+            }
+            current.lines.push(line);
+        });
+        if (current) sections.push(current);
+        return sections.map((section, index) => ({
+            id: summaryAnchorId(section.title, index + 1),
+            title: section.title,
+            body: section.lines.join('\n').trim()
+        })).filter((section) => section.title || section.body);
+    }
+
+    function findSummarySection(sections, aliases) {
+        return sections.find((section) => aliases.some((alias) => section.title.includes(alias))) || null;
+    }
+
     function markdownToHTML(markdown) {
-        const text = stripMarkdownEnvelope(markdown);
+        const text = normalizeMarkdownForPreview(markdown);
         if (!text) return '';
 
         const output = [];
@@ -394,7 +569,18 @@
 
         const flushParagraph = () => {
             if (!paragraph.length) return;
-            output.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`);
+            const text = paragraph.join(' ');
+            const inlineList = splitInlineNumberedItems(text);
+            if (inlineList) {
+                if (inlineList.intro) {
+                    output.push(`<p>${renderInlineMarkdown(inlineList.intro)}</p>`);
+                }
+                output.push(`<ol class="lc-inline-numbered">${inlineList.items
+                    .map((item) => `<li>${renderInlineMarkdown(item)}</li>`)
+                    .join('')}</ol>`);
+            } else {
+                output.push(`<p>${renderInlineMarkdown(text)}</p>`);
+            }
             paragraph.length = 0;
         };
         const closeList = () => {
@@ -1546,12 +1732,174 @@
         }
     }
 
-    function renderSummaryCard(target, markdown, fallback) {
-        renderMarkdownPreview(target, markdown, fallback);
+    function renderSummaryCard(target, points, fallback) {
+        if (!target) return;
+        target.classList.remove('lc-markdown-source');
+        if (!points || !points.length) {
+            target.innerHTML = `<p>${escapeHTML(fallback || '')}</p>`;
+            return;
+        }
+        target.innerHTML = `<ul class="lc-summary-points">${points
+            .map((point) => `<li>${renderInlineMarkdown(point)}</li>`)
+            .join('')}</ul>`;
+    }
+
+    function sourcePositionsFromText(text) {
+        const numbers = new Set();
+        String(text || '').replace(/第\s*([0-9０-９][0-9０-９\s、,，/-]*)\s*节/g, (_, raw) => {
+            raw.replace(/[0-9０-９]+/g, (value) => {
+                const number = Number(value.replace(/[０-９]/g, (char) => String('０１２３４５６７８９'.indexOf(char))));
+                if (Number.isFinite(number) && number > 0) numbers.add(number);
+                return value;
+            });
+            return raw;
+        });
+        return Array.from(numbers).sort((a, b) => a - b);
+    }
+
+    function sourceByPosition(position) {
+        const sources = currentCollection ? (currentCollection.sources || []) : [];
+        return sources.find((source, index) => Number(source.position || index + 1) === Number(position)) || null;
+    }
+
+    function cleanStructuredLine(line) {
+        return cleanSummaryLine(line)
+            .replace(/^#+\s*/, '')
+            .replace(/^\*\s*/, '')
+            .trim();
+    }
+
+    function extractStructuredEntries(section, limit) {
+        if (!section || !section.body) return [];
+        const entries = [];
+        section.body.split(/\n/).forEach((line) => {
+            const clean = cleanStructuredLine(line);
+            if (!clean) return;
+            const inlineList = splitInlineNumberedItems(clean);
+            if (inlineList) {
+                inlineList.items.forEach((item) => entries.push(item));
+                return;
+            }
+            if (/^(模块|第\s*[0-9０-９]+|想|抓|补|找|回看|复习)/.test(clean) || entries.length < 2) {
+                entries.push(clean);
+            }
+        });
+        if (!entries.length) {
+            entries.push(...summarizeMarkdownSection(section.body, [section.title], limit || 4));
+        }
+        return entries
+            .map((entry) => entry.replace(/\s+/g, ' ').trim())
+            .filter(Boolean)
+            .slice(0, limit || 6);
+    }
+
+    function renderSourceJumpButtons(text) {
+        const positions = sourcePositionsFromText(text).slice(0, 6);
+        if (!positions.length) return '';
+        const buttons = positions.map((position) => {
+            const source = sourceByPosition(position);
+            if (!source) return '';
+            return `<button class="lc-source-chip" type="button" data-summary-source-position="${position}">第 ${position} 节</button>`;
+        }).filter(Boolean);
+        return buttons.length ? `<div class="lc-source-chip-row">${buttons.join('')}</div>` : '';
+    }
+
+    function renderStructuredSummaryBlocks(markdown) {
+        if (!els.summaryStructured) return;
+        const sections = buildSummarySections(markdown);
+        if (!sections.length) {
+            els.summaryStructured.innerHTML = '<p>生成全系列解读后显示结构化阅读入口。</p>';
+            return;
+        }
+        const groups = [
+            {
+                title: '按主线看',
+                section: findSummarySection(sections, ['全系列主线', '主线', '课程主线']),
+                limit: 4
+            },
+            {
+                title: '按章节定位',
+                section: findSummarySection(sections, ['章节地图', '模块地图', '章节索引']),
+                limit: 7
+            },
+            {
+                title: '按复习目的回看',
+                section: findSummarySection(sections, ['复习索引', '复习路径', '回看']),
+                limit: 6
+            }
+        ].filter((group) => group.section);
+
+        els.summaryStructured.innerHTML = groups.map((group) => {
+            const entries = extractStructuredEntries(group.section, group.limit);
+            return `
+                <section class="lc-summary-structure-group">
+                    <h4>${escapeHTML(group.title)}</h4>
+                    <div class="lc-summary-structure-list">
+                        ${entries.map((entry) => `
+                            <article class="lc-summary-structure-item">
+                                <p>${renderInlineMarkdown(entry)}</p>
+                                ${renderSourceJumpButtons(entry)}
+                            </article>
+                        `).join('')}
+                    </div>
+                </section>
+            `;
+        }).join('') || '<p>生成全系列解读后显示结构化阅读入口。</p>';
+
+        els.summaryStructured.querySelectorAll('[data-summary-source-position]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const source = sourceByPosition(button.dataset.summarySourcePosition);
+                if (!source) return;
+                selectedSourceId = source.id;
+                currentView = 'source';
+                knowledgeMapScope = 'source';
+                selectedMapNodeId = null;
+                render();
+            });
+        });
+    }
+
+    function renderSummaryToc(sections) {
+        if (!els.summaryToc) return;
+        if (!sections.length) {
+            els.summaryToc.innerHTML = '<span>生成后显示目录</span>';
+            return;
+        }
+        els.summaryToc.innerHTML = sections.map((section, index) => `
+            <button class="${index === 0 ? 'active' : ''}" type="button" data-summary-anchor="${escapeHTML(section.id)}">
+                ${escapeHTML(section.title)}
+            </button>
+        `).join('');
+        els.summaryToc.querySelectorAll('[data-summary-anchor]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const target = document.getElementById(button.dataset.summaryAnchor);
+                if (!target) return;
+                els.summaryToc.querySelectorAll('button').forEach((item) => item.classList.remove('active'));
+                button.classList.add('active');
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+    }
+
+    function renderSummaryReader(markdown, fallback) {
+        if (!els.summaryArticle) return;
+        const sections = buildSummarySections(markdown);
+        renderSummaryToc(sections);
+        renderStructuredSummaryBlocks(markdown);
+        if (!sections.length) {
+            els.summaryArticle.innerHTML = `<p>${escapeHTML(fallback || '生成全系列解读后显示。')}</p>`;
+            return;
+        }
+        els.summaryArticle.innerHTML = sections.map((section) => `
+            <section class="lc-reader-section" id="${escapeHTML(section.id)}">
+                <h2>${renderInlineMarkdown(section.title)}</h2>
+                ${markdownToHTML(section.body)}
+            </section>
+        `).join('');
     }
 
     function renderMarkdownExport(markdown, ready) {
-        const fallback = ready ? '集合已解析完成，请先点击“生成总结”。' : '生成专题总结后显示。';
+        const fallback = ready ? '集合已解析完成，请先点击“生成全系列解读”。' : '生成全系列解读后显示。';
         setViewToggle(els.markdownPreviewMode, els.markdownSourceMode, markdownDisplayMode);
         if (els.markdownRendered) {
             els.markdownRendered.classList.toggle('hidden', markdownDisplayMode !== 'preview');
@@ -1601,41 +1949,74 @@
         const sources = currentCollection ? (currentCollection.sources || []) : [];
         const ready = sources.length > 0 && sources.every((source) => source.task_status === 'success');
 
-        els.summaryStatus.textContent = markdown ? '学习提纲已生成' : '等待生成集合级提纲';
+        els.summaryStatus.textContent = markdown ? '全系列解读已生成' : '等待生成全系列解读';
         els.summaryDescription.textContent = markdown
-            ? '从整体视角提取了主题主线、结构、证据和行动要点。'
-            : (ready ? '所有源内容已解析完成，点击“生成总结”生成学习提纲。' : '导入并解析完成后，再从整体视角生成主线、结构和行动要点。');
+            ? '已从课前导览和课后复习两个场景提炼全集主线、章节作用和复习路径。'
+            : (ready ? '所有源内容已解析完成，点击“生成全系列解读”建立全集视角。' : '导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。');
         const waitingText = ready ? '点击生成后展示。' : '解析完成后生成。';
-        renderSummaryCard(els.summaryStructure, markdown ? extractMarkdownSection(markdown, ['知识结构', '核心概念', '结构']) : '', waitingText);
-        renderSummaryCard(els.summaryProgression, markdown ? extractMarkdownSection(markdown, ['递进关系', '章节作用', '主线']) : '', waitingText);
-        renderSummaryCard(els.summaryEvidence, markdown ? extractMarkdownSection(markdown, ['论点与证据', '关键论点', '证据']) : '', waitingText);
-        renderSummaryCard(els.summarySop, markdown ? extractMarkdownSection(markdown, ['SOP', '行动清单', '判断标准']) : '', waitingText);
+        renderSummaryCard(els.summaryProblem, markdown ? summarizeMarkdownSection(markdown, ['这个系列解决什么问题', '解决什么问题', '中心问题'], 3) : [], waitingText);
+        renderSummaryCard(els.summaryValue, markdown ? summarizeMarkdownSection(markdown, ['为什么值得学', '值得学', '学习价值'], 4) : [], waitingText);
+        renderSummaryCard(els.summaryMainline, markdown ? summarizeMarkdownSection(markdown, ['全系列主线', '主线', '课程主线'], 4) : [], waitingText);
+        renderSummaryCard(els.summaryChapters, markdown ? summarizeMarkdownSection(markdown, ['章节地图', '章节作用', '小节地图'], 5) : [], waitingText);
+        renderSummaryCard(els.summaryFramework, markdown ? summarizeMarkdownSection(markdown, ['核心框架', '核心概念', '判断标准', '方法步骤'], 5) : [], waitingText);
+        renderSummaryCard(els.summaryReview, markdown ? summarizeMarkdownSection(markdown, ['复习索引', '复习路径', '回看'], 5) : [], waitingText);
+        renderSummaryReader(markdown, waitingText);
         renderMarkdownExport(markdown, ready);
-        els.generateSummary.disabled = busy || !ready;
+        renderVisibleSummaryProgress();
+        const collectionId = currentCollection && currentCollection.id;
+        els.generateSummary.disabled = busy || !ready || isSummaryGenerating(collectionId);
         els.exportMarkdown.disabled = busy || !markdown;
     }
 
-    function extractMarkdownSection(markdown, keywords) {
-        const text = String(markdown || '').trim();
-        if (!text) return '已生成，切换到导出笔记查看完整内容。';
+    function cleanSummaryLine(line) {
+        return String(line || '')
+            .replace(/^#{1,6}\s*/, '')
+            .replace(/^[-*+]\s*/, '')
+            .replace(/^\d+[.、)]\s*/, '')
+            .replace(/^>\s?/, '')
+            .replace(/^\s*[：:]\s*/, '')
+            .replace(/\*\*/g, '')
+            .replace(/__/g, '')
+            .replace(/`/g, '')
+            .trim();
+    }
+
+    function summarizeMarkdownSection(markdown, keywords, maxItems) {
+        const text = normalizeMarkdownForPreview(markdown);
+        if (!text) return [];
         const lines = text.split(/\n/);
+        const limit = maxItems || 4;
+        const collected = [];
+        let inSection = false;
         for (let index = 0; index < lines.length; index += 1) {
-            const line = lines[index].replace(/^#{1,6}\s*/, '').trim();
-            if (!keywords.some((keyword) => line.includes(keyword))) continue;
-            const collected = [];
-            for (let cursor = index + 1; cursor < lines.length && collected.join('').length < 180; cursor += 1) {
-                if (/^#{1,6}\s+/.test(lines[cursor]) && collected.length) break;
-                const clean = lines[cursor].replace(/^[-*+]\s*/, '').replace(/^\d+[.、)]\s*/, '').trim();
-                if (clean) collected.push(clean);
+            const raw = lines[index];
+            const heading = raw.match(/^(#{1,6})\s+(.+)$/);
+            const cleanHeading = cleanSummaryLine(raw);
+            if (heading && keywords.some((keyword) => cleanHeading.includes(keyword))) {
+                inSection = true;
+                continue;
             }
-            if (collected.length) return compactText(collected.join(' '), 180);
+            if (inSection && /^##\s+/.test(raw)) {
+                break;
+            }
+            if (!inSection) continue;
+
+            const clean = cleanSummaryLine(raw);
+            if (!clean || clean === ':' || clean === '：') continue;
+            if (/^source\s*\d+$/i.test(clean)) continue;
+            if (/^第\s*\d+\s*节$/.test(clean)) continue;
+            if (clean.length < 8 && !/[。？！：:]/.test(clean)) continue;
+            if (collected.includes(clean)) continue;
+            collected.push(compactText(clean, 120));
+            if (collected.length >= limit) break;
         }
-        const fallback = lines
-            .map((line) => line.replace(/^#{1,6}\s*/, '').replace(/^[-*+]\s*/, '').trim())
+        if (collected.length) return collected;
+        return lines
+            .map(cleanSummaryLine)
             .filter(Boolean)
-            .slice(0, 4)
-            .join(' ');
-        return compactText(fallback, 180) || '已生成，切换到导出笔记查看完整内容。';
+            .filter((line) => !/^source\s*\d+$/i.test(line))
+            .slice(0, limit)
+            .map((line) => compactText(line, 120));
     }
 
     async function ensureSourceDetail(sourceId) {
@@ -2044,26 +2425,50 @@
             showToast('请先导入一个专题');
             return;
         }
+        const collectionId = currentCollection.id;
+        const collectionTitle = currentCollection.title || '当前合集';
+        if (isSummaryGenerating(collectionId)) {
+            showToast('这个合集正在生成全系列解读');
+            return;
+        }
 
-        setBusy(true);
+        startSummaryProgress(collectionId);
         try {
-            showToast('正在生成集合级总结');
-            const payload = await apiJSON(`/api/collections/${currentCollection.id}/summary`, { method: 'POST' });
-            currentCollection = payload.data;
-            currentView = 'markdown';
-            render();
-            showToast('专题总结已生成');
+            showToast(`正在生成「${collectionTitle}」全系列解读`);
+            const payload = await apiJSON(`/api/collections/${collectionId}/summary`, { method: 'POST' });
+            updateSummaryProgress(collectionId, 96, '正在渲染结果...');
+            const updatedCollection = payload.data;
+            stopSummaryProgress(collectionId, '生成完成');
+            collections = collections.map((collection) => (
+                collection.id === collectionId
+                    ? {
+                        ...collection,
+                        summary_status: updatedCollection.summary_status,
+                        export_status: updatedCollection.export_status,
+                        workflow_status: updatedCollection.workflow_status,
+                        updated_at: updatedCollection.updated_at || collection.updated_at,
+                        metrics: updatedCollection.metrics || collection.metrics
+                    }
+                    : collection
+            ));
+            if (currentCollection && currentCollection.id === collectionId) {
+                currentCollection = updatedCollection;
+                currentView = 'markdown';
+            } else {
+                renderHistory();
+            }
+            showToast(`「${updatedCollection.title || collectionTitle}」全系列解读已生成`);
         } catch (error) {
-            showToast(error.message || '生成总结失败');
+            stopSummaryProgress(collectionId, '生成失败');
+            showToast(error.message || `「${collectionTitle}」全系列解读失败`);
         } finally {
-            setBusy(false);
             render();
         }
     }
 
     async function exportMarkdown() {
         if (!currentCollection || !currentCollection.summary_markdown) {
-            showToast('请先生成专题总结');
+            showToast('请先生成全系列解读');
             return;
         }
 

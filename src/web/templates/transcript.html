@@ -141,6 +141,81 @@
     background: transparent;
 }
 
+.content-export-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0 12px;
+}
+
+.content-export-row {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+}
+
+.content-export-name {
+    color: var(--text-secondary, #666);
+    font-size: 0.82rem;
+    font-weight: 500;
+}
+
+.content-export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.content-export-action.quick-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 7px 12px;
+}
+
+.content-export-action.quick-copy-btn .quick-copy-action {
+    position: static;
+    grid-row: auto;
+    grid-column: auto;
+}
+
+.content-export-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 7px 12px;
+    border: 1px solid var(--border-primary, #ddd);
+    border-radius: 6px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #333);
+    font-size: 0.82rem;
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.content-export-link:hover {
+    border-color: #E4503A;
+    background: rgba(228, 80, 58, 0.06);
+}
+
+.content-export-link:active {
+    transform: scale(0.97);
+}
+
+@media (max-width: 560px) {
+    .content-export-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .content-export-actions > * {
+        flex: 1 1 96px;
+    }
+}
+
 .focus-handoff-bar {
     display: flex;
     align-items: center;
@@ -519,17 +594,59 @@
             <span>导出与复制</span>
         </summary>
         <div>
-            <div class="quick-copy-bar">
-                <button class="quick-copy-btn" data-path="/view/{{ view_token }}?raw=calibrated" title="复制 Raw 校对文本 URL">
-                    <span class="quick-copy-label">Raw 校对文本</span>
-                    <span class="quick-copy-action">复制 URL</span>
-                    <span class="quick-copy-desc">纯文本，粘贴到 ChatGPT / Claude 直接读取</span>
-                </button>
-                <button class="quick-copy-btn" data-path="/view/{{ view_token }}?page=calibrated" title="复制 HTML 校对页面 URL">
-                    <span class="quick-copy-label">HTML 校对页面</span>
-                    <span class="quick-copy-action">复制 URL</span>
-                    <span class="quick-copy-desc">带标题的 HTML，供 NotebookLM 等工具爬取</span>
-                </button>
+            <div class="content-export-list" aria-label="解析内容复制和导出">
+                {% if calibrated_html %}
+                <div class="content-export-row">
+                    <span class="content-export-name">校对文本</span>
+                    <span class="content-export-actions">
+                        <button type="button" class="content-export-action quick-copy-btn" data-copy-path="/view/{{ view_token }}?raw=calibrated" title="复制校对文本内容">
+                            <span class="quick-copy-label">复制内容</span>
+                            <span class="quick-copy-action">复制</span>
+                        </button>
+                        <a class="content-export-action content-export-link" href="/export/{{ view_token }}/calibrated" download title="下载校对文本 TXT">TXT</a>
+                        <a class="content-export-action content-export-link" href="/view/{{ view_token }}?page=calibrated" target="_blank" rel="noopener" title="打开校对文本 HTML 页面">HTML</a>
+                    </span>
+                </div>
+                {% endif %}
+                {% if summary_html %}
+                <div class="content-export-row">
+                    <span class="content-export-name">内容总结</span>
+                    <span class="content-export-actions">
+                        <button type="button" class="content-export-action quick-copy-btn" data-copy-path="/view/{{ view_token }}?raw=summary" title="复制内容总结">
+                            <span class="quick-copy-label">复制内容</span>
+                            <span class="quick-copy-action">复制</span>
+                        </button>
+                        <a class="content-export-action content-export-link" href="/export/{{ view_token }}/summary" download title="下载内容总结 TXT">TXT</a>
+                        <a class="content-export-action content-export-link" href="/view/{{ view_token }}?page=summary" target="_blank" rel="noopener" title="打开内容总结 HTML 页面">HTML</a>
+                    </span>
+                </div>
+                {% endif %}
+                {% if comment_insight %}
+                <div class="content-export-row">
+                    <span class="content-export-name">评论洞察</span>
+                    <span class="content-export-actions">
+                        <button type="button" class="content-export-action quick-copy-btn" data-copy-path="/view/{{ view_token }}?raw=comment_insight" title="复制高赞评论洞察">
+                            <span class="quick-copy-label">复制内容</span>
+                            <span class="quick-copy-action">复制</span>
+                        </button>
+                        <a class="content-export-action content-export-link" href="/export/{{ view_token }}/comment_insight" download title="下载高赞评论洞察 TXT">TXT</a>
+                        <a class="content-export-action content-export-link" href="/view/{{ view_token }}?page=comment_insight" target="_blank" rel="noopener" title="打开高赞评论洞察 HTML 页面">HTML</a>
+                    </span>
+                </div>
+                {% endif %}
+                {% if stats and stats.original_length > 0 %}
+                <div class="content-export-row">
+                    <span class="content-export-name">原始转录</span>
+                    <span class="content-export-actions">
+                        <button type="button" class="content-export-action quick-copy-btn" data-copy-path="/view/{{ view_token }}?raw=transcript" title="复制原始转录">
+                            <span class="quick-copy-label">复制内容</span>
+                            <span class="quick-copy-action">复制</span>
+                        </button>
+                        <a class="content-export-action content-export-link" href="/export/{{ view_token }}/transcript" download title="下载原始转录 TXT">TXT</a>
+                        <a class="content-export-action content-export-link" href="/view/{{ view_token }}?page=transcript" target="_blank" rel="noopener" title="打开原始转录 HTML 页面">HTML</a>
+                    </span>
+                </div>
+                {% endif %}
             </div>
 
             <div class="focus-handoff-bar" aria-label="送入心流写作">

@@ -17,6 +17,9 @@
 - **多平台支持**：YouTube、Bilibili、抖音、小红书、小宇宙播客，工厂模式自动匹配下载器
 - **双引擎转录**：CapsWriter-Offline（通用转录）+ FunASR（说话人识别）
 - **智能文本处理**：LLM 自动校对 ASR 错误、专有名词纠错、说话人推断、内容总结
+- **内容工作台**：单篇深度学习、系列深度学习、帖子洞察、趋势雷达、IP 对标和心流写作统一导航
+- **系列学习**：支持本地文件/链接导入、知识地图、全系列解读、源内容回看和 Obsidian Markdown 导出
+- **社媒洞察**：基于 TikHub REST API 获取视频/帖子/评论等确定性数据，支持需求信号提取和趋势机会雷达
 - **企业级功能**：SQLite + 文件系统双层缓存、多用户管理、审计日志、多渠道通知（企业微信 + 飞书）、任务历史浏览器
 - **风控系统**：敏感词检测、多策略文本脱敏、风险模型自动切换
 
@@ -102,6 +105,10 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 ### Web 界面
 
 - **提交任务**：`GET /add_task_by_web`
+- **系列深度学习**：`GET /collections` — 导入多份内容，生成知识地图、全系列解读和可导出的复习笔记
+- **帖子洞察**：`GET /post` — 分析 X / 小红书 / 微信公众号等帖子正文与高价值评论
+- **趋势雷达**：`GET /trend-radar` — 手动触发 TikHub 采集和趋势机会报告，单次预算默认不超过 $5
+- **IP 对标工作台**：`GET /flywheel` — 拆解对标账号内容，并从已解析内容中发现选题机会
 - **查看结果**：`GET /view/{view_token}`
 - **任务历史**：`GET /static/history.html` — 支持按日期、平台、频道、关键词搜索，已读追踪，摘要预览
 - **导出文件**：`GET /export/{view_token}/{type}`（支持 `calibrated`、`summary`、`transcript`）
@@ -118,6 +125,12 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 | `/api/audit/history` | GET | 任务历史查询（支持多条件过滤、分页、关键词搜索） |
 | `/api/audit/filter-options` | GET | 获取过滤选项（webhook/平台/频道列表） |
 | `/api/audit/summary` | GET | 任务摘要预览（前 300 字） |
+| `/api/collections` | GET / POST | 系列学习合集列表与创建 |
+| `/api/collections/{collection_id}/summary` | POST | 生成合集级全系列解读 |
+| `/api/post-insight` | POST | 帖子正文与评论洞察 |
+| `/api/trend-radar/reports/run` | POST | 后台触发趋势雷达报告 |
+| `/api/trend-radar/jobs/{job_id}` | GET | 查询趋势雷达后台任务 |
+| `/api/trend-radar/reports/latest` | GET | 获取最新趋势雷达报告 |
 | `/api/users/profile` | GET | 当前用户信息 |
 | `/settings` | GET | 设置中心页面 |
 | `/api/settings/schema` | GET | 配置结构（无值、免鉴权，用于渲染表单） |
@@ -138,7 +151,11 @@ curl -X GET "http://localhost:8000/api/task/{task_id}" \
 video-transcript-api/
 ├── src/video_transcript_api/
 │   ├── api/              # FastAPI 服务、路由、依赖注入
+│   ├── collections/      # 系列深度学习、知识地图、全系列解读
+│   ├── comments/         # 评论筛选、帖子洞察、需求信号提取
 │   ├── downloaders/      # 多平台下载器（工厂模式）
+│   ├── flywheel/         # IP 对标与选题机会
+│   ├── trend_radar/      # TikHub 趋势采集、预算控制、报告生成
 │   ├── transcriber/      # 转录引擎（CapsWriter + FunASR）
 │   ├── llm/              # LLM 处理引擎（协调器-处理器-核心组件）
 │   ├── cache/            # 缓存系统（SQLite + 文件系统）

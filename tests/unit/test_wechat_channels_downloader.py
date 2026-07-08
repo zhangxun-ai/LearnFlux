@@ -27,6 +27,7 @@ def downloader():
             "max_retries": 1,
             "retry_delay": 0,
             "timeout": 30,
+            "cache_enabled": False,
         },
         "wechat_channels": {},
     }

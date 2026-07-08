@@ -101,6 +101,22 @@ async def contents(request: Request, user_info: dict = Depends(verify_token)):
     return result
 
 
+@router.get("/api/flywheel/opportunities")
+async def opportunities(request: Request, user_info: dict = Depends(verify_token)):
+    q = request.query_params
+    try:
+        return await run_in_threadpool(
+            svc.list_opportunities,
+            subscribe=q.get("subscribe") or None,
+            media_type=q.get("media_type") or None,
+            date_preset=q.get("date") or None,
+            limit=int(q.get("limit", 20)),
+        )
+    except Exception:
+        logger.exception("flywheel opportunities list failed")
+        return JSONResponse(status_code=500, content={"error": "选题机会查询失败"})
+
+
 @router.get("/api/flywheel/content/{content_id}")
 async def get_content(content_id: int, user_info: dict = Depends(verify_token)):
     try:

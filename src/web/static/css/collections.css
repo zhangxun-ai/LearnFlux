@@ -195,6 +195,7 @@ select:focus-visible,
 .lc-type,
 .lc-btn {
     display: inline-flex;
+    position: relative;
     align-items: center;
     justify-content: center;
     min-height: 46px;
@@ -205,6 +206,7 @@ select:focus-visible,
     color: var(--ink-soft);
     cursor: pointer;
     font-weight: 800;
+    overflow: hidden;
     text-decoration: none;
     transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
@@ -260,6 +262,35 @@ select:focus-visible,
     cursor: not-allowed;
     opacity: 0.55;
     transform: none;
+}
+
+.lc-btn.generating {
+    opacity: 1;
+}
+
+.lc-btn-progress {
+    position: absolute;
+    right: 8px;
+    bottom: 5px;
+    left: 8px;
+    display: none;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(28, 26, 23, 0.12);
+    overflow: hidden;
+}
+
+.lc-btn.generating .lc-btn-progress {
+    display: block;
+}
+
+.lc-btn-progress span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: currentColor;
+    transition: width 0.35s ease;
 }
 
 .lc-drop {
@@ -1206,28 +1237,55 @@ select:focus-visible,
 
 .lc-summary-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
     margin: 16px 0;
 }
 
 .lc-summary-grid > div {
-    min-height: 106px;
-    padding: 14px;
+    min-height: 118px;
+    padding: 14px 15px;
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: 8px;
     background: #fbf8f3;
 }
 
 .lc-summary-grid strong {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     font-size: 15px;
+    line-height: 1.35;
 }
 
 .lc-summary-text {
     color: var(--ink-soft);
-    font-size: 14px;
+    font-size: 13px;
+}
+
+.lc-summary-points {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.lc-summary-points li {
+    position: relative;
+    padding-left: 14px;
+    color: var(--ink-soft);
+    line-height: 1.56;
+}
+
+.lc-summary-points li::before {
+    content: "";
+    position: absolute;
+    top: 0.72em;
+    left: 0;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--accent);
 }
 
 .lc-summary-grid .lc-markdown-preview h1,
@@ -1238,6 +1296,190 @@ select:focus-visible,
     color: var(--ink);
     font-size: 14px;
     line-height: 1.35;
+}
+
+.lc-summary-reader {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 18px;
+    align-items: start;
+    margin: 18px 0;
+}
+
+.lc-summary-reading {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+.lc-summary-structured {
+    display: grid;
+    gap: 12px;
+    padding: 15px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.lc-summary-structured > p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.lc-summary-structure-group {
+    display: grid;
+    gap: 9px;
+}
+
+.lc-summary-structure-group h4 {
+    margin: 0;
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.35;
+}
+
+.lc-summary-structure-list {
+    display: grid;
+    gap: 8px;
+}
+
+.lc-summary-structure-item {
+    display: grid;
+    gap: 8px;
+    padding: 11px 12px;
+    border: 1px solid rgba(28, 26, 23, 0.08);
+    border-radius: 8px;
+    background: #fbf8f3;
+}
+
+.lc-summary-structure-item p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.lc-source-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.lc-source-chip {
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 850;
+}
+
+.lc-source-chip:hover {
+    border-color: rgba(228, 80, 58, 0.42);
+    color: var(--accent);
+}
+
+.lc-summary-article {
+    width: min(100%, 76ch);
+    padding: 20px 22px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink-soft);
+    font-size: 16px;
+    line-height: 1.78;
+}
+
+.lc-reader-section {
+    scroll-margin-top: 18px;
+}
+
+.lc-reader-section + .lc-reader-section {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+}
+
+.lc-summary-article .lc-reader-section h2 {
+    margin: 0 0 14px;
+    color: var(--ink);
+    font-size: 22px;
+    line-height: 1.28;
+}
+
+.lc-inline-numbered {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding-left: 1.45em;
+}
+
+.lc-inline-numbered li {
+    padding-left: 2px;
+    line-height: 1.68;
+}
+
+.lc-summary-toc {
+    position: sticky;
+    top: 18px;
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.lc-summary-toc strong {
+    font-size: 14px;
+    line-height: 1.3;
+}
+
+.lc-summary-toc nav {
+    display: grid;
+    gap: 4px;
+}
+
+.lc-summary-toc button {
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 9px;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.35;
+    text-align: left;
+}
+
+.lc-summary-toc button.active,
+.lc-summary-toc button:hover {
+    background: #fbf8f3;
+    color: var(--ink);
+}
+
+@media (max-width: 1040px) {
+    .lc-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .lc-summary-reader {
+        grid-template-columns: 1fr;
+    }
+
+    .lc-summary-toc {
+        position: static;
+        order: -1;
+    }
+
+    .lc-summary-toc nav {
+        grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    }
 }
 
 .lc-export-row {
@@ -1664,6 +1906,30 @@ select:focus-visible,
     .lc-map-actions,
     .lc-source-actions {
         grid-template-columns: 1fr;
+    }
+
+    .lc-summary-reader {
+        gap: 12px;
+    }
+
+    .lc-summary-structured,
+    .lc-summary-article,
+    .lc-summary-toc {
+        padding: 14px;
+    }
+
+    .lc-summary-article {
+        width: 100%;
+        font-size: 15px;
+        line-height: 1.72;
+    }
+
+    .lc-summary-article .lc-reader-section h2 {
+        font-size: 19px;
+    }
+
+    .lc-summary-toc nav {
+        grid-template-columns: 1fr 1fr;
     }
 
     .lc-source-actions .lc-btn {

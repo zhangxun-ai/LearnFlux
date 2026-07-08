@@ -174,6 +174,9 @@ def test_flywheel_page_exposes_prompt_editor():
     assert "基于拆解生成新帖" in html
     assert "/api/flywheel/content/'+contentId+'/draft" in html
     assert "复制全文" in html
+    assert "选题机会" in html
+    assert "v-opportunities" in html
+    assert "/api/flywheel/opportunities" in html
 
 
 @pytest.mark.unit
@@ -205,6 +208,8 @@ def test_frontend_module_names_keep_workflows_separate():
     assert "系列深度学习" in nav
     assert "帖子洞察" in nav
     assert "IP 对标" in nav
+    assert "机会雷达" not in nav
+    assert "/flywheel#opportunities" not in nav
     assert "历史" in nav
     assert "/static/history.html" in nav
     assert "单个解析" not in nav
@@ -218,4 +223,8 @@ def test_frontend_module_names_keep_workflows_separate():
     assert 'autocomplete="new-password"' in workbench
     assert "系列深度学习" in collections
     assert "IP 对标工作台" in flywheel
+    assert "选题机会" in flywheel
+    assert "IP 设置" in flywheel
+    assert "location.hash" in flywheel
+    assert "机会雷达" not in flywheel
     assert "学做小红书" not in flywheel

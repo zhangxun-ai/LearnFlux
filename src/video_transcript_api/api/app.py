@@ -12,7 +12,7 @@ from ..llm import set_default_config, log_llm_stats
 from ..llm.llm import log_llm_config_summary
 from .context import get_cache_manager, get_config, get_logger, get_static_dir, get_temp_manager
 from .services.progress_notifications import process_progress_reminders
-from .routes import audit, collections, flywheel, health, journal, post_insight, settings, study, tasks, users, views
+from .routes import audit, collections, flywheel, health, journal, post_insight, settings, study, tasks, trend_radar, users, views
 from .services.transcription import process_llm_queue, process_task_queue
 
 
@@ -72,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(collections.router)
     app.include_router(post_insight.router)
     app.include_router(flywheel.router)
+    app.include_router(trend_radar.router)
     app.include_router(settings.router)
 
     @app.on_event("startup")

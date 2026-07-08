@@ -23,12 +23,15 @@ def test_focus_studio_contains_lightweight_journal_ui():
 
     assert ".journal-dock" in css
     assert ".journal-sidecar" in css
+    assert "[data-journal-sidecar] .journal-dock" in css
     assert "[data-journal-sidecar] .focus-deck" in css
     assert ".journal-review-question" in css
 
     assert "/api/journal/entries" in js
     assert "/api/journal/reviews" in js
     assert "journalSidecar" in js
+    assert "togglePanel" in js
+    assert "mouseleave" in js
     assert "journal-sidecar-close" in js
     assert "vta_bearer_token" in js
     assert "NO_TOKEN" in js

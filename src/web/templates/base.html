@@ -1127,32 +1127,67 @@
     <!-- 一键复制脚本 -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            function copyText(text) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    return navigator.clipboard.writeText(text);
+                }
+
+                var tmp = document.createElement('textarea');
+                tmp.value = text;
+                tmp.setAttribute('readonly', '');
+                tmp.style.position = 'fixed';
+                tmp.style.left = '-9999px';
+                document.body.appendChild(tmp);
+                tmp.select();
+                try {
+                    document.execCommand('copy');
+                    return Promise.resolve();
+                } catch (err) {
+                    return Promise.reject(err);
+                } finally {
+                    document.body.removeChild(tmp);
+                }
+            }
+
+            function setCopyState(btn, actionEl, text, className) {
+                if (className) btn.classList.add(className);
+                actionEl.textContent = text;
+            }
+
             document.querySelectorAll('.quick-copy-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var path = btn.getAttribute('data-path');
-                    var fullUrl = window.location.origin + path;
-                    var actionEl = btn.querySelector('.quick-copy-action');
-                    var originalText = actionEl.textContent;
+                    var copyPath = btn.getAttribute('data-copy-path');
+                    var targetPath = copyPath || path;
+                    if (!targetPath) return;
 
-                    navigator.clipboard.writeText(fullUrl).then(function() {
-                        btn.classList.add('copied');
-                        actionEl.textContent = 'Copied!';
+                    var fullUrl = window.location.origin + targetPath;
+                    var actionEl = btn.querySelector('.quick-copy-action');
+                    if (!actionEl) return;
+
+                    var originalText = actionEl.textContent;
+                    var copyPromise;
+
+                    if (copyPath) {
+                        copyPromise = fetch(fullUrl, { headers: { 'Accept': 'text/plain' } })
+                            .then(function(resp) {
+                                if (!resp.ok) throw new Error('Fetch failed: ' + resp.status);
+                                return resp.text();
+                            })
+                            .then(copyText);
+                    } else {
+                        copyPromise = copyText(fullUrl);
+                    }
+
+                    copyPromise.then(function() {
+                        setCopyState(btn, actionEl, '已复制', 'copied');
                         setTimeout(function() {
                             btn.classList.remove('copied');
                             actionEl.textContent = originalText;
                         }, 1500);
                     }).catch(function() {
-                        // Fallback: select from temp input
-                        var tmp = document.createElement('input');
-                        tmp.value = fullUrl;
-                        document.body.appendChild(tmp);
-                        tmp.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(tmp);
-                        btn.classList.add('copied');
-                        actionEl.textContent = 'Copied!';
+                        setCopyState(btn, actionEl, '复制失败');
                         setTimeout(function() {
-                            btn.classList.remove('copied');
                             actionEl.textContent = originalText;
                         }, 1500);
                     });

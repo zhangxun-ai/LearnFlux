@@ -20,6 +20,7 @@
         month: todayISO().slice(0, 7),
         entryType: 'daily',
         saveTimer: null,
+        closeTimer: null,
         loadingEntry: false,
         historyLoaded: false
     };
@@ -36,6 +37,7 @@
         els.reviewQuestion = document.getElementById('journal-review-question');
         els.reviewResult = document.getElementById('journal-review-result');
         els.sidecar = document.getElementById('journal-sidecar');
+        els.shell = document.querySelector('.journal-shell');
         els.sidecarClose = document.getElementById('journal-sidecar-close');
         els.openButtons = document.querySelectorAll('[data-journal-open]');
         els.tabs = document.querySelectorAll('[data-journal-tab]');
@@ -301,6 +303,7 @@
 
     function openPanel(panel) {
         const target = panel === 'review' ? 'review' : 'history';
+        cancelPanelClose();
         document.body.dataset.journalSidecar = target;
         if (els.sidecar) {
             els.sidecar.setAttribute('aria-hidden', 'false');
@@ -311,7 +314,33 @@
         }
     }
 
+    function isPanelOpen(panel) {
+        const target = panel === 'review' ? 'review' : 'history';
+        return document.body.dataset.journalSidecar === target;
+    }
+
+    function togglePanel(panel) {
+        if (isPanelOpen(panel)) {
+            closePanel();
+            return;
+        }
+        openPanel(panel);
+    }
+
+    function cancelPanelClose() {
+        if (!state.closeTimer) return;
+        clearTimeout(state.closeTimer);
+        state.closeTimer = null;
+    }
+
+    function schedulePanelClose() {
+        if (!document.body.dataset.journalSidecar) return;
+        cancelPanelClose();
+        state.closeTimer = setTimeout(closePanel, 180);
+    }
+
     function closePanel() {
+        cancelPanelClose();
         delete document.body.dataset.journalSidecar;
         if (els.sidecar) {
             els.sidecar.setAttribute('aria-hidden', 'true');
@@ -334,12 +363,16 @@
                 loadCurrentEntry();
             });
         }
-        els.openButtons.forEach((button) => {
-            button.addEventListener('click', () => openPanel(button.dataset.journalOpen));
-        });
         els.tabs.forEach((button) => {
-            button.addEventListener('click', () => openPanel(button.dataset.journalTab));
+            button.addEventListener('click', () => togglePanel(button.dataset.journalTab));
         });
+        els.openButtons.forEach((button) => {
+            button.addEventListener('click', () => togglePanel(button.dataset.journalOpen));
+        });
+        if (els.shell) {
+            els.shell.addEventListener('mouseenter', cancelPanelClose);
+            els.shell.addEventListener('mouseleave', schedulePanelClose);
+        }
         if (els.sidecarClose) {
             els.sidecarClose.addEventListener('click', closePanel);
         }

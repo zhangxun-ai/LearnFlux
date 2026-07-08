@@ -39,6 +39,7 @@ data/*.db-wal
 data/output
 data/risk_control/
 data/flywheel/
+data/trend_radar/
 data/services/
 data/source_files/
 data/server.pid

@@ -10,6 +10,7 @@
         { href: '/collections', label: '系列深度学习' },
         { href: '/static/focus-studio.html', label: '心流写作' },
         { href: '/post', label: '帖子洞察' },
+        { href: '/trend-radar', label: '趋势雷达' },
         { href: '/flywheel', label: 'IP 对标' },
         { href: '/static/history.html', label: '历史' },
         { href: '/settings', label: '设置' }

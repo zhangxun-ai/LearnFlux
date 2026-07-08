@@ -7,25 +7,31 @@ whether a post and its top replies are trustworthy and worth their time. It also
 works when there are no replies (the post content alone is worth analyzing).
 """
 
+from typing import Any
+
+from .demand_miner import format_demand_signals_for_llm
 from .selector import CommentItem, format_comments_for_llm
 
-POST_INSIGHT_SYSTEM_PROMPT = """你是专业的社交帖子审核分析助手。
-你的任务是分析一条社交平台帖子（X / 小红书 / 微信公众号 等）的作者正文与高赞评论/回复，
-提炼对读者有价值的精华，并显式做可信度判断。
+POST_INSIGHT_SYSTEM_PROMPT = """你是专业的社交内容洞察分析助手。
+你的任务是分析一条社交平台帖子（X / 小红书 / 微信公众号等）的作者正文、高赞评论/回复与评论需求信号，
+输出一份可用于学习、判断、选题和行动的单条内容深度洞察 2.0。
 
 要求：
 - 自适应判断帖子类型（观点 / 经验 / 资讯 / 种草 / 营销），不要套模板。
 - 可信度判断要克制、有依据：区分"可核实的事实陈述"与"个人观点 / 单方面断言"。
-- 如果评论区/回复区对正文有补充、佐证或反驳，要明确指出。
+- 评论需求矿场必须基于评论证据，提炼用户痛点、问题、反对意见、购买/工具/教程需求。
+- 机会判断要说明这个内容背后是否值得做选题、产品、教程、清单或服务。
 - 若帖子没有可用评论（如公众号留言不可获取），就只基于正文分析，并说明这一点。
 - 信息不足以判断时要直说，禁止臆测或强行拔高。
 - 输出中文 Markdown。
 
 固定输出结构：
+## 内容定位
 ## 正文核心主张
-## 可信度与存疑点
+## 证据与可信度
 （逐条用标签标注：[共识/可信]、[单方面断言]、[需外部核实]、[回复区有反驳]）
-## 评论区：共识 vs 争议
+## 评论需求矿场
+## 机会判断
 ## 代表性高赞回复
 ## 对你的可行动启发
 """
@@ -49,8 +55,11 @@ class PostInsightAnalyzer:
         author: str,
         summary_text: str | None,
         comments: list[CommentItem],
+        demand_signals: dict[str, list[dict[str, Any]]] | None = None,
     ) -> str | None:
-        user_prompt = self._build_user_prompt(title, author, summary_text, comments)
+        user_prompt = self._build_user_prompt(
+            title, author, summary_text, comments, demand_signals
+        )
         response = self.llm_client.call(
             model=self.model,
             system_prompt=POST_INSIGHT_SYSTEM_PROMPT,
@@ -66,6 +75,7 @@ class PostInsightAnalyzer:
         author: str,
         summary_text: str | None,
         comments: list[CommentItem],
+        demand_signals: dict[str, list[dict[str, Any]]] | None = None,
     ) -> str:
         thread_block = (summary_text or "").strip() or "（正文为空）"
         if comments:
@@ -74,6 +84,7 @@ class PostInsightAnalyzer:
             )
         else:
             comment_block = "（无可用回复，请仅基于正文分析。）"
+        demand_block = format_demand_signals_for_llm(demand_signals or {})
 
         return f"""帖子标题：{title}
 作者：@{author or "Unknown"}
@@ -83,5 +94,8 @@ class PostInsightAnalyzer:
 
 高赞回复样本：
 {comment_block}
+
+评论需求信号：
+{demand_block}
 
 请基于以上内容生成帖子洞察。"""

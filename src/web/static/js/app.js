@@ -297,6 +297,27 @@ class APIManager {
 
         return await response.json();
     }
+
+    static async getTaskSummary(viewToken) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+
+        if (!token) {
+            throw new Error('请先设置API访问令牌');
+        }
+
+        const response = await fetch(`/api/audit/summary?view_token=${encodeURIComponent(viewToken)}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: '摘要查询失败' }));
+            throw new Error(errorData.message || `HTTP ${response.status}`);
+        }
+
+        return await response.json();
+    }
 }
 
 /**
@@ -317,6 +338,11 @@ class TaskHistoryManager {
                 url: taskData.url,
                 original_text: taskData.original_text || '',
                 title: taskData.title || this.extractTitleFromURL(taskData.url),
+                author: taskData.author || '',
+                platform: taskData.platform || '',
+                description: taskData.description || '',
+                summaryPreview: taskData.summaryPreview || '',
+                summaryPreviewLoaded: Boolean(taskData.summaryPreview),
                 timestamp: Date.now(),
                 useSpeakerRecognition: taskData.use_speaker_recognition || false,
                 includeComments: taskData.include_comments || false,
@@ -466,6 +492,7 @@ class TaskHistoryManager {
 
         renderHistoryPagination(filtered.length, page, totalPages);
         refreshHistoryStatuses();
+        refreshHistoryPreviews();
     }
 }
 
@@ -880,8 +907,15 @@ function jsAttr(s) {
         .replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
+function compactText(s, maxLen) {
+    const text = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    return text.length > maxLen ? text.slice(0, maxLen - 1) + '…' : text;
+}
+
 /** 每页历史条数 */
 const HISTORY_PAGE_SIZE = 8;
+const HISTORY_PREVIEW_LOADING = new Set();
 
 /** 日期范围判断（today / 7d / 30d / 90d / all） */
 function inDateRange(ts, rangeKey) {
@@ -923,6 +957,10 @@ function buildHistoryCard(task) {
     const typeLabel = histType === 'post' ? '帖子' : (histType === 'file' ? '文件' : '视频');
     const st = statusInfo(task.status, histType);
     const timeStr = formatRelativeTime(task.timestamp);
+    const author = compactText(task.author || '', 36);
+    const description = compactText(task.description || '', 140);
+    const summaryPreview = compactText(task.summaryPreview || '', 180);
+    const originalPreview = compactText(task.original_text || '', 140);
 
     let host = '链接';
     try { host = new URL(task.url).hostname.replace(/^www\./, ''); } catch (e) { /* keep fallback */ }
@@ -951,10 +989,20 @@ function buildHistoryCard(task) {
     if (task.useSpeakerRecognition) tags.push('<span class="hist-feature-tag">说话人识别</span>');
     if (task.includeComments) tags.push('<span class="hist-feature-tag">评论洞察</span>');
 
+    let previewText = summaryPreview || description || originalPreview;
+    if (!previewText && histType === 'video' && task.view_token && st.cls === 'done' && !task.summaryPreviewLoaded) {
+        previewText = '正在加载摘要预览...';
+    } else if (!previewText && st.cls === 'running') {
+        previewText = '任务完成后会显示内容摘要，方便回看和定位。';
+    } else if (!previewText) {
+        previewText = cls.action || '暂无内容预览';
+    }
+
     const card = document.createElement('div');
     card.className = 'hist-card fade-in';
     card.setAttribute('data-type', histType);
     if (task.id) card.setAttribute('data-task-id', task.id);
+    if (task.view_token) card.setAttribute('data-view-token', task.view_token);
     card.innerHTML = `
                 <div class="hist-icon">${icon}</div>
                 <div class="hist-body">
@@ -963,6 +1011,8 @@ function buildHistoryCard(task) {
                         <span class="status-badge s-${st.cls}">${st.text}</span>
                         <span class="hist-title" title="${escapeAttr(task.title || '')}">${escapeHtml(task.title || '未命名')}</span>
                     </div>
+                    ${author ? `<div class="hist-author">作者：${escapeHtml(author)}</div>` : ''}
+                    <div class="hist-preview">${escapeHtml(previewText)}</div>
                     <div class="hist-meta">
                         <span class="hist-source">🔗 <a href="${escapeAttr(task.url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a></span>
                         <span class="hist-time">${timeStr}</span>
@@ -990,6 +1040,40 @@ function renderHistoryPagination(total, page, totalPages) {
     `;
 }
 
+function hydrateHistoryPreview(entry, card) {
+    if (!entry || !entry.view_token) return;
+    const st = statusInfo(entry.status, histTypeOf(entry));
+    if (st.cls !== 'done' || entry.summaryPreview || entry.summaryPreviewLoaded) return;
+    const key = entry.view_token;
+    if (HISTORY_PREVIEW_LOADING.has(key)) return;
+    HISTORY_PREVIEW_LOADING.add(key);
+
+    APIManager.getTaskSummary(key).then((resp) => {
+        const raw = (resp && (resp.data || resp)) || {};
+        if (resp && resp.code === 202) return;
+
+        const history = TaskHistoryManager.getHistory();
+        const latest = history.find((t) => t && t.view_token === key);
+        if (!latest) return;
+
+        latest.summaryPreview = compactText(raw.summary || '', 300);
+        latest.summaryPreviewLoaded = true;
+        StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
+
+        const target = card && card.isConnected
+            ? card
+            : Array.from(document.querySelectorAll('.hist-card[data-view-token]'))
+                .find((node) => node.getAttribute('data-view-token') === key);
+        if (target && target.parentNode) {
+            target.replaceWith(buildHistoryCard(latest));
+        }
+    }).catch(() => {
+        /* best-effort, ignore */
+    }).finally(() => {
+        HISTORY_PREVIEW_LOADING.delete(key);
+    });
+}
+
 /** 历史视频任务的状态最佳努力刷新（复用既有 getTaskStatus，容错字段名） */
 function refreshHistoryStatuses() {
     let token = null;
@@ -1006,16 +1090,39 @@ function refreshHistoryStatuses() {
             const norm = String(s).toLowerCase();
             const entry = history.find((t) => t && t.id === taskId);
             if (!entry) return;
-            // 回写真实状态（下次渲染直接正确，不再从 submitted 起跳）
+            let changed = false;
             if (entry.status !== norm) {
                 entry.status = norm;
+                changed = true;
+            }
+            ['title', 'author', 'platform', 'view_token'].forEach((key) => {
+                if (raw[key] && entry[key] !== raw[key]) {
+                    entry[key] = raw[key];
+                    changed = true;
+                }
+            });
+            if (changed) {
                 StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
             }
             // 用最新状态重建整张卡片：徽章与动作按钮（查看/重试/处理中）保持一致
             if (card.parentNode) {
-                card.replaceWith(buildHistoryCard(entry));
+                const nextCard = buildHistoryCard(entry);
+                card.replaceWith(nextCard);
+                hydrateHistoryPreview(entry, nextCard);
             }
         }).catch(() => { /* best-effort, ignore */ });
+    });
+}
+
+function refreshHistoryPreviews() {
+    let token = null;
+    try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return; }
+    if (!token) return;
+    const history = TaskHistoryManager.getHistory();
+    document.querySelectorAll('.hist-card[data-view-token]').forEach((card) => {
+        const viewToken = card.getAttribute('data-view-token');
+        const entry = history.find((t) => t && t.view_token === viewToken);
+        hydrateHistoryPreview(entry, card);
     });
 }
 

@@ -170,7 +170,7 @@
                 <section class="lc-detail">
                     <div class="lc-tabs">
                         <button class="lc-tab active" data-view="map" type="button">知识地图</button>
-                        <button class="lc-tab" data-view="summary" type="button">学习提纲</button>
+                        <button class="lc-tab" data-view="summary" type="button">全系列解读</button>
                         <button class="lc-tab" data-view="source" type="button">源内容</button>
                         <button class="lc-tab" data-view="markdown" type="button">导出笔记</button>
                     </div>
@@ -240,23 +240,38 @@
 
                     <article class="lc-card hidden" id="summary-view">
                         <div class="lc-summary-hero">
-                            <span>学习提纲</span>
-                            <strong id="summary-status">等待生成集合级提纲</strong>
-                            <p id="summary-description">导入并解析完成后，再从整体视角生成主线、结构和行动要点。</p>
+                            <span>全系列解读</span>
+                            <strong id="summary-status">等待生成全系列解读</strong>
+                            <p id="summary-description">导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。</p>
                         </div>
                         <div class="lc-summary-grid">
-                            <div><strong>知识结构</strong><div class="lc-summary-text lc-markdown-preview" id="summary-structure">解析完成后生成。</div></div>
-                            <div><strong>递进关系</strong><div class="lc-summary-text lc-markdown-preview" id="summary-progression">解析完成后生成。</div></div>
-                            <div><strong>论点与证据</strong><div class="lc-summary-text lc-markdown-preview" id="summary-evidence">解析完成后生成。</div></div>
-                            <div><strong>SOP / 行动清单</strong><div class="lc-summary-text lc-markdown-preview" id="summary-sop">解析完成后生成。</div></div>
+                            <div><strong>这个系列解决什么问题</strong><div class="lc-summary-text lc-markdown-preview" id="summary-problem">解析完成后生成。</div></div>
+                            <div><strong>为什么值得学</strong><div class="lc-summary-text lc-markdown-preview" id="summary-value">解析完成后生成。</div></div>
+                            <div><strong>全系列主线</strong><div class="lc-summary-text lc-markdown-preview" id="summary-mainline">解析完成后生成。</div></div>
+                            <div><strong>章节地图</strong><div class="lc-summary-text lc-markdown-preview" id="summary-chapters">解析完成后生成。</div></div>
+                            <div><strong>核心框架</strong><div class="lc-summary-text lc-markdown-preview" id="summary-framework">解析完成后生成。</div></div>
+                            <div><strong>复习索引</strong><div class="lc-summary-text lc-markdown-preview" id="summary-review">解析完成后生成。</div></div>
+                        </div>
+                        <div class="lc-summary-reader" id="summary-reader">
+                            <div class="lc-summary-reading">
+                                <section class="lc-summary-structured" id="summary-structured" aria-label="结构化阅读入口">生成全系列解读后显示。</section>
+                                <article class="lc-summary-article lc-markdown-preview" id="summary-article">生成全系列解读后显示。</article>
+                            </div>
+                            <aside class="lc-summary-toc" aria-label="全系列解读目录">
+                                <strong>快速跳转</strong>
+                                <nav id="summary-toc"></nav>
+                            </aside>
                         </div>
                         <div class="lc-export-row">
                             <div>
                                 <strong>Obsidian 输出</strong>
-                                <span>包含专题总论、核心概念、章节作用、递进关系、复习笔记和行动清单。</span>
+                                <span>包含课前导览、全集主线、章节作用、核心框架和课后复习索引。</span>
                             </div>
                             <div>
-                                <button class="lc-btn" id="generate-summary" type="button">生成总结</button>
+                                <button class="lc-btn" id="generate-summary" type="button">
+                                    <span id="summary-progress-text">生成全系列解读</span>
+                                    <span class="lc-btn-progress" aria-hidden="true"><span id="summary-progress-fill"></span></span>
+                                </button>
                                 <button class="lc-btn primary" id="export-markdown" type="button">导出</button>
                             </div>
                         </div>
@@ -304,8 +319,8 @@
                                 <button id="markdown-source-mode" type="button">源码</button>
                             </div>
                         </div>
-                        <div id="markdown-rendered" class="lc-markdown-preview">生成专题总结后显示。</div>
-                        <pre id="markdown-preview" class="hidden">生成专题总结后显示。</pre>
+                        <div id="markdown-rendered" class="lc-markdown-preview">生成全系列解读后显示。</div>
+                        <pre id="markdown-preview" class="hidden">生成全系列解读后显示。</pre>
                     </article>
                 </section>
             </div>

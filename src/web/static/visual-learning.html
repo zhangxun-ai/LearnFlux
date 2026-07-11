@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#FBF8F3">
+    <title>图解生成 - 内容解析工作台</title>
+    <link rel="icon" type="image/svg+xml" href="icon/logo.svg">
+    <link rel="stylesheet" href="css/editorial.css">
+    <link rel="stylesheet" href="css/app-shell.css">
+    <link rel="stylesheet" href="css/visual-learning.css?v=3">
+    <script src="js/pwa-register.js" defer></script>
+    <script src="js/app-shell.js" defer></script>
+</head>
+<body class="app-shell has-app-shell">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core">
+                <h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item is-active" href="/visual-learning"><span class="nav-icon" aria-hidden="true">▦</span><span>图解生成</span></a>
+                <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight">
+                <h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system">
+                <h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">图解生成</span></div>
+        </header>
+
+        <h1 class="sr-only">图解生成</h1>
+        <section class="vl-workbench">
+            <aside class="vl-control-pane" aria-label="图解输入与设置">
+                <div class="vl-source-tabs" role="tablist" aria-label="内容来源">
+                    <button class="is-active" id="visual-source-text" type="button" data-source-mode="text" aria-selected="true">粘贴文字</button>
+                    <button id="visual-source-file" type="button" data-source-mode="file" aria-selected="false">上传文档</button>
+                </div>
+
+                <section class="vl-source-panel is-active" id="visual-text-panel">
+                    <label for="visual-text-title">标题</label>
+                    <input id="visual-text-title" type="text" maxlength="160" placeholder="可选，留空时使用正文首行">
+                    <label for="visual-text-content">正文</label>
+                    <textarea id="visual-text-content" maxlength="200000" rows="12" placeholder="粘贴文章、课程笔记或其他文字"></textarea>
+                </section>
+
+                <section class="vl-source-panel" id="visual-file-panel" hidden>
+                    <input id="visual-file-input" type="file" accept=".pdf,.docx,.txt,.md,.markdown" hidden>
+                    <button class="vl-file-drop" id="visual-file-drop" type="button">
+                        <strong id="visual-file-name">选择文档</strong>
+                        <span>PDF / DOCX / TXT / Markdown</span>
+                    </button>
+                </section>
+
+                <div class="vl-control-grid">
+                    <label for="visual-diagram-type">图解类型</label>
+                    <select id="visual-diagram-type">
+                        <option value="auto">自动推荐</option>
+                        <option value="concept_chain">概念链</option>
+                        <option value="process_flow">流程图</option>
+                        <option value="comparison">对比图</option>
+                        <option value="hierarchy">层级图</option>
+                        <option value="timeline">时间线</option>
+                        <option value="mind_map">思维导图</option>
+                    </select>
+                    <label for="visual-style">视觉主题</label>
+                    <select id="visual-style">
+                        <option value="study-notes">学霸笔记</option>
+                        <option value="clean-lecture">清晰讲义</option>
+                        <option value="chalkboard">黑板手记</option>
+                        <option value="technical-blueprint">技术蓝图</option>
+                    </select>
+                </div>
+
+                <button class="vl-generate" id="visual-generate" type="button" disabled>生成图解</button>
+                <div class="vl-job-status" id="visual-job-status" role="status" aria-live="polite">
+                    <strong id="visual-progress-stage"></strong>
+                    <span id="visual-progress-meta"></span>
+                    <div class="vl-progress-track" aria-hidden="true"><i id="visual-progress-fill"></i></div>
+                </div>
+
+                <section class="vl-history-section">
+                    <header><h2>最近生成</h2><button id="visual-history-refresh" type="button" aria-label="刷新历史">↻</button></header>
+                    <div class="vl-history" id="visual-history"></div>
+                </section>
+            </aside>
+
+            <section class="vl-output-pane" aria-label="图解画布">
+                <header class="vl-output-toolbar">
+                    <button class="vl-reader-exit" id="visual-reader-exit" type="button" hidden>← 返回生成</button>
+                    <div class="vl-output-heading">
+                        <span>视觉文档</span>
+                        <h2 id="visual-output-title">等待生成</h2>
+                    </div>
+                    <div class="vl-reading-status" aria-live="polite">
+                        <span>正在阅读</span>
+                        <strong id="visual-current-section">尚未开始</strong>
+                    </div>
+                    <div class="vl-reading-progress-wrap">
+                        <div><span>全文进度</span><output id="visual-reading-progress-label">0%</output></div>
+                        <div class="vl-reading-progress" id="visual-reading-progress" role="progressbar" aria-label="全文阅读进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <i id="visual-reading-progress-fill"></i>
+                        </div>
+                    </div>
+                    <div class="vl-output-actions">
+                        <button id="visual-export" type="button" disabled>导出 SVG</button>
+                        <button id="visual-print-page" type="button" disabled>打印</button>
+                    </div>
+                </header>
+                <div class="vl-recommendations" id="visual-recommendations" hidden></div>
+                <nav class="vl-page-navigation" id="visual-page-navigation" aria-label="图解页面" hidden></nav>
+                <div class="vl-canvas" id="visual-canvas">
+                    <div class="vl-canvas-empty"><strong>选择内容后生成图解</strong><span>生成结果会保留原文引用。</span></div>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <div class="vl-evidence-layer" id="visual-evidence-layer" hidden>
+        <button class="vl-evidence-overlay" id="visual-evidence-overlay" type="button" aria-label="关闭原文依据"></button>
+        <aside class="vl-evidence-drawer" id="visual-evidence-drawer" role="dialog" aria-modal="true" aria-labelledby="visual-evidence-title">
+            <header>
+                <div><span id="visual-evidence-position">原文依据</span><h2 id="visual-evidence-title">章节依据</h2></div>
+                <button id="visual-evidence-close" type="button" aria-label="关闭原文依据">×</button>
+            </header>
+            <p class="vl-evidence-claim" id="visual-evidence-claim"></p>
+            <div class="vl-evidence-list" id="visual-evidence-list"></div>
+        </aside>
+    </div>
+
+    <script src="js/visual-learning.js?v=3"></script>
+    <script src="js/visual-learning-workbench.js?v=3"></script>
+</body>
+</html>

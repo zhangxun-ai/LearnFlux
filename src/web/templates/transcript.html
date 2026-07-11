@@ -7,10 +7,16 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/floating-toc.css">
+<link rel="stylesheet" href="/static/css/visual-learning.css?v={{ asset_ver }}">
 <style>
 /* Section header with inline action */
 .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .section-header h2 { margin-bottom: 0; }
+.summary-reader-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.summary-reader-btn { border: 1px solid var(--border-color, #ddd); border-radius: 999px; padding: 8px 16px; cursor: pointer; background: var(--bg-primary, #fff); color: var(--text-primary, #222); }
+.summary-reader-btn.primary { border-color: #e8523f; color: #fff; background: #e8523f; }
+body.vl-reader-open { overflow: hidden; }
+#transcript-immersive-reader[hidden] { display: none; }
 
 /* Recalibrate button */
 .recalibrate-btn {
@@ -478,7 +484,6 @@
     <!-- 统计信息（单行显示） -->
     {% if stats and stats.original_length > 0 %}
     <div class="stats-line">
-        <span class="stats-icon">📊</span>
         <span class="stats-label">转录统计</span>
         <span class="stats-content">
             {% if stats.duration_display %}总耗时 {{ stats.duration_display }} | {% endif %}
@@ -551,12 +556,10 @@
     {% set cal = stats.calibration_stats %}
     {% if cal.failed_count == cal.total_chunks and cal.total_chunks > 0 %}
     <div class="calibration-warning" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#991b1b;display:flex;align-items:center;gap:8px;">
-        <span>&#x26A0;&#xFE0F;</span>
         <span><strong>校准失败</strong>：LLM API 超时，当前显示为未校准的原始语音识别文本，可能包含较多错别字。建议点击上方「重新校对」按钮。</span>
     </div>
     {% elif cal.failed_count > 0 or cal.fallback_count > 0 %}
     <div class="calibration-warning" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#92400e;display:flex;align-items:center;gap:8px;">
-        <span>&#x26A0;&#xFE0F;</span>
         <span><strong>校准部分异常</strong>：{{ cal.success_count }}/{{ cal.total_chunks }} 段校准成功，{{ cal.fallback_count }} 段降级，{{ cal.failed_count }} 段失败。部分内容可能包含错别字。</span>
     </div>
     {% endif %}
@@ -566,7 +569,6 @@
     {% if llm_config %}
     <details class="llm-config-details">
         <summary>
-            <span class="config-icon">⚙️</span>
             <span class="config-label">高级信息</span>
             {% if llm_config.has_risk %}<span class="risk-badge">风险降级</span>{% endif %}
         </summary>
@@ -679,7 +681,6 @@
 
             <details class="export-links-details">
                 <summary class="export-links-summary">
-                    <span class="export-icon">📤</span>
                     <span class="export-summary-label">更多导出选项</span>
                 </summary>
                 <div class="export-links-content">
@@ -720,7 +721,15 @@
     {% endif %}
 
     <div class="section">
-        <h2>📝 内容总结</h2>
+        <div class="section-header">
+            <h2>内容总结</h2>
+            {% if view_token and summary %}
+            <div class="summary-reader-actions">
+                <button type="button" class="summary-reader-btn" id="transcript-reader-text">沉浸阅读</button>
+                <button type="button" class="summary-reader-btn primary" id="transcript-reader-visual">一键图解</button>
+            </div>
+            {% endif %}
+        </div>
         <div class="content" data-focus-section="summary">
             {% if summary_html %}
                 {{ summary_html|safe }}
@@ -734,7 +743,7 @@
 
     {% if comment_insight_html %}
     <div class="section">
-        <h2>💬 高赞评论洞察</h2>
+        <h2>高赞评论洞察</h2>
         <div class="content" data-focus-section="comment_insight">
             {{ comment_insight_html|safe }}
         </div>
@@ -760,16 +769,16 @@
     {% if calibrated_html %}
     <div class="section">
         <div class="section-header">
-            <h2>✨ 校对文本</h2>
+            <h2>校对文本</h2>
             {% if view_token %}
             <span id="recalibrateArea">
-                <button class="recalibrate-btn" id="recalibrateBtn" onclick="document.getElementById('recalibrateDialog').showModal()">🔄 重新校对</button>
+                <button class="recalibrate-btn" id="recalibrateBtn" onclick="document.getElementById('recalibrateDialog').showModal()">重新校对</button>
             </span>
             {% endif %}
         </div>
         {% if use_speaker_recognition %}
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
-                🎤 本校对文本包含说话人识别信息
+                本校对文本包含说话人识别信息
             </p>
         {% endif %}
         <div class="content" data-focus-section="calibrated">
@@ -800,6 +809,10 @@
 <script src="/static/js/floating-toc.js?v=comment-toc-20260607"></script>
 {% if view_token %}
 <script src="/static/js/focus-handoff.js?v=20260617-1"></script>
+<div id="transcript-immersive-reader" data-view-token="{{ view_token }}" data-reader-title="{{ title or '内容总结' }}" hidden></div>
+<script id="transcript-summary-data" type="application/json">{{ (summary or '')|tojson }}</script>
+<script src="/static/js/visual-learning.js?v={{ asset_ver }}"></script>
+<script src="/static/js/transcript-visual-reader.js?v={{ asset_ver }}"></script>
 <script>
 (function() {
     // Auto-fill API key from localStorage (shared with /add_task_by_web)

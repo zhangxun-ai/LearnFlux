@@ -67,7 +67,8 @@ async def collections_page():
         page,
         static_dir / "css" / "collections.css",
         static_dir / "js" / "collections.js",
-        static_dir / "js" / "site-nav.js",
+        static_dir / "css" / "app-shell.css",
+        static_dir / "js" / "app-shell.js",
         static_dir / "js" / "pwa-register.js",
         static_dir / "css" / "editorial.css",
     ]

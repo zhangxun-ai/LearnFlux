@@ -1539,6 +1539,28 @@ def test_collection_workflow_status_is_stopped_after_cancel(tmp_path):
     assert service.list_collections(status="stopped")[0]["id"] == collection["id"]
 
 
+def test_collections_import_uses_one_primary_choice_and_collapsed_history():
+    project_root = Path(__file__).resolve().parents[2]
+    html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
+    js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+
+    intro = html[html.index('class="lc-intro-strip"') : html.index('class="lc-import-card"')]
+    import_card = html[html.index('class="lc-import-card"') : html.index('class="lc-history')]
+    import_files = js[js.index("async function importFiles(") : js.index("async function appendFilesToCurrentCollection(")]
+
+    assert "lc-eyebrow" not in intro
+    assert "lc-points" not in intro
+    assert '<div class="lc-drop" id="drop-action"' in import_card
+    assert "dropAction.addEventListener('click'" not in js
+    assert 'class="lc-btn primary" id="pick-files"' in import_card
+    assert import_card.count("lc-btn primary") == 1
+    busy_guard = import_files[import_files.index("if (busy)") : import_files.index("const files = normalizeFiles")]
+    assert "return;" in busy_guard
+    assert '<details class="lc-history lc-history-panel"' in html
+    assert '<summary class="lc-history-summary">' in html
+    assert '<details class="lc-history lc-history-panel" open' not in html
+
+
 def test_collections_page_restores_existing_collections():
     project_root = Path(__file__).resolve().parents[2]
     html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
@@ -1571,6 +1593,9 @@ def test_collections_page_restores_existing_collections():
     assert "cancel-collection" in html
     assert "map-related-sources" in html
     assert "全系列解读" in html
+    assert "grid-template-rows: auto minmax(0, 1fr)" in css
+    assert "top: 16px" in css
+    assert "max-height: none" in css
     assert "学习提纲" not in html
     assert "学习提纲" not in js
     assert "summary-problem" in html
@@ -1582,12 +1607,18 @@ def test_collections_page_restores_existing_collections():
     assert "summary-reader" in html
     assert "summary-toc" in html
     assert "summary-structured" in html
+    assert "summary-dialog" in html
+    assert 'data-summary-card="problem"' in html
     assert "renderSummaryReader" in js
+    assert "openSummaryDialog" in js
     assert "buildSummarySections" in js
     assert "renderSummaryToc" in js
     assert "renderStructuredSummaryBlocks" in js
     assert "splitInlineNumberedItems" in js
     assert "data-summary-anchor" in js
+    assert "aria-disabled" in js
+    assert ".lc-summary-card" in css
+    assert ".lc-summary-dialog" in css
     assert ".lc-summary-reader" in css
     assert ".lc-summary-toc" in css
     assert ".lc-summary-article" in css
@@ -1632,6 +1663,72 @@ def test_collections_page_restores_existing_collections():
     assert "selectedHistoryFilters" in js
     assert "selectCollection" in js
     assert "loadCollections().catch((error) => {\n                    showToast(error.message || '历史专题筛选失败');" in js
+
+
+def test_collections_page_exposes_immersive_text_visual_reader():
+    project_root = Path(__file__).resolve().parents[2]
+    html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
+    js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+    css = (project_root / "src/web/static/css/collections.css").read_text(encoding="utf-8")
+
+    assert '/static/css/visual-learning.css?v=__ASSET_VERSION__' in html
+    assert '/static/js/visual-learning.js?v=__ASSET_VERSION__' in html
+    assert 'data-view="visual"' in html
+    assert '>图解<' in html
+    for element_id in (
+        "visual-view",
+        "collection-visual-root",
+        "collection-visual-overview-status",
+        "collection-visual-overview-retry",
+        "collection-visual-full-note-status",
+        "collection-visual-full-note-retry",
+        "collection-visual-theme",
+        "collection-visual-export",
+        "collection-visual-print",
+        "collection-visual-open",
+        "collection-summary-reader-open",
+        "collection-immersive-reader",
+    ):
+        assert f'id="{element_id}"' in html
+
+    assert "function activateCollectionVisuals()" in js
+    assert "currentView !== 'visual'" in js
+    assert "document_type=${encodeURIComponent(documentType)}" in js
+    assert "document_type: documentType" in js
+    assert "'overview'" in js
+    assert "'full_note'" in js
+    assert "window.VisualLearning.renderImmersiveReader" in js
+    assert "window.VisualLearning.createReaderState" in js
+    assert "function openCollectionReader(" in js
+    assert "function closeCollectionReader(" in js
+    summary_tab_branch = js[
+        js.index("els.tabs.forEach((tab) => {") : js.index("if (els.collectionVisualOverviewRetry)")
+    ]
+    assert "currentView === 'summary'" in summary_tab_branch
+    assert "openCollectionReader('text', tab)" in summary_tab_branch
+    assert "ensureCollectionVisualLayer('overview', false)" in js
+    assert "readerGeneration" in js
+    assert ".accepts(" in js
+    assert "window.VisualLearning.activeDiagram" in js
+    assert "function retryCollectionVisual(documentType)" in js
+    assert "function parseCollectionVisualRef(" in js
+    assert "function visualSummarySections()" in js
+    assert "visual-section:${target.sectionId}" in js
+    assert 'data-summary-section="${escapeHTML(section.id)}"' in js
+    visual_navigation = js[
+        js.index("async function navigateCollectionVisualRef(") : js.index("function exportCollectionVisualSvg(")
+    ]
+    assert ".find((section) => section.id === target.sectionId)" in visual_navigation
+    assert ".find((section) => section.title.trim()" not in visual_navigation
+    assert "collection:${collectionId}:source:" in js
+    assert "collection:${collectionId}:summary:section:" in js
+    assert "ensureSourceDetail(sourceId)" in js
+    assert "resetCollectionVisualState" in js
+    assert "window.clearInterval(collectionVisual.pollTimers.overview)" in js
+    assert "window.clearInterval(collectionVisual.pollTimers.full_note)" in js
+    assert "@media print" in css
+    assert ".lc-visual-view" in css
+    assert "overflow: visible" in css
     assert "loadCollections({ selectLatest: false }).catch((error) => {\n                    showToast(error.message || '历史专题筛选失败');" not in js
     assert "renderKnowledgeMap" in js
     assert "loadKnowledgeMap" in js

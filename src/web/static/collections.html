@@ -20,24 +20,49 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/visual-learning.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/collections.css?v=__ASSET_VERSION__">
     <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
+    <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
 </head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js?v=__ASSET_VERSION__"></script>
+<body class="app-shell has-app-shell">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item is-active" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">系列深度学习</span></div>
+        </header>
+        <section class="page-stage">
 
-    <main class="lc-page">
+    <section class="lc-page">
         <section class="lc-intro-strip" aria-label="系列深度学习说明">
             <div>
-                <p class="lc-eyebrow">系列深度学习 · 新工作流</p>
                 <h1>导入一个系列，生成可复用的方法论</h1>
                 <p>适合连续课程、专题视频或文档合集，按顺序解析后沉淀为 Obsidian 笔记。</p>
-            </div>
-            <div class="lc-points">
-                <span>一个专题</span>
-                <span>逐个解析</span>
-                <span>导出 Markdown</span>
             </div>
         </section>
 
@@ -63,11 +88,11 @@
                 </div>
             </div>
 
-            <button class="lc-drop" id="drop-action" type="button">
+            <div class="lc-drop" id="drop-action" role="group" aria-labelledby="drop-title" aria-describedby="drop-subtitle">
                 <span class="lc-plus">+</span>
-                <strong id="drop-title">上传课程视频</strong>
-                <span id="drop-subtitle">选择专题文件夹，或一次选择多个视频。</span>
-            </button>
+                <strong id="drop-title">拖放课程视频到这里</strong>
+                <span id="drop-subtitle">也可以使用下方按钮选择文件或文件夹。</span>
+            </div>
 
             <div class="lc-import-actions">
                 <button class="lc-btn" id="pick-folder" type="button">选择文件夹</button>
@@ -87,44 +112,46 @@
             <div class="lc-hint" id="token-hint"></div>
         </section>
 
-        <section class="lc-history lc-history-panel" aria-label="历史学习集合">
-            <div class="lc-history-head">
+        <details class="lc-history lc-history-panel">
+            <summary class="lc-history-summary">
                 <strong>历史专题</strong>
                 <span id="collection-history-count">0 个</span>
+            </summary>
+            <div class="lc-history-content">
+                <div class="lc-history-filters" aria-label="历史专题筛选">
+                    <select id="history-creator-filter" aria-label="按 IP 名称筛选">
+                        <option value="">全部 IP</option>
+                    </select>
+                    <select id="history-topic-filter" aria-label="按专题名称筛选">
+                        <option value="">全部专题</option>
+                    </select>
+                    <select id="history-date-filter" aria-label="按解析日期筛选">
+                        <option value="">全部日期</option>
+                        <option value="today">今天</option>
+                        <option value="7d">最近 7 天</option>
+                        <option value="30d">最近 30 天</option>
+                    </select>
+                    <select id="history-type-filter" aria-label="按内容类型筛选">
+                        <option value="">全部类型</option>
+                        <option value="video_course">视频课程</option>
+                        <option value="document_topic">文档专题</option>
+                    </select>
+                    <select id="history-status-filter" aria-label="按状态筛选">
+                        <option value="">全部状态</option>
+                        <option value="summarized">已总结</option>
+                        <option value="ready">待总结</option>
+                        <option value="processing">解析中</option>
+                        <option value="stopped">已停止</option>
+                        <option value="failed">有失败</option>
+                        <option value="draft">未导入</option>
+                    </select>
+                    <button class="lc-btn ghost" id="history-reset" type="button">重置</button>
+                </div>
+                <div class="lc-history-list" id="collection-history-list">
+                    <div class="lc-history-empty">暂无历史专题</div>
+                </div>
             </div>
-            <div class="lc-history-filters" aria-label="历史专题筛选">
-                <select id="history-creator-filter" aria-label="按 IP 名称筛选">
-                    <option value="">全部 IP</option>
-                </select>
-                <select id="history-topic-filter" aria-label="按专题名称筛选">
-                    <option value="">全部专题</option>
-                </select>
-                <select id="history-date-filter" aria-label="按解析日期筛选">
-                    <option value="">全部日期</option>
-                    <option value="today">今天</option>
-                    <option value="7d">最近 7 天</option>
-                    <option value="30d">最近 30 天</option>
-                </select>
-                <select id="history-type-filter" aria-label="按内容类型筛选">
-                    <option value="">全部类型</option>
-                    <option value="video_course">视频课程</option>
-                    <option value="document_topic">文档专题</option>
-                </select>
-                <select id="history-status-filter" aria-label="按状态筛选">
-                    <option value="">全部状态</option>
-                    <option value="summarized">已总结</option>
-                    <option value="ready">待总结</option>
-                    <option value="processing">解析中</option>
-                    <option value="stopped">已停止</option>
-                    <option value="failed">有失败</option>
-                    <option value="draft">未导入</option>
-                </select>
-                <button class="lc-btn ghost" id="history-reset" type="button">重置</button>
-            </div>
-            <div class="lc-history-list" id="collection-history-list">
-                <div class="lc-history-empty">暂无历史专题</div>
-            </div>
-        </section>
+        </details>
 
         <section class="lc-workspace">
             <header class="lc-workspace-head">
@@ -170,6 +197,7 @@
                 <section class="lc-detail">
                     <div class="lc-tabs">
                         <button class="lc-tab active" data-view="map" type="button">知识地图</button>
+                        <button class="lc-tab" data-view="visual" type="button">图解</button>
                         <button class="lc-tab" data-view="summary" type="button">全系列解读</button>
                         <button class="lc-tab" data-view="source" type="button">源内容</button>
                         <button class="lc-tab" data-view="markdown" type="button">导出笔记</button>
@@ -238,29 +266,89 @@
                         </div>
                     </article>
 
+                    <article class="lc-card lc-visual-view hidden" id="visual-view">
+                        <header class="lc-visual-head">
+                            <div>
+                                <span class="lc-map-kicker">全系列双层图解</span>
+                                <h3>先看全局，再逐节对照解读</h3>
+                                <p>图解仅在打开本视图后生成；已有层会先展示，不等待另一层完成。</p>
+                            </div>
+                            <div class="lc-visual-tools">
+                                <label for="collection-visual-theme">主题</label>
+                                <select id="collection-visual-theme">
+                                    <option value="study-notes">学习笔记</option>
+                                    <option value="clean-lecture">简洁讲义</option>
+                                    <option value="chalkboard">黑板课堂</option>
+                                    <option value="technical-blueprint">技术蓝图</option>
+                                </select>
+                                <button class="lc-btn" id="collection-visual-export" type="button">导出当前 SVG</button>
+                                <button class="lc-btn" id="collection-visual-print" type="button">打印</button>
+                                <button class="lc-btn primary" id="collection-visual-open" type="button">沉浸查看图解</button>
+                            </div>
+                        </header>
+                        <div class="lc-visual-layer-status" aria-label="图解生成状态">
+                            <div>
+                                <span>全局总览</span>
+                                <strong id="collection-visual-overview-status">打开图解后加载</strong>
+                                <button class="lc-btn compact" id="collection-visual-overview-retry" type="button">重试总览</button>
+                            </div>
+                            <div>
+                                <span>逐节详解</span>
+                                <strong id="collection-visual-full-note-status">打开图解后加载</strong>
+                                <button class="lc-btn compact" id="collection-visual-full-note-retry" type="button">重试详解</button>
+                            </div>
+                        </div>
+                        <div class="lc-visual-root" id="collection-visual-root" data-vl-theme="study-notes">
+                            <p class="lc-visual-empty">打开“图解”后生成全系列双层图解。</p>
+                        </div>
+                    </article>
+
                     <article class="lc-card hidden" id="summary-view">
                         <div class="lc-summary-hero">
                             <span>全系列解读</span>
                             <strong id="summary-status">等待生成全系列解读</strong>
                             <p id="summary-description">导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。</p>
+                            <button class="lc-btn primary" id="collection-summary-reader-open" type="button">沉浸阅读全文</button>
                         </div>
-                        <div class="lc-summary-grid">
-                            <div><strong>这个系列解决什么问题</strong><div class="lc-summary-text lc-markdown-preview" id="summary-problem">解析完成后生成。</div></div>
-                            <div><strong>为什么值得学</strong><div class="lc-summary-text lc-markdown-preview" id="summary-value">解析完成后生成。</div></div>
-                            <div><strong>全系列主线</strong><div class="lc-summary-text lc-markdown-preview" id="summary-mainline">解析完成后生成。</div></div>
-                            <div><strong>章节地图</strong><div class="lc-summary-text lc-markdown-preview" id="summary-chapters">解析完成后生成。</div></div>
-                            <div><strong>核心框架</strong><div class="lc-summary-text lc-markdown-preview" id="summary-framework">解析完成后生成。</div></div>
-                            <div><strong>复习索引</strong><div class="lc-summary-text lc-markdown-preview" id="summary-review">解析完成后生成。</div></div>
+                        <div class="lc-summary-mode" role="tablist" aria-label="全系列解读阅读模式">
+                            <button class="active" data-summary-mode="guide" type="button">导览</button>
+                            <button data-summary-mode="mainline" type="button">主线</button>
+                            <button data-summary-mode="chapters" type="button">章节地图</button>
+                            <button data-summary-mode="framework" type="button">核心框架</button>
+                            <button data-summary-mode="review" type="button">复习索引</button>
+                            <button data-summary-mode="full" type="button">全文</button>
                         </div>
-                        <div class="lc-summary-reader" id="summary-reader">
-                            <div class="lc-summary-reading">
-                                <section class="lc-summary-structured" id="summary-structured" aria-label="结构化阅读入口">生成全系列解读后显示。</section>
-                                <article class="lc-summary-article lc-markdown-preview" id="summary-article">生成全系列解读后显示。</article>
-                            </div>
-                            <aside class="lc-summary-toc" aria-label="全系列解读目录">
-                                <strong>快速跳转</strong>
-                                <nav id="summary-toc"></nav>
-                            </aside>
+                        <div class="lc-summary-grid" aria-label="全系列解读摘要入口">
+                            <article class="lc-summary-card" data-summary-card="problem" role="button" tabindex="0">
+                                <strong>这个系列解决什么问题</strong>
+                                <div class="lc-summary-text lc-markdown-preview" id="summary-problem">解析完成后生成。</div>
+                                <span>查看完整内容</span>
+                            </article>
+                            <article class="lc-summary-card" data-summary-card="value" role="button" tabindex="0">
+                                <strong>为什么值得学</strong>
+                                <div class="lc-summary-text lc-markdown-preview" id="summary-value">解析完成后生成。</div>
+                                <span>查看完整内容</span>
+                            </article>
+                            <article class="lc-summary-card" data-summary-card="mainline" role="button" tabindex="0">
+                                <strong>全系列主线</strong>
+                                <div class="lc-summary-text lc-markdown-preview" id="summary-mainline">解析完成后生成。</div>
+                                <span>查看完整内容</span>
+                            </article>
+                            <article class="lc-summary-card" data-summary-card="chapters" role="button" tabindex="0">
+                                <strong>章节地图</strong>
+                                <div class="lc-summary-text lc-markdown-preview" id="summary-chapters">解析完成后生成。</div>
+                                <span>查看完整内容</span>
+                            </article>
+                            <article class="lc-summary-card" data-summary-card="framework" role="button" tabindex="0">
+                                <strong>核心框架</strong>
+                                <div class="lc-summary-text lc-markdown-preview" id="summary-framework">解析完成后生成。</div>
+                                <span>查看完整内容</span>
+                            </article>
+                            <article class="lc-summary-card" data-summary-card="review" role="button" tabindex="0">
+                                <strong>复习索引</strong>
+                                <div class="lc-summary-text lc-markdown-preview" id="summary-review">解析完成后生成。</div>
+                                <span>查看完整内容</span>
+                            </article>
                         </div>
                         <div class="lc-export-row">
                             <div>
@@ -325,9 +413,38 @@
                 </section>
             </div>
         </section>
+    </section>
+        </section>
     </main>
 
+    <dialog class="lc-summary-dialog" id="summary-dialog" aria-labelledby="summary-dialog-title">
+        <div class="lc-summary-dialog-panel">
+            <header class="lc-summary-dialog-head">
+                <div>
+                    <span id="summary-dialog-eyebrow">全系列解读</span>
+                    <h3 id="summary-dialog-title">导览</h3>
+                </div>
+                <button class="lc-icon-btn" id="summary-dialog-close" type="button" aria-label="关闭全系列解读弹窗" title="关闭">
+                    <span aria-hidden="true">×</span>
+                </button>
+            </header>
+            <div class="lc-summary-reader" id="summary-reader">
+                <div class="lc-summary-reading">
+                    <section class="lc-summary-structured" id="summary-structured" aria-label="结构化阅读入口">生成全系列解读后显示。</section>
+                    <article class="lc-summary-article lc-markdown-preview" id="summary-article">生成全系列解读后显示。</article>
+                </div>
+                <aside class="lc-summary-toc" aria-label="全系列解读目录">
+                    <strong>快速跳转</strong>
+                    <nav id="summary-toc"></nav>
+                </aside>
+            </div>
+        </div>
+    </dialog>
+
+    <div id="collection-immersive-reader" hidden></div>
+
     <div class="lc-toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/static/js/visual-learning.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/collections.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

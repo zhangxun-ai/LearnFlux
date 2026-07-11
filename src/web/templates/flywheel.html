@@ -15,7 +15,9 @@
 <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
 <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
+<link rel="stylesheet" href="/static/css/app-shell.css?v={{ asset_ver }}">
 <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
+<script src="/static/js/app-shell.js?v={{ asset_ver }}" defer></script>
 <style>
   :root{
     --paper:#FBF8F3; --ink:#1B1A17; --ink-soft:#4A463F; --muted:#9A938A;
@@ -36,8 +38,8 @@
 
   /* top bar */
   .top{max-width:760px;margin:0 auto;padding:18px 28px 2px}
-  .top-label{font-size:.76rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px}
-  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:1.02rem;letter-spacing:.2px}
+  .top-label{font-size:.76rem;letter-spacing:0;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:1.02rem;letter-spacing:0}
   .brand .mark{width:26px;height:26px;border-radius:8px;background:var(--accent);color:#fff;display:flex;
     align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:.95rem}
   .nav{display:flex;gap:4px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:10px}
@@ -53,8 +55,8 @@
 
   /* hero */
   .hero{text-align:center;padding:54px 0 8px}
-  .eyebrow{font-size:.8rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin-bottom:18px}
-  .hero h1{font-family:'Fraunces',Georgia,'Songti SC',serif;font-weight:500;font-size:2.7rem;line-height:1.15;letter-spacing:-.01em}
+  .eyebrow{font-size:.8rem;letter-spacing:0;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin-bottom:18px}
+  .hero h1{font-family:'Fraunces',Georgia,'Songti SC',serif;font-weight:500;font-size:2.7rem;line-height:1.15;letter-spacing:0}
   .hero h1 em{font-style:italic;color:var(--accent)}
   .hero .sub{margin:18px auto 0;max-width:480px;color:var(--ink-soft);font-size:1.05rem}
 
@@ -99,20 +101,20 @@
   .draft-output h2:first-child{margin-top:0}
   .result-layout{display:grid;grid-template-columns:170px minmax(0,1fr);gap:26px;align-items:start}
   .result-toc{position:sticky;top:18px;padding:14px 0;border-right:1px solid var(--line)}
-  .result-toc .toc-title{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:9px}
+  .result-toc .toc-title{font-size:.78rem;letter-spacing:0;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:9px}
   .result-toc a{display:block;text-decoration:none;color:var(--ink-soft);font-size:.84rem;line-height:1.35;padding:7px 12px 7px 0;border-radius:8px}
   .result-toc a:hover{color:var(--accent-ink)}
   .result-main{min-width:0}
   .source-text{padding:22px 0;border-bottom:1px solid var(--line)}
-  .source-text h2{font-size:1.12rem;margin-bottom:9px;letter-spacing:-.01em}
+  .source-text h2{font-size:1.12rem;margin-bottom:9px;letter-spacing:0}
   .source-text .source-body{color:var(--ink-soft);line-height:1.85;white-space:normal;overflow-wrap:break-word}
   .source-text .source-empty{color:var(--muted)}
   .pt{display:flex;gap:18px;padding:22px 0;border-bottom:1px solid var(--line)}
   .pt .n{font-family:'Fraunces',serif;font-size:1.7rem;color:var(--accent);line-height:1;flex-shrink:0;width:34px;font-weight:500}
-  .pt h3{font-size:1.12rem;margin-bottom:7px;letter-spacing:-.01em}
+  .pt h3{font-size:1.12rem;margin-bottom:7px;letter-spacing:0}
   .pt .bd{color:var(--ink-soft);line-height:1.85}
   .one{margin-top:24px;background:var(--accent-soft);border:1px solid rgba(228,80,58,.16);border-radius:16px;padding:22px 24px}
-  .one .lab{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin-bottom:8px}
+  .one .lab{font-size:.78rem;letter-spacing:0;text-transform:uppercase;color:var(--accent-ink);font-weight:600;margin-bottom:8px}
   .one .do{font-family:'Fraunces',serif;font-size:1.25rem;line-height:1.5;color:var(--ink)}
   .err{margin-top:18px;padding:16px 18px;border-radius:14px;background:#FCEEEA;border:1px solid #F3C9BF;color:#A23320}
 
@@ -169,13 +171,61 @@
   .prompt-status{font-size:.86rem;color:var(--muted)}
   .sub-msg{font-size:.84rem;color:var(--accent-ink);margin-left:2px}
   .hidden{display:none!important}
+  body.has-app-shell .top{max-width:76rem;padding:1.25rem 1.5rem 0}
+  body.has-app-shell .top-label{display:none}
+  body.has-app-shell .nav{display:inline-flex;gap:4px;padding:.32rem;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm)}
+  body.has-app-shell .nav button{min-height:40px;border-radius:6px;font-weight:750}
+  body.has-app-shell .nav button.on{background:var(--accent-soft);color:var(--accent-ink)}
+  body.has-app-shell .wrap{max-width:76rem;padding:1rem 1.5rem 5rem}
+  body.has-app-shell .hero{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;align-items:start;text-align:left;padding:1.5rem;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm)}
+  body.has-app-shell .hero h1{font-size:2rem;line-height:1.2;white-space:nowrap}
+  body.has-app-shell .hero .sub{max-width:52rem;margin:.2rem 0 0;font-size:.98rem}
+  body.has-app-shell .box{margin-top:.25rem;border-radius:8px;background:#fff;box-shadow:none}
+  body.has-app-shell .box input{min-height:48px}
+  body.has-app-shell .go,
+  body.has-app-shell .act,
+  body.has-app-shell .chip,
+  body.has-app-shell .filters select,
+  body.has-app-shell .field input,
+  body.has-app-shell .prompt-box,
+  body.has-app-shell .prompt-box textarea{border-radius:8px}
+  body.has-app-shell .result-layout{grid-template-columns:14rem minmax(0,1fr)}
+  body.has-app-shell .row,.draft-panel,.source-text,.pt,.one{border-radius:8px}
   @media(max-width:720px){.result-layout{grid-template-columns:1fr;gap:4px}.result-toc{position:static;border-right:none;border-bottom:1px solid var(--line);display:flex;gap:4px;overflow-x:auto;padding:10px 0}.result-toc .toc-title{display:none}.result-toc a{flex:0 0 auto;padding:6px 10px;border:1px solid var(--line);background:var(--card);white-space:nowrap}}
-  @media(max-width:560px){.hero h1{font-size:2.1rem}.top{padding:18px}.wrap{padding:0 18px 80px}}
+  @media(max-width:560px){.hero h1{font-size:1.6rem}body.has-app-shell .hero h1{font-size:1.18rem}.top{padding:18px}.wrap{padding:0 18px 80px}}
 </style>
 </head>
-<body>
-  <div id="site-nav"></div>
-  <script src="/static/js/site-nav.js?v={{ asset_ver }}"></script>
+<body class="app-shell has-app-shell">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <aside class="sidebar" aria-label="应用导航">
+    <div class="sidebar-brand">
+      <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+        <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+        <span class="brand-text">内容变现工作台</span>
+      </a>
+    </div>
+    <nav class="sidebar-nav" aria-label="主导航">
+      <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+        <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+        <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+        <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+      </section>
+      <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+        <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+        <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+        <a class="nav-item is-active" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+      </section>
+      <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+        <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+        <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+      </section>
+    </nav>
+  </aside>
+  <main class="main-area" id="main-content">
+    <header class="topbar" aria-label="页面导航栏">
+      <div class="topbar-title"><span class="topbar-page-title">IP 对标</span></div>
+    </header>
+    <section class="page-stage">
   <div class="top">
     <div class="top-label">IP 对标工作台</div>
     <nav class="nav" aria-label="IP 对标工作台">
@@ -193,16 +243,16 @@
     <div class="view on" id="v-analyze">
       <div class="hero">
         <div class="eyebrow">IP 对标 · 看懂内容为什么火</div>
-        <h1 class="serif">贴一个链接，<br>看懂它<em>为什么火</em></h1>
+        <h1 class="serif">贴一个链接，看懂它<em>为什么火</em></h1>
         <p class="sub">当前先支持小红书视频或图文。这个模块用于学习对标账号的选题、开头、留人、转化和迭代方法。</p>
         <div class="box">
           <input id="url" name="xhs-content-link" type="url" inputmode="url" placeholder="粘贴小红书对标内容链接…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
-          <button class="go" id="go">拆解 →</button>
+          <button class="go" id="go">开始拆解</button>
         </div>
         <div class="samples">
           没有链接？试一个例子：
-          <span class="chip" data-u="https://www.xiaohongshu.com/discovery/item/6a1ceb8a00000000080306aa?xsec_token=AB6w1KLme-ykqXzgvgySIufM_L-yfr8eomVpufWJ0fqk8=&xsec_source=pc_share">📹 视频示例</span>
-          <span class="chip" data-u="https://www.xiaohongshu.com/discovery/item/69e72660000000001f0055b6?xsec_token=ABhx8az_Lx2_9_ZyJqqZB8GgDp8g5pZsNIs_jdU-0rRSA=&xsec_source=pc_share">📝 图文示例</span>
+          <span class="chip" data-u="https://www.xiaohongshu.com/discovery/item/6a1ceb8a00000000080306aa?xsec_token=AB6w1KLme-ykqXzgvgySIufM_L-yfr8eomVpufWJ0fqk8=&xsec_source=pc_share">视频示例</span>
+          <span class="chip" data-u="https://www.xiaohongshu.com/discovery/item/69e72660000000001f0055b6?xsec_token=ABhx8az_Lx2_9_ZyJqqZB8GgDp8g5pZsNIs_jdU-0rRSA=&xsec_source=pc_share">图文示例</span>
         </div>
         <div class="note" id="token-note"></div>
       </div>
@@ -281,6 +331,8 @@
     </div>
 
   </div>
+    </section>
+  </main>
 
 <script>
 (function(){
@@ -327,7 +379,7 @@
   function renderResult(d){
     var tc=d.media_type==='video'?'video':'article', tt=d.media_type==='video'?'视频':'图文';
     var h='<div class="src"><span class="ty '+tc+'">'+tt+'</span><span class="tt">'+esc(d.title)+'</span>'+
-      '<span class="by">@'+esc(d.author)+(d.stats?(' · 👍 '+(d.stats.like_count||0)):'')+'</span>'+
+      '<span class="by">@'+esc(d.author)+(d.stats?(' · 赞 '+(d.stats.like_count||0)):'')+'</span>'+
       '<a class="link" href="'+esc(d.original_url)+'" target="_blank" rel="noopener">看原内容 ↗</a></div>';
     if(d.content_id){
       h+='<section class="draft-panel" aria-labelledby="draft-title"><div class="draft-head"><div>'+
@@ -429,9 +481,9 @@
           : (c.analysis_status==='failed'
               ? '<button class="act" onclick="fwRun(\''+encodeURIComponent(c.original_url)+'\')">重试</button>'
               : '<button class="act primary" onclick="fwRun(\''+encodeURIComponent(c.original_url)+'\')">解析</button>');
-        h+='<div class="row"><span class="ic">'+(c.media_type==='video'?'📹':'📝')+'</span>'+
+        h+='<div class="row"><span class="ic">'+(c.media_type==='video'?'视':'文')+'</span>'+
           '<div class="main"><div class="tt">'+esc(c.title)+'<span class="st '+c.analysis_status+'">'+stTxt+'</span></div>'+
-          '<div class="meta">@'+esc(c.blogger_handle)+' · 👍 '+c.like_count+' · <a href="'+esc(c.original_url)+'" target="_blank" rel="noopener">看原内容↗</a></div></div>'+
+          '<div class="meta">@'+esc(c.blogger_handle)+' · 赞 '+c.like_count+' · <a href="'+esc(c.original_url)+'" target="_blank" rel="noopener">看原内容↗</a></div></div>'+
           act+'</div>';
       });
       $('contents').innerHTML=h;
@@ -467,7 +519,7 @@
       d.items.forEach(function(o){
         h+='<div class="row"><div class="opp-score '+esc(o.level)+'"><span>'+esc(o.score)+'</span><small>分</small></div>'+
           '<div class="main"><div class="tt">'+esc(o.title)+'<span class="st success">'+esc(lvlTxt[o.level]||o.level)+'</span></div>'+
-          '<div class="meta">@'+esc(o.blogger_handle||'')+' · 👍 '+((o.stats&&o.stats.like_count)||0)+' · 收藏 '+((o.stats&&o.stats.collect_count)||0)+' · 评论 '+((o.stats&&o.stats.comment_count)||0)+' · <a href="'+esc(o.original_url)+'" target="_blank" rel="noopener">看原内容↗</a></div>'+
+          '<div class="meta">@'+esc(o.blogger_handle||'')+' · 赞 '+((o.stats&&o.stats.like_count)||0)+' · 收藏 '+((o.stats&&o.stats.collect_count)||0)+' · 评论 '+((o.stats&&o.stats.comment_count)||0)+' · <a href="'+esc(o.original_url)+'" target="_blank" rel="noopener">看原内容↗</a></div>'+
           '<div class="opp-tags"><span class="opp-tag">'+esc(typeTxt[o.opportunity_type]||o.opportunity_type)+'</span><span class="opp-tag">'+esc(o.reason||'')+'</span></div>'+
           '<div class="opp-action">建议动作：'+esc(o.next_action||'打开解析结果继续判断')+'</div></div>'+
           '<button class="act primary" onclick="fwView('+o.content_id+')">看解析</button></div>';
@@ -484,7 +536,7 @@
     fetch('/api/flywheel/bloggers',{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
       if(!d.items||!d.items.length){$('bloggers').innerHTML='<div class="empty">还没订阅博主。</div>';return;}
       var h='';d.items.forEach(function(b){
-        h+='<div class="row"><span class="ic">'+(b.pinned?'★':'👤')+'</span><div class="main">'+
+        h+='<div class="row"><span class="ic">'+(b.pinned?'★':'人')+'</span><div class="main">'+
           '<div class="tt">'+esc(b.handle)+'</div><div class="meta">'+esc(b.platform)+' · 粉丝 '+b.follower_count+'</div></div></div>';});
       $('bloggers').innerHTML=h;
     }).catch(function(){$('bloggers').innerHTML='<div class="err">加载失败</div>';});

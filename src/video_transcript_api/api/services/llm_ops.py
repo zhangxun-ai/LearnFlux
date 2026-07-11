@@ -50,6 +50,48 @@ def _safe_update_progress(task_id: str, **kwargs):
         return None
 
 
+def _document_quality_payload(llm_task: dict) -> dict | None:
+    """Whitelist bounded document-quality fields before persistence."""
+    raw = llm_task.get("document_quality")
+    if not isinstance(raw, dict):
+        return None
+    metrics = raw.get("metrics")
+    reasons = raw.get("reasons")
+    return {
+        "mode": str(raw.get("mode") or "fallback"),
+        "reasons": [str(reason) for reason in reasons] if isinstance(reasons, list) else [],
+        "metrics": dict(metrics) if isinstance(metrics, dict) else {},
+    }
+
+
+def _progress_evidence(llm_task: dict, **extra) -> dict:
+    evidence = {}
+    quality = _document_quality_payload(llm_task)
+    if quality is not None:
+        evidence["document_quality"] = quality
+    evidence.update(extra)
+    return evidence
+
+
+def _fallback_stage_label(llm_task: dict, default: str) -> str:
+    return (
+        "检测到提取质量问题，正在进行完整校对"
+        if _document_quality_payload(llm_task) is not None
+        else default
+    )
+
+
+def _terminal_evidence(llm_task: dict) -> dict | None:
+    quality = _document_quality_payload(llm_task)
+    if quality is None:
+        return None
+    return {
+        "analysis_mode": "document_fallback",
+        "visual_ready": False,
+        "quality": quality,
+    }
+
+
 def _is_task_canceled(task_id: str) -> bool:
     task_info = cache_manager.get_task_by_id(task_id) or {}
     return task_info.get("status") == TaskStatus.CANCELED
@@ -176,10 +218,12 @@ def _handle_llm_task(llm_task: dict):
                 _safe_update_progress(
                     task_id,
                     stage="calibrating",
-                    stage_label="正在校对和总结",
+                    stage_label=_fallback_stage_label(llm_task, "正在校对和总结"),
                     basis="llm_started",
                     confidence="low",
-                    evidence={"transcript_chars": len(transcript)},
+                    evidence=_progress_evidence(
+                        llm_task, transcript_chars=len(transcript)
+                    ),
                 )
 
                 # 准备内容参数
@@ -211,6 +255,23 @@ def _handle_llm_task(llm_task: dict):
                 skip_summary_for_coordinator = calibrate_only and not summary_backfill
 
                 # 调用新架构（包含校对和总结）
+                def _calibration_progress(completed: int, total: int) -> None:
+                    _safe_update_progress(
+                        task_id,
+                        stage="calibrating",
+                        stage_label=_fallback_stage_label(
+                            llm_task, "正在校对和总结"
+                        ),
+                        fraction=(completed / total) if total else None,
+                        basis="completed_segments",
+                        confidence="high",
+                        evidence=_progress_evidence(
+                            llm_task,
+                            completed_segments=completed,
+                            total_segments=total,
+                        ),
+                    )
+
                 with tracker.track("llm_processing"):
                     coordinator_result = llm_coordinator.process(
                         content=content,
@@ -220,6 +281,7 @@ def _handle_llm_task(llm_task: dict):
                         platform=platform or "",
                         media_id=media_id or "",
                         skip_summary=skip_summary_for_coordinator,
+                        progress_callback=_calibration_progress,
                     )
 
                 # 适配返回格式
@@ -278,6 +340,7 @@ def _handle_llm_task(llm_task: dict):
                     stage_label="正在保存结果和发送通知",
                     basis="stage_transition",
                     confidence="medium",
+                    evidence=_progress_evidence(llm_task),
                 )
 
                 # 保存结果到缓存
@@ -320,6 +383,7 @@ def _handle_llm_task(llm_task: dict):
                     media_id=media_id,
                     title=video_title,
                     author=llm_task.get("author", ""),
+                    terminal_evidence=_terminal_evidence(llm_task),
                 )
                 logger.info(f"任务状态已更新为 success: {task_id} ({done_message})")
 
@@ -337,6 +401,7 @@ def _handle_llm_task(llm_task: dict):
                 try:
                     cache_manager.update_task_status(
                         task_id, TaskStatus.FAILED, error_message=fail_message,
+                        terminal_evidence=_terminal_evidence(llm_task),
                     )
                     logger.info(f"任务状态已更新为 failed: {task_id} ({fail_message})")
                 except Exception:

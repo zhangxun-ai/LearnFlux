@@ -4,6 +4,7 @@ import json
 import time
 import datetime
 from typing import Any, Optional, Sequence, Tuple, Union
+from urllib.parse import parse_qs, urlparse
 
 from .base import BaseDownloader
 from .models import VideoMetadata, DownloadInfo
@@ -15,6 +16,13 @@ logger = setup_logger("xiaohongshu_downloader")
 # 创建调试目录
 DEBUG_DIR = create_debug_dir()
 
+
+def _xsec_token(url: str) -> str:
+    try:
+        return parse_qs(urlparse(url).query).get("xsec_token", [""])[0]
+    except Exception:
+        return ""
+
 # ---------------------------------------------------------------------------
 # 端点配置 & 多路径提取常量
 # ---------------------------------------------------------------------------
@@ -22,24 +30,35 @@ DEBUG_DIR = create_debug_dir()
 # 按优先级排列的 TikHub 端点配置
 _ENDPOINT_CONFIGS: list[dict[str, Any]] = [
     {
+        "name": "web_v3_detail",
+        "path": "/api/v1/xiaohongshu/web_v3/fetch_note_detail",
+        "params_builder": lambda url, note_id: {
+            "note_id": note_id,
+            "xsec_token": _xsec_token(url),
+        },
+    },
+    {
         "name": "app_video_note",
         "path": "/api/v1/xiaohongshu/app/get_video_note_info",
-        "params_builder": lambda url: {"share_text": url},
+        "params_builder": lambda url, note_id: {"share_text": url},
     },
     {
         "name": "web_v4",
         "path": "/api/v1/xiaohongshu/web/get_note_info_v4",
-        "params_builder": lambda url: {"share_text": url},
+        "params_builder": lambda url, note_id: {"share_text": url},
     },
     {
         "name": "app_note",
         "path": "/api/v1/xiaohongshu/app/get_note_info",
-        "params_builder": lambda url: {"share_text": url, "force_video_enabled": "true"},
+        "params_builder": lambda url, note_id: {
+            "share_text": url,
+            "force_video_enabled": "true",
+        },
     },
     {
         "name": "web_v2",
         "path": "/api/v1/xiaohongshu/web/get_note_info_v2",
-        "params_builder": lambda url: {"share_text": url},
+        "params_builder": lambda url, note_id: {"share_text": url},
     },
 ]
 
@@ -246,7 +265,7 @@ class XiaohongshuDownloader(BaseDownloader):
         """
         name = config["name"]
         endpoint = config["path"]
-        params = config["params_builder"](url)
+        params = config["params_builder"](url, note_id)
 
         logger.info(f"Trying endpoint '{name}': {endpoint}")
         response = self.make_api_request(endpoint, params)
@@ -298,8 +317,26 @@ class XiaohongshuDownloader(BaseDownloader):
             logger.debug(f"[{name}] data is already at note level")
             return data
 
-        # 嵌套模式: data.data 是 list
+        # 嵌套模式: data.data 是 dict 或 list
         inner_data = data.get("data")
+        if isinstance(inner_data, dict):
+            if any(k in inner_data for k in ("video", "video_info", "video_info_v2")):
+                logger.debug(f"[{name}] unwrapped via data.data")
+                return inner_data
+
+            items = inner_data.get("items")
+            if (
+                isinstance(items, list)
+                and len(items) > 0
+                and isinstance(items[0], dict)
+            ):
+                note = items[0].get("note_card") or items[0].get("noteCard")
+                if isinstance(note, dict):
+                    logger.debug(
+                        f"[{name}] unwrapped via data.data.items[0].note_card"
+                    )
+                    return note
+
         if isinstance(inner_data, list) and len(inner_data) > 0:
             first_item = inner_data[0]
             if not isinstance(first_item, dict):

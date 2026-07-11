@@ -13,17 +13,48 @@
     <title>本地视频学习 - 内容解析工作台</title>
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/visual-learning.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/study.css?v=__ASSET_VERSION__">
     <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
+    <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
 </head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js?v=__ASSET_VERSION__"></script>
+<body class="app-shell has-app-shell">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item is-active" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title" id="study-workbench-title">本地学习</span></div>
+        </header>
+        <section class="page-stage">
 
-    <main class="study-page">
+    <section class="study-page">
         <header class="study-head">
             <div>
-                <p class="study-kicker">本地视频学习</p>
+                <p class="study-kicker" id="study-page-context">本地学习</p>
                 <h1 id="study-title">正在加载学习内容...</h1>
                 <p id="study-subtitle">视频、逐字稿、AI 解读和问答会围绕同一条时间轴组织。</p>
             </div>
@@ -61,7 +92,14 @@
                             <span>如果这是旧任务，源视频可能没有被保留；逐字稿和 AI 解读仍可学习。</span>
                         </div>
                     </div>
-                    <div class="play-strip">
+                    <div class="study-source-card" id="study-source-card" hidden>
+                        <div>
+                            <strong id="study-source-name">原始文档</strong>
+                            <span id="study-source-meta">可在右侧文稿中阅读并定位引用</span>
+                        </div>
+                        <a class="btn ghost" id="study-source-open" href="#" target="_blank" rel="noopener" hidden>打开源文件</a>
+                    </div>
+                    <div class="play-strip" id="study-play-strip">
                         <div class="time-row">
                             <button class="play-btn" id="play-toggle" type="button" aria-label="播放">▶</button>
                             <div class="progress" id="video-progress" style="--value: 0%"></div>
@@ -73,7 +111,7 @@
                 <aside class="panel" aria-label="右侧学习面板">
                     <div class="right-tabs" role="tablist" aria-label="学习内容视图">
                         <button class="is-active" type="button" data-tab="ai">AI 看</button>
-                        <button type="button" data-tab="visual">笔记</button>
+                        <button type="button" data-tab="visual">图解</button>
                         <button type="button" data-tab="transcript">文稿</button>
                         <button type="button" data-tab="chat">问 AI</button>
                     </div>
@@ -91,17 +129,29 @@
                     </div>
 
                     <div class="study-panel-view" id="tab-visual">
-                        <div class="note-tools" aria-label="AI 笔记工具栏">
-                            <span>AI 图文笔记</span>
+                        <div class="study-visual-toolbar" aria-label="视觉学习工具栏">
+                            <label class="sr-only" for="visual-theme">视觉主题</label>
+                            <select id="visual-theme" class="study-visual-theme">
+                                <option value="study-notes">学霸笔记</option>
+                                <option value="clean-lecture">清晰讲义</option>
+                                <option value="chalkboard">黑板手记</option>
+                                <option value="technical-blueprint">技术蓝图</option>
+                            </select>
+                            <button class="btn ghost" id="visual-expand" type="button" disabled>展开</button>
+                            <button class="btn primary" id="visual-full-note" type="button">完整笔记</button>
+                            <button class="btn ghost" id="visual-export-svg" type="button">导出 SVG</button>
+                            <button class="btn ghost" id="visual-print" type="button">打印</button>
                         </div>
-                        <div class="panel-head">
-                            <div>
-                                <h3>笔记</h3>
-                                <span>以下为 AI 生成的图文笔记内容</span>
-                            </div>
+                        <div class="study-visual-state" id="visual-learning-status" hidden>
+                            <span id="visual-learning-status-text"></span>
+                            <button type="button" id="visual-retry" hidden>重新生成</button>
                         </div>
-                        <div class="ai-note-list" id="ai-notes-list">
-                            <div class="empty-panel"><strong>正在加载</strong><span>学习内容加载完成后会显示 AI 图文笔记。</span></div>
+                        <div class="study-visual-layer-state" id="visual-full-note-status" hidden>
+                            <span id="visual-full-note-status-text"></span>
+                            <button type="button" id="visual-full-note-retry" hidden>重试完整笔记</button>
+                        </div>
+                        <div class="study-visual-preview study-visual-continuous study-visual-two-layer" id="visual-learning-overview">
+                            <div class="empty-panel"><strong>正在准备视觉速览</strong><span>原文就绪后会自动生成。</span></div>
                         </div>
                     </div>
 
@@ -138,9 +188,29 @@
                 </aside>
             </div>
         </section>
+    </section>
+        </section>
     </main>
 
+    <dialog class="study-visual-dialog" id="visual-learning-dialog">
+        <div class="study-visual-dialog-shell">
+            <header class="study-visual-dialog-head">
+                <div>
+                    <span>视觉学习</span>
+                    <h2 id="visual-modal-title">图文笔记</h2>
+                </div>
+                <div class="study-visual-dialog-actions">
+                    <span class="study-visual-modal-status" id="visual-modal-status"></span>
+                    <button class="btn primary" id="visual-regenerate" type="button" hidden>重新生成</button>
+                    <button class="study-visual-close" id="visual-modal-close" type="button" aria-label="关闭">×</button>
+                </div>
+            </header>
+            <div class="study-visual-modal-content" id="visual-learning-modal-content"></div>
+        </div>
+    </dialog>
+
     <div class="toast" id="study-toast" role="status" aria-live="polite"></div>
+    <script src="/static/js/visual-learning.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/study.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

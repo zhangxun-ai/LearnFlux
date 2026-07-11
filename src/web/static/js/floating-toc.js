@@ -21,8 +21,8 @@
 
         // 需要纳入目录的正文区块
         CONTENT_SECTIONS: [
-            { title: '📝 内容总结', headingText: '内容总结' },
-            { title: '💬 高赞评论洞察', headingText: '高赞评论洞察' }
+            { title: '内容总结', headingText: '内容总结' },
+            { title: '高赞评论洞察', headingText: '高赞评论洞察' }
         ],
 
         // 校对文本区块选择器
@@ -197,7 +197,7 @@
             headingsHTML += `
                 <div class="toc-item">
                     <a class="toc-link toc-anchor" href="#calibrated-section" data-id="calibrated-section">
-                        ✨ 校对文本
+                        校对文本
                     </a>
                 </div>
             `;
@@ -212,8 +212,8 @@
                     <div class="toc-indicator-line"></div>
                 </div>
                 <div class="toc-header">
-                    <div class="toc-title">📑 目录</div>
-                    <button class="toc-pin-btn" id="toc-pin-btn" title="固定目录（点击保持展开）">📌</button>
+                    <div class="toc-title">目录</div>
+                    <button class="toc-pin-btn" id="toc-pin-btn" title="固定目录（点击保持展开）">固定</button>
                 </div>
                 <div class="toc-content">
                     <ul class="toc-list">
@@ -253,7 +253,7 @@
             headingsHTML += `
                 <div class="toc-item">
                     <a class="toc-link toc-anchor" href="#calibrated-section" data-id="calibrated-section">
-                        ✨ 校对文本
+                        校对文本
                     </a>
                 </div>
             `;
@@ -261,13 +261,13 @@
 
         return `
             <button class="floating-toc-mobile-btn" id="toc-mobile-btn" title="目录">
-                📑
+                目录
             </button>
             <div class="floating-toc-mobile-panel" id="toc-mobile-panel">
                 <div class="toc-mobile-overlay" id="toc-mobile-overlay"></div>
                 <div class="toc-mobile-content">
                     <div class="toc-mobile-header">
-                        <div class="toc-mobile-title">📑 目录</div>
+                        <div class="toc-mobile-title">目录</div>
                         <button class="toc-mobile-close-btn" id="toc-mobile-close-btn">✕</button>
                     </div>
                     <div class="toc-mobile-body">

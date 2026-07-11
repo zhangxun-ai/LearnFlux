@@ -14,8 +14,10 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/editorial.css">
+    <link rel="stylesheet" href="/static/css/app-shell.css">
     <link rel="stylesheet" href="/static/css/styles.css">
     <script src="/static/js/pwa-register.js" defer></script>
+    <script src="/static/js/app-shell.js" defer></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -382,11 +384,94 @@
             transform: translateY(-50%);
             flex-shrink: 0;
         }
+
+        body.has-app-shell .container {
+            width: min(100%, 76rem);
+            max-width: none;
+            padding: 1.5rem;
+        }
+        body.has-app-shell .header {
+            margin-bottom: 1rem;
+            padding: 0;
+        }
+        body.has-app-shell .header h1 {
+            font-size: 1.7rem;
+            letter-spacing: 0;
+            word-break: keep-all;
+            white-space: nowrap;
+        }
+        body.has-app-shell .auth-bar,
+        body.has-app-shell .alias-panel,
+        body.has-app-shell .filter-bar,
+        body.has-app-shell .state-box,
+        body.has-app-shell .task-row,
+        body.has-app-shell .multi-dropdown {
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: var(--shadow-sm);
+        }
+        body.has-app-shell .task-list {
+            gap: 4px;
+        }
+        body.has-app-shell .task-row {
+            grid-template-columns: 24px 150px minmax(0, 1fr) 110px;
+            min-height: 56px;
+            box-shadow: none;
+        }
+        body.has-app-shell .task-row:hover {
+            border-color: rgba(228, 80, 58, 0.28);
+            background: #fff;
+            box-shadow: var(--shadow-sm);
+        }
+        body.has-app-shell .btn,
+        body.has-app-shell .filter-group select,
+        body.has-app-shell .filter-group input[type="date"],
+        body.has-app-shell .auth-bar input,
+        body.has-app-shell .alias-input,
+        body.has-app-shell .multi-select {
+            border-radius: 8px;
+        }
+        @media (max-width: 760px) {
+            body.has-app-shell .container {
+                padding: 1rem;
+            }
+            body.has-app-shell .task-row {
+                grid-template-columns: 24px minmax(0, 1fr);
+            }
+        }
     </style>
 </head>
-<body>
-<div id="site-nav"></div>
-<script src="/static/js/site-nav.js"></script>
+<body class="app-shell has-app-shell">
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+<aside class="sidebar" aria-label="应用导航">
+    <div class="sidebar-brand">
+        <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+            <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+            <span class="brand-text">内容变现工作台</span>
+        </a>
+    </div>
+    <nav class="sidebar-nav" aria-label="主导航">
+        <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+            <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+            <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+            <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+        </section>
+        <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+            <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+            <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+            <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+        </section>
+        <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+            <a class="nav-item is-active" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+            <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+        </section>
+    </nav>
+</aside>
+<main class="main-area" id="main-content">
+    <header class="topbar" aria-label="页面导航栏">
+        <div class="topbar-title"><span class="topbar-page-title">历史记录</span></div>
+    </header>
+    <section class="page-stage">
 <div class="container">
     <div class="header">
         <h1>任务历史</h1>
@@ -498,6 +583,8 @@
     <div class="summary-tooltip-title" id="tooltipTitle"></div>
     <div id="tooltipContent"></div>
 </div>
+</section>
+</main>
 
 <script>
 // ===================== 状态 =====================
@@ -691,11 +778,11 @@ function shortWebhook(url) {
 }
 
 const PLATFORM_LABELS = {
-    youtube: '🎬 YouTube',
-    bilibili: '📺 Bilibili',
-    xiaoyuzhou: '🎵 小宇宙',
-    xiaohongshu: '📕 小红书',
-    douyin: '🎭 抖音',
+    youtube: 'YouTube',
+    bilibili: 'Bilibili',
+    xiaoyuzhou: '小宇宙',
+    xiaohongshu: '小红书',
+    douyin: '抖音',
 };
 
 // ===================== Auth =====================
@@ -1159,11 +1246,11 @@ function saveAliases() {
 // ===================== UI 辅助 =====================
 function showListLoading() {
     document.getElementById('listArea').innerHTML =
-        `<div class="state-box"><div class="icon">⏳</div><div>加载中...</div></div>`;
+        `<div class="state-box"><div class="icon">—</div><div>加载中...</div></div>`;
 }
 function showError(msg) {
     document.getElementById('listArea').innerHTML =
-        `<div class="state-box"><div class="icon">⚠️</div><div>${esc(msg)}</div><br>
+        `<div class="state-box"><div class="icon">!</div><div>${esc(msg)}</div><br>
          <button class="btn btn-ghost" onclick="loadHistory(0)" style="margin-top:8px">重试</button></div>`;
 }
 function showStatus(type, msg) {

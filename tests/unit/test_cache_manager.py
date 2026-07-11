@@ -672,6 +672,73 @@ class TestTaskProgress:
         assert view_data["progress"]["stage"] == "transcribing"
         assert view_data["progress"]["percent"] == 46
 
+    def test_view_token_prefers_success_over_older_failed_task(self, cm):
+        url = "https://www.xiaohongshu.com/discovery/item/note123?xsec_token=tok"
+        failed_task = cm.create_task(
+            url=url,
+            platform="xiaohongshu",
+            media_id="note123",
+        )
+        cm.update_task_status(
+            failed_task["task_id"],
+            "failed",
+            platform="xiaohongshu",
+            media_id="note123",
+            error_message="old download failed",
+        )
+        _save_sample_capswriter(cm, media_id="note123", platform="xiaohongshu")
+        success_task = cm.create_task(
+            url=url,
+            platform="xiaohongshu",
+            media_id="note123",
+        )
+        assert success_task["view_token"] == failed_task["view_token"]
+        cm.update_task_status(
+            success_task["task_id"],
+            "success",
+            platform="xiaohongshu",
+            media_id="note123",
+            title="人生怎么作弊",
+            author="苏越越",
+        )
+
+        task_info = cm.get_task_by_view_token(failed_task["view_token"])
+        view_data = cm.get_view_data_by_token(failed_task["view_token"])
+
+        assert task_info["task_id"] == success_task["task_id"]
+        assert task_info["status"] == "success"
+        assert view_data["status"] == "success"
+        assert view_data["media_id"] == "note123"
+
+    def test_processing_view_data_recovers_when_final_cache_exists(self, cm):
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="final calibrated transcript",
+        )
+        task = cm.create_task(
+            url="https://example.com/vid1",
+            platform="youtube",
+            media_id="vid1",
+        )
+        cm.update_task_status(
+            task["task_id"],
+            "calibrating",
+            platform="youtube",
+            media_id="vid1",
+        )
+
+        view_data = cm.get_view_data_by_token(task["view_token"])
+        task_info = cm.get_task_by_id(task["task_id"])
+
+        assert view_data["status"] == "success"
+        assert view_data["transcript"] == "final calibrated transcript"
+        assert task_info["status"] == "success"
+        assert task_info["progress"]["basis"] == "task_completed"
+
     def test_progress_reminder_markers_are_persisted(self, cm):
         task = cm.create_task(url="https://example.com/progress-reminder")
         cm.update_task_status(task["task_id"], "processing")
@@ -732,3 +799,37 @@ class TestTaskProgress:
         assert view_data["status"] == "success"
         assert view_data["summary"] == ""
         assert view_data["summary_missing"] is True
+def test_terminal_progress_preserves_explicit_evidence(tmp_path):
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    success = manager.create_task(
+        url="local://study-source/doc/guide.pdf",
+        platform="generic",
+        media_id="doc",
+    )
+    evidence = {
+        "analysis_mode": "document_fast",
+        "visual_ready": True,
+        "quality": {"mode": "fast", "reasons": [], "metrics": {}},
+    }
+    manager.update_task_status(
+        success["task_id"], "success", terminal_evidence=evidence
+    )
+
+    failed = manager.create_task(
+        url="local://study-source/bad/bad.pdf",
+        platform="generic",
+        media_id="bad",
+    )
+    manager.update_task_status(
+        failed["task_id"],
+        "failed",
+        error_message="invalid document",
+        terminal_evidence={"analysis_mode": "document_fallback"},
+    )
+
+    assert manager.get_task_by_id(success["task_id"])["progress"]["evidence"] == evidence
+    assert manager.get_task_by_id(failed["task_id"])["progress"]["evidence"] == {
+        "analysis_mode": "document_fallback"
+    }

@@ -9,7 +9,24 @@ def test_study_page_uses_note_and_manuscript_panels():
     js = (PROJECT_ROOT / "src/web/static/js/study.js").read_text(encoding="utf-8")
     css = (PROJECT_ROOT / "src/web/static/css/study.css").read_text(encoding="utf-8")
 
-    assert 'id="ai-notes-list"' in html
+    assert '/static/css/visual-learning.css' in html
+    assert '/static/js/visual-learning.js' in html
+    assert 'id="visual-learning-overview"' in html
+    assert 'id="visual-learning-status"' in html
+    assert 'id="visual-expand"' in html
+    assert 'id="visual-full-note"' in html
+    assert 'id="visual-theme"' in html
+    assert 'id="visual-learning-dialog"' in html
+    assert 'id="visual-learning-modal-content"' in html
+    assert 'id="visual-modal-close"' in html
+    assert 'id="visual-export-svg"' in html
+    assert 'id="visual-print"' in html
+    assert 'id="visual-modal-status"' in html
+    assert 'id="visual-regenerate"' in html
+    assert 'id="study-source-card"' in html
+    assert 'id="study-source-open"' in html
+    assert 'id="study-page-context"' in html
+    assert 'id="study-workbench-title"' in html
     assert 'id="chat-list"' in html
     assert 'id="chat-question"' in html
     assert 'id="chat-use-time"' not in html
@@ -23,7 +40,15 @@ def test_study_page_uses_note_and_manuscript_panels():
     assert 'class="markdown-content" id="ai-overview"' in html
     assert "isPendingState" in js
     assert "renderMarkdown" in js
-    assert "renderAINotes" in js
+    assert "ensureVisualOverview" in js
+    assert "requestVisualGeneration" in js
+    assert "/api/visual-learning/study/" in js
+    assert "window.VisualLearning.render" in js
+    assert "onSourceRef" in js
+    assert "readerMode" not in js
+    assert "force: true" in js
+    assert "visual_source" in js
+    assert "full_note" in js
     assert "sendChat" in js
     assert "renderThinking" in js
     assert "startChatThinking" in js
@@ -38,16 +63,27 @@ def test_study_page_uses_note_and_manuscript_panels():
     assert "AI 接口还没有被当前运行中的服务加载" in js
     assert "/ai-chat" in js
     assert "renderCourseware" not in js
-    assert "captureVideoFrames" in js
+    assert "captureVideoFrames" not in js
+    assert "buildStudySections" not in js
+    assert "generateNoteFrames" not in js
     assert "transcript-segment" in js
     assert "applyEstimatedTranscriptTimes" in js
+    assert "renderSourceMode" in js
+    assert "source.kind" in js
+    assert "is-document-source" in js
+    assert "studySourceOpen" in js
+    assert "studyPageContext" in js
+    assert "studyWorkbenchTitle" in js
     assert "panel-seek" in js
     assert "正在转录本地视频" in js
     assert "正在生成 AI 总结" in js
     assert "window.setTimeout(loadSession" in js
     assert ".manuscript-reader" in css
-    assert ".ai-note-section" in css
-    assert ".note-visual" in css
+    assert ".study-visual-toolbar" in css
+    assert ".study-visual-dialog" in css
+    assert ".study-visual-preview" in css
+    assert ".study-source-card" in css
+    assert ".is-document-source" in css
     assert ".chat-message" in css
     assert ".chat-composer" in css
     assert ".chat-thinking" in css
@@ -56,3 +92,36 @@ def test_study_page_uses_note_and_manuscript_panels():
     assert ".chat-time-option" not in css
     assert "position: sticky" in css
     assert "overflow: auto" in css
+
+
+def test_study_visual_tab_activates_and_renders_both_layers_continuously():
+    html = (PROJECT_ROOT / "src/web/static/study.html").read_text(encoding="utf-8")
+    js = (PROJECT_ROOT / "src/web/static/js/study.js").read_text(encoding="utf-8")
+    css = (PROJECT_ROOT / "src/web/static/css/study.css").read_text(encoding="utf-8")
+
+    assert 'id="visual-learning-overview"' in html
+    assert 'id="visual-full-note-status"' in html
+    assert 'id="visual-full-note-retry"' in html
+    assert "study-visual-continuous" in html
+    assert "overview" in js
+    assert "full_note" in js
+    assert "activateVisualLearning" in js
+    assert "window.VisualLearning.renderTwoLayer" in js
+    assert "window.VisualLearning.activeDiagram" in js
+    assert "setFullNoteStatus" in js
+    assert "requestVisualGeneration('full_note', { force: true })" in js
+    assert "visualTabActive" in js
+    assert "state.visualActivated = false" in js
+    assert "if (state.visualTabActive) activateVisualLearning();" in js
+    render_session = js[js.index("function renderSession"):js.index("function renderSourceMode")]
+    assert "ensureVisualOverview" not in render_session
+    visual_source_ready = js[js.index("function visualSourceReady"):js.index("function setVisualStatus")]
+    assert "session.ai" in visual_source_ready
+    assert "transcript" not in visual_source_ready
+    assert ".study-visual-two-layer" in css
+    assert ".study-visual-layer-state" in css
+    assert ".vl-two-layer-section" in css
+    assert "@media print" in css
+    assert "#tab-visual" in css
+    assert ".study-visual-toolbar" in css
+    assert "overflow: visible" in css

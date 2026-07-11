@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -8,7 +9,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..context import get_cache_manager, get_config, get_logger
 from ..services.transcription import TranscribeResponse, process_local_upload, verify_token
@@ -46,6 +47,16 @@ class StudyChatRequest(BaseModel):
     history: list[StudyChatMessage] = Field(default_factory=list, max_length=12)
 
 
+class StudyTextRequest(BaseModel):
+    title: str = Field(default="", max_length=160)
+    content: str = Field(..., min_length=1, max_length=200000)
+
+    @field_validator("title", "content", mode="before")
+    @classmethod
+    def strip_text_fields(cls, value):
+        return str(value or "").strip()
+
+
 def get_source_root() -> Path:
     storage_cfg = config.get("storage", {}) or {}
     return Path(storage_cfg.get("source_files_dir") or "./data/source_files")
@@ -76,6 +87,7 @@ async def upload_study_video(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     use_speaker_recognition: bool = Form(False),
+    visual_fast_path: bool = Form(False),
     user_info: dict = Depends(verify_token),
 ):
     filename = (file.filename or "upload").strip() or "upload"
@@ -94,7 +106,6 @@ async def upload_study_video(
         platform="generic",
         media_id=media_id,
     )
-
     background_tasks.add_task(
         process_local_upload,
         task_info["task_id"],
@@ -105,11 +116,54 @@ async def upload_study_video(
         use_speaker_recognition,
         True,
         True,
+        visual_fast_path,
     )
     logger.info("study upload accepted: task=%s, file=%s, size=%s", task_info["task_id"], filename, size)
     return TranscribeResponse(
         code=202,
         message="本地学习视频已上传，正在解析",
+        data={"task_id": task_info["task_id"], "view_token": task_info["view_token"]},
+    )
+
+
+@router.post("/text", response_model=TranscribeResponse, status_code=202)
+async def create_study_text(
+    request: StudyTextRequest,
+    background_tasks: BackgroundTasks,
+    user_info: dict = Depends(verify_token),
+):
+    title = request.title or _title_from_content(request.content)
+    content_hash = hashlib.sha256(request.content.encode("utf-8")).hexdigest()
+    media_id = f"text_{content_hash[:32]}"
+    source_dir = get_source_root() / "study_texts"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    source_path = source_dir / f"{media_id}.md"
+    source_path.write_text(request.content, encoding="utf-8")
+
+    display_filename = _display_markdown_filename(title)
+    display_url = f"local://study-text/{quote(media_id)}/content.md"
+    task_info = cache_manager.create_task(
+        url=display_url,
+        use_speaker_recognition=False,
+        platform="generic",
+        media_id=media_id,
+    )
+    background_tasks.add_task(
+        process_local_upload,
+        task_info["task_id"],
+        str(source_path),
+        display_filename,
+        display_url,
+        media_id,
+        False,
+        True,
+        True,
+        False,
+    )
+    logger.info("study text accepted: task=%s", task_info["task_id"])
+    return TranscribeResponse(
+        code=202,
+        message="文字内容已提交，正在解析",
         data={"task_id": task_info["task_id"], "view_token": task_info["view_token"]},
     )
 
@@ -219,3 +273,20 @@ async def _save_temp_upload(file: UploadFile, filename: str) -> tuple[str, int, 
         raise HTTPException(status_code=400, detail="上传文件为空")
 
     return str(temp_path), size, digest.hexdigest()
+
+
+def _title_from_content(content: str) -> str:
+    for line in content.splitlines():
+        clean_line = line.strip()
+        if not clean_line:
+            continue
+        clean_line = re.sub(r"^#{1,6}\s*", "", clean_line).strip()
+        if clean_line:
+            return clean_line[:80]
+    return "粘贴文字"
+
+
+def _display_markdown_filename(title: str) -> str:
+    safe_title = re.sub(r"[\\/\x00-\x1f]+", " ", title)
+    safe_title = re.sub(r"\s+", " ", safe_title).strip(" .")
+    return f"{(safe_title or '粘贴文字')[:120]}.md"

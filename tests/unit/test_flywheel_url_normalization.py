@@ -199,21 +199,25 @@ def test_frontend_module_names_keep_workflows_separate():
     from pathlib import Path
 
     project_root = Path(__file__).resolve().parents[2]
-    nav = (project_root / "src/web/static/js/site-nav.js").read_text(encoding="utf-8")
     workbench = (project_root / "src/web/static/index.html").read_text(encoding="utf-8")
     collections = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
     flywheel = (project_root / "src/web/templates/flywheel.html").read_text(encoding="utf-8")
+    shell_css = (project_root / "src/web/static/css/app-shell.css").read_text(encoding="utf-8")
 
-    assert "单篇深度学习" in nav
-    assert "系列深度学习" in nav
-    assert "帖子洞察" in nav
-    assert "IP 对标" in nav
-    assert "机会雷达" not in nav
-    assert "/flywheel#opportunities" not in nav
-    assert "历史" in nav
-    assert "/static/history.html" in nav
-    assert "单个解析" not in nav
-    assert "学做小红书" not in nav
+    shell_sources = "\n".join([workbench, collections, flywheel])
+    assert "body.app-shell" in shell_css
+    assert '<aside class="sidebar"' in shell_sources
+    assert '<main class="main-area"' in shell_sources
+    assert "单篇深度学习" in shell_sources
+    assert "系列深度学习" in shell_sources
+    assert "帖子洞察" in shell_sources
+    assert "IP 对标" in shell_sources
+    assert "机会雷达" not in shell_sources
+    assert "/flywheel#opportunities" not in shell_sources
+    assert "历史" in shell_sources
+    assert "/static/history.html" in shell_sources
+    assert "单个解析" not in shell_sources
+    assert "学做小红书" not in shell_sources
 
     assert "视频/文档深度学习" in workbench
     assert 'id="share-content"' in workbench

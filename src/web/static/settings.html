@@ -15,7 +15,9 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
     <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
+    <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -80,7 +82,7 @@
             width: 300px; max-width: 78vw; white-space: normal; text-align: left;
             background: var(--ink, #1f2933); color: var(--paper, #fff);
             padding: 10px 12px; border-radius: 9px; font-size: 0.76rem; font-weight: 400;
-            line-height: 1.6; letter-spacing: .01em; z-index: 200;
+            line-height: 1.6; letter-spacing: 0; z-index: 200;
             box-shadow: 0 10px 30px rgba(0,0,0,.22); pointer-events: none; }
         .help-q[data-tip]:hover::before, .help-q[data-tip]:focus::before {
             content: ''; position: absolute; left: 3px; top: calc(100% + 3px);
@@ -99,14 +101,59 @@
             background: var(--ink); color: var(--paper); padding: 10px 18px; border-radius: 10px;
             font-size: 0.88rem; opacity: 0; pointer-events: none; transition: .25s; z-index: 2000; }
         .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-        @media (max-width: 600px) { .st-page { padding: 16px 14px 64px; } .key-row { flex-wrap: wrap; } }
+        body.has-app-shell .st-page { width: min(100%, 76rem); max-width: none; padding: 1.5rem 1.5rem 5rem; }
+        body.has-app-shell .st-head { margin-bottom: 1rem; }
+        body.has-app-shell .st-head h1 { font-family: var(--font-display); font-size: 1.7rem; font-weight: 700; word-break: keep-all; white-space: nowrap; }
+        body.has-app-shell .card { border-radius: 8px; box-shadow: var(--shadow-sm); background: #fff; }
+        body.has-app-shell #groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+        body.has-app-shell #groups .card { margin-top: 0; }
+        body.has-app-shell #groups details.card { grid-column: 1 / -1; }
+        body.has-app-shell .field input[type=text],
+        body.has-app-shell .field input[type=password],
+        body.has-app-shell .field input[type=number],
+        body.has-app-shell .field select,
+        body.has-app-shell .combo-menu,
+        body.has-app-shell .btn,
+        body.has-app-shell .key-link,
+        body.has-app-shell .toast { border-radius: 8px; }
+        body.has-app-shell .save-bar { position: sticky; bottom: 0; padding: 14px 0; background: linear-gradient(to top, var(--paper) 70%, rgba(243,244,246,0)); }
+        @media (max-width: 900px) { body.has-app-shell #groups { grid-template-columns: 1fr; } }
+        @media (max-width: 600px) { .st-page { padding: 16px 14px 64px; } .key-row { flex-wrap: wrap; } body.has-app-shell .st-page { padding: 1rem 1rem 4rem; } }
     </style>
 </head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js?v=__ASSET_VERSION__"></script>
+<body class="app-shell has-app-shell">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item is-active" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">系统设置</span></div>
+        </header>
+        <section class="page-stage">
 
-    <main class="st-page">
+    <section class="st-page">
         <header class="st-head"><h1>设置</h1></header>
 
         <!-- 管理口令：加载 / 保存配置的钥匙（全站唯一一处） -->
@@ -129,6 +176,8 @@
             <button class="btn" id="save-btn">保存配置</button>
             <span class="save-hint">保存后重启服务生效</span>
         </div>
+    </section>
+        </section>
     </main>
 
     <div class="toast" id="toast"></div>
@@ -178,7 +227,7 @@
             return '<div class="field"><label for="provider">服务商</label>' +
                 '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
                 '<select id="provider" style="flex:1; min-width:200px;">' + providers.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select>' +
-                '<button type="button" class="btn btn-ghost" id="fetch-models-btn" title="用当前 API Key 从服务商实时拉取可用模型（模型在迭代，离线候选仅作兜底）">🔄 拉取可用模型</button>' +
+                '<button type="button" class="btn btn-ghost" id="fetch-models-btn" title="用当前 API Key 从服务商实时拉取可用模型（模型在迭代，离线候选仅作兜底）">拉取可用模型</button>' +
                 '</div></div>';
         }
 
@@ -254,7 +303,7 @@
                     toast(json.message || json.detail || '拉取失败，已保留离线候选');
                 }
             } catch (e) { toast('网络错误，拉取失败'); }
-            finally { if (btn) { btn.disabled = false; btn.textContent = '🔄 拉取可用模型'; } }
+            finally { if (btn) { btn.disabled = false; btn.textContent = '拉取可用模型'; } }
         }
 
         // 选择/初始化服务商：填 Base URL、模型候选、获取链接

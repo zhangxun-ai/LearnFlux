@@ -517,10 +517,30 @@ class TestViewProgressEndpoint:
         resp = client.get("/view/vt-1")
 
         assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
         assert "progress-panel" in resp.text
         assert "/view/vt-1/progress" in resp.text
         assert "正在下载音视频" in resp.text
         assert "已处理" in resp.text
+
+    def test_failed_view_is_not_cached(self, client, mock_cache_manager):
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "failed",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "url": "https://example.com/video",
+            "platform": "xiaohongshu",
+            "media_id": "note-1",
+            "error_message": "download failed",
+            "created_at": "2026-06-08T10:00:00",
+        }
+
+        resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
+        assert "download failed" in resp.text
 
     def test_success_view_links_preserved_local_source_file(
         self, client, mock_cache_manager, tmp_path
@@ -742,6 +762,7 @@ class TestViewProgressEndpoint:
             resp = client.get("/view/vt-1")
 
         assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
         assert "总结未生成" in resp.text
         assert "总结处理中" not in resp.text
 

@@ -158,3 +158,56 @@ class TestLlmTerminalWriteback:
         assert coordinator.process.call_args.kwargs["skip_summary"] is False
         assert save_results.call_args.kwargs["summary_backfill"] is True
         assert cm.get_task_by_id(task_id)["status"] == "success"
+
+    def test_document_fallback_quality_survives_progress_and_terminal_state(self, cm):
+        task_id = _calibrating_task(cm)
+        quality = {
+            "mode": "fallback",
+            "reasons": ["low_printable_ratio"],
+            "metrics": {"printable_ratio": 0.9},
+            "canonical_text": "must not persist",
+        }
+        coordinator = MagicMock()
+
+        def process(**kwargs):
+            kwargs["progress_callback"](1, 2)
+            kwargs["progress_callback"](2, 2)
+            return {
+                "calibrated_text": "calibrated text",
+                "summary_text": "summary text",
+                "stats": {},
+                "models_used": {},
+            }
+
+        coordinator.process.side_effect = process
+        progress_updates = []
+        original_update = cm.update_task_progress
+
+        def track_progress(*args, **kwargs):
+            result = original_update(*args, **kwargs)
+            progress_updates.append(result)
+            return result
+
+        task = {**_llm_task(task_id), "document_quality": quality}
+        ctxs = _patches(cm, coordinator, llm_ops._build_result_dict)
+        ctxs.append(patch.object(cm, "update_task_progress", side_effect=track_progress))
+        for context in ctxs:
+            context.start()
+        try:
+            llm_ops._handle_llm_task(task)
+        finally:
+            for context in ctxs:
+                context.stop()
+
+        assert progress_updates
+        for progress in progress_updates:
+            document_quality = progress["evidence"]["document_quality"]
+            assert set(document_quality) == {"mode", "reasons", "metrics"}
+            assert "canonical_text" not in repr(progress["evidence"])
+        calibration = [item for item in progress_updates if item["stage"] == "calibrating"]
+        assert calibration[-1]["evidence"]["completed_segments"] == 2
+        assert calibration[-1]["stage_label"] == "检测到提取质量问题，正在进行完整校对"
+        terminal = cm.get_task_by_id(task_id)["progress"]
+        assert terminal["evidence"]["analysis_mode"] == "document_fallback"
+        assert terminal["evidence"]["quality"]["reasons"] == ["low_printable_ratio"]
+        assert "canonical_text" not in repr(terminal["evidence"])

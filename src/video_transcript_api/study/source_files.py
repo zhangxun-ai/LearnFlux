@@ -21,6 +21,10 @@ _MEDIA_TYPES = {
     ".flac": "audio/flac",
 }
 
+_DOCUMENT_EXTS = {".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".log"}
+_VIDEO_EXTS = {ext for ext, media_type in _MEDIA_TYPES.items() if media_type.startswith("video/")}
+_AUDIO_EXTS = {ext for ext, media_type in _MEDIA_TYPES.items() if media_type.startswith("audio/")}
+
 
 def safe_media_id(media_id: str) -> str:
     cleaned = _SAFE_ID_RE.sub("_", (media_id or "").strip()).strip("_")
@@ -44,6 +48,71 @@ def media_type_for_filename(filename: str) -> str:
         return _MEDIA_TYPES[ext]
     guessed, _ = mimetypes.guess_type(filename or "")
     return guessed or "application/octet-stream"
+
+
+def describe_study_source(
+    *,
+    url: str,
+    title: str,
+    source_file: Path | None,
+    media_type: str = "",
+    media_kind: str = "",
+) -> dict[str, str]:
+    """Describe a Study source without changing legacy playback fields."""
+    clean_url = (url or "").strip()
+    filename = (title or "").strip()
+    parsed = parse_study_local_url(clean_url)
+    if not filename and parsed:
+        filename = parsed[1]
+    if not filename and source_file is not None:
+        filename = source_file.name
+    filename = filename or "source"
+
+    if clean_url.startswith("local://study-text/"):
+        kind = "text"
+    else:
+        candidates = []
+        if source_file is not None:
+            candidates.append(source_file.suffix.lower())
+        if parsed:
+            candidates.append(Path(parsed[1]).suffix.lower())
+        candidates.append(Path(filename).suffix.lower())
+        extension = next((item for item in candidates if item), "")
+        if extension in _DOCUMENT_EXTS:
+            kind = "document"
+        elif extension in _VIDEO_EXTS:
+            kind = "video"
+        elif extension in _AUDIO_EXTS:
+            kind = "audio"
+        else:
+            trusted_media_type = (media_type or "").lower().strip()
+            existing_kind = (media_kind or "").lower().strip()
+            if trusted_media_type.startswith("video/"):
+                kind = "video"
+            elif trusted_media_type.startswith("audio/"):
+                kind = "audio"
+            elif trusted_media_type in {
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "text/plain",
+                "text/markdown",
+            }:
+                kind = "document"
+            elif existing_kind in {"video", "audio", "document", "text"}:
+                kind = existing_kind
+            elif existing_kind == "article":
+                kind = "document"
+            else:
+                kind = "unknown"
+
+    resolved_media_type = media_type_for_filename(filename)
+    if resolved_media_type == "application/octet-stream" and media_type:
+        resolved_media_type = media_type
+    return {
+        "kind": kind,
+        "filename": filename,
+        "media_type": resolved_media_type,
+    }
 
 
 def parse_study_local_url(url: str) -> tuple[str, str] | None:

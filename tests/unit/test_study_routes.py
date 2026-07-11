@@ -148,8 +148,112 @@ def test_study_upload_preserves_source_file(monkeypatch, tmp_path):
     assert response.json()["data"]["view_token"] == "view-1"
     assert cache_manager.create_task.call_args.kwargs["url"].startswith("local://study-source/")
     assert background_calls
-    assert background_calls[0][-2] is True
-    assert background_calls[0][-1] is True
+    assert background_calls[0][-3:-1] == (True, True)
+    assert background_calls[0][-1] is False
+
+
+def test_study_upload_only_enables_fast_path_when_explicit(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import study
+
+    cache_manager = MagicMock()
+    cache_manager.create_task.side_effect = [
+        {"task_id": "task-1", "view_token": "view-1"},
+        {"task_id": "task-2", "view_token": "view-2"},
+    ]
+    background_calls = []
+    monkeypatch.setattr(study, "cache_manager", cache_manager)
+    monkeypatch.setattr(
+        study, "process_local_upload", lambda *args: background_calls.append(args)
+    )
+    monkeypatch.setattr(study, "get_source_root", lambda: tmp_path / "sources")
+    client = TestClient(_build_app())
+
+    legacy = client.post(
+        "/api/study/upload",
+        files={"file": ("legacy.pdf", b"pdf", "application/pdf")},
+    )
+    visual = client.post(
+        "/api/study/upload",
+        data={"visual_fast_path": "true"},
+        files={"file": ("visual.pdf", b"pdf", "application/pdf")},
+    )
+
+    assert legacy.status_code == 202
+    assert visual.status_code == 202
+    assert background_calls[0][-1] is False
+    assert background_calls[1][-1] is True
+
+
+def test_study_text_creates_controlled_markdown_source(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import study
+
+    cache_manager = MagicMock()
+    cache_manager.create_task.return_value = {
+        "task_id": "task-text-1",
+        "view_token": "view-text-1",
+    }
+    background_calls = []
+
+    def fake_process_local_upload(*args):
+        background_calls.append(args)
+
+    monkeypatch.setattr(study, "cache_manager", cache_manager)
+    monkeypatch.setattr(study, "process_local_upload", fake_process_local_upload)
+    monkeypatch.setattr(study, "get_source_root", lambda: tmp_path / "sources")
+
+    response = TestClient(_build_app()).post(
+        "/api/study/text",
+        json={
+            "title": "",
+            "content": "\n## 第一章 Agent 的基本结构\n\nLLM 负责推理，工具负责行动。\n",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["data"]["view_token"] == "view-text-1"
+    source_files = list((tmp_path / "sources" / "study_texts").glob("*.md"))
+    assert len(source_files) == 1
+    assert source_files[0].read_text(encoding="utf-8") == (
+        "## 第一章 Agent 的基本结构\n\nLLM 负责推理，工具负责行动。"
+    )
+    assert "Agent" not in source_files[0].name
+    assert cache_manager.create_task.call_args.kwargs["url"].startswith(
+        "local://study-text/"
+    )
+    assert background_calls[0][2] == "第一章 Agent 的基本结构.md"
+    assert background_calls[0][-3:] == (True, True, False)
+
+
+def test_study_text_rejects_blank_content():
+    response = TestClient(_build_app()).post(
+        "/api/study/text",
+        json={"title": "空白", "content": " \n\t "},
+    )
+
+    assert response.status_code == 422
+
+
+def test_study_text_keeps_user_title_out_of_file_path(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import study
+
+    cache_manager = MagicMock()
+    cache_manager.create_task.return_value = {
+        "task_id": "task-text-2",
+        "view_token": "view-text-2",
+    }
+    monkeypatch.setattr(study, "cache_manager", cache_manager)
+    monkeypatch.setattr(study, "process_local_upload", lambda *args: None)
+    monkeypatch.setattr(study, "get_source_root", lambda: tmp_path / "sources")
+
+    response = TestClient(_build_app()).post(
+        "/api/study/text",
+        json={"title": "../../季度复盘", "content": "这是正文。"},
+    )
+
+    assert response.status_code == 202
+    source_files = list((tmp_path / "sources" / "study_texts").glob("*.md"))
+    assert len(source_files) == 1
+    assert "季度复盘" not in str(source_files[0])
 
 
 def test_export_study_markdown(monkeypatch):

@@ -12,33 +12,52 @@
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=7">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=7">
     <link rel="stylesheet" href="/static/css/trend-radar.css?v=6">
+    <script src="/static/js/app-shell.js?v=20260709-2" defer></script>
 </head>
-<body>
-    <a class="skip-link" href="#radar-main">跳到趋势雷达内容</a>
+<body class="app-shell has-app-shell">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item is-active" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">趋势雷达</span></div>
+        </header>
+        <section class="page-stage">
 
     <div id="trend-radar-app" class="radar-shell">
-        <header class="radar-topbar" aria-label="趋势机会雷达导航">
-            <a class="radar-brand" href="/" aria-label="返回内容解析工作台首页">
-                <img src="/static/icon/logo.svg" alt="" width="26" height="26">
-                <span>内容解析工作台</span>
-            </a>
-            <nav class="radar-nav" aria-label="页面导航">
-                <a href="/">首页</a>
-                <a href="/post">帖子洞察</a>
-                <a href="/flywheel">IP 对标</a>
-                <a href="/trend-radar" aria-current="page">趋势雷达</a>
-            </nav>
-        </header>
-
-        <main id="radar-main" class="radar-main">
-            <section class="museum-hero" aria-labelledby="radar-title">
-                <div class="hero-copy">
+        <section id="radar-main" class="radar-main" aria-label="趋势机会雷达">
+            <header class="dashboard-header">
+                <div class="page-title-block">
                     <span class="section-label">AI stack x human needs</span>
                     <h1 id="radar-title">AI 社会需求趋势雷达</h1>
                     <p>
-                        用黄仁勋五层产业栈看供给变化，用马斯洛七层需求判断社会实际需求。
-                        趋势必须同时回答“能力为什么现在出现”和“它解决谁的真实问题”。
+                        用 AI 五层产业栈判断供给变化，用马斯洛七层需求校验真实需求。
+                        每个趋势都要同时回答“能力为什么现在出现”和“它解决谁的问题”。
                     </p>
                 </div>
 
@@ -47,166 +66,189 @@
                         <span>单次预算</span>
                         <input id="run-budget" type="number" min="1" max="5" step="0.5" value="2">
                     </label>
-                    <button type="button" class="primary-action" id="refresh-signals">生成真实报告</button>
-                    <p id="run-status" role="status"></p>
+                    <button type="button" class="primary-action" id="refresh-signals">重新生成报告</button>
                     <p id="budget-hint" class="budget-hint">建议 $2，可调高到 $5。</p>
+                    <p id="run-status" role="status"></p>
                 </div>
+            </header>
+
+            <section class="summary-strip" aria-label="今日雷达摘要">
+                <article>
+                    <span>新进入机会期</span>
+                    <strong id="metric-new-window">0</strong>
+                    <small class="metric-delta up">↗ 新信号</small>
+                </article>
+                <article>
+                    <span>成熟期</span>
+                    <strong id="metric-mature">0</strong>
+                    <small class="metric-delta flat">→ 稳定验证</small>
+                </article>
+                <article>
+                    <span>过热预警</span>
+                    <strong id="metric-hot">0</strong>
+                    <small class="metric-delta down">↘ 降噪优先</small>
+                </article>
+                <article>
+                    <span>证据平均置信度</span>
+                    <strong id="metric-confidence">0%</strong>
+                    <small class="metric-delta up">↗ 证据质量</small>
+                </article>
             </section>
 
-            <section class="curation-board" aria-labelledby="curation-title">
-                <div class="board-head">
+            <section class="radar-bento" aria-label="趋势雷达主面板">
+                <article class="panel matrix-panel" id="matrix-panel" aria-labelledby="matrix-title">
+                    <div class="panel-header">
+                        <div>
+                            <span class="section-label">Signal map</span>
+                            <h2 id="matrix-title">二维信号地图</h2>
+                            <p>横轴是 AI 五层产业栈，纵轴是人类需求层级。点越醒目，越值得优先核查。</p>
+                        </div>
+                        <div class="matrix-legend" aria-label="矩阵图例">
+                            <span><i class="legend-dot hot"></i>过热</span>
+                            <span><i class="legend-dot warm"></i>机会</span>
+                            <span><i class="legend-dot cold"></i>潜伏</span>
+                        </div>
+                    </div>
+                    <div id="matrix-list" class="matrix-list" aria-label="AI 栈与需求二维矩阵"></div>
+                </article>
+
+                <article class="panel decision-panel" aria-label="今日决策队列">
+                    <div class="panel-header compact">
+                        <div>
+                            <span class="section-label">Act now</span>
+                            <h2>今日优先验证</h2>
+                        </div>
+                    </div>
+                    <div id="priority-list" class="queue-list"></div>
+
+                    <div class="panel-header compact watch-heading">
+                        <div>
+                            <span class="section-label">Watch</span>
+                            <h2>继续观察</h2>
+                        </div>
+                    </div>
+                    <div id="watch-list" class="queue-list compact"></div>
+                </article>
+            </section>
+
+            <section class="panel curation-board" aria-labelledby="curation-title">
+                <div class="panel-header">
                     <div>
                         <span class="section-label">Today</span>
                         <h2 id="curation-title">今日策展结论</h2>
                     </div>
                     <time id="last-updated" datetime="">等待报告</time>
                 </div>
-                <div class="summary-strip" aria-label="今日雷达摘要">
-                    <article>
-                        <span>新进入机会期</span>
-                        <strong id="metric-new-window">0</strong>
-                    </article>
-                    <article>
-                        <span>成熟期</span>
-                        <strong id="metric-mature">0</strong>
-                    </article>
-                    <article>
-                        <span>过热预警</span>
-                        <strong id="metric-hot">0</strong>
-                    </article>
-                    <article>
-                        <span>证据置信度</span>
-                        <strong id="metric-confidence">0%</strong>
-                    </article>
-                </div>
                 <div id="curation-list" class="curation-list" aria-live="polite"></div>
             </section>
 
-            <section class="gallery-section" aria-labelledby="stack-gallery-title">
-                <div class="section-head">
+            <section class="panel trend-workbench" aria-labelledby="trend-list-title">
+                <div class="panel-header">
                     <div>
-                        <span class="section-label">Five-layer stack</span>
-                        <h2 id="stack-gallery-title">五层产业栈</h2>
+                        <span class="section-label">Candidate feed</span>
+                        <h2 id="trend-list-title">趋势候选</h2>
+                        <p id="list-count">等待加载</p>
                     </div>
-                    <p>能源、芯片 / 计算、基础设施 / AI 工厂、模型、应用。</p>
                 </div>
-                <div id="stack-gallery" class="gallery-grid" aria-label="AI 五层产业栈"></div>
-            </section>
 
-            <section class="gallery-section" aria-labelledby="need-gallery-title">
-                <div class="section-head">
-                    <div>
-                        <span class="section-label">Human needs</span>
-                        <h2 id="need-gallery-title">需求映射</h2>
+                <div class="radar-controls" aria-labelledby="controls-title">
+                    <h3 id="controls-title">筛选趋势</h3>
+                    <label class="search-field" for="trend-search">
+                        <span>搜索</span>
+                        <input id="trend-search" type="search" placeholder="输入方向、需求或商业模式" autocomplete="off">
+                    </label>
+                    <label class="select-field" for="stack-filter">
+                        <span>AI 栈层级</span>
+                        <select id="stack-filter">
+                            <option value="all">全部层级</option>
+                            <option value="energy">能源</option>
+                            <option value="compute">芯片 / 计算</option>
+                            <option value="infrastructure">基础设施 / AI 工厂</option>
+                            <option value="models">模型</option>
+                            <option value="applications">应用</option>
+                        </select>
+                    </label>
+                    <label class="select-field" for="need-filter">
+                        <span>需求层级</span>
+                        <select id="need-filter">
+                            <option value="all">全部需求</option>
+                            <option value="physiological">生理需求</option>
+                            <option value="safety">安全需求</option>
+                            <option value="belonging">归属与爱</option>
+                            <option value="esteem">尊重需求</option>
+                            <option value="cognitive">认知需求</option>
+                            <option value="aesthetic">审美需求</option>
+                            <option value="self_actualization">自我实现</option>
+                        </select>
+                    </label>
+                    <div class="stage-filter" role="group" aria-label="按扩散阶段筛选">
+                        <button type="button" class="is-active" data-stage-filter="all">全部</button>
+                        <button type="button" data-stage-filter="opportunity">机会期</button>
+                        <button type="button" data-stage-filter="mature">成熟期</button>
+                        <button type="button" data-stage-filter="too-early">太早期</button>
+                        <button type="button" data-stage-filter="overheated">过热</button>
+                        <button type="button" data-stage-filter="noise">噪音</button>
                     </div>
-                    <p>生理需求、安全需求、归属与爱、尊重需求、认知需求、审美需求、自我实现。</p>
                 </div>
-                <div id="need-gallery" class="need-grid" aria-label="马斯洛七层需求"></div>
-            </section>
 
-            <section class="matrix-panel" id="matrix-panel" aria-labelledby="matrix-title">
-                <div class="section-head">
-                    <div>
-                        <span class="section-label">Signal map</span>
-                        <h2 id="matrix-title">二维信号地图</h2>
-                    </div>
-                    <p>每个趋势同时落在一个供给层和一个需求层，用来避免只追热点。</p>
-                </div>
-                <div id="matrix-list" class="matrix-list"></div>
-            </section>
+                <div class="radar-layout" aria-label="趋势机会分析">
+                    <aside class="trend-list-pane">
+                        <div id="trend-list" class="trend-list" role="list"></div>
+                    </aside>
 
-            <section class="decision-grid" aria-label="今日决策队列">
-                <article class="queue-card priority-card">
-                    <div class="queue-head">
-                        <span class="section-label">Act now</span>
-                        <h2>今日优先验证</h2>
-                    </div>
-                    <div id="priority-list" class="queue-list"></div>
-                </article>
-                <article class="queue-card watch-card">
-                    <div class="queue-head">
-                        <span class="section-label">Watch</span>
-                        <h2>继续观察</h2>
-                    </div>
-                    <div id="watch-list" class="queue-list compact"></div>
-                </article>
-            </section>
-
-            <section class="report-history" aria-labelledby="report-history-title">
-                <div class="history-head">
-                    <div>
-                        <span class="section-label">History</span>
-                        <h2 id="report-history-title">最近报告</h2>
-                    </div>
-                    <span id="history-count">等待读取</span>
-                </div>
-                <div id="report-history-list" class="history-list">
-                    <div class="empty-state compact">暂无历史记录。</div>
+                    <section class="trend-detail-pane" aria-live="polite" aria-label="趋势详情">
+                        <article id="trend-detail" class="trend-detail"></article>
+                    </section>
                 </div>
             </section>
 
-            <section class="radar-controls" aria-labelledby="controls-title">
-                <h2 id="controls-title">筛选趋势</h2>
-                <label class="search-field" for="trend-search">
-                    <span>搜索</span>
-                    <input id="trend-search" type="search" placeholder="输入方向、需求或商业模式" autocomplete="off">
-                </label>
-                <label class="select-field" for="stack-filter">
-                    <span>AI 栈层级</span>
-                    <select id="stack-filter">
-                        <option value="all">全部层级</option>
-                        <option value="energy">能源</option>
-                        <option value="compute">芯片 / 计算</option>
-                        <option value="infrastructure">基础设施 / AI 工厂</option>
-                        <option value="models">模型</option>
-                        <option value="applications">应用</option>
-                    </select>
-                </label>
-                <label class="select-field" for="need-filter">
-                    <span>需求层级</span>
-                    <select id="need-filter">
-                        <option value="all">全部需求</option>
-                        <option value="physiological">生理需求</option>
-                        <option value="safety">安全需求</option>
-                        <option value="belonging">归属与爱</option>
-                        <option value="esteem">尊重需求</option>
-                        <option value="cognitive">认知需求</option>
-                        <option value="aesthetic">审美需求</option>
-                        <option value="self_actualization">自我实现</option>
-                    </select>
-                </label>
-                <div class="stage-filter" role="group" aria-label="按扩散阶段筛选">
-                    <button type="button" class="is-active" data-stage-filter="all">全部</button>
-                    <button type="button" data-stage-filter="opportunity">机会期</button>
-                    <button type="button" data-stage-filter="mature">成熟期</button>
-                    <button type="button" data-stage-filter="too-early">太早期</button>
-                    <button type="button" data-stage-filter="overheated">过热</button>
-                    <button type="button" data-stage-filter="noise">噪音</button>
-                </div>
-            </section>
-
-            <section class="radar-layout" aria-label="趋势机会分析">
-                <aside class="trend-list-pane" aria-labelledby="trend-list-title">
-                    <div class="pane-head">
-                        <div>
-                            <span class="section-label">Candidate feed</span>
-                            <h2 id="trend-list-title">趋势候选</h2>
-                            <p id="list-count">等待加载</p>
+            <details class="radar-drawer">
+                <summary>方法说明与历史报告</summary>
+                <section class="support-grid" aria-label="趋势支撑视图">
+                    <article class="panel gallery-section" aria-labelledby="stack-gallery-title">
+                        <div class="panel-header">
+                            <div>
+                                <span class="section-label">Five-layer stack</span>
+                                <h2 id="stack-gallery-title">五层产业栈</h2>
+                            </div>
+                            <p>能源、芯片 / 计算、基础设施 / AI 工厂、模型、应用。</p>
                         </div>
-                    </div>
-                    <div id="trend-list" class="trend-list" role="list"></div>
-                </aside>
+                        <div id="stack-gallery" class="gallery-grid" aria-label="AI 五层产业栈"></div>
+                    </article>
 
-                <section class="trend-detail-pane" aria-live="polite" aria-label="趋势详情">
-                    <article id="trend-detail" class="trend-detail"></article>
+                    <article class="panel gallery-section" aria-labelledby="need-gallery-title">
+                        <div class="panel-header">
+                            <div>
+                                <span class="section-label">Human needs</span>
+                                <h2 id="need-gallery-title">需求映射</h2>
+                            </div>
+                            <p>生理需求、安全需求、归属与爱、尊重需求、认知需求、审美需求、自我实现。</p>
+                        </div>
+                        <div id="need-gallery" class="need-grid" aria-label="马斯洛七层需求"></div>
+                    </article>
                 </section>
-            </section>
 
-            <p class="prototype-footnote">
-                默认预算 $2，最高 $5；旧版报告会自动补齐 AI 栈层级与需求层级。
-            </p>
-        </main>
+                <section class="panel report-history" aria-labelledby="report-history-title">
+                    <div class="panel-header">
+                        <div>
+                            <span class="section-label">History</span>
+                            <h2 id="report-history-title">最近报告</h2>
+                        </div>
+                        <span id="history-count">等待读取</span>
+                    </div>
+                    <div id="report-history-list" class="history-list">
+                        <div class="empty-state compact">暂无历史记录。</div>
+                    </div>
+                </section>
+
+                <p class="prototype-footnote">
+                    默认预算 $2，最高 $5；旧版报告会自动补齐 AI 栈层级与需求层级。
+                </p>
+            </details>
+        </section>
     </div>
+        </section>
+    </main>
 
     <script src="/static/js/trend-radar.js?v=6"></script>
 </body>

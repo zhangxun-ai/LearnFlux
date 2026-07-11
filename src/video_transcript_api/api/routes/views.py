@@ -39,6 +39,12 @@ static_dir = get_static_dir()
 
 router = APIRouter()
 
+
+def _no_store(response: Response) -> Response:
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 # robots.txt：允许首页和分享页面被收录，禁止 API 和静态资源
 _ROBOTS_TXT_TEMPLATE = """\
 User-agent: *
@@ -274,6 +280,7 @@ _HOME_HTML = """\
     <meta property="og:image" content="/static/icon/og.png">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="stylesheet" href="/static/css/editorial.css?v=1">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=1">
     <style>
         /* 配色 token / 字体 / 导航 来自 editorial.css（单一来源） */
         *{margin:0;padding:0;box-sizing:border-box}
@@ -325,10 +332,39 @@ _HOME_HTML = """\
         @media(max-width:560px){.hero h1{font-size:2.2rem}.nav{padding:18px}.links a:not(.cta):not(.hot){display:none}}
     </style>
 </head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js"></script>
+<body class="app-shell has-app-shell">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item is-active" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">内容解析工作台</span></div>
+        </header>
+        <section class="page-stage">
     <script src="/static/js/pwa-register.js" defer></script>
+    <script src="/static/js/app-shell.js?v=1" defer></script>
 
     <header class="hero">
         <div class="eyebrow">一站式内容解析</div>
@@ -350,19 +386,19 @@ _HOME_HTML = """\
         </a>
         <div class="grid">
             <a class="card" href="/add_task_by_web">
-                <div class="ic">🔗</div><h3>链接/文档解析</h3>
+                <div class="ic">文</div><h3>链接/文档解析</h3>
                 <p>贴视频链接或上传文档，先拿到原文稿/转录稿，再让 AI 提炼高价值内容。</p>
             </a>
             <a class="card" href="/collections">
-                <div class="ic">📚</div><h3>系列深度学习</h3>
+                <div class="ic">系</div><h3>系列深度学习</h3>
                 <p>连续课程、专题视频或文档合集，按顺序解析并生成集合级方法论。</p>
             </a>
             <a class="card" href="/post">
-                <div class="ic">📝</div><h3>帖子/文章洞察</h3>
+                <div class="ic">帖</div><h3>帖子/文章洞察</h3>
                 <p>X / 小红书 / 公众号，抓正文 + 高赞评论，提炼精华并标注可信度。</p>
             </a>
             <a class="card" href="/flywheel">
-                <div class="ic">🎯</div><h3>IP 对标工作台</h3>
+                <div class="ic">IP</div><h3>IP 对标工作台</h3>
                 <p>学习对标账号的选题、开头、留人、引导和迭代方法，并从已拆解内容里挑选题机会。</p>
             </a>
         </div>
@@ -371,6 +407,8 @@ _HOME_HTML = """\
     <footer class="foot">
         Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source
     </footer>
+        </section>
+    </main>
 </body>
 </html>
 """
@@ -924,7 +962,9 @@ async def add_task_by_web(request: Request):
                 static_dir / "js" / "app.js",
                 static_dir / "css" / "styles.css",
                 static_dir / "css" / "workbench.css",
-                static_dir / "css" / "nav.css",
+                static_dir / "css" / "app-shell.css",
+                static_dir / "css" / "editorial.css",
+                static_dir / "js" / "app-shell.js",
                 static_dir / "js" / "pwa-register.js",
             ]
             version = str(int(max(
@@ -959,9 +999,12 @@ async def study_page(view_token: str):
     asset_files = [
         page,
         static_dir / "css" / "study.css",
+        static_dir / "css" / "visual-learning.css",
         static_dir / "js" / "study.js",
+        static_dir / "js" / "visual-learning.js",
         static_dir / "css" / "editorial.css",
-        static_dir / "js" / "site-nav.js",
+        static_dir / "css" / "app-shell.css",
+        static_dir / "js" / "app-shell.js",
         static_dir / "js" / "pwa-register.js",
     ]
     version = str(int(max(
@@ -1158,12 +1201,14 @@ async def view_transcript(
                     status_code=404,
                 )
             else:
-                return templates.TemplateResponse(
-                    "error.html",
-                    {
-                        "request": request,
-                        "message": "view_token 无效或已过期",
-                    },
+                return _no_store(
+                    templates.TemplateResponse(
+                        "error.html",
+                        {
+                            "request": request,
+                            "message": "view_token 无效或已过期",
+                        },
+                    )
                 )
 
         # 如果请求导出原始文件（GitHub Raw 模式）
@@ -1178,27 +1223,33 @@ async def view_transcript(
         _decorate_source_link(view_data)
 
         if view_data["status"] == "processing":
-            return templates.TemplateResponse(
-                "processing.html",
-                {
-                    "request": request,
-                    **view_data,
-                    "page_title": f"正在处理 - {view_data.get('title', '转录任务')}",
-                },
+            return _no_store(
+                templates.TemplateResponse(
+                    "processing.html",
+                    {
+                        "request": request,
+                        **view_data,
+                        "page_title": f"正在处理 - {view_data.get('title', '转录任务')}",
+                    },
+                )
             )
         if view_data["status"] == "failed":
-            return templates.TemplateResponse(
-                "error.html",
-                {
-                    "request": request,
-                    "message": view_data.get("error_message", "任务处理失败"),
-                    **view_data,
-                },
+            return _no_store(
+                templates.TemplateResponse(
+                    "error.html",
+                    {
+                        "request": request,
+                        "message": view_data.get("error_message", "任务处理失败"),
+                        **view_data,
+                    },
+                )
             )
         if view_data["status"] == "file_cleaned":
-            return templates.TemplateResponse(
-                "cleaned.html",
-                {"request": request, **view_data},
+            return _no_store(
+                templates.TemplateResponse(
+                    "cleaned.html",
+                    {"request": request, **view_data},
+                )
             )
         if view_data["status"] == "success":
             if view_data.get("summary"):
@@ -1307,19 +1358,28 @@ async def view_transcript(
                 view_token
             )
 
-        return templates.TemplateResponse(
-            "transcript.html",
-            {"request": request, **view_data, "view_token": view_token, "stats": stats},
+        return _no_store(
+            templates.TemplateResponse(
+                "transcript.html",
+                {
+                    "request": request,
+                    **view_data,
+                    "view_token": view_token,
+                    "stats": stats,
+                },
+            )
         )
 
     except Exception as exc:
         logger.exception("查看转录页面异常: %s", exc)
-        return templates.TemplateResponse(
-            "error.html",
-            {
-                "request": request,
-                "message": "查看页面失败，请稍后重试",
-            },
+        return _no_store(
+            templates.TemplateResponse(
+                "error.html",
+                {
+                    "request": request,
+                    "message": "查看页面失败，请稍后重试",
+                },
+            )
         )
 
 

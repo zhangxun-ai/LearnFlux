@@ -30,6 +30,7 @@
     <meta property="og:image" content="/static/icon/og.png">
     <title>{% block title %}视频转录查看器{% endblock %}</title>
     <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
+    <script src="/static/js/app-shell.js?v={{ asset_ver }}" defer></script>
     <style>
         /* 配色 token 统一来自 editorial.css（单一来源） */
 
@@ -44,11 +45,13 @@
         }
 
         .container {
-            max-width: 900px;
+            width: min(100%, 72rem);
+            max-width: none;
             margin: 24px auto 40px;
             background: var(--bg-primary);
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid rgba(27, 26, 23, 0.08);
+            box-shadow: var(--shadow-sm);
             overflow: hidden;
             transition: background 0.3s ease;
         }
@@ -56,28 +59,34 @@
         .header {
             background: var(--bg-primary);
             color: var(--text-primary);
-            padding: 38px 30px 24px;
-            text-align: center;
+            padding: 28px 30px 22px;
+            text-align: left;
             position: relative;
             border-bottom: 1px solid var(--border-primary);
         }
 
         .header h1 {
             margin: 0;
-            font-size: 1.9rem;
-            font-weight: 500;
-            font-family: 'Fraunces', Georgia, 'Songti SC', serif;
-            letter-spacing: -0.01em;
+            font-size: 1.8rem;
+            font-weight: 650;
+            font-family: var(--font-display);
+            letter-spacing: 0;
+            word-break: keep-all;
+            white-space: nowrap;
         }
 
         .header .meta {
             margin-top: 10px;
-            opacity: 0.9;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem 0.75rem;
+            opacity: 1;
             font-size: 0.9rem;
+            color: var(--text-secondary);
         }
 
         .header .meta a {
-            color: #C2533F;
+            color: var(--accent-ink);
             text-decoration: none;
         }
 
@@ -86,7 +95,7 @@
         }
 
         .section {
-            padding: 30px;
+            padding: 24px 30px;
             border-bottom: 1px solid var(--border-primary);
         }
 
@@ -544,11 +553,6 @@
             gap: 10px;
         }
 
-        .stats-icon {
-            font-size: 1rem;
-            opacity: 0.8;
-        }
-
         .stats-label {
             font-weight: 600;
             opacity: 0.9;
@@ -657,7 +661,7 @@
             font-size: 0.75rem;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0;
         }
 
         .config-value {
@@ -963,38 +967,107 @@
         }
     </style>
     <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v={{ asset_ver }}">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js?v={{ asset_ver }}"></script>
-    <div class="container">
-        <div class="header">
-            <h1>{{ title or "视频转录查看器" }}</h1>
-            {% if author or url %}
-            <div class="meta">
-                {% if author %}👤 {{ author }}{% endif %}
-                {% if source_link_url %}
-                    <br>🔗 <a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }}</a>
-                {% endif %}
-                {% if source_reveal_url %}
-                    <br>📁 <button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button>
-                {% endif %}
-                {% if created_at_display %}
-                    <br>⏰ {{ created_at_display }}
-                {% elif created_at %}
-                    <br>⏰ {{ created_at }}
-                {% endif %}
+<body class="app-shell has-app-shell">
+    {% set shell_path = request.url.path if request is defined else '' %}
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true">
+                    <img src="/static/icon/logo.svg" alt="">
+                </span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core">
+                <h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item {% if shell_path == '/' or shell_path.startswith('/add_task_by_web') or shell_path.startswith('/view/') %}is-active{% endif %}" href="/add_task_by_web">
+                    <span class="nav-icon" aria-hidden="true">↯</span>
+                    <span>单篇深度学习</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/collections') %}is-active{% endif %}" href="/collections">
+                    <span class="nav-icon" aria-hidden="true">▥</span>
+                    <span>系列深度学习</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/static/focus-studio') %}is-active{% endif %}" href="/static/focus-studio.html">
+                    <span class="nav-icon" aria-hidden="true">✎</span>
+                    <span>心流写作</span>
+                </a>
+            </section>
+
+            <section class="nav-group" aria-labelledby="nav-insight">
+                <h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item {% if shell_path.startswith('/post') %}is-active{% endif %}" href="/post">
+                    <span class="nav-icon" aria-hidden="true">☷</span>
+                    <span>帖子洞察</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/trend-radar') %}is-active{% endif %}" href="/trend-radar">
+                    <span class="nav-icon" aria-hidden="true">◎</span>
+                    <span>趋势雷达</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/flywheel') %}is-active{% endif %}" href="/flywheel">
+                    <span class="nav-icon" aria-hidden="true">⌘</span>
+                    <span>IP 对标</span>
+                </a>
+            </section>
+
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system">
+                <h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item {% if shell_path.startswith('/static/history') %}is-active{% endif %}" href="/static/history.html">
+                    <span class="nav-icon" aria-hidden="true">◷</span>
+                    <span>历史记录</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/settings') %}is-active{% endif %}" href="/settings">
+                    <span class="nav-icon" aria-hidden="true">⚙</span>
+                    <span>系统设置</span>
+                </a>
+            </section>
+        </nav>
+    </aside>
+
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title">
+                <span class="topbar-page-title">{% block shell_title %}{{ title or page_title or "视频转录查看器" }}{% endblock %}</span>
             </div>
-            {% endif %}
-        </div>
+        </header>
 
-        {% block content %}{% endblock %}
+        <section class="page-stage">
+            <div class="container">
+                <div class="header">
+                    <h1>{{ title or "视频转录查看器" }}</h1>
+            {% if author or url %}
+                <div class="meta">
+                    {% if author %}<span>作者：{{ author }}</span>{% endif %}
+                    {% if source_link_url %}
+                        <span><a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }}</a></span>
+                    {% endif %}
+                    {% if source_reveal_url %}
+                        <span><button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button></span>
+                    {% endif %}
+                    {% if created_at_display %}
+                        <span>创建：{{ created_at_display }}</span>
+                    {% elif created_at %}
+                        <span>创建：{{ created_at }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                </div>
 
-        <div class="powered-footer">
-            Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source · <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">☆ Star on GitHub</a>
-        </div>
-    </div>
+                {% block content %}{% endblock %}
+
+                <div class="powered-footer">
+                    Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source · <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">☆ Star on GitHub</a>
+                </div>
+            </div>
+        </section>
+    </main>
 
     {% block extra_js %}{% endblock %}
 
@@ -1070,12 +1143,12 @@
 
                 if (theme === 'dark') {
                     if (themeToggle) {
-                        themeToggle.textContent = '☀️';
+                        themeToggle.textContent = '浅色';
                         themeToggle.title = '切换到浅色模式';
                     }
                 } else {
                     if (themeToggle) {
-                        themeToggle.textContent = '🌙';
+                        themeToggle.textContent = '深色';
                         themeToggle.title = '切换到深色模式';
                     }
                 }

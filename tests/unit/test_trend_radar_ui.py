@@ -51,11 +51,15 @@ def test_trend_radar_assets_support_responsive_interaction():
     js = (STATIC_DIR / "js/trend-radar.js").read_text(encoding="utf-8")
 
     assert ".radar-shell" in css
-    assert ".museum-hero" in css
+    assert ".dashboard-header" in css
+    assert ".summary-strip" in css
+    assert ".radar-bento" in css
+    assert ".panel" in css
     assert ".gallery-grid" in css
     assert ".need-grid" in css
     assert ".matrix-panel" in css
-    assert ".priority-card" in css
+    assert ".matrix-dot-button" in css
+    assert ".decision-panel" in css
     assert ".run-panel" in css
     assert ".evidence-card" in css
     assert ".stack-badge" in css
@@ -68,7 +72,7 @@ def test_trend_radar_assets_support_responsive_interaction():
     assert ".key-fact-list" in css
     assert ".raw-source" in css
     assert ":focus-visible" in css
-    assert "@media (max-width: 720px)" in css
+    assert "@media (max-width: 760px)" in css
     assert "trendRadarData" in js
     assert "stackLayer" in js
     assert "needLayer" in js
@@ -117,8 +121,15 @@ def test_trend_radar_assets_support_responsive_interaction():
     assert "扩散时间线" not in js
 
 
-def test_site_nav_links_to_trend_radar():
-    nav = (STATIC_DIR / "js/site-nav.js").read_text(encoding="utf-8")
+def test_trend_radar_uses_static_app_shell():
+    html = (STATIC_DIR / "trend-radar.html").read_text(encoding="utf-8")
+    shell_css = (STATIC_DIR / "css/app-shell.css").read_text(encoding="utf-8")
 
-    assert "/trend-radar" in nav
-    assert "趋势雷达" in nav
+    assert 'class="app-shell has-app-shell"' in html
+    assert '<aside class="sidebar"' in html
+    assert '<main class="main-area"' in html
+    assert 'href="/trend-radar"' in html
+    assert "趋势雷达" in html
+    assert "#site-nav" not in html
+    assert "site-nav.js" not in html
+    assert "body.app-shell" in shell_css

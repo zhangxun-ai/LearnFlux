@@ -1,6 +1,6 @@
 """协调器模块 - 场景路由和统一入口"""
 
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Callable
 
 from ..utils.logging import setup_logger
 from .core.config import LLMConfig
@@ -102,6 +102,7 @@ class LLMCoordinator:
         platform: str = "",
         media_id: str = "",
         skip_summary: bool = False,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Dict:
         """处理文本（统一入口）
 
@@ -140,6 +141,7 @@ class LLMCoordinator:
             platform=platform,
             media_id=media_id,
             selected_models=selected_models,
+            progress_callback=progress_callback,
         )
 
         # 提取校对文本和说话人信息
@@ -184,6 +186,7 @@ class LLMCoordinator:
         platform: str,
         media_id: str,
         selected_models: Dict,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Dict:
         """路由到对应的校对处理器
 
@@ -210,6 +213,7 @@ class LLMCoordinator:
                 platform=platform,
                 media_id=media_id,
                 selected_models=selected_models,
+                progress_callback=progress_callback,
             )
         elif isinstance(content, list):
             # 对话列表 - 使用 SpeakerAwareProcessor

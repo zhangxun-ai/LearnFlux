@@ -59,3 +59,30 @@ def test_workbench_history_cards_show_content_preview():
     assert "summaryPreview" in app_js
     assert "hist-preview" in app_js
     assert ".hist-preview" in css
+
+
+def test_workbench_exposes_pasted_text_study_entry():
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    html = (project_root / "src/web/static/index.html").read_text(encoding="utf-8")
+
+    assert 'id="tab-text"' in html
+    assert 'data-panel="panel-text"' in html
+    assert 'id="panel-text"' in html
+    assert 'id="study-text-title"' in html
+    assert 'id="study-text-content"' in html
+    assert 'id="study-text-submit"' in html
+
+
+def test_workbench_submits_pasted_text_and_opens_study():
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+
+    assert "submitStudyText" in app_js
+    assert "'/api/study/text'" in app_js
+    assert "study-text-form" in app_js
+    assert "study-text-content" in app_js
+    assert "'/study/' + data.data.view_token" in app_js

@@ -566,7 +566,7 @@ def test_trend_radar_page_route_returns_static_shell():
 
     assert response.status_code == 200
     assert "趋势机会雷达" in response.text
-    assert "生成真实报告" in response.text
+    assert "重新生成报告" in response.text
 
 
 def test_trend_radar_run_route_starts_background_job(monkeypatch):

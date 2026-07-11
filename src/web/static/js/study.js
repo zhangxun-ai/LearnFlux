@@ -8,13 +8,21 @@
         pollTimer: null,
         chatThinkingTimer: null,
         estimatedToken: '',
-        noteFrameToken: '',
-        noteFrames: {},
+        visualDocuments: {},
+        visualStates: {},
+        visualLoading: new Set(),
+        visualPollTimers: {},
+        visualActivated: false,
+        visualTabActive: false,
+        activeVisualType: 'overview',
+        requestedVisualSourceApplied: false,
         chatMessages: [],
     };
 
     const els = {
         title: document.getElementById('study-title'),
+        studyPageContext: document.getElementById('study-page-context'),
+        studyWorkbenchTitle: document.getElementById('study-workbench-title'),
         subtitle: document.getElementById('study-subtitle'),
         state: document.getElementById('study-state'),
         transcriptCount: document.getElementById('study-transcript-count'),
@@ -28,12 +36,34 @@
         playToggle: document.getElementById('play-toggle'),
         progress: document.getElementById('video-progress'),
         videoTime: document.getElementById('video-time'),
+        playStrip: document.getElementById('study-play-strip'),
+        sourceCard: document.getElementById('study-source-card'),
+        sourceName: document.getElementById('study-source-name'),
+        sourceMeta: document.getElementById('study-source-meta'),
+        studySourceOpen: document.getElementById('study-source-open'),
         progressCard: document.getElementById('study-progress-card'),
         progressTitle: document.getElementById('study-progress-title'),
         progressDetail: document.getElementById('study-progress-detail'),
         progressFill: document.getElementById('study-progress-fill'),
         aiOverview: document.getElementById('ai-overview'),
-        aiNotesList: document.getElementById('ai-notes-list'),
+        visualOverview: document.getElementById('visual-learning-overview'),
+        visualStatus: document.getElementById('visual-learning-status'),
+        visualStatusText: document.getElementById('visual-learning-status-text'),
+        visualRetry: document.getElementById('visual-retry'),
+        visualFullNoteStatus: document.getElementById('visual-full-note-status'),
+        visualFullNoteStatusText: document.getElementById('visual-full-note-status-text'),
+        visualFullNoteRetry: document.getElementById('visual-full-note-retry'),
+        visualExpand: document.getElementById('visual-expand'),
+        visualFullNote: document.getElementById('visual-full-note'),
+        visualTheme: document.getElementById('visual-theme'),
+        visualDialog: document.getElementById('visual-learning-dialog'),
+        visualModalTitle: document.getElementById('visual-modal-title'),
+        visualModalContent: document.getElementById('visual-learning-modal-content'),
+        visualModalStatus: document.getElementById('visual-modal-status'),
+        visualRegenerate: document.getElementById('visual-regenerate'),
+        visualModalClose: document.getElementById('visual-modal-close'),
+        visualExportSvg: document.getElementById('visual-export-svg'),
+        visualPrint: document.getElementById('visual-print'),
         transcriptList: document.getElementById('transcript-list'),
         chatQuestion: document.getElementById('chat-question'),
         sendChat: document.getElementById('send-chat'),
@@ -128,29 +158,60 @@
         state.session = session;
         const metadata = session.metadata || {};
         const playback = session.playback || {};
+        const source = session.source || { kind: 'unknown' };
         const transcript = session.transcript || { lines: [] };
 
-        els.title.textContent = metadata.title || '本地视频学习';
-        els.videoTitle.textContent = metadata.title || '本地视频';
-        els.breadcrumbs.textContent = `本地视频 / ${metadata.title || '学习模式'}`;
-        els.subtitle.textContent = metadata.author ? `作者：${metadata.author}` : '视频、文稿、AI 解读和问答围绕同一条时间轴组织。';
+        const documentSource = ['document', 'text'].includes(source.kind);
+        const sourceLabel = documentSource ? '文档学习' : (source.kind === 'audio' ? '音频学习' : '视频学习');
+        els.studyPageContext.textContent = sourceLabel;
+        els.studyWorkbenchTitle.textContent = sourceLabel;
+        document.title = `${metadata.title || sourceLabel} - 内容解析工作台`;
+        els.title.textContent = metadata.title || sourceLabel;
+        els.videoTitle.textContent = metadata.title || sourceLabel;
+        els.breadcrumbs.textContent = `${sourceLabel} / ${metadata.title || '学习模式'}`;
+        els.subtitle.textContent = metadata.author
+            ? `作者：${metadata.author}`
+            : (documentSource ? '原文、AI 解读、图解和问答围绕同一份文档组织。' : '视频、文稿、AI 解读和问答围绕同一条时间轴组织。');
         els.state.textContent = stateLabel(session.state);
         els.transcriptCount.textContent = `${transcript.lines.length} 段`;
         els.aiModel.textContent = modelLabel(session.ai && session.ai.chat_model);
         els.aiOverview.innerHTML = renderMarkdown(aiOverviewText(session));
         els.exportMarkdown.disabled = isPendingState(session.state) && !transcript.lines.length;
 
-        renderPlayback(playback);
+        renderSourceMode(source);
+        renderPlayback(playback, source);
         renderProgress(session);
         renderTranscript(transcript.lines || [], session);
-        renderAINotes(session);
         renderChat();
         applyEstimatedTranscriptTimes();
-        generateNoteFrames(session);
+        applyRequestedVisualSource();
+        if (state.visualTabActive) activateVisualLearning();
         scheduleNextPoll(session);
     }
 
-    function renderPlayback(playback) {
+    function renderSourceMode(source) {
+        const documentSource = ['document', 'text'].includes(source.kind);
+        document.body.classList.toggle('is-document-source', documentSource);
+        els.videoFrame.hidden = documentSource;
+        els.playStrip.hidden = documentSource;
+        els.sourceCard.hidden = !documentSource;
+        if (!documentSource) return;
+        els.sourceName.textContent = source.filename || '原始文档';
+        els.sourceMeta.textContent = source.kind === 'text'
+            ? '文字原稿 · 可在右侧文稿中精确定位'
+            : '文档原件 · 可在右侧文稿中精确定位';
+        const available = Boolean(source.original_url);
+        els.studySourceOpen.hidden = !available;
+        if (available) els.studySourceOpen.href = source.original_url;
+    }
+
+    function renderPlayback(playback, source) {
+        if (['document', 'text'].includes(source.kind)) {
+            els.video.removeAttribute('src');
+            els.videoFrame.classList.remove('has-video');
+            els.videoMeta.textContent = source.kind === 'text' ? '文字原稿' : '文档原件';
+            return;
+        }
         if (playback.source_available && playback.source_url) {
             if (els.video.getAttribute('src') !== playback.source_url) {
                 els.video.src = playback.source_url;
@@ -302,42 +363,6 @@
             <button class="back-playhead" type="button">回播放处</button>`;
     }
 
-    function renderAINotes(session) {
-        if (!els.aiNotesList) return;
-        const sections = buildStudySections(session, 6);
-        if (!sections.length) {
-            els.aiNotesList.innerHTML = panelFallback(session, '笔记生成中', '文稿完成后会自动整理图文笔记。');
-            return;
-        }
-
-        els.aiNotesList.innerHTML = sections.map((section) => {
-            const timeButton = renderTimeButton(section, 'note');
-            const points = section.points.map((point) => `<li>${escapeHTML(point)}</li>`).join('');
-            const frame = state.noteFrames[section.id];
-            const visual = frame
-                ? `<img src="${frame}" alt="${escapeHTML(section.title)} 对应的视频画面" loading="lazy">`
-                : `<div class="note-visual-fallback"><span>${escapeHTML(section.indexLabel)}</span><strong>${escapeHTML(section.title)}</strong></div>`;
-            return `<article class="ai-note-section">
-                <div class="note-heading">
-                    <h4>${escapeHTML(section.indexText)} ${escapeHTML(section.title)}</h4>
-                    ${timeButton}
-                </div>
-                <figure class="note-visual">${visual}</figure>
-                <ul>${points}</ul>
-            </article>`;
-        }).join('');
-    }
-
-    function panelFallback(session, title, message) {
-        if (isPendingState(session.state)) {
-            return `<div class="empty-panel"><strong>${title}</strong><span>${message}</span></div>`;
-        }
-        if (session.state === 'failed') {
-            return '<div class="empty-panel"><strong>内容生成失败</strong><span>请检查转录服务或重新上传视频。</span></div>';
-        }
-        return '<div class="empty-panel"><strong>暂无可整理内容</strong><span>当前任务还没有可用于生成学习卡片的文稿。</span></div>';
-    }
-
     function groupTranscriptLines(lines, size) {
         const groups = [];
         for (let index = 0; index < lines.length; index += size) {
@@ -346,155 +371,309 @@
         return groups;
     }
 
-    function buildStudySections(session, limit) {
-        const lines = (session.transcript && session.transcript.lines) || [];
-        const usableLines = lines.filter((line) => (line.text || '').trim());
-        if (!usableLines.length) return [];
+    function visualSourceReady(session) {
+        const overview = ((session.ai || {}).overview || '').trim();
+        return Boolean(overview);
+    }
 
-        const chunkSize = Math.max(1, Math.ceil(usableLines.length / limit));
-        return groupTranscriptLines(usableLines, chunkSize).slice(0, limit).map((group, index) => {
-            const firstLine = group[0];
-            const clean = normalizeText(group.map((line) => line.text).join(' '));
-            const title = sectionTitle(clean, index);
-            return {
-                id: `ai-note-${index + 1}`,
-                indexText: chineseIndex(index + 1),
-                indexLabel: String(index + 1).padStart(2, '0'),
-                title,
-                summary: shorten(clean, 120),
-                points: splitPoints(clean),
-                startSeconds: firstLine.seekable ? Number(firstLine.start_seconds) : null,
-                seekable: Boolean(firstLine.seekable),
-            };
+    function setVisualStatus(message, retry) {
+        if (!els.visualStatus) return;
+        els.visualStatus.hidden = !message;
+        els.visualStatusText.textContent = message || '';
+        els.visualRetry.hidden = !retry;
+    }
+
+    function setFullNoteStatus(message, retry) {
+        els.visualFullNoteStatus.hidden = !message;
+        els.visualFullNoteStatusText.textContent = message || '';
+        els.visualFullNoteRetry.hidden = !retry;
+    }
+
+    function renderVisualPlaceholder(container, title, message) {
+        if (!container) return;
+        const empty = document.createElement('div');
+        empty.className = 'empty-panel';
+        const heading = document.createElement('strong');
+        const copy = document.createElement('span');
+        heading.textContent = title;
+        copy.textContent = message;
+        empty.append(heading, copy);
+        container.replaceChildren(empty);
+    }
+
+    function renderVisualDocument(documentType, visualDocument) {
+        if (!visualDocument || !window.VisualLearning) return;
+        state.visualDocuments[documentType] = visualDocument;
+        const options = { onSourceRef: handleVisualSourceRef };
+        renderTwoLayerVisual();
+        if (documentType === 'overview') els.visualExpand.disabled = false;
+        if (state.activeVisualType === documentType && els.visualDialog.open) {
+            window.VisualLearning.render(els.visualModalContent, visualDocument, options);
+        }
+        applyVisualTheme();
+    }
+
+    function renderTwoLayerVisual() {
+        if (!window.VisualLearning) return;
+        const fullNoteState = state.visualStates.full_note || {};
+        const overviewState = state.visualStates.overview || {};
+        const sectionCandidates = [
+            fullNoteState.interpretation_sections,
+            overviewState.interpretation_sections,
+        ];
+        const sections = sectionCandidates.find((items) => Array.isArray(items) && items.length)
+            || sectionCandidates.find(Array.isArray)
+            || [];
+        const availability = [
+            fullNoteState.interpretation_available,
+            overviewState.interpretation_available,
+        ].filter((value) => typeof value === 'boolean');
+        const interpretationAvailable = availability.includes(true)
+            ? true
+            : (availability.includes(false) ? false : Boolean(sections.length));
+        if (!state.visualDocuments.overview
+            && !state.visualDocuments.full_note
+            && interpretationAvailable !== false) return;
+        window.VisualLearning.renderTwoLayer(els.visualOverview, {
+            overview: state.visualDocuments.overview,
+            fullNote: state.visualDocuments.full_note,
+            sections: sections,
+            interpretationAvailable: interpretationAvailable,
+        }, {
+            onSourceRef: handleVisualSourceRef,
+            onSectionEvidence: handleVisualSectionEvidence,
         });
     }
 
-    function chineseIndex(value) {
-        const labels = ['一、', '二、', '三、', '四、', '五、', '六、', '七、', '八、'];
-        return labels[value - 1] || `${value}.`;
+    function applyVisualTheme() {
+        const theme = els.visualTheme.value;
+        window.VisualLearning.setTheme(els.visualOverview, theme);
+        window.VisualLearning.setTheme(els.visualModalContent, theme);
     }
 
-    function sectionTitle(text, index) {
-        const first = text.split(/[。！？!?；;]/)[0] || text;
-        return shorten(first, 24) || `重点 ${index + 1}`;
-    }
+    function handleVisualState(documentType, payload) {
+        state.visualStates[documentType] = payload;
+        const documentRecord = payload && payload.document;
+        const attempt = payload && payload.latest_attempt;
+        if (documentRecord && documentRecord.status === 'success' && documentRecord.document_json) {
+            renderVisualDocument(documentType, documentRecord.document_json);
+        } else {
+            renderTwoLayerVisual();
+        }
 
-    function splitPoints(text) {
-        const sentences = [];
-        let buffer = '';
-        Array.from(text).forEach((char) => {
-            buffer += char;
-            if ('。！？!?；;'.includes(char)) {
-                const sentence = buffer.trim();
-                if (sentence) sentences.push(sentence);
-                buffer = '';
+        const pending = attempt && ['pending', 'generating'].includes(attempt.status);
+        const failed = attempt && attempt.status === 'failed';
+        if (documentType === 'overview') {
+            if (payload && payload.stale) {
+                setVisualStatus('原文已经更新，当前展示的是上一版视觉速览。', true);
+            } else if (failed) {
+                setVisualStatus(documentRecord && documentRecord.status === 'success'
+                    ? '新版本生成失败，已保留上一版。'
+                    : '视觉速览生成失败。', true);
+            } else if (pending) {
+                setVisualStatus('正在生成视觉速览…', false);
+            } else {
+                setVisualStatus('', false);
             }
-        });
-        if (buffer.trim()) sentences.push(buffer.trim());
-        const points = sentences.length ? sentences : [text];
-        return points.slice(0, 3).map((item) => shorten(item, 58));
-    }
-
-    function normalizeText(value) {
-        return String(value || '').replace(/\s+/g, ' ').trim();
-    }
-
-    function shorten(value, maxLength) {
-        const text = normalizeText(value);
-        if (text.length <= maxLength) return text;
-        return `${text.slice(0, maxLength - 1)}…`;
-    }
-
-    function renderTimeButton(section, source) {
-        if (!section.seekable || !Number.isFinite(section.startSeconds)) {
-            return '<span class="time-pill is-disabled">--:--</span>';
+        } else if (payload && payload.stale) {
+            setFullNoteStatus('原解读已经更新，当前展示的是上一版完整笔记。', true);
+        } else if (failed) {
+            setFullNoteStatus(documentRecord && documentRecord.status === 'success'
+                ? '完整笔记新版本生成失败，已保留上一版。'
+                : '完整笔记生成失败。', true);
+        } else if (pending) {
+            setFullNoteStatus('正在生成完整笔记…', false);
+        } else {
+            setFullNoteStatus('', false);
         }
-        return `<button class="time-pill panel-seek" type="button" data-source="${source}" data-time="${section.startSeconds}">▶ ${formatTime(section.startSeconds)}</button>`;
+        if (pending) scheduleVisualPoll(documentType);
+        updateVisualDialogState(documentType, payload);
+        return Boolean(documentRecord && documentRecord.status === 'success' && documentRecord.document_json);
     }
 
-    async function generateNoteFrames(session) {
-        const playback = session.playback || {};
-        if (!playback.source_available || !playback.source_url) return;
+    function updateVisualDialogState(documentType, payload) {
+        if (state.activeVisualType !== documentType) return;
+        const attempt = payload && payload.latest_attempt;
+        const pending = attempt && ['pending', 'generating'].includes(attempt.status);
+        const failed = attempt && attempt.status === 'failed';
+        const stale = Boolean(payload && payload.stale);
+        if (pending) {
+            els.visualModalStatus.textContent = '正在生成新版本…';
+            els.visualRegenerate.hidden = true;
+        } else if (stale) {
+            els.visualModalStatus.textContent = '原内容已更新，当前是上一版。';
+            els.visualRegenerate.hidden = false;
+        } else if (failed) {
+            els.visualModalStatus.textContent = '新版本生成失败，已保留上一版。';
+            els.visualRegenerate.hidden = false;
+        } else {
+            els.visualModalStatus.textContent = '';
+            els.visualRegenerate.hidden = true;
+        }
+    }
 
-        const sections = buildStudySections(session, 6).filter((section) => section.seekable);
-        if (!sections.length) return;
-
-        const token = `${playback.source_url}:${sections.map((section) => Math.round(section.startSeconds || 0)).join(',')}`;
-        if (state.noteFrameToken === token) return;
-        state.noteFrameToken = token;
-        state.noteFrames = {};
-
+    async function loadVisualState(documentType, generateWhenMissing) {
+        if (state.visualLoading.has(documentType)) return;
+        state.visualLoading.add(documentType);
         try {
-            const frames = await captureVideoFrames(playback.source_url, sections);
-            if (!Object.keys(frames).length || state.noteFrameToken !== token) return;
-            state.noteFrames = frames;
-            if (state.session) renderAINotes(state.session);
+            const payload = await apiJSON(
+                `/api/visual-learning/study/${encodeURIComponent(viewToken)}?document_type=${encodeURIComponent(documentType)}`
+            );
+            const hasDocument = handleVisualState(documentType, payload);
+            if (!hasDocument && !payload.latest_attempt && generateWhenMissing) {
+                await requestVisualGeneration(documentType);
+            } else if (!hasDocument && documentType === 'full_note' && !payload.latest_attempt) {
+                renderVisualPlaceholder(els.visualModalContent, '尚未生成完整笔记', '点击完整笔记后开始生成。');
+            }
         } catch (error) {
-            state.noteFrames = {};
+            if (documentType === 'overview') {
+                setVisualStatus(error.status === 404 || error.status === 405
+                    ? '视觉学习接口尚未加载，请重启服务。'
+                    : (error.message || '视觉速览加载失败。'), true);
+            } else {
+                setFullNoteStatus(error.message || '完整笔记加载失败。', true);
+                renderVisualPlaceholder(els.visualModalContent, '完整笔记加载失败', error.message || '请稍后重试。');
+            }
+        } finally {
+            state.visualLoading.delete(documentType);
         }
     }
 
-    function captureVideoFrames(sourceUrl, sections) {
-        return new Promise((resolve) => {
-            const video = document.createElement('video');
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            const frames = {};
-            let index = 0;
-
-            canvas.width = 360;
-            canvas.height = 202;
-            video.muted = true;
-            video.playsInline = true;
-            video.preload = 'metadata';
-
-            const cleanup = () => {
-                video.removeAttribute('src');
-                video.load();
-            };
-
-            const finish = () => {
-                cleanup();
-                resolve(frames);
-            };
-
-            const captureCurrent = () => {
-                const section = sections[index];
-                try {
-                    if (video.videoWidth && video.videoHeight && context) {
-                        context.fillStyle = '#111';
-                        context.fillRect(0, 0, canvas.width, canvas.height);
-                        const scale = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-                        const width = video.videoWidth * scale;
-                        const height = video.videoHeight * scale;
-                        const x = (canvas.width - width) / 2;
-                        const y = (canvas.height - height) / 2;
-                        context.drawImage(video, x, y, width, height);
-                        frames[section.id] = canvas.toDataURL('image/jpeg', 0.78);
-                    }
-                } catch (error) {
-                    finish();
-                    return;
+    async function requestVisualGeneration(documentType, options) {
+        const force = Boolean(options && options.force);
+        if (state.visualLoading.has(`generate:${documentType}`)) return;
+        state.visualLoading.add(`generate:${documentType}`);
+        if (documentType === 'full_note') {
+            setFullNoteStatus('正在生成完整笔记…', false);
+            renderVisualPlaceholder(els.visualModalContent, '正在生成完整笔记', '内容较长时需要等待一会儿。');
+        }
+        try {
+            const payload = await apiJSON(
+                `/api/visual-learning/study/${encodeURIComponent(viewToken)}/generate`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        document_type: documentType,
+                        style: els.visualTheme.value,
+                        diagram_type: 'auto',
+                        force,
+                    }),
                 }
+            );
+            handleVisualState(documentType, payload);
+        } catch (error) {
+            if (documentType === 'overview') {
+                setVisualStatus(error.message || '视觉速览生成失败。', true);
+            } else {
+                setFullNoteStatus(error.message || '完整笔记生成失败。', true);
+                renderVisualPlaceholder(els.visualModalContent, '完整笔记生成失败', error.message || '请稍后重试。');
+            }
+        } finally {
+            state.visualLoading.delete(`generate:${documentType}`);
+        }
+    }
 
-                index += 1;
-                seekNext();
-            };
+    function scheduleVisualPoll(documentType) {
+        window.clearTimeout(state.visualPollTimers[documentType]);
+        state.visualPollTimers[documentType] = window.setTimeout(
+            () => loadVisualState(documentType, false),
+            2200
+        );
+    }
 
-            const seekNext = () => {
-                if (index >= sections.length) {
-                    finish();
-                    return;
-                }
-                const target = Math.min(Math.max(0, sections[index].startSeconds || 0), Math.max(0, (video.duration || 0) - 0.2));
-                video.currentTime = target;
-            };
+    function ensureVisualOverview(session) {
+        if (!visualSourceReady(session)) {
+            setVisualStatus('原文就绪后会自动生成视觉速览。', false);
+            return;
+        }
+        loadVisualState('overview', true);
+    }
 
-            video.addEventListener('loadedmetadata', seekNext, { once: true });
-            video.addEventListener('seeked', captureCurrent);
-            video.addEventListener('error', finish, { once: true });
-            video.src = sourceUrl;
-        });
+    function activateVisualLearning() {
+        if (state.visualActivated) return;
+        if (!visualSourceReady(state.session || {})) {
+            state.visualActivated = false;
+            setVisualStatus('原文就绪后可重新打开图解。', false);
+            return;
+        }
+        state.visualActivated = true;
+        setFullNoteStatus('正在加载完整笔记…', false);
+        loadVisualState('overview', true);
+        loadVisualState('full_note', true);
+    }
+
+    function openVisualDialog(documentType) {
+        state.activeVisualType = documentType;
+        els.visualModalTitle.textContent = documentType === 'full_note' ? '完整图文笔记' : '视觉速览';
+        const document = state.visualDocuments[documentType];
+        if (document) {
+            window.VisualLearning.render(
+                els.visualModalContent,
+                document,
+                { onSourceRef: handleVisualSourceRef }
+            );
+            applyVisualTheme();
+        } else {
+            renderVisualPlaceholder(els.visualModalContent, '正在准备内容', '请稍候。');
+        }
+        if (!els.visualDialog.open) els.visualDialog.showModal();
+        updateVisualDialogState(documentType, state.visualStates[documentType] || {});
+    }
+
+    function handleVisualSourceRef(refId, sourceRef) {
+        if (els.visualDialog.open) els.visualDialog.close();
+        if (refId.endsWith(':summary') || refId.includes(':summary:section:')) {
+            activateTab('ai');
+            els.aiOverview.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            return;
+        }
+        activateTab('transcript');
+        const lines = ((state.session || {}).transcript || {}).lines || [];
+        let line = sourceRef.line_id
+            ? lines.find((item) => item.id === sourceRef.line_id)
+            : null;
+        if (!line && Number.isInteger(sourceRef.paragraph_index)) {
+            line = lines[sourceRef.paragraph_index];
+        }
+        if (Number.isFinite(Number(sourceRef.start_seconds)) && els.video.src) {
+            seekTo(Number(sourceRef.start_seconds));
+        }
+        if (!line) return;
+        state.currentLineId = line.id;
+        const target = Array.from(document.querySelectorAll('.transcript-segment'))
+            .find((button) => button.dataset.lineId === line.id);
+        if (target) {
+            document.querySelectorAll('.transcript-segment').forEach((button) => {
+                button.classList.toggle('is-current', button === target);
+            });
+            target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+    }
+
+    function handleVisualSectionEvidence(payload) {
+        const references = (payload && payload.originalReferences) || [];
+        const fallback = (payload && payload.summaryReferences) || [];
+        const selected = references[0] || fallback[0];
+        if (selected) handleVisualSourceRef(selected.refId, selected.sourceRef);
+    }
+
+    function applyRequestedVisualSource() {
+        if (state.requestedVisualSourceApplied) return;
+        const params = new URLSearchParams(window.location.search);
+        const sourceKind = params.get('visual_source');
+        const lineId = params.get('visual_line_id');
+        const paragraphValue = params.get('visual_paragraph');
+        const startValue = params.get('visual_start');
+        if (!sourceKind && !lineId && paragraphValue === null && startValue === null) return;
+        state.requestedVisualSourceApplied = true;
+        handleVisualSourceRef(
+            sourceKind === 'summary' ? `study:${viewToken}:summary` : 'requested-source',
+            {
+                line_id: lineId || null,
+                paragraph_index: paragraphValue === null ? null : Number(paragraphValue),
+                start_seconds: startValue === null ? null : Number(startValue),
+            }
+        );
     }
 
     function renderChat() {
@@ -551,6 +730,8 @@
                 document.querySelectorAll('.study-panel-view').forEach((panel) => {
                     panel.classList.toggle('is-active', panel.id === `tab-${tab}`);
                 });
+                state.visualTabActive = tab === 'visual';
+                if (tab === 'visual') activateVisualLearning();
             });
         });
     }
@@ -679,8 +860,6 @@
         }));
         state.estimatedToken = token;
         renderTranscript(session.transcript.lines, session);
-        renderAINotes(session);
-        generateNoteFrames(session);
     }
 
     function bindChat() {
@@ -707,6 +886,45 @@
     function bindActions() {
         els.copyCurrentLine.addEventListener('click', copyCurrentLine);
         els.exportMarkdown.addEventListener('click', exportMarkdown);
+    }
+
+    function bindVisualLearning() {
+        els.visualTheme.addEventListener('change', applyVisualTheme);
+        els.visualExpand.addEventListener('click', () => openVisualDialog('overview'));
+        els.visualFullNote.addEventListener('click', async () => {
+            openVisualDialog('full_note');
+            await loadVisualState('full_note', false);
+            const payload = state.visualStates.full_note || {};
+            const attempt = payload.latest_attempt;
+            if (!state.visualDocuments.full_note && (!attempt || attempt.status === 'failed')) {
+                await requestVisualGeneration('full_note', { force: Boolean(attempt) });
+            }
+        });
+        els.visualRetry.addEventListener('click', () => {
+            requestVisualGeneration('overview', { force: true });
+        });
+        els.visualFullNoteRetry.addEventListener('click', () => {
+            requestVisualGeneration('full_note', { force: true });
+        });
+        els.visualRegenerate.addEventListener('click', () => {
+            requestVisualGeneration(state.activeVisualType, { force: true });
+        });
+        els.visualModalClose.addEventListener('click', () => els.visualDialog.close());
+        els.visualDialog.addEventListener('click', (event) => {
+            if (event.target === els.visualDialog) els.visualDialog.close();
+        });
+        els.visualExportSvg.addEventListener('click', () => {
+            const metadata = (state.session && state.session.metadata) || {};
+            try {
+                window.VisualLearning.exportSvg(
+                    window.VisualLearning.activeDiagram(els.visualOverview),
+                    `${safeFilename(metadata.title || 'visual-learning')}.svg`
+                );
+            } catch (error) {
+                showToast(error.message || '导出失败');
+            }
+        });
+        els.visualPrint.addEventListener('click', () => window.print());
     }
 
     function activateTab(tab) {
@@ -867,9 +1085,7 @@
             els.state.textContent = '不可用';
             els.title.textContent = '学习内容加载失败';
             els.aiOverview.textContent = error.message || '请稍后重试';
-            if (els.aiNotesList) {
-                els.aiNotesList.innerHTML = `<div class="empty-panel"><strong>笔记加载失败</strong><span>${message}</span></div>`;
-            }
+            setVisualStatus(error.message || '视觉速览加载失败', true);
             els.transcriptList.innerHTML = `<div class="empty-panel"><strong>文稿加载失败</strong><span>${message}</span></div>`;
             els.chatList.innerHTML = `<div class="empty-panel"><strong>问答加载失败</strong><span>${message}</span></div>`;
             els.exportMarkdown.disabled = true;
@@ -891,6 +1107,7 @@
         bindVideo();
         bindChat();
         bindActions();
+        bindVisualLearning();
         loadSession();
     }
 

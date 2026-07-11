@@ -34,7 +34,8 @@ async def settings_page():
     version_files = [
         page,
         static_dir / "css" / "editorial.css",
-        static_dir / "js" / "site-nav.js",
+        static_dir / "css" / "app-shell.css",
+        static_dir / "js" / "app-shell.js",
         static_dir / "js" / "pwa-register.js",
     ]
     version = str(int(max((f.stat().st_mtime for f in version_files if f.exists()), default=0)))

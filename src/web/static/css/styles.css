@@ -38,7 +38,7 @@ body {
     margin-bottom: 0.5rem;
     font-weight: 500;
     font-family: 'Fraunces', Georgia, 'Songti SC', serif;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
 }
 
 .header p {
@@ -168,6 +168,10 @@ body {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     min-height: 60px;
+}
+
+.url-preview[hidden] {
+    display: none;
 }
 
 .no-urls {
@@ -316,16 +320,6 @@ body {
     justify-content: space-between;
 }
 
-.required-indicator {
-    font-size: 0.85rem;
-    color: #dc2626;
-    font-weight: 500;
-    background-color: #fef2f2;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    border: 1px solid #fecaca;
-}
-
 .advanced-toggle:hover {
     color: var(--accent-secondary);
 }
@@ -423,6 +417,15 @@ body {
     cursor: not-allowed;
     transform: none;
     box-shadow: 0 2px 6px rgba(228, 80, 58, 0.2);
+}
+
+.submit-hint {
+    min-height: 1.35rem;
+    margin-top: 0.65rem;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    text-align: center;
 }
 
 .btn-icon {
@@ -690,10 +693,6 @@ body {
         gap: 0.5rem;
     }
 
-    .required-indicator {
-        align-self: flex-end;
-    }
-
     /* 改善URL选项在平板上的显示 */
     .url-option {
         padding: 1rem;
@@ -757,11 +756,6 @@ body {
 
     .toggle-left {
         font-size: 1rem;
-    }
-
-    .required-indicator {
-        font-size: 0.8rem;
-        padding: 0.2rem 0.4rem;
     }
 
     /* URL预览在手机上的优化 */
@@ -1029,7 +1023,7 @@ body {
     display: block;
     font-size: 1.75rem;
     font-weight: 700;
-    letter-spacing: -0.5px;
+    letter-spacing: 0;
     line-height: 1.2;
     margin-bottom: 0.25rem;
     color: var(--header-text);

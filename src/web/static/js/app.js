@@ -234,6 +234,25 @@ class URLExtractor {
  * API调用管理类
  */
 class APIManager {
+    static async submitStudyText(title, content) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        if (!token) throw new Error('请先设置 API 访问令牌');
+
+        const response = await fetch('/api/study/text', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ title, content })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.detail || data.message || `提交失败（HTTP ${response.status}）`);
+        }
+        return data;
+    }
+
     /**
      * 提交转录任务
      */
@@ -484,7 +503,7 @@ class TaskHistoryManager {
         if (pageItems.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'hist-empty';
-            empty.innerHTML = '<span class="empty-icon">🗂️</span>该筛选条件下暂无记录';
+            empty.innerHTML = '<span class="empty-icon">—</span>该筛选条件下暂无记录';
             list.appendChild(empty);
         } else {
             pageItems.forEach((task) => list.appendChild(buildHistoryCard(task)));
@@ -557,12 +576,12 @@ class ThemeManager {
 
         if (theme === 'dark') {
             if (themeToggle) {
-                themeToggle.textContent = '☀️';
+                themeToggle.textContent = '浅色';
                 themeToggle.title = '切换到浅色模式';
             }
         } else {
             if (themeToggle) {
-                themeToggle.textContent = '🌙';
+                themeToggle.textContent = '深色';
                 themeToggle.title = '切换到深色模式';
             }
         }
@@ -627,21 +646,21 @@ class UIManager {
         let icon = '';
         switch (type) {
             case 'success':
-                icon = '✅';
+                icon = '';
                 break;
             case 'error':
-                icon = '❌';
+                icon = '';
                 break;
             case 'loading':
                 icon = '<span class="loading-spinner"></span>';
                 break;
             default:
-                icon = 'ℹ️';
+                icon = '';
         }
 
         content.innerHTML = `
             <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">
-                ${icon} ${message}
+                ${icon ? icon + ' ' : ''}${message}
             </div>
             ${details ? `<div style="font-size: 0.95rem; opacity: 0.8;">${details}</div>` : ''}
         `;
@@ -665,6 +684,7 @@ class UIManager {
         const btn = document.getElementById('submit-btn');
         const btnIcon = btn.querySelector('.btn-icon');
         const btnText = btn.querySelector('.btn-text');
+        const hint = document.getElementById('submit-hint');
 
         const selectedURL = getSelectedURL();
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
@@ -674,17 +694,21 @@ class UIManager {
         btn.disabled = !canSubmit;
 
         if (currentTask) {
-            btnIcon.textContent = '⏳';
+            btnIcon.textContent = '…';
             btnText.textContent = '处理中...';
+            if (hint) hint.textContent = '当前任务处理中，请稍候。';
         } else if (!selectedURL) {
-            btnIcon.textContent = '📝';
-            btnText.textContent = '请输入包含视频链接的内容';
+            btnIcon.textContent = '↗';
+            btnText.textContent = '开始解析';
+            if (hint) hint.textContent = '请先粘贴包含链接的内容。';
         } else if (!token) {
-            btnIcon.textContent = '🔐';
-            btnText.textContent = '请在高级设置中填写 API 令牌';
-        } else {
-            btnIcon.textContent = '🚀';
+            btnIcon.textContent = '↗';
             btnText.textContent = submitLabelForUrl(selectedURL);
+            if (hint) hint.textContent = '请在高级设置中填写 API 令牌。';
+        } else {
+            btnIcon.textContent = '↗';
+            btnText.textContent = submitLabelForUrl(selectedURL);
+            if (hint) hint.textContent = '';
         }
     }
 
@@ -694,6 +718,7 @@ class UIManager {
     static toggleAdvancedSettings() {
         const settings = document.getElementById('advanced-settings');
         const icon = document.querySelector('.toggle-icon');
+        if (!settings || !icon) return;
 
         isAdvancedSettingsExpanded = !isAdvancedSettingsExpanded;
 
@@ -715,11 +740,11 @@ class UIManager {
 
         if (input.classList.contains('secret-masked')) {
             input.classList.remove('secret-masked');
-            btn.textContent = '🙈';
+            btn.textContent = '隐藏';
             btn.setAttribute('aria-label', '隐藏 API 令牌');
         } else {
             input.classList.add('secret-masked');
-            btn.textContent = '👁️';
+            btn.textContent = '显示';
             btn.setAttribute('aria-label', '显示 API 令牌');
         }
     }
@@ -756,7 +781,8 @@ function handleTextInput(textarea) {
     const previewContainer = document.getElementById('url-preview');
 
     if (urlResults.length === 0) {
-        previewContainer.innerHTML = '<div class="no-urls">未检测到URL</div>';
+        previewContainer.hidden = true;
+        previewContainer.innerHTML = '';
         UIManager.updateSubmitButton();
         return;
     }
@@ -778,6 +804,7 @@ function handleTextInput(textarea) {
     html += '</div>';
 
     previewContainer.innerHTML = html;
+    previewContainer.hidden = false;
 
     // 绑定选择事件
     bindURLSelection();
@@ -946,14 +973,7 @@ function histTypeOf(task) {
 function buildHistoryCard(task) {
     const cls = classifyContent(task.url);
     const histType = histTypeOf(task);
-    // 图标按来源平台映射（展示来源，避免帖子一律显示 𝕏）
-    const PLATFORM_ICONS = {
-        twitter: '𝕏', xiaohongshu: '📕', weixin: '📰',
-        bilibili: '📺', douyin: '🎵', youtube: '▶️', xiaoyuzhou: '🎙️',
-    };
-    const icon = histType === 'file'
-        ? '📁'
-        : (PLATFORM_ICONS[cls.platform] || (histType === 'post' ? '📝' : '🎬'));
+    const icon = histType === 'file' ? '文' : (histType === 'post' ? '帖' : '视');
     const typeLabel = histType === 'post' ? '帖子' : (histType === 'file' ? '文件' : '视频');
     const st = statusInfo(task.status, histType);
     const timeStr = formatRelativeTime(task.timestamp);
@@ -971,18 +991,18 @@ function buildHistoryCard(task) {
         const retryHref = (cls.type === 'post')
             ? ('/post?url=' + encodeURIComponent(task.url))
             : '/add_task_by_web';
-        viewBtn = `<a class="hist-btn" href="${retryHref}">🔁 重试</a>`;
+        viewBtn = `<a class="hist-btn" href="${retryHref}">重试</a>`;
     } else if (st.cls === 'running' || st.cls === 'queued') {
-        viewBtn = `<a class="hist-btn" aria-disabled="true">⏳ 处理中</a>`;
+        viewBtn = `<a class="hist-btn" aria-disabled="true">处理中</a>`;
     } else if (task.result_id) {
         // 帖子洞察结果（已持久化到本地）→ 查看存储结果
-        viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">👁️ 查看</a>`;
+        viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">查看</a>`;
     } else if (task.view_token) {
-        viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">👁️ 查看</a>`;
+        viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">查看</a>`;
     } else if (cls.type === 'post') {
-        viewBtn = `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url)}">🔁 重新分析</a>`;
+        viewBtn = `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url)}">重新分析</a>`;
     } else {
-        viewBtn = `<a class="hist-btn" href="/add_task_by_web">🔁 重新提交</a>`;
+        viewBtn = `<a class="hist-btn" href="/add_task_by_web">重新提交</a>`;
     }
 
     const tags = [];
@@ -1014,15 +1034,15 @@ function buildHistoryCard(task) {
                     ${author ? `<div class="hist-author">作者：${escapeHtml(author)}</div>` : ''}
                     <div class="hist-preview">${escapeHtml(previewText)}</div>
                     <div class="hist-meta">
-                        <span class="hist-source">🔗 <a href="${escapeAttr(task.url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a></span>
+                        <span class="hist-source"><a href="${escapeAttr(task.url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a></span>
                         <span class="hist-time">${timeStr}</span>
                         ${tags.join('')}
                     </div>
                 </div>
                 <div class="hist-actions">
                     ${viewBtn}
-                    <button class="hist-btn" onclick="copyToClipboard('${jsAttr(task.url)}')">📋 复制</button>
-                    <button class="hist-btn danger" onclick="TaskHistoryManager.deleteTask('${jsAttr(task.id)}')">🗑️ 删除</button>
+                    <button class="hist-btn" onclick="copyToClipboard('${jsAttr(task.url)}')">复制</button>
+                    <button class="hist-btn danger" onclick="TaskHistoryManager.deleteTask('${jsAttr(task.id)}')">删除</button>
                 </div>
             `;
     return card;
@@ -1174,6 +1194,41 @@ function initWorkbenchUI() {
     if (window.location.hash === '#local-video-study') {
         const fileTab = document.getElementById('tab-file');
         if (fileTab) fileTab.click();
+    }
+    if (window.location.hash === '#pasted-text-study') {
+        const textTab = document.getElementById('tab-text');
+        if (textTab) textTab.click();
+    }
+
+    const textForm = document.getElementById('study-text-form');
+    const textTitle = document.getElementById('study-text-title');
+    const textContent = document.getElementById('study-text-content');
+    const textSubmit = document.getElementById('study-text-submit');
+    const textStatus = document.getElementById('study-text-status');
+    if (textForm && textTitle && textContent && textSubmit && textStatus) {
+        const updateTextSubmit = () => {
+            textSubmit.disabled = !textContent.value.trim();
+        };
+        textContent.addEventListener('input', updateTextSubmit);
+        textForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const content = textContent.value.trim();
+            if (!content) return;
+            textSubmit.disabled = true;
+            textStatus.textContent = '正在创建学习内容…';
+            try {
+                const data = await APIManager.submitStudyText(textTitle.value.trim(), content);
+                if (!data.data || !data.data.view_token) {
+                    throw new Error(data.message || '未返回学习内容标识');
+                }
+                textStatus.textContent = '正在打开学习工作区…';
+                window.location.href = '/study/' + data.data.view_token;
+            } catch (error) {
+                textStatus.textContent = error && error.message ? error.message : '提交失败，请重试';
+                updateTextSubmit();
+            }
+        });
+        updateTextSubmit();
     }
 
     // 本地文件：上传 → 转录 → 跳结果页
@@ -1453,7 +1508,7 @@ async function submitTranscription(event) {
 
             if (historyResult.isDuplicate) {
                 statusMessage = '任务提交成功！(检测到重复URL)';
-                statusDetails += `<span style="color: #f59e0b;">⚠️ 相同链接的旧任务记录已被更新</span><br>`;
+                statusDetails += `<span style="color: #a36b20;">相同链接的旧任务记录已被更新</span><br>`;
             }
 
             statusDetails += `<a href="/view/${response.data.view_token}" target="_blank" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
@@ -1462,7 +1517,9 @@ async function submitTranscription(event) {
 
             // 清空表单
             document.getElementById('share-content').value = '';
-            document.getElementById('url-preview').innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
+            const previewContainer = document.getElementById('url-preview');
+            previewContainer.hidden = true;
+            previewContainer.innerHTML = '';
 
             // 3秒后跳转到查看页面
             setTimeout(() => {
@@ -1524,7 +1581,8 @@ function initializePage() {
 
     // 确保URL预览区域初始状态正确
     const previewContainer = document.getElementById('url-preview');
-    previewContainer.innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
+    previewContainer.hidden = true;
+    previewContainer.innerHTML = '';
 
     // 如果没有保存的 token，自动展开高级设置
     if (!savedToken) {
@@ -1535,7 +1593,9 @@ function initializePage() {
     form.addEventListener('submit', submitTranscription);
 
     const advancedToggle = document.getElementById('advanced-toggle');
-    advancedToggle.addEventListener('click', UIManager.toggleAdvancedSettings);
+    if (advancedToggle) {
+        advancedToggle.addEventListener('click', UIManager.toggleAdvancedSettings);
+    }
 
     const tokenToggle = document.getElementById('toggle-token-visibility');
     tokenToggle.addEventListener('click', UIManager.toggleTokenVisibility);

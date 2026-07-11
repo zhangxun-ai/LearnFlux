@@ -1,6 +1,19 @@
 import asyncio
 import contextlib
+import os
 import threading
+from pathlib import Path
+from typing import TextIO
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows only
+    fcntl = None
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - POSIX only
+    msvcrt = None
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +27,45 @@ from .context import get_cache_manager, get_config, get_logger, get_static_dir, 
 from .services.progress_notifications import process_progress_reminders
 from .routes import audit, collections, flywheel, health, journal, post_insight, settings, study, tasks, trend_radar, users, views, visual_learning
 from .services.transcription import process_llm_queue, process_task_queue
+
+
+def _acquire_runtime_lock(cache_dir: Path) -> TextIO | None:
+    """Hold task recovery ownership for the lifetime of one API instance."""
+    lock_path = Path(cache_dir) / ".runtime.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_path.open("a+", encoding="utf-8")
+    try:
+        if fcntl is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        elif msvcrt is not None:  # pragma: no cover - Windows only
+            lock_file.seek(0)
+            if not lock_file.read(1):
+                lock_file.write("\0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        else:  # pragma: no cover - unsupported Python platform
+            raise OSError("no supported file-lock implementation")
+    except (BlockingIOError, OSError):
+        lock_file.close()
+        return None
+
+    lock_file.seek(0)
+    lock_file.truncate()
+    lock_file.write(str(os.getpid()))
+    lock_file.flush()
+    return lock_file
+
+
+def _release_runtime_lock(lock_file: TextIO | None) -> None:
+    if lock_file is None:
+        return
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    elif msvcrt is not None:  # pragma: no cover - Windows only
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+    lock_file.close()
 
 
 def create_app() -> FastAPI:
@@ -85,14 +137,24 @@ def create_app() -> FastAPI:
 
         init_all_notifiers()
 
-        # 启动恢复：把上次进程中断遗留的非终态任务（queued/processing/calibrating）
-        # 标记为 failed。内存任务队列随进程崩溃丢失，否则这些任务会永久卡在处理中。
-        try:
-            recovered = get_cache_manager().recover_orphaned_tasks()
-            if recovered:
-                logger.warning(f"启动恢复：已将 {recovered} 个中断任务标记为 failed")
-        except Exception as exc:
-            logger.exception("启动恢复扫描失败: %s", exc)
+        # 只有持有运行锁的主实例可以执行恢复。测试进程或重复启动的短生命周期实例
+        # 不得把仍由在线服务处理的任务误判为孤儿任务。
+        cache_manager = get_cache_manager()
+        runtime_lock_file = _acquire_runtime_lock(cache_manager.cache_dir)
+        app.state.runtime_lock_file = runtime_lock_file
+        if runtime_lock_file is None:
+            logger.warning(
+                "Skipping orphan task recovery: another API instance owns the runtime lock"
+            )
+        else:
+            try:
+                recovered = cache_manager.recover_orphaned_tasks()
+                if recovered:
+                    logger.warning(
+                        f"启动恢复：已将 {recovered} 个中断任务标记为 failed"
+                    )
+            except Exception as exc:
+                logger.exception("启动恢复扫描失败: %s", exc)
 
         # 设置 LLM 模块默认配置（用于 JSON 结构化输出）
         set_default_config(config)
@@ -162,6 +224,8 @@ def create_app() -> FastAPI:
             app.state.asr_monitor.stop()
 
         shutdown_all_notifiers()
+        _release_runtime_lock(getattr(app.state, "runtime_lock_file", None))
+        app.state.runtime_lock_file = None
         logger.info("API服务已关闭")
 
     return app

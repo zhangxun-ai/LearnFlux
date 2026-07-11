@@ -15,12 +15,53 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=20260709-1">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=20260709-1">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css">
-    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260702-1">
+    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260709-1">
     <script src="/static/js/pwa-register.js?v=20260630-1" defer></script>
+    <script src="/static/js/app-shell.js?v=20260709-2" defer></script>
 </head>
-<body class="focus-body" data-mode="rainy" data-font="handwriting" data-size="small">
-    <main class="focus-stage" aria-label="心流写作空间">
+<body class="app-shell has-app-shell focus-body" data-mode="rainy" data-font="handwriting" data-size="small">
+    <script>
+    (function () {
+        if (new URLSearchParams(window.location.search).has('embedded')) {
+            document.body.dataset.embedded = 'true';
+        }
+    })();
+    </script>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item is-active" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">心流写作</span></div>
+        </header>
+        <section class="page-stage">
+    <h1 class="sr-only">心流写作</h1>
+    <section class="focus-stage" aria-label="心流写作空间">
         <canvas id="focus-canvas" class="focus-canvas" aria-hidden="true"></canvas>
         <div class="focus-vignette" aria-hidden="true"></div>
 
@@ -169,9 +210,11 @@
             </svg>
             <span>返回落地页</span>
         </a>
+    </section>
+        </section>
     </main>
 
-    <script src="/static/js/focus-studio.js?v=20260702-1"></script>
-    <script src="/static/js/focus-journal.js?v=20260702-1"></script>
+    <script src="/static/js/focus-studio.js?v=20260709-2"></script>
+    <script src="/static/js/focus-journal.js?v=20260709-2"></script>
 </body>
 </html>

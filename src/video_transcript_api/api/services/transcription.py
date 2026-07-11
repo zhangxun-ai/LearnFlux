@@ -37,6 +37,7 @@ from ...utils.rendering import get_base_url
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
 from ...utils.task_progress import estimate_eta_seconds
+from ...study.document_quality import assess_document_text
 
 logger = get_logger()
 config = get_config()
@@ -363,6 +364,7 @@ def process_local_upload(
     use_speaker_recognition: bool = False,
     preserve_source_file: bool = False,
     preserve_transcript_timestamps: bool = False,
+    document_fast_path: bool = False,
 ) -> Dict[str, Any]:
     """处理本地上传的音视频或文档，复用 LLM 后处理与结果页。
 
@@ -372,6 +374,7 @@ def process_local_upload(
     tracker = PerfTracker(task_id=task_id)
     audio_path = None
     structured_transcript = None
+    document_quality = None
     try:
         if _is_task_canceled(task_id):
             return {"status": "canceled", "message": "任务已取消"}
@@ -393,8 +396,33 @@ def process_local_upload(
                 task_id, stage="transcribing", stage_label="正在解析文档",
                 basis="local_upload", confidence="high",
             )
-            transcript = _extract_document_text(file_path, ext).strip()
+            transcript = _extract_document_text(file_path, ext)
             empty_msg = "未能从文档中提取到文本（可能是扫描件/图片型 PDF）"
+            if document_fast_path and ext in {".pdf", ".docx", ".txt", ".md", ".markdown"}:
+                try:
+                    document_quality = assess_document_text(transcript).to_evidence()
+                except Exception as exc:
+                    logger.warning(
+                        "document quality assessment failed; using legacy flow: %s",
+                        type(exc).__name__,
+                    )
+                    document_quality = {
+                        "mode": "fallback",
+                        "reasons": ["assessment_error"],
+                        "metrics": {},
+                    }
+                _safe_update_progress(
+                    task_id,
+                    stage="document_quality",
+                    stage_label=(
+                        "文档质量检查完成"
+                        if document_quality["mode"] == "fast"
+                        else "检测到提取质量问题，准备完整校对"
+                    ),
+                    basis="document_quality_metrics",
+                    confidence="high",
+                    evidence={"document_quality": document_quality},
+                )
         else:
             # 音视频：默认省空间，先抽 16kHz 单声道小音频并删除原视频。
             # 学习集合需要后续打开源文件时，会传 preserve_source_file=True。
@@ -436,7 +464,7 @@ def process_local_upload(
             structured_transcript = result.get("funasr_json_data")
             empty_msg = "转录结果为空"
 
-        if not transcript:
+        if not transcript or not transcript.strip():
             cache_manager.update_task_status(
                 task_id, TaskStatus.FAILED, error_message=empty_msg
             )
@@ -468,8 +496,29 @@ def process_local_upload(
             description="",
         )
 
-        llm_task_queue.put(
-            {
+        if document_quality and document_quality["mode"] == "fast":
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.SUCCESS,
+                platform="generic",
+                media_id=media_id,
+                title=original_name,
+                author="本地上传",
+                terminal_evidence={
+                    "analysis_mode": "document_fast",
+                    "visual_ready": True,
+                    "quality": document_quality,
+                },
+            )
+            logger.info(
+                "document fast path ready: task=%s, file=%s, chars=%s",
+                task_id,
+                original_name,
+                len(transcript),
+            )
+            return {"status": "success", "message": "文档解析完成，可生成图解"}
+
+        llm_payload = {
                 "task_id": task_id,
                 "url": display_url,
                 "display_url": original_name,
@@ -488,7 +537,9 @@ def process_local_upload(
                 "comment_limit": 100,
                 "perf_tracker": tracker,
             }
-        )
+        if document_quality:
+            llm_payload["document_quality"] = document_quality
+        llm_task_queue.put(llm_payload)
         cache_manager.update_task_status(
             task_id, TaskStatus.CALIBRATING, platform="generic", media_id=media_id
         )

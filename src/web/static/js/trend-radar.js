@@ -452,18 +452,51 @@
     }
 
     function renderMatrixPanel(items) {
-        const top = items.slice().sort((a, b) => b.score - a.score).slice(0, 4);
-        if (!top.length) {
+        if (!items.length) {
             els.matrix.innerHTML = '<div class="empty-state">暂无二维映射。</div>';
             return;
         }
-        els.matrix.innerHTML = top.map((item) => `
-            <article class="matrix-item">
-                <span class="type-badge">${escapeHtml(item.opportunityType)}</span>
-                <h3>${escapeHtml(item.stackLayer.label)} x ${escapeHtml(item.needLayer.label)}</h3>
-                <p>${escapeHtml(truncateText(item.title, 82))}</p>
-            </article>
-        `).join("");
+        const stackLayers = Object.values(stackMeta);
+        const needLayers = Object.values(needMeta).slice().reverse();
+        const bucket = items.reduce((acc, item) => {
+            const key = item.needLayer.id + "::" + item.stackLayer.id;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(item);
+            acc[key].sort((a, b) => b.score - a.score);
+            return acc;
+        }, {});
+
+        const header = [
+            '<div class="matrix-corner" aria-hidden="true"></div>',
+            ...stackLayers.map((layer) => `<div class="matrix-col-head">${escapeHtml(layer.label)}</div>`)
+        ].join("");
+        const rows = needLayers.map((need) => {
+            const cells = stackLayers.map((stack) => {
+                const cellItems = (bucket[need.id + "::" + stack.id] || []).slice(0, 3);
+                const dots = cellItems.map((item) => `
+                    <button type="button" class="matrix-dot-button" data-select-trend="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}">
+                        <span class="matrix-signal-dot ${matrixSignalTone(item)} size-${matrixSignalSize(item)}"></span>
+                        <span class="sr-only">${escapeHtml(item.title)}</span>
+                    </button>
+                `).join("");
+                return `<div class="matrix-cell ${cellItems.length ? "has-signal" : ""}">${dots}</div>`;
+            }).join("");
+            return `<div class="matrix-row-head">${escapeHtml(need.label)}</div>${cells}`;
+        }).join("");
+
+        els.matrix.innerHTML = header + rows;
+    }
+
+    function matrixSignalTone(item) {
+        if (item.stage === "overheated") return "hot";
+        if (item.stage === "opportunity" || item.stage === "mature") return "warm";
+        return "cold";
+    }
+
+    function matrixSignalSize(item) {
+        if (Number(item.score || 0) >= 85) return 3;
+        if (Number(item.score || 0) >= 70) return 2;
+        return 1;
     }
 
     function renderPriorityBoard(items) {

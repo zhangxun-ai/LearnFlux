@@ -1,7 +1,11 @@
 from video_transcript_api.cache.cache_manager import CacheManager
 
 
-def _create_successful_local_task(cache_manager: CacheManager, url: str = "local://study-source/local_abc/lesson.mp4"):
+def _create_successful_local_task(
+    cache_manager: CacheManager,
+    url: str = "local://study-source/local_abc/lesson.mp4",
+    title: str = "lesson.mp4",
+):
     task = cache_manager.create_task(
         url=url,
         use_speaker_recognition=False,
@@ -15,7 +19,7 @@ def _create_successful_local_task(cache_manager: CacheManager, url: str = "local
         use_speaker_recognition=False,
         transcript_data="第一段内容。\n第二段内容。",
         transcript_type="capswriter",
-        title="lesson.mp4",
+        title=title,
         author="本地上传",
         description="",
     )
@@ -31,7 +35,7 @@ def _create_successful_local_task(cache_manager: CacheManager, url: str = "local
         "success",
         platform="generic",
         media_id="local_abc",
-        title="lesson.mp4",
+        title=title,
         author="本地上传",
     )
     return task
@@ -62,9 +66,91 @@ def test_study_service_builds_ready_session_with_source_file(tmp_path):
     assert session["metadata"]["title"] == "lesson.mp4"
     assert session["playback"]["source_available"] is True
     assert session["playback"]["source_url"].endswith("/api/study/" + task["view_token"] + "/source-file")
+    assert session["source"] == {
+        "kind": "video",
+        "filename": "lesson.mp4",
+        "media_type": "video/mp4",
+        "original_url": "/api/study/" + task["view_token"] + "/source-file",
+    }
     assert "核心概念" in session["ai"]["overview"]
     assert session["transcript"]["lines"][0]["text"] == "第一段内容。"
     assert session["notes"][0]["body"] == "重点复看"
+
+
+def test_study_service_exposes_document_source_metadata(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+    from video_transcript_api.study.source_files import build_study_source_path
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    url = "local://study-source/local_abc/guide.pdf"
+    task = _create_successful_local_task(cache_manager, url=url, title="guide.pdf")
+    source = build_study_source_path(tmp_path / "sources", "local_abc", "guide.pdf")
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"pdf")
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=StudyRepository(db_path=str(tmp_path / "study.db")),
+        source_root=tmp_path / "sources",
+    )
+
+    session = service.get_session(task["view_token"])
+
+    assert session["source"]["kind"] == "document"
+    assert session["source"]["filename"] == "guide.pdf"
+    assert session["source"]["media_type"] == "application/pdf"
+    assert session["source"]["original_url"].endswith("/source-file")
+
+
+def test_study_service_exposes_fast_document_analysis_from_terminal_progress(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    url = "local://study-source/local_fast/guide.pdf"
+    task = cache_manager.create_task(
+        url=url,
+        platform="generic",
+        media_id="local_fast",
+    )
+    cache_manager.save_cache(
+        platform="generic",
+        url=url,
+        media_id="local_fast",
+        use_speaker_recognition=False,
+        transcript_data="原始正文" * 100,
+        transcript_type="capswriter",
+        title="guide.pdf",
+        author="本地上传",
+        description="",
+    )
+    quality = {"mode": "fast", "reasons": [], "metrics": {"printable_ratio": 1.0}}
+    cache_manager.update_task_status(
+        task["task_id"],
+        "success",
+        platform="generic",
+        media_id="local_fast",
+        terminal_evidence={
+            "analysis_mode": "document_fast",
+            "visual_ready": True,
+            "quality": quality,
+        },
+    )
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=StudyRepository(db_path=str(tmp_path / "study.db")),
+        source_root=tmp_path / "sources",
+    )
+
+    session = service.get_session(task["view_token"])
+
+    assert session["analysis"] == {
+        "mode": "document_fast",
+        "visual_ready": True,
+        "quality": quality,
+    }
+    assert session["ai"]["overview"] == ""
+    assert session["ai"]["summary_missing"] is True
 
 
 def test_study_service_reports_source_missing_without_failing(tmp_path):

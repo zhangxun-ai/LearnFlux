@@ -6,25 +6,25 @@
 {% block extra_css %}
 <style>
     /* ===== 入口表单 ===== */
-    .post-entry { padding: 28px 30px; }
-    .post-entry .entry-label { font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 10px; }
+    .post-entry { padding: 24px; }
+    .post-entry .entry-label { font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 12px; }
     .post-entry .entry-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .post-entry input[type="text"] {
-        flex: 1; min-width: 220px; padding: 12px 14px; font-size: 1rem;
+        flex: 1; min-width: 220px; min-height: 48px; padding: 0 14px; font-size: 1rem;
         border: 1px solid var(--border-primary); border-radius: 8px;
-        background: var(--bg-secondary); color: var(--text-primary);
+        background: #fff; color: var(--text-primary);
         transition: border 0.2s ease, box-shadow 0.2s ease;
     }
     .post-entry input[type="text"]:focus {
         outline: none; border-color: #E4503A; box-shadow: 0 0 0 3px rgba(228,80,58,0.2);
     }
     .btn-analyze {
-        padding: 12px 22px; font-size: 1rem; font-weight: 600; border: none;
+        min-height: 48px; padding: 0 22px; font-size: 1rem; font-weight: 700; border: none;
         border-radius: 8px; cursor: pointer; color: #fff;
-        background: linear-gradient(135deg, #E4503A, #C23A26);
-        transition: transform 0.12s ease, opacity 0.2s ease;
+        background: #E4503A;
+        transition: transform 0.12s ease, opacity 0.2s ease, box-shadow 0.15s ease;
     }
-    .btn-analyze:hover { transform: translateY(-1px); }
+    .btn-analyze:hover { transform: translateY(-1px); box-shadow: 0 14px 24px -20px rgba(228,80,58,0.8); }
     .btn-analyze:active { transform: scale(0.98); }
     .btn-analyze:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
     .entry-hint { margin-top: 10px; font-size: 0.8rem; color: var(--text-secondary); opacity: 0.8; }
@@ -43,8 +43,8 @@
 
     /* ===== 来源头部 ===== */
     .source-meta {
-        padding: 16px 30px; background: rgba(228,80,58,0.06);
-        border-bottom: 1px solid var(--border-primary);
+        margin: 16px 24px 0; padding: 14px 16px; background: #F8FAFC;
+        border: 1px solid var(--border-primary); border-radius: 8px;
         display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-size: 0.88rem;
     }
     .source-meta .author { font-weight: 600; color: var(--text-primary); }
@@ -53,7 +53,7 @@
     .source-meta .meta-dim { color: var(--text-secondary); }
 
     /* ===== 一键复制条 ===== */
-    .copy-bar { padding: 12px 30px; border-bottom: 1px solid var(--border-primary); }
+    .copy-bar { padding: 12px 24px; border-bottom: 1px solid var(--border-primary); }
     .copy-btn {
         padding: 9px 16px; font-size: 0.88rem; border-radius: 7px; cursor: pointer;
         border: 1px solid var(--border-primary); background: var(--bg-primary); color: var(--text-primary);
@@ -63,7 +63,7 @@
     .copy-btn.copied { border-color: #10b981; background: rgba(16,185,129,0.1); color: #10b981; }
 
     /* ===== 洞察卡片 ===== */
-    .insight-card { padding: 24px 30px; border-bottom: 1px solid var(--border-primary); }
+    .insight-card { margin: 14px 24px; padding: 20px; border: 1px solid var(--border-primary); border-radius: 8px; }
     .insight-card:last-child { border-bottom: none; }
     .insight-card h2 {
         margin: 0 0 14px; font-size: 1.2rem; color: var(--text-primary);
@@ -73,11 +73,11 @@
 
     /* 可信度卡片：视觉焦点 */
     .card-credibility {
-        background: var(--bg-secondary);
-        border-left: 3px solid var(--border-primary);
+        background: #fff;
+        border-left: 3px solid #E4503A;
     }
     [data-theme="dark"] .card-credibility { background: rgba(245, 158, 11, 0.08); }
-    .card-credibility h2::before { content: "🔎"; }
+    .card-credibility h2::before { content: ""; }
 
     /* 可信度徽章 */
     .cred-chip {
@@ -95,7 +95,7 @@
     [data-theme="dark"] .cred-rebut  { color: #60a5fa; }
 
     /* 原文折叠 */
-    .thread-details { padding: 16px 30px 26px; }
+    .thread-details { margin: 0 24px 24px; padding: 16px; border: 1px solid var(--border-primary); border-radius: 8px; background: #fff; }
     .thread-details summary {
         cursor: pointer; color: var(--text-secondary); font-size: 0.88rem; user-select: none;
     }
@@ -109,8 +109,8 @@
 
     /* 错误态 */
     .post-error {
-        margin: 26px 30px; padding: 18px 20px; border-radius: 8px;
-        background: rgba(239,68,68,0.08); border-left: 4px solid #ef4444; color: var(--text-primary);
+        margin: 24px; padding: 18px 20px; border-radius: 8px;
+        background: rgba(228,80,58,0.08); border-left: 4px solid #E4503A; color: var(--text-primary);
     }
     .post-error .err-title { font-weight: 600; margin-bottom: 6px; }
     .post-error a { color: #E4503A; text-decoration: none; }
@@ -128,7 +128,7 @@
 {% block content %}
 <!-- 入口 -->
 <div class="section post-entry" id="entry-section">
-    <div class="entry-label">粘贴一条帖子或文章链接（X 推文 / 小红书笔记 / 微信公众号文章），自动提炼正文 + 高赞回复的精华，并给出可信度判断。</div>
+    <div class="entry-label">粘贴一条帖子或文章链接，系统会提炼正文、高赞回复和可信度判断。</div>
     <div class="entry-row">
         <input type="text" id="post-url" placeholder="X / 小红书 / 微信公众号帖子或文章链接均可"
                value="{{ prefill_url or '' }}" autocomplete="off" spellcheck="false">
@@ -156,7 +156,7 @@
 <div id="result-section" class="hidden">
     <div class="source-meta" id="source-meta"></div>
     <div class="copy-bar">
-        <button class="copy-btn" id="copy-btn" type="button">📋 复制全文精华</button>
+        <button class="copy-btn" id="copy-btn" type="button">复制全文精华</button>
     </div>
     <div id="sections-container"></div>
     <details class="thread-details" id="thread-details">
@@ -232,13 +232,13 @@
         // 来源头部
         var srcUrl = escapeHtml(data.source_url || '');
         var parts = [];
-        parts.push('<span class="author">👤 @' + escapeHtml(data.author || 'Unknown') + '</span>');
+        parts.push('<span class="author">@' + escapeHtml(data.author || 'Unknown') + '</span>');
         if (data.source_url) {
-            parts.push('🔗 <a href="' + srcUrl + '" target="_blank" rel="noopener">查看原推文</a>');
+            parts.push('<a href="' + srcUrl + '" target="_blank" rel="noopener">查看原文</a>');
         }
         var fetched = data.fetched_comment_count || 0;
         var analyzed = data.analyzed_comment_count || 0;
-        parts.push('<span class="meta-dim">💬 抓取回复 ' + fetched + ' 条 · 分析 ' + analyzed + ' 条</span>');
+        parts.push('<span class="meta-dim">抓取回复 ' + fetched + ' 条 · 分析 ' + analyzed + ' 条</span>');
         $('source-meta').innerHTML = parts.join('');
 
         // 分段卡片
@@ -274,7 +274,7 @@
                 copyBtn.textContent = '✓ 已复制';
                 setTimeout(function () {
                     copyBtn.classList.remove('copied');
-                    copyBtn.textContent = '📋 复制全文精华';
+                    copyBtn.textContent = '复制全文精华';
                 }, 1600);
             });
         };

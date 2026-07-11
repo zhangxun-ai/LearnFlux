@@ -23,7 +23,7 @@
     --toc-shadow: rgba(0, 0, 0, 0.3);
 
     /* 移动端浮动按钮 */
-    --toc-mobile-btn-size: 56px;
+    --toc-mobile-btn-size: 64px;
     --toc-mobile-btn-bottom: 80px;
     --toc-mobile-btn-right: 20px;
 }
@@ -141,8 +141,9 @@
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 1.1rem;
-    padding: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 6px 8px;
     border-radius: 6px;
     transition: all 0.3s ease;
     color: var(--toc-text-secondary);
@@ -150,7 +151,7 @@
     align-items: center;
     justify-content: center;
     position: relative;
-    min-width: 32px;
+    min-width: 44px;
     min-height: 32px;
 }
 
@@ -165,28 +166,28 @@
 
 /* 已固定状态 */
 .toc-pin-btn.pinned {
-    background: linear-gradient(135deg, var(--toc-indicator-start) 0%, var(--toc-indicator-end) 100%);
+    background: var(--accent, #E4503A);
     color: white;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transform: rotate(45deg);
+    transform: none;
 }
 
 .toc-pin-btn.pinned:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    transform: rotate(45deg) scale(1.05);
+    transform: scale(1.03);
 }
 
 /* Pin 按钮动画 */
 @keyframes pinRotate {
-    0% { transform: rotate(0deg); }
-    50% { transform: rotate(15deg) scale(1.1); }
-    100% { transform: rotate(45deg); }
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-1px); }
+    100% { transform: translateY(0); }
 }
 
 @keyframes unpinRotate {
-    0% { transform: rotate(45deg); }
-    50% { transform: rotate(30deg) scale(1.1); }
-    100% { transform: rotate(0deg); }
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-1px); }
+    100% { transform: translateY(0); }
 }
 
 .toc-pin-btn.animating-pin {
@@ -290,7 +291,7 @@
     font-weight: 600;
     color: var(--toc-text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     transition: color 0.3s ease;
 }
 
@@ -322,10 +323,12 @@
     position: fixed;
     bottom: var(--toc-mobile-btn-bottom);
     right: var(--toc-mobile-btn-right);
-    width: var(--toc-mobile-btn-size);
+    min-width: var(--toc-mobile-btn-size);
+    width: auto;
     height: var(--toc-mobile-btn-size);
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--toc-indicator-start) 0%, var(--toc-indicator-end) 100%);
+    padding: 0 16px;
+    border-radius: 999px;
+    background: var(--accent, #E4503A);
     color: white;
     border: none;
     box-shadow: 0 4px 12px var(--toc-shadow);
@@ -333,7 +336,8 @@
     z-index: 999;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 700;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 

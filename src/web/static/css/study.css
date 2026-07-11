@@ -198,6 +198,42 @@ button {
     overflow: hidden;
 }
 
+.study-source-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 220px;
+    margin: 0 14px 14px;
+    padding: 28px;
+    border: 1px dashed var(--line);
+    border-radius: 16px;
+    background: linear-gradient(145deg, #fff, #f8f3eb);
+}
+
+.study-source-card[hidden] {
+    display: none;
+}
+
+.study-source-card strong,
+.study-source-card span {
+    display: block;
+}
+
+.study-source-card strong {
+    font-size: 20px;
+    overflow-wrap: anywhere;
+}
+
+.study-source-card span {
+    margin-top: 8px;
+    color: var(--muted);
+}
+
+.is-document-source .surface {
+    position: static;
+}
+
 .surface-head {
     padding: 14px 16px 10px;
 }
@@ -534,6 +570,311 @@ button {
     font-size: 13px;
     font-weight: 800;
     box-shadow: 0 8px 24px rgba(27, 26, 23, .16);
+}
+
+.study-visual-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) repeat(4, auto);
+    gap: 8px;
+    align-items: center;
+}
+
+.study-visual-theme {
+    min-width: 0;
+    height: 36px;
+    padding: 0 30px 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.study-visual-state {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(228, 80, 58, .25);
+    border-radius: 8px;
+    background: #fff7ed;
+    color: var(--ink-soft);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.study-visual-state[hidden] {
+    display: none;
+}
+
+.study-visual-state button {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.study-visual-layer-state {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f5f2ec;
+    color: var(--ink-soft);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.study-visual-layer-state[hidden] {
+    display: none;
+}
+
+.study-visual-layer-state button {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 0 9px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink-soft);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.study-visual-preview {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.study-visual-preview .vl-document-head,
+.study-visual-preview .vl-page {
+    padding: 16px;
+}
+
+.study-visual-preview .vl-document-head h2 {
+    font-size: 20px;
+}
+
+.study-visual-preview .vl-page-head {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 10px;
+}
+
+.study-visual-preview .vl-page-number {
+    width: 38px;
+    height: 38px;
+    font-size: 12px;
+}
+
+.study-visual-preview .vl-page-title h2 {
+    font-size: 18px;
+}
+
+.study-visual-preview .vl-block-grid,
+.study-visual-preview .vl-process-flow,
+.study-visual-preview .vl-mind-map,
+.study-visual-preview .vl-mind-branches {
+    grid-template-columns: 1fr;
+}
+
+.study-visual-preview .vl-block {
+    grid-column: 1;
+    padding: 14px;
+}
+
+.study-visual-preview .vl-process-flow > li:not(:last-child)::after {
+    content: "↓";
+    top: auto;
+    right: 50%;
+    bottom: -21px;
+}
+
+.study-visual-two-layer {
+    overflow-x: hidden;
+}
+
+.study-visual-two-layer .vl-two-layer {
+    display: grid;
+    gap: 24px;
+    padding: 18px;
+}
+
+.study-visual-two-layer .vl-two-layer-overview,
+.study-visual-two-layer .vl-two-layer-section,
+.study-visual-two-layer .vl-two-layer-review {
+    min-width: 0;
+}
+
+.study-visual-two-layer .vl-two-layer-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 1.2fr);
+    gap: 20px;
+    padding: 18px;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    scroll-margin-top: 18px;
+}
+
+.study-visual-two-layer .vl-two-layer-section.is-focused {
+    border-color: currentColor;
+    outline: 3px double currentColor;
+    outline-offset: 3px;
+}
+
+.study-visual-two-layer .vl-two-layer-original[role="button"]:focus-visible {
+    outline: 3px solid currentColor;
+    outline-offset: 4px;
+}
+
+.study-visual-two-layer .vl-two-layer-original,
+.study-visual-two-layer .vl-two-layer-visual,
+.study-visual-two-layer .vl-diagram {
+    min-width: 0;
+}
+
+.study-visual-two-layer .vl-original-markdown {
+    max-width: 72ch;
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    font: inherit;
+    line-height: 1.75;
+}
+
+.study-visual-two-layer .vl-original-markdown blockquote {
+    margin: 1em 0;
+    padding-left: 14px;
+    border-left: 3px solid currentColor;
+}
+
+.study-visual-two-layer .vl-original-markdown code {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, .07);
+}
+
+.study-visual-two-layer .vl-diagram[data-focus-state="active"] {
+    outline: 3px solid currentColor;
+    outline-offset: 3px;
+}
+
+.study-visual-two-layer .vl-topic-entries {
+    display: grid;
+    gap: 8px;
+    margin: 14px 0 0;
+    padding-left: 24px;
+}
+
+.study-visual-two-layer .vl-topic-entry {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid currentColor;
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    font-weight: 800;
+}
+
+.study-visual-two-layer .vl-interpretation-unavailable {
+    padding: 18px;
+    border: 1px dashed currentColor;
+    border-radius: 10px;
+    font-weight: 800;
+}
+
+.study-visual-dialog {
+    width: min(1240px, calc(100vw - 32px));
+    max-width: none;
+    height: min(920px, calc(100vh - 32px));
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 24px 80px rgba(27, 26, 23, .24);
+}
+
+.study-visual-dialog::backdrop {
+    background: rgba(24, 27, 30, .58);
+}
+
+.study-visual-dialog-shell {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100%;
+}
+
+.study-visual-dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    background: #fff;
+}
+
+.study-visual-dialog-head span {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.study-visual-dialog-head h2 {
+    margin: 2px 0 0;
+    font-size: 20px;
+}
+
+.study-visual-dialog-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.study-visual-modal-status {
+    max-width: 260px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.study-visual-close {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: #fff;
+    color: var(--ink);
+    font-size: 24px;
+    line-height: 1;
+}
+
+.study-visual-modal-content {
+    min-width: 0;
+    overflow: auto;
+    background: #f5f2ec;
+}
+
+.study-visual-modal-content > .empty-panel {
+    margin: 24px;
 }
 
 .note-tools {
@@ -888,6 +1229,48 @@ button {
     transform: translateX(-50%) translateY(0);
 }
 
+body.has-app-shell .study-page {
+    width: min(100%, 92rem);
+    padding: 1.5rem;
+}
+
+body.has-app-shell .study-head,
+body.has-app-shell .study-shell,
+body.has-app-shell .study-stat,
+body.has-app-shell .surface,
+body.has-app-shell .panel,
+body.has-app-shell .overview-card,
+body.has-app-shell .status-card,
+body.has-app-shell .video-frame,
+body.has-app-shell .btn,
+body.has-app-shell .right-tabs,
+body.has-app-shell .study-panel-view,
+body.has-app-shell .chat-composer {
+    border-radius: 8px;
+}
+
+body.has-app-shell .study-head,
+body.has-app-shell .study-shell,
+body.has-app-shell .surface,
+body.has-app-shell .panel {
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+}
+
+body.has-app-shell .study-head h1 {
+    font-size: 1.45rem;
+    word-break: keep-all;
+    white-space: nowrap;
+}
+
+body.has-app-shell .study-stat {
+    background: #f8fafc;
+}
+
+body.has-app-shell .surface {
+    top: calc(var(--shell-topbar) + 1rem);
+}
+
 @media (max-width: 980px) {
     .layout-focus {
         grid-template-columns: 1fr;
@@ -909,6 +1292,50 @@ button {
     .study-page {
         width: min(100% - 20px, 680px);
         padding-top: 14px;
+    }
+
+    body.has-app-shell .study-page {
+        padding: 1rem;
+    }
+
+    body.has-app-shell .study-head h1 {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .study-visual-dialog-head {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .study-visual-dialog-actions {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .study-visual-toolbar {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .study-visual-theme {
+        grid-column: 1 / -1;
+    }
+
+    .study-visual-two-layer .vl-two-layer-section {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 12px 0;
+    }
+
+    .study-visual-two-layer .vl-document,
+    .study-visual-two-layer .vl-page,
+    .study-visual-two-layer .vl-block {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
+
+    .study-visual-modal-status {
+        flex: 1 0 100%;
+        max-width: none;
     }
 
     .study-head {
@@ -935,5 +1362,70 @@ button {
 
     .note-visual {
         margin-left: 0;
+    }
+}
+
+@media print {
+    body * {
+        visibility: hidden !important;
+    }
+
+    #tab-visual,
+    #tab-visual * {
+        visibility: visible !important;
+    }
+
+    #tab-visual {
+        position: absolute;
+        inset: 0;
+        display: block !important;
+        width: 100%;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    .topbar,
+    .sidebar,
+    .study-head,
+    .study-toolbar,
+    .right-tabs,
+    .study-visual-toolbar,
+    .study-visual-state,
+    .study-visual-layer-state,
+    .study-source-card,
+    .surface,
+    #tab-ai,
+    #tab-transcript,
+    #tab-chat,
+    .study-visual-dialog {
+        display: none !important;
+    }
+
+    .study-page,
+    .study-shell,
+    .layout-focus,
+    .panel,
+    .study-panel-view {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .study-visual-preview,
+    .study-visual-two-layer,
+    .study-visual-two-layer .vl-two-layer,
+    .study-visual-two-layer .vl-document,
+    .study-visual-two-layer .vl-two-layer-overview,
+    .study-visual-two-layer .vl-two-layer-sections,
+    .study-visual-two-layer .vl-two-layer-section,
+    .study-visual-two-layer .vl-two-layer-review {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .study-visual-two-layer .vl-two-layer-section,
+    .study-visual-two-layer .vl-two-layer-review {
+        break-inside: avoid;
     }
 }

@@ -850,7 +850,8 @@ class CacheManager:
                           media_id: str = None, title: str = None, author: str = None,
                           cache_id: int = None, download_url: str = None,
                           force: bool = False, error_message: str = None,
-                          source_file_path: str = None):
+                          source_file_path: str = None,
+                          terminal_evidence: Dict[str, Any] = None):
         """
         更新任务状态
 
@@ -912,6 +913,7 @@ class CacheManager:
                             stage="completed",
                             basis="task_completed",
                             confidence="high",
+                            evidence=terminal_evidence,
                         )
                     elif status == TaskStatus.CANCELED:
                         progress = build_progress(
@@ -919,6 +921,7 @@ class CacheManager:
                             stage_label="任务已取消",
                             basis="task_canceled",
                             confidence="high",
+                            evidence=terminal_evidence,
                             message=error_message or "用户已取消任务",
                         )
                     else:
@@ -926,6 +929,7 @@ class CacheManager:
                             stage="failed",
                             basis="task_failed",
                             confidence="high",
+                            evidence=terminal_evidence,
                             message=error_message,
                         )
                     update_fields.append("progress_json = ?")
@@ -1144,6 +1148,18 @@ class CacheManager:
             logger.error(f"根据view_token获取任务信息失败: {e}")
             return None
 
+    def _cache_has_final_artifacts(self, cache_data: Optional[Dict[str, Any]]) -> bool:
+        """Return True when cache contains user-facing final LLM output."""
+        if not cache_data:
+            return False
+        for key in ("llm_calibrated", "llm_summary"):
+            value = cache_data.get(key)
+            if isinstance(value, str) and value.strip():
+                return True
+            if value and not isinstance(value, str):
+                return True
+        return False
+
     def get_view_data_by_token(self, view_token: str) -> Optional[Dict[str, Any]]:
         """
         根据view_token获取查看页面数据
@@ -1162,8 +1178,42 @@ class CacheManager:
 
             display_url = task_info.get('url') or task_info.get('download_url') or ""
             source_file_path = task_info.get('source_file_path')
+            cache_data = None
+            if task_info['platform'] and task_info['media_id']:
+                cache_data = self.get_cache(
+                    platform=task_info['platform'],
+                    media_id=task_info['media_id'],
+                    use_speaker_recognition=task_info['use_speaker_recognition']
+                )
 
             # 如果任务还在进行中（calibrating 表示转录已完成、LLM 校对/总结进行中）
+            if task_info['status'] in ['queued', 'processing', 'calibrating']:
+                if self._cache_has_final_artifacts(cache_data):
+                    self.update_task_status(
+                        task_info['task_id'],
+                        TaskStatus.SUCCESS,
+                        platform=task_info.get('platform'),
+                        media_id=task_info.get('media_id'),
+                        title=(cache_data or {}).get('title') or task_info.get('title'),
+                        author=(cache_data or {}).get('author') or task_info.get('author'),
+                    )
+                    task_info = self.get_task_by_id(task_info['task_id']) or task_info
+                    display_url = task_info.get('url') or task_info.get('download_url') or ""
+                    source_file_path = task_info.get('source_file_path')
+                else:
+                    return {
+                        'status': 'processing',
+                        'task_id': task_info.get('task_id'),
+                        'view_token': task_info.get('view_token'),
+                        'title': task_info.get('title', '转录处理中...'),
+                        'url': display_url,
+                        'platform': task_info.get('platform'),
+                        'media_id': task_info.get('media_id'),
+                        'created_at': task_info['created_at'],
+                        'progress': task_info.get('progress'),
+                        'source_file_path': source_file_path,
+                    }
+
             if task_info['status'] in ['queued', 'processing', 'calibrating']:
                 return {
                     'status': 'processing',
@@ -1196,11 +1246,12 @@ class CacheManager:
 
             # 任务成功，获取缓存数据
             if task_info['platform'] and task_info['media_id']:
-                cache_data = self.get_cache(
-                    platform=task_info['platform'],
-                    media_id=task_info['media_id'],
-                    use_speaker_recognition=task_info['use_speaker_recognition']
-                )
+                if cache_data is None:
+                    cache_data = self.get_cache(
+                        platform=task_info['platform'],
+                        media_id=task_info['media_id'],
+                        use_speaker_recognition=task_info['use_speaker_recognition']
+                    )
 
                 if cache_data:
                     # 缓存存在，返回完整数据

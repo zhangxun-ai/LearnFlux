@@ -96,3 +96,125 @@ def test_local_upload_preserves_structured_transcript_cache(monkeypatch, tmp_pat
     assert cached["transcript_type"] == "funasr"
     lines = normalize_transcript(cached["transcript_data"])
     assert [line["start_seconds"] for line in lines] == [0.0, 1.5]
+
+
+def test_clean_visual_document_skips_llm_and_preserves_extracted_text(monkeypatch, tmp_path):
+    import queue
+    from pathlib import Path
+
+    from video_transcript_api.api.services import transcription
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = manager.create_task(
+        url="local://study-source/clean/guide.pdf",
+        platform="generic",
+        media_id="clean",
+    )
+    source = tmp_path / "guide.pdf"
+    source.write_bytes(b"pdf")
+    extracted = "\ufeff" + "".join(
+        f"第 {index} 节：干净的正文内容。" + ("\r\n" if index % 2 else "\r")
+        for index in range(80)
+    )
+    llm_queue = queue.Queue()
+    monkeypatch.setattr(transcription, "cache_manager", manager)
+    monkeypatch.setattr(transcription, "llm_task_queue", llm_queue)
+    monkeypatch.setattr(transcription, "_extract_document_text", lambda *_: extracted)
+
+    result = transcription.process_local_upload(
+        task["task_id"],
+        str(source),
+        "guide.pdf",
+        "local://study-source/clean/guide.pdf",
+        "clean",
+        preserve_source_file=True,
+        document_fast_path=True,
+    )
+
+    cached = manager.get_cache("generic", "clean")
+    progress = manager.get_task_by_id(task["task_id"])["progress"]
+    assert result["status"] == "success"
+    assert llm_queue.empty()
+    cached_file = Path(cached["file_path"]) / "transcript_capswriter.txt"
+    with cached_file.open("r", encoding="utf-8", newline="") as saved:
+        assert saved.read() == extracted
+    assert progress["evidence"]["analysis_mode"] == "document_fast"
+    assert progress["evidence"]["visual_ready"] is True
+    assert "canonical_text" not in repr(progress["evidence"])
+
+
+def test_low_quality_visual_document_falls_back_with_bounded_evidence(monkeypatch, tmp_path):
+    import queue
+
+    from video_transcript_api.api.services import transcription
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = manager.create_task(
+        url="local://study-source/bad/bad.pdf",
+        platform="generic",
+        media_id="bad",
+    )
+    source = tmp_path / "bad.pdf"
+    source.write_bytes(b"pdf")
+    extracted = ("有效正文" * 80) + ("\x00" * 40)
+    llm_queue = queue.Queue()
+    monkeypatch.setattr(transcription, "cache_manager", manager)
+    monkeypatch.setattr(transcription, "llm_task_queue", llm_queue)
+    monkeypatch.setattr(transcription, "_extract_document_text", lambda *_: extracted)
+
+    result = transcription.process_local_upload(
+        task["task_id"],
+        str(source),
+        "bad.pdf",
+        "local://study-source/bad/bad.pdf",
+        "bad",
+        preserve_source_file=True,
+        document_fast_path=True,
+    )
+
+    queued = llm_queue.get_nowait()
+    progress = manager.get_task_by_id(task["task_id"])["progress"]
+    assert result["status"] == "success"
+    assert manager.get_task_by_id(task["task_id"])["status"] == "calibrating"
+    assert queued["document_quality"]["mode"] == "fallback"
+    assert "low_printable_ratio" in queued["document_quality"]["reasons"]
+    assert "canonical_text" not in queued["document_quality"]
+    assert "document_quality" in progress["evidence"]
+    assert len(repr(progress["evidence"])) < 2000
+
+
+def test_visual_fast_path_excludes_non_visual_and_non_whitelisted_documents(monkeypatch, tmp_path):
+    import queue
+
+    from video_transcript_api.api.services import transcription
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    monkeypatch.setattr(transcription, "cache_manager", manager)
+    monkeypatch.setattr(transcription, "_extract_document_text", lambda *_: "正文" * 200)
+
+    for index, (filename, fast_flag) in enumerate(
+        [("guide.pdf", False), ("data.csv", True), ("events.log", True)]
+    ):
+        media_id = f"legacy-{index}"
+        task = manager.create_task(
+            url=f"local://study-source/{media_id}/{filename}",
+            platform="generic",
+            media_id=media_id,
+        )
+        source = tmp_path / filename
+        source.write_text("source", encoding="utf-8")
+        llm_queue = queue.Queue()
+        monkeypatch.setattr(transcription, "llm_task_queue", llm_queue)
+        transcription.process_local_upload(
+            task["task_id"],
+            str(source),
+            filename,
+            f"local://study-source/{media_id}/{filename}",
+            media_id,
+            preserve_source_file=True,
+            document_fast_path=fast_flag,
+        )
+        assert not llm_queue.empty()

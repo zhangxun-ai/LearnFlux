@@ -4,7 +4,7 @@ from typing import Any, Callable, Optional
 from ..cache.cache_manager import CacheManager
 from ..llm import call_llm_api
 from .repository import StudyRepository
-from .source_files import find_study_source_file
+from .source_files import describe_study_source, find_study_source_file
 from .transcript import normalize_transcript
 
 _DEFAULT_STUDY_CHAT_MODEL = "deepseek-v4-pro"
@@ -38,8 +38,18 @@ class StudyService:
         source_file = self.get_source_file(view_token)
         source_available = source_file is not None
         progress = task_info.get("progress") or view_data.get("progress") or {}
+        progress_evidence = progress.get("evidence") or {}
         state = self._state_for(status, source_available, progress)
         transcript_source = self._transcript_source(view_token, view_data)
+        source_url = f"/api/study/{view_token}/source-file" if source_available else ""
+        source = describe_study_source(
+            url=view_data.get("url") or "",
+            title=view_data.get("title") or "",
+            source_file=source_file,
+            media_type=view_data.get("source_media_type") or "",
+            media_kind=view_data.get("media_type") or "",
+        )
+        source["original_url"] = source_url
 
         return {
             "state": state,
@@ -56,9 +66,10 @@ class StudyService:
             },
             "playback": {
                 "source_available": source_available,
-                "source_url": f"/api/study/{view_token}/source-file" if source_available else "",
+                "source_url": source_url,
                 "unavailable_reason": "" if source_available else "源视频未保存或已清理",
             },
+            "source": source,
             "transcript": {
                 "lines": normalize_transcript(transcript_source),
             },
@@ -66,6 +77,11 @@ class StudyService:
                 "overview": view_data.get("summary") or "",
                 "summary_missing": bool(view_data.get("summary_missing")),
                 "chat_model": self._study_chat_model(),
+            },
+            "analysis": {
+                "mode": progress_evidence.get("analysis_mode") or "legacy",
+                "visual_ready": bool(progress_evidence.get("visual_ready")),
+                "quality": progress_evidence.get("quality") or {},
             },
             "notes": self.repository.list_notes(view_token),
             "progress": progress,

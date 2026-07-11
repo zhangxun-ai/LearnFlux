@@ -1,6 +1,6 @@
 """无说话人文本处理器"""
 
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import math
@@ -56,6 +56,7 @@ class PlainTextProcessor:
         platform: str = "",
         media_id: str = "",
         selected_models: Optional[Dict] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Dict:
         """处理无说话人文本
 
@@ -104,6 +105,7 @@ class PlainTextProcessor:
             description=description,
             selected_models=selected_models,
             language=detected_language,
+            progress_callback=progress_callback,
         )
 
         # 合并校对结果（分段级检查已完成，无需全局检查）
@@ -132,6 +134,7 @@ class PlainTextProcessor:
         description: str,
         selected_models: Optional[Dict],
         language: str = "zh",
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> List[str]:
         """校对分段文本（并发处理）
 
@@ -170,6 +173,23 @@ class PlainTextProcessor:
 
         calibrated_segments = [None] * len(segments)
         cancel_events = [threading.Event() for _ in segments]
+        progress_lock = threading.Lock()
+        reported_indices = set()
+
+        def report_completed(index: int) -> None:
+            if progress_callback is None:
+                return
+            with progress_lock:
+                if index in reported_indices:
+                    return
+                reported_indices.add(index)
+                try:
+                    progress_callback(len(reported_indices), len(segments))
+                except Exception as exc:
+                    logger.debug(
+                        "Calibration progress callback failed: %s",
+                        type(exc).__name__,
+                    )
 
         def calibrate_single_segment(index: int, segment: str):
             """校对单个分段（含长度检查 + 质量验证 + 二次校对）"""
@@ -332,6 +352,8 @@ class PlainTextProcessor:
                 # 降级到原文（格式化处理）
                 formatted_segment = self._format_plain_text(segment)
                 calibrated_segments[index] = formatted_segment
+            finally:
+                report_completed(index)
 
         # 并发处理
         max_workers = min(len(segments), self.config.concurrent_workers)
@@ -367,6 +389,7 @@ class PlainTextProcessor:
                 future.cancel()
                 if calibrated_segments[index] is None:
                     calibrated_segments[index] = self._format_plain_text(segments[index])
+                report_completed(index)
 
             if timed_out:
                 timed_out_indices = ", ".join(

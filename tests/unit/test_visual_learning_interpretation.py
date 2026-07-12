@@ -39,6 +39,21 @@ def test_sections_preserve_heading_markdown_and_stable_ids():
     )
 
 
+def test_deeper_markdown_headings_are_clean_section_titles():
+    sections = _build(
+        "### 1. 概述（Overview）\n总览内容。\n\n"
+        "#### 🧭 核心概念：雇佣即采购，简历即广告\n概念内容。\n\n"
+        "#### 💪 老板找人的四大特征\n特征内容。"
+    )
+
+    assert [item.title for item in sections] == [
+        "1. 概述（Overview）",
+        "🧭 核心概念：雇佣即采购，简历即广告",
+        "💪 老板找人的四大特征",
+    ]
+    assert all("#" not in item.title for item in sections)
+
+
 def test_heading_free_markdown_uses_non_empty_paragraphs():
     sections = _build("第一段。\n\n第二段第一行。\n第二段第二行。\n\n第三段。")
 

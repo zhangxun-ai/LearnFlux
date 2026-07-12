@@ -20,7 +20,23 @@ def test_visual_learning_page_exposes_text_file_and_diagram_controls():
     assert 'id="visual-canvas"' in html
     assert 'id="visual-history"' in html
     assert 'id="visual-recommendations"' in html
+    assert "css/editorial.css" in html
+    assert "visual-learning.css?v=4" in html
     assert '<h1>图解生成</h1>' not in html
+
+
+def test_visual_learning_workbench_uses_shared_shell_tokens():
+    css = (
+        PROJECT_ROOT / "src/web/static/css/visual-learning.css"
+    ).read_text(encoding="utf-8")
+
+    workbench_css = css[
+        css.index(".vl-workbench {") : css.index("@media (max-width: 900px)")
+    ]
+    assert "background: var(--card)" in workbench_css
+    assert "box-shadow: var(--shadow-sm)" in workbench_css
+    assert "background: #f5f2ec" not in workbench_css
+    assert "background: #fff;" not in workbench_css
 
 
 def test_visual_learning_workbench_uses_existing_ingestion_and_visual_apis():

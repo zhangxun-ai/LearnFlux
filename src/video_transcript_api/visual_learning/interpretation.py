@@ -28,8 +28,11 @@ class _SectionDraft:
 
 
 _HEADING_PATTERN = re.compile(
-    r"^ {0,3}##(?!#)[ \t]+(?P<title>[^\r\n]+?)[ \t]*(?:\r?\n|$)",
+    r"^ {0,3}#{2,6}(?!#)[ \t]+(?P<title>[^\r\n]+?)[ \t]*(?:\r?\n|$)",
     re.MULTILINE,
+)
+_ATX_HEADING_LINE = re.compile(
+    r"^ {0,3}#{1,6}(?!#)[ \t]+(?P<title>.*?)[ \t]*(?:#+[ \t]*)?$"
 )
 _PARAGRAPH_BOUNDARY = re.compile(r"(?:\r?\n)[ \t]*(?:\r?\n)+")
 _FENCE_OPENING = re.compile(r"^ {0,3}(?P<marker>`{3,}|~{3,})(?P<info>.*)$")
@@ -116,8 +119,17 @@ def _paragraphs(markdown: str) -> list[str]:
     return paragraphs
 
 
+def _clean_heading_title(title: str) -> str:
+    heading = _ATX_HEADING_LINE.fullmatch(title.strip())
+    if heading:
+        return heading.group("title").strip()
+    return re.sub(r"[ \t]+#+[ \t]*$", "", title).strip()
+
+
 def _title_from_markdown(markdown: str) -> str:
-    return next(line.strip() for line in markdown.splitlines() if line.strip())
+    return _clean_heading_title(
+        next(line.strip() for line in markdown.splitlines() if line.strip())
+    )
 
 
 def _initial_sections(markdown: str) -> list[_SectionDraft]:
@@ -152,7 +164,7 @@ def _initial_sections(markdown: str) -> list[_SectionDraft]:
             if body.strip():
                 sections.append(
                     _SectionDraft(
-                        title=heading.group("title"),
+                        title=_clean_heading_title(heading.group("title")),
                         markdown=body,
                     )
                 )

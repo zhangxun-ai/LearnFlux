@@ -408,7 +408,11 @@
         renderTwoLayerVisual();
         if (documentType === 'overview') els.visualExpand.disabled = false;
         if (state.activeVisualType === documentType && els.visualDialog.open) {
-            window.VisualLearning.render(els.visualModalContent, visualDocument, options);
+            window.VisualLearning.render(
+                els.visualModalContent,
+                visualDocument,
+                { ...options, showInlineSourceRefs: true }
+            );
         }
         applyVisualTheme();
     }
@@ -610,7 +614,7 @@
             window.VisualLearning.render(
                 els.visualModalContent,
                 document,
-                { onSourceRef: handleVisualSourceRef }
+                { onSourceRef: handleVisualSourceRef, showInlineSourceRefs: true }
             );
             applyVisualTheme();
         } else {

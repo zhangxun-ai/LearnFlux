@@ -16,10 +16,10 @@
     --toc-border: #475569;
     --toc-text: #f8fafc;
     --toc-text-secondary: #cbd5e1;
-    --toc-active: #06B6D4;
+    --toc-active: #E4503A;
     --toc-hover: #334155;
-    --toc-indicator-start: #06B6D4;
-    --toc-indicator-end: #3B82F6;
+    --toc-indicator-start: transparent;
+    --toc-indicator-end: transparent;
     --toc-shadow: rgba(0, 0, 0, 0.3);
 
     /* 移动端浮动按钮 */
@@ -30,14 +30,14 @@
 
 /* 浅色主题 */
 [data-theme="light"] {
-    --toc-bg: rgba(255, 255, 255, 0.95);
+    --toc-bg: rgba(252, 251, 250, 0.95);
     --toc-border: #e5e7eb;
-    --toc-text: #333;
-    --toc-text-secondary: #6b7280;
-    --toc-active: #667eea;
-    --toc-hover: #f3f4f6;
-    --toc-indicator-start: #667eea;
-    --toc-indicator-end: #764ba2;
+    --toc-text: #1B1A17;
+    --toc-text-secondary: rgba(27, 26, 23, 0.5);
+    --toc-active: #E4503A;
+    --toc-hover: rgba(27, 26, 23, 0.04);
+    --toc-indicator-start: transparent;
+    --toc-indicator-end: transparent;
     --toc-shadow: rgba(0, 0, 0, 0.1);
 }
 
@@ -89,14 +89,14 @@
     justify-content: center;
     gap: 8px;
     padding: 20px 0;
-    background: linear-gradient(180deg, var(--toc-indicator-start) 0%, var(--toc-indicator-end) 100%);
+    background: transparent;
     opacity: 0.6;
     transition: opacity 0.3s ease;
 }
 
 .toc-indicator-line {
     width: 4px;
-    background: white;
+    background: var(--toc-text-secondary);
     border-radius: 2px;
     transition: height 0.3s ease;
 }

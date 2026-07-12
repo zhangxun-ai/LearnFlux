@@ -11,13 +11,15 @@
     --paper-warm: #FBF8F3;
     --ink: #1B1A17;
     --ink-soft: #4A463F;
-    --muted: #9A938A;
+    --muted: #857E75;
     --line: #EBE4D9;
     --card: #FFFFFF;
     --accent: #E4503A;
     --accent-ink: #C23A26;
     --accent-soft: rgba(228, 80, 58, 0.07);
-    --shadow-sm: 0 1px 2px rgba(27, 26, 23, 0.06), 0 10px 26px -22px rgba(27, 26, 23, 0.28);
+    --video: #E4503A;
+    --article: #2F8F6B;
+    --shadow-sm: 0 1px 1px rgba(27, 26, 23, 0.02), 0 4px 8px -4px rgba(27, 26, 23, 0.04), 0 16px 24px -8px rgba(27, 26, 23, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72);
     --shadow: var(--shadow-sm);
     --radius-card: 0.5rem;
     --radius-control: 0.5rem;
@@ -45,6 +47,44 @@
     --error-bg: #FCEEEA; --error-border: #C23A26; --error-text: #B0463A;
     --loading-bg: #FBF8F3; --loading-border: #E4503A; --loading-text: #C23A26;
     --scrollbar-track: #F3EDE4; --scrollbar-thumb: #D8CFC2; --scrollbar-thumb-hover: #C9BFAE;
+}
+
+[data-theme="dark"] {
+    --paper: #121110;
+    --paper-warm: #181613;
+    --ink: #F4EDE4;
+    --ink-soft: #D6CBBE;
+    --muted: #A79E92;
+    --line: #2B2722;
+    --card: #1A1815;
+    --accent: #FF765F;
+    --accent-ink: #FF9A87;
+    --accent-soft: rgba(255, 118, 95, 0.14);
+    --video: #FF765F;
+    --article: #65C99B;
+    --shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.32), 0 8px 20px -10px rgba(0, 0, 0, 0.7), 0 24px 42px -20px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    --shadow: var(--shadow-sm);
+
+    --bg-gradient-start: #121110;
+    --bg-gradient-end: #181613;
+    --text-primary: #F4EDE4;
+    --text-secondary: #D6CBBE;
+    --text-tertiary: #A79E92;
+    --bg-primary: #1A1815;
+    --bg-secondary: #121110;
+    --bg-tertiary: #201D19;
+    --border-primary: #2B2722;
+    --border-secondary: #373127;
+    --border-focus: #FF765F;
+    --shadow-light: rgba(0, 0, 0, 0.4);
+    --shadow-medium: rgba(0, 0, 0, 0.64);
+    --header-text: #F4EDE4;
+    --accent-primary: #FF765F;
+    --accent-secondary: #FF9A87;
+    --success-bg: rgba(101, 201, 155, 0.12); --success-border: #65C99B; --success-text: #86D8B1;
+    --error-bg: rgba(255, 118, 95, 0.12); --error-border: #FF765F; --error-text: #FFB2A5;
+    --loading-bg: #181613; --loading-border: #FF765F; --loading-text: #FF9A87;
+    --scrollbar-track: #181613; --scrollbar-thumb: #3A332A; --scrollbar-thumb-hover: #51483D;
 }
 
 .serif {

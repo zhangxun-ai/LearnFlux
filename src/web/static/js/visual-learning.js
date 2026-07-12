@@ -231,7 +231,7 @@
         } else {
             wrapper.appendChild(node('p', 'vl-unsupported', '该知识块暂不支持展示。'));
         }
-        if (!continuous) {
+        if (!continuous && options.showInlineSourceRefs === true) {
             const references = renderReferences(block, sourceMap, options);
             if (references.childElementCount) wrapper.appendChild(references);
         }
@@ -448,6 +448,34 @@
         return reviewBlocks(data && data.fullNote);
     }
 
+    function captureReaderScroll(container, mode, sectionId) {
+        const current = container && container.querySelector
+            ? container.querySelector('.vl-immersive-reader')
+            : null;
+        const readerSection = sectionId || 'global';
+        if (
+            !current
+            || current.dataset.readerMode !== mode
+            || current.dataset.readerSection !== readerSection
+        ) {
+            return null;
+        }
+        const body = current.querySelector('.vl-reader-body');
+        const sections = current.querySelector('.vl-reader-sections');
+        return {
+            bodyTop: body ? body.scrollTop : 0,
+            sectionsLeft: sections ? sections.scrollLeft : 0,
+        };
+    }
+
+    function restoreReaderScroll(root, scrollState) {
+        if (!scrollState) return;
+        const body = root.querySelector('.vl-reader-body');
+        if (body) body.scrollTop = scrollState.bodyTop;
+        const sections = root.querySelector('.vl-reader-sections');
+        if (sections) sections.scrollLeft = scrollState.sectionsLeft;
+    }
+
     function readerAction(label, className, callback) {
         const button = node('button', className || 'vl-reader-action', label);
         button.type = 'button';
@@ -476,9 +504,25 @@
                 render(panel, overview, options).classList.add('vl-diagram');
             } else {
                 const empty = node('div', 'vl-reader-empty');
-                empty.appendChild(node('strong', '', data.overviewStatus || '全局图解尚未生成'));
-                if (typeof options.onGenerateOverview === 'function') {
-                    empty.appendChild(readerAction('一键生成图解', 'vl-reader-primary', options.onGenerateOverview));
+                const statusStr = data.overviewStatus || '全局图解尚未生成';
+                const isGenerating = statusStr.includes('生成中') || statusStr.includes('正在请求');
+                
+                if (isGenerating) {
+                    empty.classList.add('is-generating');
+                    const spinner = node('div', 'vl-spinner');
+                    empty.appendChild(spinner);
+                    empty.appendChild(node('strong', '', statusStr));
+                    
+                    const skeleton = node('div', 'vl-skeleton');
+                    skeleton.appendChild(node('div', 'vl-skeleton-title'));
+                    skeleton.appendChild(node('div', 'vl-skeleton-box'));
+                    skeleton.appendChild(node('div', 'vl-skeleton-box'));
+                    empty.appendChild(skeleton);
+                } else {
+                    empty.appendChild(node('strong', '', statusStr));
+                    if (typeof options.onGenerateOverview === 'function') {
+                        empty.appendChild(readerAction('一键生成图解', 'vl-reader-primary', options.onGenerateOverview));
+                    }
                 }
                 panel.appendChild(empty);
             }
@@ -491,9 +535,25 @@
         const page = ((fullNote && fullNote.pages) || []).find((item) => item.id === sectionId);
         if (!page) {
             const empty = node('div', 'vl-reader-empty');
-            empty.appendChild(node('strong', '', data.fullNoteStatus || '逐段图解尚未生成'));
-            if (typeof options.onGenerateFullNote === 'function') {
-                empty.appendChild(readerAction('生成逐段图解', 'vl-reader-primary', options.onGenerateFullNote));
+            const statusStr = data.fullNoteStatus || '逐段图解尚未生成';
+            const isGenerating = statusStr.includes('生成中') || statusStr.includes('正在请求');
+            
+            if (isGenerating) {
+                empty.classList.add('is-generating');
+                const spinner = node('div', 'vl-spinner');
+                empty.appendChild(spinner);
+                empty.appendChild(node('strong', '', statusStr));
+                
+                const skeleton = node('div', 'vl-skeleton');
+                skeleton.appendChild(node('div', 'vl-skeleton-title'));
+                skeleton.appendChild(node('div', 'vl-skeleton-box'));
+                skeleton.appendChild(node('div', 'vl-skeleton-box'));
+                empty.appendChild(skeleton);
+            } else {
+                empty.appendChild(node('strong', '', statusStr));
+                if (typeof options.onGenerateFullNote === 'function') {
+                    empty.appendChild(readerAction('生成逐段图解', 'vl-reader-primary', options.onGenerateFullNote));
+                }
             }
             panel.appendChild(empty);
             return;
@@ -516,6 +576,7 @@
         const sectionId = String(data.sectionId || '');
         const sections = data.sections || [];
         const reviews = reviewBlocksForReader(data);
+        const scrollState = captureReaderScroll(container, mode, sectionId);
         const root = node('section', 'vl-immersive-reader');
         root.dataset.readerMode = mode;
         root.dataset.readerSection = sectionId || 'global';
@@ -574,6 +635,7 @@
         body.appendChild(panel);
         root.appendChild(body);
         container.replaceChildren(root);
+        restoreReaderScroll(root, scrollState);
         return root;
     }
 

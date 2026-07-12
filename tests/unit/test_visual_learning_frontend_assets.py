@@ -43,6 +43,10 @@ def test_visual_learning_renderer_exposes_immersive_reader_contract():
     assert "renderImmersiveReader" in js
     assert "createReaderState" in js
     assert "normalizeMarkdownForReader" in js
+    assert "captureReaderScroll" in js
+    assert "restoreReaderScroll" in js
+    assert "current.dataset.readerMode !== mode" in js
+    assert "current.dataset.readerSection !== readerSection" in js
     assert "vl-reader-mode-tabs" in js
     assert "vl-reader-sections" in js
     assert "vl-reader-review" in js
@@ -62,10 +66,13 @@ def test_visual_learning_renderer_exposes_immersive_reader_contract():
     assert ".innerHTML" not in js
 
 
-def test_renderer_has_opt_in_continuous_article_without_breaking_default_refs():
+def test_renderer_hides_inline_source_refs_unless_explicitly_enabled():
     js = (
         PROJECT_ROOT / "src/web/static/js/visual-learning.js"
     ).read_text(encoding="utf-8")
+    study_js = (PROJECT_ROOT / "src/web/static/js/study.js").read_text(
+        encoding="utf-8"
+    )
 
     assert "readerMode === 'continuous'" in js
     assert "vl-continuous-article" in js
@@ -73,6 +80,8 @@ def test_renderer_has_opt_in_continuous_article_without_breaking_default_refs():
     assert "vl-page-transition" in js
     assert "node('figure'" in js
     assert "renderReferences(block" in js
+    assert "showInlineSourceRefs === true" in js
+    assert "showInlineSourceRefs: true" in study_js
     assert "onSectionEvidence" in js
 
 

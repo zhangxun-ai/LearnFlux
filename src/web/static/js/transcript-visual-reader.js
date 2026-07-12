@@ -144,7 +144,7 @@
     function schedulePoll(documentType, generation) {
         stopPoll(documentType);
         pollTimers[documentType] = window.setTimeout(async () => {
-            if (!isOpen || !reader.accepts(viewToken, generation)) return;
+            if (!reader.accepts(viewToken, generation)) return;
             try {
                 const state = await apiJSON(
                     `/api/visual-learning/study/${encodeURIComponent(viewToken)}?document_type=${encodeURIComponent(documentType)}`
@@ -196,7 +196,7 @@
     }
 
     async function ensureDocument(documentType, generateIfMissing) {
-        if (!isOpen || loading.has(documentType)) return;
+        if (loading.has(documentType)) return;
         const generation = reader.generation();
         try {
             const state = await apiJSON(
@@ -244,7 +244,55 @@
     }
 
     if (textButton) textButton.addEventListener('click', () => openReader('text', textButton));
-    if (visualButton) visualButton.addEventListener('click', () => openReader('visual', visualButton));
+    if (visualButton) {
+        visualButton.addEventListener('click', () => {
+            if (documents.overview) {
+                openReader('visual', visualButton);
+            } else {
+                startInlineGeneration();
+            }
+        });
+    }
+    
+    async function startInlineGeneration() {
+        if (loading.has('overview')) return;
+        visualButton.disabled = true;
+        
+        // Polling will update button state through a callback we add to storeState, 
+        // but for simplicity we can just manually poll here or let the existing logic run.
+        // Actually, the cleanest way is to hook into storeState.
+        ensureDocument('overview', true);
+    }
+    
+    // We need to update the button text when state changes.
+    // Let's hook into storeState.
+    const originalStoreState = storeState;
+    storeState = function(documentType, state) {
+        originalStoreState(documentType, state);
+        if (documentType === 'overview' && visualButton) {
+            if (documents.overview) {
+                visualButton.disabled = false;
+                visualButton.textContent = '查看图解';
+                // Automatically open if we were generating inline and just finished
+                if (!isOpen && visualButton.dataset.autoOpen === 'true') {
+                    visualButton.dataset.autoOpen = 'false';
+                    openReader('visual', visualButton);
+                }
+            } else {
+                const st = statusText('overview');
+                if (st.includes('生成中') || st.includes('正在请求')) {
+                    visualButton.disabled = true;
+                    visualButton.textContent = st;
+                    visualButton.dataset.autoOpen = 'true';
+                } else if (st.includes('尚未生成') || st.includes('失败')) {
+                    visualButton.disabled = false;
+                    visualButton.textContent = '一键图解';
+                    visualButton.dataset.autoOpen = 'false';
+                }
+            }
+        }
+    };
+
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && isOpen) {
             event.preventDefault();

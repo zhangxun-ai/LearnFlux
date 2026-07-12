@@ -7,6 +7,24 @@
     const DEFAULT_MAP_ZOOM = 1.16;
     const VISUAL_DOCUMENT_TYPES = ['overview', 'full_note'];
 
+    window.copyToClipboard = async function (text) {
+        if (!text) return;
+        try {
+            await navigator.clipboard.writeText(text);
+            const notice = document.createElement('div');
+            notice.textContent = '内容已复制到剪贴板';
+            notice.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:8px 16px;border-radius:8px;z-index:9999;font-size:14px;';
+            document.body.appendChild(notice);
+            setTimeout(() => {
+                notice.style.opacity = '0';
+                notice.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => notice.remove(), 300);
+            }, 2000);
+        } catch (err) {
+            console.error('复制失败:', err);
+        }
+    };
+
     const els = {
         creator: document.getElementById('collection-creator'),
         creatorOptions: document.getElementById('collection-creator-options'),
@@ -3541,7 +3559,9 @@
         setActiveType(activeType);
         bindEvents();
         const token = getToken();
-        els.tokenHint.textContent = token ? '' : '需要 API 令牌，请先在工作台设置。';
+        if (els.tokenHint) {
+            els.tokenHint.textContent = token ? '' : '需要 API 令牌，请先在工作台设置。';
+        }
         render();
         await loadFilterOptions();
         if (initialTarget.collectionId) {

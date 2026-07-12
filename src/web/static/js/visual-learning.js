@@ -61,6 +61,22 @@
         parent.appendChild(list);
     }
 
+    function appendTeachingFields(parent, item) {
+        const fields = [
+            ['为什么', item.why_needed],
+            ['怎么运作', item.mechanism],
+            ['例子', item.example],
+            ['别误解', item.misconception],
+        ].filter((entry) => entry[1]);
+        if (!fields.length) return;
+        const list = node('dl', 'vl-teaching-fields');
+        fields.forEach(([label, value]) => {
+            list.appendChild(node('dt', 'vl-teaching-label', label));
+            list.appendChild(node('dd', '', value));
+        });
+        parent.appendChild(list);
+    }
+
     function renderLabeledItems(block, field, className, ordered) {
         const list = node(ordered ? 'ol' : 'div', className);
         (block[field] || []).forEach((item, index) => {
@@ -68,7 +84,8 @@
             if (!ordered) row.appendChild(node('span', 'vl-item-index', index + 1));
             const body = node('div', 'vl-item-body');
             body.appendChild(node('strong', '', item.label));
-            body.appendChild(node('p', '', item.description));
+            body.appendChild(node('p', 'vl-item-description', item.description));
+            appendTeachingFields(body, item);
             row.appendChild(body);
             list.appendChild(row);
         });
@@ -91,9 +108,63 @@
         return renderLabeledItems(block, 'steps', 'vl-process-flow', true);
     }
 
+    function comparisonKey(label) {
+        return String(label || '').trim().toLowerCase();
+    }
+
+    function comparisonRows(columns) {
+        const rows = [];
+        const seen = new Set();
+        columns.forEach((column) => {
+            (column.items || []).forEach((item) => {
+                const key = comparisonKey(item.label);
+                if (!key || seen.has(key)) return;
+                seen.add(key);
+                rows.push({ key: key, label: item.label });
+            });
+        });
+        return rows;
+    }
+
+    function renderComparisonMatrix(columns, rows) {
+        const table = node('table', 'vl-comparison-matrix');
+        const thead = node('thead');
+        const headRow = node('tr');
+        headRow.appendChild(node('th', 'vl-comparison-axis', '维度'));
+        columns.forEach((column) => {
+            const th = node('th', '', column.title);
+            th.scope = 'col';
+            headRow.appendChild(th);
+        });
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = node('tbody');
+        rows.forEach((row) => {
+            const tr = node('tr');
+            const rowHead = node('th', 'vl-comparison-rowhead', row.label);
+            rowHead.scope = 'row';
+            tr.appendChild(rowHead);
+            columns.forEach((column) => {
+                const match = (column.items || []).find((item) => comparisonKey(item.label) === row.key);
+                const td = node('td');
+                td.appendChild(node('p', '', match ? match.description : ''));
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        return table;
+    }
+
     function renderComparison(block) {
+        const columns = block.columns || [];
+        const rows = comparisonRows(columns);
+        if (columns.length >= 2 && rows.length >= 2) {
+            return renderComparisonMatrix(columns, rows);
+        }
         const grid = node('div', 'vl-comparison');
-        (block.columns || []).forEach((column) => {
+        columns.forEach((column) => {
             const section = node('section', 'vl-comparison-column');
             section.appendChild(node('h4', '', column.title));
             (column.items || []).forEach((item) => {
@@ -105,6 +176,72 @@
             grid.appendChild(section);
         });
         return grid;
+    }
+
+    function renderPairedContrast(block) {
+        const list = node('div', 'vl-paired-contrast');
+        (block.pairs || []).forEach((pair) => {
+            const row = node('article', 'vl-contrast-pair');
+            const bad = node('section', 'vl-contrast-side vl-contrast-bad');
+            bad.appendChild(node('strong', '', pair.bad_label));
+            bad.appendChild(node('p', '', pair.bad_signal));
+            const bridge = node('div', 'vl-contrast-bridge');
+            if (pair.risk_label) bridge.title = pair.risk_label;
+            bridge.appendChild(node('span', '', pair.risk_label));
+            const better = node('section', 'vl-contrast-side vl-contrast-better');
+            better.appendChild(node('strong', '', pair.better_label));
+            if (pair.better_signal) better.appendChild(node('p', '', pair.better_signal));
+            row.appendChild(bad);
+            row.appendChild(bridge);
+            row.appendChild(better);
+            list.appendChild(row);
+        });
+        return list;
+    }
+
+    function renderSignalFlow(block) {
+        const wrap = node('div', 'vl-signal-flow');
+        const steps = node('ol', 'vl-signal-steps');
+        (block.steps || []).forEach((step, index) => {
+            const item = node('li', 'vl-signal-step');
+            item.appendChild(node('span', 'vl-signal-index', index + 1));
+            const body = node('div', 'vl-signal-body');
+            body.appendChild(node('strong', '', step.label));
+            body.appendChild(node('p', '', step.description));
+            item.appendChild(body);
+            steps.appendChild(item);
+        });
+        wrap.appendChild(steps);
+        if (block.outcome_label) {
+            wrap.appendChild(node('p', 'vl-signal-outcome', block.outcome_label));
+        }
+        return wrap;
+    }
+
+    function renderDecisionAxis(block) {
+        const axis = node('div', 'vl-decision-axis');
+        const xAxis = block.x_axis || {};
+        const yAxis = block.y_axis || {};
+        const head = node('div', 'vl-axis-head');
+        head.appendChild(node('span', '', yAxis.high || '高'));
+        head.appendChild(node('strong', '', block.title || '决策坐标'));
+        axis.appendChild(head);
+        const grid = node('div', 'vl-axis-grid');
+        (block.quadrants || []).forEach((quadrant) => {
+            const cell = node('article', `vl-axis-quadrant vl-axis-${quadrant.tone || 'neutral'}`);
+            cell.dataset.axisX = quadrant.x || '';
+            cell.dataset.axisY = quadrant.y || '';
+            cell.appendChild(node('strong', '', quadrant.label));
+            if (quadrant.description) cell.appendChild(node('p', '', quadrant.description));
+            grid.appendChild(cell);
+        });
+        axis.appendChild(grid);
+        const foot = node('div', 'vl-axis-foot');
+        foot.appendChild(node('span', '', xAxis.low || '低'));
+        foot.appendChild(node('span', '', yAxis.low || '低'));
+        foot.appendChild(node('span', '', xAxis.high || '高'));
+        axis.appendChild(foot);
+        return axis;
     }
 
     function renderHierarchy(block) {
@@ -120,15 +257,25 @@
                 if (visited.has(item.id)) return;
                 const nextVisited = new Set(visited);
                 nextVisited.add(item.id);
-                const row = node('article', 'vl-hierarchy-node');
-                row.style.setProperty('--vl-depth', String(depth));
-                row.appendChild(node('strong', '', item.label));
-                row.appendChild(node('p', '', item.description));
-                target.appendChild(row);
-                appendLevel(item.id, target, depth + 1, nextVisited);
+                const branch = node('li', 'vl-hierarchy-branch');
+                const card = node('article', 'vl-hierarchy-node');
+                card.style.setProperty('--vl-depth', String(depth));
+                card.appendChild(node('strong', '', item.label));
+                card.appendChild(node('p', 'vl-item-description', item.description));
+                appendTeachingFields(card, item);
+                branch.appendChild(card);
+                const children = nodesByParent.get(item.id) || [];
+                if (children.length) {
+                    const childList = node('ol', 'vl-hierarchy-children');
+                    appendLevel(item.id, childList, depth + 1, nextVisited);
+                    branch.appendChild(childList);
+                }
+                target.appendChild(branch);
             });
         };
-        appendLevel('', tree, 0, new Set());
+        const rootList = node('ol', 'vl-hierarchy-tree');
+        appendLevel('', rootList, 0, new Set());
+        tree.appendChild(rootList);
         return tree;
     }
 
@@ -149,7 +296,8 @@
         (block.items || []).forEach((item) => {
             const card = node('article', 'vl-concept-item');
             card.appendChild(node('strong', '', item.label));
-            card.appendChild(node('p', '', item.description));
+            card.appendChild(node('p', 'vl-item-description', item.description));
+            appendTeachingFields(card, item);
             grid.appendChild(card);
         });
         return grid;
@@ -191,6 +339,9 @@
         concept_chain: renderConceptChain,
         process_flow: renderProcessFlow,
         comparison: renderComparison,
+        paired_contrast: renderPairedContrast,
+        signal_flow: renderSignalFlow,
+        decision_axis: renderDecisionAxis,
         hierarchy: renderHierarchy,
         timeline: renderTimeline,
         concept_grid: renderConceptGrid,
@@ -324,7 +475,7 @@
             section.appendChild(blocks);
             if (continuous) {
                 const evidence = renderSectionEvidence(page, sourceMap, renderOptions);
-                if (evidence) section.appendChild(evidence);
+                if (evidence && renderOptions.showSectionEvidence === true) section.appendChild(evidence);
                 const nextPage = (doc.pages || [])[pageIndex + 1];
                 const transition = page.transition || (nextPage ? `接下来：${nextPage.learning_goal}` : '');
                 if (transition) section.appendChild(node('p', 'vl-page-transition', transition));
@@ -858,7 +1009,7 @@
                 visual.addEventListener('click', () => activateSection(root, section.id, false));
                 article.appendChild(visual);
                 const evidence = renderSectionEvidence(page, sourceMap, renderOptions);
-                if (evidence) article.appendChild(evidence);
+                if (evidence && renderOptions.showSectionEvidence === true) article.appendChild(evidence);
                 paired.appendChild(article);
             });
         }

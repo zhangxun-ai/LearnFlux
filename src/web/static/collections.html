@@ -109,7 +109,7 @@
                 <span>选择后会按文件名顺序逐个解析</span>
             </div>
 
-            <div class="lc-hint" id="token-hint"></div>
+
         </section>
 
         <details class="lc-history lc-history-panel">
@@ -199,7 +199,7 @@
                         <button class="lc-tab active" data-view="map" type="button">知识地图</button>
                         <button class="lc-tab" data-view="summary" type="button">全系列解读</button>
                         <button class="lc-tab" data-view="source" type="button">源内容</button>
-                        <button class="lc-tab" data-view="markdown" type="button">导出笔记</button>
+                        <button class="lc-tab" data-view="markdown" type="button">系列洞察</button>
                     </div>
 
                     <article class="lc-card lc-map-card" id="map-view">
@@ -326,7 +326,12 @@
                             <button class="lc-btn" id="collection-summary-reader-open" type="button">阅读全文</button>
                         </div>
                         <div class="lc-summary-view-panel is-active" id="collection-summary-text-panel" role="tabpanel" aria-labelledby="collection-summary-text">
-                            <article class="lc-summary-inline-article lc-markdown-preview" id="collection-summary-article">生成全系列解读后显示。</article>
+                            <div class="lc-preview-container">
+                                <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('collection-summary-article').innerText)" aria-label="复制" title="复制全部">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                </button>
+                                <article class="lc-summary-inline-article lc-markdown-preview" id="collection-summary-article">生成全系列解读后显示。</article>
+                            </div>
                         </div>
                         <div class="lc-summary-view-panel" id="collection-summary-visual-panel" role="tabpanel" aria-labelledby="collection-summary-visual" hidden>
                             <div class="lc-summary-inline-visual" id="collection-summary-visual-root">图解生成后显示。</div>
@@ -348,18 +353,30 @@
                                 <div class="lc-section-head">
                                     <h4>AI 解读摘要</h4>
                                     <div class="lc-summary-tools">
-                                        <button class="lc-btn compact" id="regenerate-source-summary" type="button">重新生成 AI 解读</button>
+                                        <button class="lc-btn compact" id="regenerate-source-summary" type="button">重新生成</button>
                                         <div class="lc-view-toggle" role="group" aria-label="AI 解读摘要显示方式">
                                             <button class="active" id="source-summary-preview" type="button">预览</button>
                                             <button id="source-summary-source" type="button">源码</button>
                                         </div>
                                     </div>
                                 </div>
-                                <div id="source-summary" class="lc-text-preview lc-markdown-preview">解析完成后显示。</div>
+                                <div class="lc-preview-container">
+                                    <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('source-summary').innerText)" aria-label="复制" title="复制全部">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    </button>
+                                    <div id="source-summary" class="lc-text-preview lc-markdown-preview">解析完成后显示。</div>
+                                </div>
                             </section>
                             <section>
-                                <h4>逐字稿预览</h4>
-                                <pre id="source-transcript" class="lc-transcript-preview">解析完成后显示。</pre>
+                                <div class="lc-section-head" style="margin-bottom: 12px;">
+                                    <h4 style="margin: 0;">逐字稿预览</h4>
+                                </div>
+                                <div class="lc-preview-container">
+                                    <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('source-transcript').textContent)" aria-label="复制" title="复制全部">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    </button>
+                                    <pre id="source-transcript" class="lc-transcript-preview">解析完成后显示。</pre>
+                                </div>
                             </section>
                         </div>
                     </article>
@@ -367,16 +384,21 @@
                     <article class="lc-card hidden" id="markdown-view">
                         <div class="lc-markdown-head">
                             <div>
-                                <h3>导出笔记</h3>
-                                <p>预览最终导出的 Obsidian 笔记，必要时切换源码检查格式。</p>
+                                <h3>系列洞察</h3>
+                                <p>预览 AI 对全系列的深度解读与提炼，一键复制核心笔记。</p>
                             </div>
-                            <div class="lc-view-toggle" role="group" aria-label="导出笔记显示方式">
+                            <div class="lc-view-toggle" role="group" aria-label="系列洞察显示方式">
                                 <button class="active" id="markdown-preview-mode" type="button">预览</button>
                                 <button id="markdown-source-mode" type="button">源码</button>
                             </div>
                         </div>
-                        <div id="markdown-rendered" class="lc-markdown-preview">生成全系列解读后显示。</div>
-                        <pre id="markdown-preview" class="hidden">生成全系列解读后显示。</pre>
+                        <div class="lc-preview-container">
+                            <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('markdown-preview').textContent)" aria-label="复制" title="复制全部">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
+                            <div id="markdown-rendered" class="lc-markdown-preview">生成全系列解读后显示。</div>
+                            <pre id="markdown-preview" class="hidden">生成全系列解读后显示。</pre>
+                        </div>
                     </article>
                 </section>
             </div>

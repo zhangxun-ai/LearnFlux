@@ -120,8 +120,7 @@
                 <header class="vl-output-toolbar">
                     <button class="vl-reader-exit" id="visual-reader-exit" type="button" hidden>← 返回生成</button>
                     <div class="vl-output-heading">
-                        <span>视觉文档</span>
-                        <h2 id="visual-output-title">等待生成</h2>
+                        <h2 id="visual-output-title"></h2>
                     </div>
                     <div class="vl-reading-status" aria-live="polite">
                         <span>正在阅读</span>
@@ -133,15 +132,11 @@
                             <i id="visual-reading-progress-fill"></i>
                         </div>
                     </div>
-                    <div class="vl-output-actions">
-                        <button id="visual-export" type="button" disabled>导出 SVG</button>
-                        <button id="visual-print-page" type="button" disabled>打印</button>
-                    </div>
                 </header>
                 <div class="vl-recommendations" id="visual-recommendations" hidden></div>
                 <nav class="vl-page-navigation" id="visual-page-navigation" aria-label="图解页面" hidden></nav>
                 <div class="vl-canvas" id="visual-canvas">
-                    <div class="vl-canvas-empty"><strong>选择内容后生成图解</strong><span>生成结果会保留原文引用。</span></div>
+                    <div class="vl-canvas-empty"><span>选择内容后生成图解</span></div>
                 </div>
             </section>
         </section>

@@ -63,9 +63,9 @@ select:focus-visible,
     gap: 18px;
     margin-bottom: 16px;
     padding: 14px 18px;
-    border: 1px solid var(--line);
+    border: none;
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.76);
+    background: transparent;
 }
 
 .lc-intro-strip h1 {
@@ -85,9 +85,12 @@ select:focus-visible,
 .lc-workspace,
 .lc-card,
 .lc-sources {
-    border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.86);
-    box-shadow: var(--shadow);
+    border: none;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.72);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(255,255,255,0.4);
+    backdrop-filter: blur(24px) saturate(1.8);
+    -webkit-backdrop-filter: blur(24px) saturate(1.8);
 }
 
 .lc-import-card {
@@ -129,13 +132,17 @@ select:focus-visible,
     width: 100%;
     min-height: 58px;
     padding: 0 18px;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    outline: none;
-    background: #fff;
+    border: none !important;
+    border-radius: 16px !important;
+    outline: none !important;
+    background: rgba(255, 255, 255, 0.72) !important;
     color: var(--ink);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.4) !important;
+    backdrop-filter: blur(24px) saturate(1.8) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
     font-size: 19px;
     font-weight: 800;
+    transition: all 0.3s ease;
 }
 
 .lc-input.compact {
@@ -145,15 +152,18 @@ select:focus-visible,
 }
 
 .lc-input:focus {
-    border-color: rgba(228, 80, 58, 0.55);
-    box-shadow: 0 0 0 4px rgba(228, 80, 58, 0.08);
+    background: rgba(255, 255, 255, 0.95) !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255,255,255,0.8) !important;
 }
 
 .lc-type-tabs {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
     margin: 0;
+    border: none;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 999px;
 }
 
 .lc-type,
@@ -164,38 +174,54 @@ select:focus-visible,
     justify-content: center;
     min-height: 46px;
     padding: 0 17px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: #fff;
-    color: var(--ink-soft);
+    border: none;
+    border-radius: 16px;
+    background: transparent;
+    color: rgba(0,0,0,0.5);
     cursor: pointer;
-    font-weight: 800;
+    font-weight: 600;
     overflow: hidden;
     text-decoration: none;
-    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+    transition: all 0.2s ease;
 }
 
-.lc-type:hover,
+.lc-btn {
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink-soft);
+    border-radius: 14px;
+}
+
+.lc-type:hover {
+    color: rgba(0,0,0,0.8);
+    background: rgba(0,0,0,0.02);
+}
+
 .lc-btn:hover {
     transform: translateY(-1px);
     border-color: #d8cfc2;
 }
 
 .lc-type.active {
-    border-color: rgba(228, 80, 58, 0.32);
-    background: var(--accent-soft);
-    color: var(--accent-ink);
+    color: rgba(0,0,0,0.9);
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    font-weight: 600;
 }
 
 .lc-btn.primary {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: #fff;
+    border: none !important;
+    border-radius: 999px !important;
+    background: rgba(0, 0, 0, 0.85) !important;
+    color: white !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease !important;
 }
 
 .lc-btn.primary:hover {
-    border-color: var(--accent-ink);
-    background: var(--accent-ink);
+    transform: translateY(-2px) !important;
+    background: black !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18) !important;
 }
 
 .lc-btn.ghost {
@@ -265,17 +291,18 @@ select:focus-visible,
     column-gap: 14px;
     row-gap: 4px;
     padding: 18px 20px;
-    border: 2px dashed #bfd0e8;
-    border-radius: 12px;
-    background: linear-gradient(180deg, #eef3ff 0%, #fff 100%);
+    border: 2px dashed rgba(0,0,0,0.15) !important;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.4) !important;
+    backdrop-filter: blur(12px) !important;
     color: var(--ink);
     text-align: left;
-    transition: border-color 0.16s ease, background 0.16s ease, opacity 0.16s ease;
+    transition: all 0.2s ease;
 }
 
 .lc-drop.dragging {
-    border-color: var(--accent);
-    background: linear-gradient(180deg, rgba(228, 80, 58, 0.08), #fff 100%);
+    border-color: rgba(0,0,0,0.4) !important;
+    background: rgba(255, 255, 255, 0.7) !important;
 }
 
 .lc-drop.is-busy {
@@ -288,8 +315,8 @@ select:focus-visible,
     height: 44px;
     grid-row: 1 / span 2;
     place-items: center;
-    border-radius: 10px;
-    background: var(--accent);
+    border-radius: 12px;
+    background: rgba(0,0,0,0.85);
     color: #fff;
     font-size: 26px;
     font-weight: 800;
@@ -1985,6 +2012,40 @@ select:focus-visible,
     white-space: pre-wrap;
 }
 
+.lc-preview-container {
+    position: relative;
+    width: 100%;
+}
+
+.lc-copy-overlay-btn {
+    position: absolute;
+    top: 14px;
+    right: 22px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    color: rgba(0,0,0,0.6);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 10;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+}
+
+.lc-copy-overlay-btn:hover {
+    background: #fff;
+    color: rgba(0,0,0,0.9);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+    border-color: rgba(0,0,0,0.15);
+}
+
 .lc-markdown-preview {
     color: var(--ink-soft);
     line-height: 1.75;
@@ -2009,17 +2070,21 @@ select:focus-visible,
 .lc-markdown-preview h4,
 .lc-markdown-preview h5,
 .lc-markdown-preview h6 {
-    margin: 18px 0 8px;
-    color: var(--ink);
-    line-height: 1.35;
+    margin: 32px 0 16px;
+    color: rgba(0, 0, 0, 0.9);
+    line-height: 1.4;
+    font-weight: 700;
 }
 
 .lc-markdown-preview h1 {
-    font-size: 24px;
+    font-size: 26px;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    padding-bottom: 10px;
 }
 
 .lc-markdown-preview h2 {
     font-size: 20px;
+    margin-top: 40px;
 }
 
 .lc-markdown-preview h3 {
@@ -2033,22 +2098,31 @@ select:focus-visible,
 }
 
 .lc-markdown-preview p {
-    margin: 0 0 12px;
+    margin: 0 0 16px;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 16px;
+    line-height: 1.8;
 }
 
 .lc-markdown-preview ul,
 .lc-markdown-preview ol {
-    margin: 0 0 12px;
+    margin: 0 0 16px;
     padding-left: 1.25em;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 16px;
+    line-height: 1.8;
 }
 
 .lc-markdown-preview li + li {
-    margin-top: 5px;
+    margin-top: 8px;
 }
 
 .lc-markdown-preview strong {
-    color: var(--ink);
-    font-weight: 850;
+    color: rgba(228, 80, 58, 0.95);
+    font-weight: 600;
+    padding: 0 2px;
+    background: rgba(228, 80, 58, 0.05);
+    border-radius: 4px;
 }
 
 .lc-markdown-preview code {

@@ -80,6 +80,44 @@ def test_visual_document_accepts_known_blocks_and_stable_refs():
     assert document.source_refs[0].id == "study:view-1:line:line-1"
 
 
+def test_labeled_items_accept_learning_scaffold_fields():
+    from video_transcript_api.visual_learning.schemas import VisualDocument
+
+    payload = _document()
+    payload["pages"][0]["blocks"] = [
+        {
+            "id": "token-chain",
+            "type": "concept_chain",
+            "title": "Token 如何进入模型",
+            "source_ref_ids": ["study:view-1:line:line-1"],
+            "items": [
+                {
+                    "id": "text",
+                    "label": "人类文字",
+                    "description": "用户输入自然语言。",
+                    "why_needed": "这是用户真正想表达的意思，模型需要先接收它。",
+                    "mechanism": "Tokenizer 会把文字切成更小的可编号单位。",
+                    "example": "“我喜欢 AI”会先被切成若干 token。",
+                    "misconception": "Token 不一定等于一个汉字或一个英文单词。",
+                },
+                {
+                    "id": "token-id",
+                    "label": "Token ID",
+                    "description": "模型实际处理的是数字编号。",
+                    "why_needed": "模型底层做数学计算，不能直接计算文字本身。",
+                    "example": "文字片段会映射成类似 2512、9843 的编号。",
+                },
+            ],
+        }
+    ]
+
+    document = VisualDocument.model_validate(payload)
+    item = document.pages[0].blocks[0].items[0]
+
+    assert item.why_needed == "这是用户真正想表达的意思，模型需要先接收它。"
+    assert item.example == "“我喜欢 AI”会先被切成若干 token。"
+
+
 def test_visual_document_rejects_unknown_block_type():
     from video_transcript_api.visual_learning.schemas import VisualDocument
 
@@ -118,6 +156,144 @@ def test_mind_map_enforces_branch_limits():
 
     with pytest.raises(ValidationError):
         VisualDocument.model_validate(payload)
+
+
+def _contrast_pair(index=1, **overrides):
+    pair = {
+        "bad_label": f"错误表达 {index}",
+        "bad_signal": "会释放负面信号",
+        "risk_label": "风险判断",
+        "better_label": f"替代表达 {index}",
+        "better_signal": "更利于决策",
+    }
+    pair.update(overrides)
+    return pair
+
+
+def test_visual_document_accepts_paired_contrast_block():
+    from video_transcript_api.visual_learning.schemas import VisualDocument
+
+    payload = _document(
+        selected_diagram_type="paired_contrast",
+        diagram_recommendations=[
+            {
+                "diagram_type": "paired_contrast",
+                "label": "配对转化",
+                "rationale": "适合把错误表达转成可采购信号。",
+                "score": 0.91,
+            }
+        ],
+    )
+    payload["pages"][0]["blocks"] = [
+        {
+            "id": "contrast-1",
+            "type": "paired_contrast",
+            "title": "错误信号转化",
+            "source_ref_ids": ["study:view-1:line:line-1"],
+            "pairs": [
+                _contrast_pair(
+                    1,
+                    bad_label="身体不好",
+                    bad_signal="可能无法稳定出勤",
+                    risk_label="出勤风险",
+                    better_label="耐力运动",
+                    better_signal="证明恢复力和稳定投入",
+                ),
+                _contrast_pair(
+                    2,
+                    bad_label="抱怨消耗",
+                    bad_signal="低积累高消耗",
+                    risk_label="负资产",
+                    better_label="解决问题",
+                ),
+            ],
+        }
+    ]
+
+    document = VisualDocument.model_validate(payload)
+
+    assert document.pages[0].blocks[0].type == "paired_contrast"
+    assert document.selected_diagram_type == "paired_contrast"
+
+
+def test_paired_contrast_rejects_more_than_six_pairs():
+    from video_transcript_api.visual_learning.schemas import VisualDocument
+
+    payload = _document()
+    payload["pages"][0]["blocks"] = [
+        {
+            "id": "contrast-1",
+            "type": "paired_contrast",
+            "title": "错误信号转化",
+            "source_ref_ids": ["study:view-1:line:line-1"],
+            "pairs": [_contrast_pair(index) for index in range(7)],
+        }
+    ]
+
+    with pytest.raises(ValidationError):
+        VisualDocument.model_validate(payload)
+
+
+def test_visual_document_accepts_signal_flow_block():
+    from video_transcript_api.visual_learning.schemas import VisualDocument
+
+    payload = _document(selected_diagram_type="signal_flow")
+    payload["pages"][0]["blocks"] = [
+        {
+            "id": "signal-1",
+            "type": "signal_flow",
+            "title": "老板决策信号流",
+            "source_ref_ids": ["study:view-1:line:line-1"],
+            "steps": [
+                {"label": "候选表达", "description": "我被上份工作消耗"},
+                {"label": "老板解读", "description": "低积累高消耗"},
+                {"label": "决策后果", "description": "无法向股东交代"},
+            ],
+            "outcome_label": "需要改成采购信号",
+        }
+    ]
+
+    document = VisualDocument.model_validate(payload)
+
+    assert document.pages[0].blocks[0].type == "signal_flow"
+    assert document.pages[0].blocks[0].outcome_label == "需要改成采购信号"
+
+
+def test_visual_document_accepts_decision_axis_block():
+    from video_transcript_api.visual_learning.schemas import VisualDocument
+
+    payload = _document(selected_diagram_type="decision_axis")
+    payload["pages"][0]["blocks"] = [
+        {
+            "id": "axis-1",
+            "type": "decision_axis",
+            "title": "老板采购坐标",
+            "source_ref_ids": ["study:view-1:line:line-1"],
+            "x_axis": {"low": "低积累", "high": "高积累"},
+            "y_axis": {"low": "低消耗", "high": "高消耗"},
+            "quadrants": [
+                {
+                    "label": "优先采购",
+                    "description": "高积累、低消耗",
+                    "x": "high",
+                    "y": "low",
+                    "tone": "good",
+                },
+                {
+                    "label": "谨慎排除",
+                    "description": "低积累、高消耗",
+                    "x": "low",
+                    "y": "high",
+                    "tone": "bad",
+                },
+            ],
+        }
+    ]
+
+    document = VisualDocument.model_validate(payload)
+
+    assert document.pages[0].blocks[0].type == "decision_axis"
+    assert document.pages[0].blocks[0].quadrants[0].tone == "good"
 
 
 @pytest.mark.parametrize(

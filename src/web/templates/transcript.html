@@ -635,135 +635,244 @@
 {% endblock %}
 
 {% block content %}
-    <!-- 统计信息（单行显示） -->
-    {% if stats and stats.original_length > 0 %}
-    <div class="stats-line">
-        <span class="stats-label">转录统计</span>
-        <span class="stats-content">
-            {% if stats.duration_display %}总耗时 {{ stats.duration_display }} | {% endif %}
-            原始转录 {{ "{:,}".format(stats.original_length) }} 字
-            {% if stats.calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(stats.calibrated_length) }} 字{% endif %}
-            {% if stats.summary_length > 0 and stats.summary_length != stats.calibrated_length %} | 内容总结 {{ "{:,}".format(stats.summary_length) }} 字{% endif %}
-        </span>
+    <style id="immersive-styles">
+    /* --- Immersive & Glassmorphic UI --- */
+    /* --- Top Actions --- */
+    .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 24px;
+    }
+    .top-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 32px;
+        padding: 0 14px;
+        border: 1px solid rgba(0,0,0,0.06);
+        border-radius: 999px;
+        background: white;
+        color: rgba(0, 0, 0, 0.65);
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .top-btn:hover {
+        background: rgba(0, 0, 0, 0.02);
+        color: black;
+    }
+    .top-btn.primary {
+        background: #E4503A;
+        color: white;
+        border: none;
+    }
+    .top-btn.primary:hover {
+        background: #d4402a;
+    }
+    
+    /* Subdued Status Indicators */
+    .status-island {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.03);
+        font-size: 0.8rem;
+        color: rgba(0, 0, 0, 0.5);
+        margin-bottom: 24px;
+        transition: all 0.2s ease;
+        cursor: default;
+    }
+    .status-island:hover { background: rgba(0, 0, 0, 0.06); color: rgba(0,0,0,0.8); }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .status-dot.error { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.5); }
+    .status-dot.warn { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.5); }
+    .status-dot.ok { background: #10b981; }
+
+    /* Minimal Collection Nav */
+    .minimal-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0;
+        margin-bottom: 32px;
+        border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .minimal-nav a {
+        color: rgba(0,0,0,0.5);
+        text-decoration: none;
+        font-size: 0.88rem;
+        font-weight: 500;
+        transition: color 0.2s;
+    }
+    .minimal-nav a:hover { color: black; }
+    .minimal-nav-center {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.88rem;
+        color: rgba(0,0,0,0.8);
+    }
+    .minimal-nav-select {
+        appearance: none;
+        -webkit-appearance: none;
+        background: transparent;
+        border: none;
+        font-size: 0.88rem;
+        color: rgba(0,0,0,0.8);
+        cursor: pointer;
+        padding-right: 18px;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right center;
+        background-size: 14px;
+        font-family: inherit;
+        outline: none;
+    }
+    .minimal-nav-select:hover {
+        color: black;
+    }
+    
+    /* Export Menu */
+    #exportMenu {
+        top: calc(100% + 8px);
+        right: 0;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.98);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 10px 32px rgba(0,0,0,0.12);
+        padding: 6px;
+    }
+    .export-menu-item {
+        border-radius: 6px;
+        margin-bottom: 2px;
+    }
+    .export-menu-item:hover {
+        background: rgba(0,0,0,0.04) !important;
+        color: black !important;
+    }
+
+    /* Redefine section headers to be cleaner */
+    .section { border: none !important; box-shadow: none !important; padding: 0 !important; margin-bottom: 48px !important; background: transparent !important; }
+    .section-header h2 { font-size: 1.25rem !important; color: rgba(0,0,0,0.9) !important; font-weight: 600 !important; margin: 0 !important; }
+    
+    /* Override summary actions */
+    .summary-reader-actions {
+        background: rgba(0,0,0,0.04) !important;
+        border: 1px solid rgba(0,0,0,0.02) !important;
+        border-radius: 999px !important;
+        padding: 4px !important;
+    }
+    .summary-reader-btn {
+        border-radius: 999px !important;
+        min-height: 32px !important;
+        font-size: 0.85rem !important;
+        color: rgba(0,0,0,0.5) !important;
+    }
+    .summary-reader-btn[aria-selected="true"] {
+        background: white !important;
+        color: black !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+        font-weight: 600 !important;
+    }
+    </style>
+
+    <!-- Top Status & Meta Island -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
+        {% if stats %}
+        <div class="status-island" title="{% if llm_config %}校对模型: {{ llm_config.calibrate_model or '默认' }} | 总结模型: {{ llm_config.summary_model or '默认' }}{% endif %}">
+            {% set cal = stats.calibration_stats %}
+            {% if cal and cal.failed_count == cal.total_chunks and cal.total_chunks > 0 %}
+                <span class="status-dot error"></span>
+                <span>校准失败，显示原文</span>
+            {% elif cal and (cal.failed_count > 0 or cal.fallback_count > 0) %}
+                <span class="status-dot warn"></span>
+                <span>部分校准异常 ({{ cal.success_count }}/{{ cal.total_chunks }})</span>
+            {% else %}
+                <span class="status-dot ok"></span>
+                <span>校准完成</span>
+            {% endif %}
+            
+            {% if stats.original_length > 0 %}
+                <span style="opacity: 0.2; margin: 0 4px;">|</span>
+                <span>转录 {{ "{:,}".format(stats.original_length) }} 字</span>
+            {% endif %}
+            {% if stats.duration_display %}
+                <span style="opacity: 0.2; margin: 0 4px;">|</span>
+                <span>耗时 {{ stats.duration_display }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if view_token %}
+        <div class="top-actions">
+            <button type="button" class="top-btn" onclick="submitRecalibrate()">重新校对</button>
+            <div style="position: relative;" id="exportDropdownContainer">
+                <button type="button" id="exportMainBtn" class="top-btn primary" onclick="toggleExportMenu(event)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    导出
+                </button>
+                <div id="exportMenu" style="display: none; position: absolute; right: 0; min-width: 140px; z-index: 1000;">
+                    <button type="button" class="export-menu-item" onclick="executeExport('markdown', '{{ view_token }}')">Markdown 文档</button>
+                    <button type="button" class="export-menu-item" onclick="executeExport('pdf', '{{ view_token }}')">PDF 文档</button>
+                    <button type="button" class="export-menu-item" onclick="executeExport('html', '{{ view_token }}')">HTML 页面</button>
+                    <button type="button" class="export-menu-item" onclick="executeExport('png', '{{ view_token }}')">PNG 长图</button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 
+    <!-- Minimal Collection Navigation -->
     {% if collection_navigation %}
-    <nav class="collection-nav" aria-label="同合集章节导航">
-        <div class="collection-nav-top">
-            <div class="collection-nav-context">
-                <span class="collection-nav-kicker">合集学习</span>
-                <a class="collection-nav-collection" href="{{ collection_navigation.collection.url }}">{{ collection_navigation.collection.title }}</a>
-                <a class="collection-nav-return" href="{{ collection_navigation.collection.url }}">返回合集</a>
-            </div>
-            <span class="collection-nav-count">第 {{ collection_navigation.current_number }} / {{ collection_navigation.total }} 节</span>
+    <nav class="minimal-nav">
+        {% if collection_navigation.previous and collection_navigation.previous.view_url %}
+            <a href="{{ collection_navigation.previous.view_url }}">← 上一节</a>
+        {% else %}
+            <span style="color: rgba(0,0,0,0.25);">← 上一节</span>
+        {% endif %}
+        
+        <div class="minimal-nav-center">
+            <a href="{{ collection_navigation.collection.url }}" style="color: rgba(0,0,0,0.5);">{{ collection_navigation.collection.title }}</a>
+            <span style="opacity: 0.2;">/</span>
+            <select class="minimal-nav-select" onchange="if (this.value) window.location.href = this.value" aria-label="切换章节" title="切换其他章节">
+                {% for item in collection_navigation["items"] %}
+                <option value="{{ item.view_url }}" {% if item.is_current %}selected{% endif %}>
+                    第 {{ loop.index }}/{{ collection_navigation.total }} 节 {% if item.title %}- {{ item.title }}{% endif %}
+                </option>
+                {% endfor %}
+            </select>
         </div>
-        <div class="collection-nav-controls">
-            {% if collection_navigation.previous and collection_navigation.previous.view_url %}
-            <a class="collection-nav-link" href="{{ collection_navigation.previous.view_url }}" aria-label="上一节：{{ collection_navigation.previous.title }}">
-                <span class="collection-nav-dir">上一节</span>
-                <span class="collection-nav-title">{{ collection_navigation.previous.title }}</span>
-            </a>
-            {% else %}
-            <span class="collection-nav-disabled" aria-disabled="true">
-                <span class="collection-nav-dir">上一节</span>
-                <span class="collection-nav-title">已经是第一节</span>
-            </span>
-            {% endif %}
 
-            <div class="collection-nav-select-wrap">
-                <label class="collection-nav-sr-only" for="collection-source-jump">切换到同合集其他章节</label>
-                <select class="collection-nav-select" id="collection-source-jump" onchange="if (this.value) window.location.href = this.value">
-                    {% for item in collection_navigation["items"] %}
-                    <option value="{{ item.view_url }}" {% if item.is_current %}selected{% endif %}>{{ loop.index }}. {{ item.title }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            {% if collection_navigation.next and collection_navigation.next.view_url %}
-            <a class="collection-nav-link" href="{{ collection_navigation.next.view_url }}" aria-label="下一节：{{ collection_navigation.next.title }}">
-                <span class="collection-nav-dir">下一节</span>
-                <span class="collection-nav-title">{{ collection_navigation.next.title }}</span>
-            </a>
-            {% else %}
-            <span class="collection-nav-disabled" aria-disabled="true">
-                <span class="collection-nav-dir">下一节</span>
-                <span class="collection-nav-title">已经是最后一节</span>
-            </span>
-            {% endif %}
-        </div>
+        {% if collection_navigation.next and collection_navigation.next.view_url %}
+            <a href="{{ collection_navigation.next.view_url }}">下一节 →</a>
+        {% else %}
+            <span style="color: rgba(0,0,0,0.25);">下一节 →</span>
+        {% endif %}
     </nav>
     {% endif %}
 
     {% if longcut_action %}
-    <div class="learning-action-bar">
-        <a class="longcut-action-btn" href="{{ longcut_action.url }}">
-            <span>▶</span>
-            <span>{{ longcut_action.label }}</span>
+    <div style="margin-bottom: 32px;">
+        <a href="{{ longcut_action.url }}" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #2563eb; text-decoration: none; font-weight: 500;">
+            <span style="background: rgba(37,99,235,0.1); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">▶</span>
+            {{ longcut_action.label }}
         </a>
-        <span class="learning-action-desc">{{ longcut_action.description }}</span>
     </div>
     {% endif %}
 
-    <!-- 校准质量警告 -->
-    {% if stats and stats.calibration_stats %}
-    {% set cal = stats.calibration_stats %}
-    {% if cal.failed_count == cal.total_chunks and cal.total_chunks > 0 %}
-    <div class="calibration-warning" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#991b1b;display:flex;align-items:center;gap:8px;">
-        <span><strong>校准失败</strong>：LLM API 超时，当前显示为未校准的原始语音识别文本，可能包含较多错别字。建议点击上方「重新校对」按钮。</span>
-    </div>
-    {% elif cal.failed_count > 0 or cal.fallback_count > 0 %}
-    <div class="calibration-warning" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#92400e;display:flex;align-items:center;gap:8px;">
-        <span><strong>校准部分异常</strong>：{{ cal.success_count }}/{{ cal.total_chunks }} 段校准成功，{{ cal.fallback_count }} 段降级，{{ cal.failed_count }} 段失败。部分内容可能包含错别字。</span>
-    </div>
-    {% endif %}
-    {% endif %}
 
-    <!-- 模型配置信息（折叠展示） -->
-    {% if llm_config %}
-    <details class="llm-config-details">
-        <summary>
-            <span class="config-label">高级信息</span>
-            {% if llm_config.has_risk %}<span class="risk-badge">风险降级</span>{% endif %}
-        </summary>
-        <div class="llm-config-grid">
-            {% if llm_config.calibrate_model %}
-            <div class="config-item">
-                <span class="config-key">校对模型</span>
-                <span class="config-value">{{ llm_config.calibrate_model }}{% if llm_config.calibrate_reasoning_effort %} <span class="reasoning-tag">reasoning: {{ llm_config.calibrate_reasoning_effort }}</span>{% endif %}</span>
-            </div>
-            {% endif %}
-            {% if llm_config.summary_model %}
-            <div class="config-item">
-                <span class="config-key">总结模型</span>
-                <span class="config-value">{{ llm_config.summary_model }}{% if llm_config.summary_reasoning_effort %} <span class="reasoning-tag">reasoning: {{ llm_config.summary_reasoning_effort }}</span>{% endif %}</span>
-            </div>
-            {% endif %}
-        </div>
-    </details>
-    {% endif %}
-
-    <!-- 高级操作：一键导出 -->
-    {% if view_token %}
-    <div class="one-click-export-bar" style="padding: 16px 30px; background: rgba(0,0,0,0.015); border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: flex-end;">
-        <div style="position: relative;" id="exportDropdownContainer">
-            <button type="button" id="exportMainBtn" class="quick-copy-btn" onclick="toggleExportMenu(event)" style="background: #E4503A; color: white; border-color: #E4503A; font-weight: 600; min-width: 120px; justify-content: center; display: inline-flex;">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                一键导出
-            </button>
-            <div id="exportMenu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 8px; background: var(--bg-primary, white); border: 1px solid var(--border-primary, #ddd); border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); min-width: 160px; z-index: 100; overflow: hidden; padding: 4px 0;">
-                <button type="button" class="export-menu-item" onclick="executeExport('markdown', '{{ view_token }}')">Markdown 文档</button>
-                <button type="button" class="export-menu-item" onclick="executeExport('pdf', '{{ view_token }}')">PDF 文档</button>
-                <button type="button" class="export-menu-item" onclick="executeExport('html', '{{ view_token }}')">HTML 页面</button>
-                <button type="button" class="export-menu-item" onclick="executeExport('png', '{{ view_token }}')">PNG 长图</button>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 
     <div class="section">
         <div class="section-header">
@@ -819,8 +928,7 @@
         <div class="section-header">
             <h2>校对文本</h2>
             {% if view_token %}
-            <span id="recalibrateArea">
-                <button class="recalibrate-btn" id="recalibrateBtn" onclick="document.getElementById('recalibrateDialog').showModal()">重新校对</button>
+            <span id="recalibrateArea" style="font-size: 0.85rem; color: var(--text-secondary);">
             </span>
             {% endif %}
         </div>
@@ -834,19 +942,8 @@
         </div>
 
         {% if view_token %}
-        <dialog id="recalibrateDialog" class="recalibrate-dialog">
-            <form method="dialog">
-                <h3>重新校对</h3>
-                <p class="dialog-desc">将重新执行 LLM 校对（跳过下载、转录和总结），校对完成后刷新页面即可查看新结果。</p>
-                <label for="recalibrateApiKey">API Key</label>
-                <input type="password" id="recalibrateApiKey" placeholder="Bearer token" autocomplete="off">
-                <div class="dialog-actions">
-                    <button type="button" class="dialog-btn dialog-btn-cancel" onclick="document.getElementById('recalibrateDialog').close()">取消</button>
-                    <button type="button" class="dialog-btn dialog-btn-confirm" id="recalibrateConfirmBtn" onclick="submitRecalibrate()">确认</button>
-                </div>
-                <p id="recalibrateStatus" class="dialog-status" style="display:none;"></p>
-            </form>
-        </dialog>
+        <span id="recalibrateArea" style="position: fixed; bottom: 16px; right: 32px; font-size: 0.85rem; color: var(--text-secondary); z-index: 1000;">
+        </span>
         {% endif %}
     </div>
     {% endif %}
@@ -868,25 +965,10 @@
 })();
 
 function submitRecalibrate() {
-    var btn = document.getElementById('recalibrateConfirmBtn');
-    var status = document.getElementById('recalibrateStatus');
-    var dialog = document.getElementById('recalibrateDialog');
     var area = document.getElementById('recalibrateArea');
-    var apiKey = document.getElementById('recalibrateApiKey').value.trim();
+    var apiKey = localStorage.getItem('api_key') || '';
 
-    if (!apiKey) {
-        status.textContent = 'Please enter API Key';
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        return;
-    }
-
-    // Save to localStorage for future use
-    localStorage.setItem('api_key', apiKey);
-
-    btn.disabled = true;
-    btn.textContent = 'Submitting...';
-    status.style.display = 'none';
+    area.innerHTML = '<span class="recalibrate-status">校对请求中...</span>';
 
     fetch('/api/recalibrate', {
         method: 'POST',
@@ -912,11 +994,7 @@ function submitRecalibrate() {
         pollTask(taskId, apiKey, area);
     })
     .catch(function(err) {
-        status.textContent = err.message;
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Confirm';
+        area.innerHTML = '<span class="recalibrate-status recalibrate-error">' + err.message + '</span>';
     });
 }
 

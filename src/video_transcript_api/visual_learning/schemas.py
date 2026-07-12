@@ -19,6 +19,9 @@ DIAGRAM_TYPES = {
     "concept_chain",
     "process_flow",
     "comparison",
+    "paired_contrast",
+    "signal_flow",
+    "decision_axis",
     "hierarchy",
     "timeline",
     "mind_map",
@@ -36,6 +39,9 @@ DiagramType = Literal[
     "concept_chain",
     "process_flow",
     "comparison",
+    "paired_contrast",
+    "signal_flow",
+    "decision_axis",
     "hierarchy",
     "timeline",
     "mind_map",
@@ -44,11 +50,15 @@ RenderedDiagramType = Literal[
     "concept_chain",
     "process_flow",
     "comparison",
+    "paired_contrast",
+    "signal_flow",
+    "decision_axis",
     "hierarchy",
     "timeline",
     "mind_map",
 ]
 ShortText = Annotated[str, Field(min_length=1, max_length=40)]
+SignalText = Annotated[str, Field(min_length=1, max_length=120)]
 DescriptionText = Annotated[str, Field(min_length=1, max_length=240)]
 Identifier = Annotated[str, Field(min_length=1, max_length=160)]
 
@@ -95,6 +105,9 @@ class VisualOutlineSection(StrictModel):
         "concept_chain",
         "process_flow",
         "comparison",
+        "paired_contrast",
+        "signal_flow",
+        "decision_axis",
         "hierarchy",
         "timeline",
         "concept_grid",
@@ -134,6 +147,10 @@ class LabeledItem(StrictModel):
     id: Identifier
     label: ShortText
     description: DescriptionText
+    why_needed: Optional[DescriptionText] = None
+    mechanism: Optional[DescriptionText] = None
+    example: Optional[DescriptionText] = None
+    misconception: Optional[DescriptionText] = None
 
 
 class ConceptChainBlock(BlockBase):
@@ -159,6 +176,50 @@ class ComparisonColumn(StrictModel):
 class ComparisonBlock(BlockBase):
     type: Literal["comparison"]
     columns: list[ComparisonColumn] = Field(min_length=2, max_length=4)
+
+
+class ContrastPair(StrictModel):
+    bad_label: ShortText
+    bad_signal: SignalText
+    risk_label: ShortText
+    better_label: ShortText
+    better_signal: Optional[SignalText] = None
+
+
+class PairedContrastBlock(BlockBase):
+    type: Literal["paired_contrast"]
+    pairs: list[ContrastPair] = Field(min_length=2, max_length=6)
+
+
+class SignalFlowStep(StrictModel):
+    label: ShortText
+    description: SignalText
+
+
+class SignalFlowBlock(BlockBase):
+    type: Literal["signal_flow"]
+    steps: list[SignalFlowStep] = Field(min_length=2, max_length=6)
+    outcome_label: Optional[ShortText] = None
+
+
+class DecisionAxisLabels(StrictModel):
+    low: ShortText
+    high: ShortText
+
+
+class DecisionAxisQuadrant(StrictModel):
+    label: ShortText
+    description: Optional[SignalText] = None
+    x: Literal["low", "high"]
+    y: Literal["low", "high"]
+    tone: Literal["good", "neutral", "warning", "bad"] = "neutral"
+
+
+class DecisionAxisBlock(BlockBase):
+    type: Literal["decision_axis"]
+    x_axis: DecisionAxisLabels
+    y_axis: DecisionAxisLabels
+    quadrants: list[DecisionAxisQuadrant] = Field(min_length=2, max_length=4)
 
 
 class HierarchyNode(LabeledItem):
@@ -205,6 +266,10 @@ class TimelineBlock(BlockBase):
 class ConceptGridItem(StrictModel):
     label: ShortText
     description: DescriptionText
+    why_needed: Optional[DescriptionText] = None
+    mechanism: Optional[DescriptionText] = None
+    example: Optional[DescriptionText] = None
+    misconception: Optional[DescriptionText] = None
 
 
 class ConceptGridBlock(BlockBase):
@@ -245,6 +310,9 @@ VisualBlock = Annotated[
         ConceptChainBlock,
         ProcessFlowBlock,
         ComparisonBlock,
+        PairedContrastBlock,
+        SignalFlowBlock,
+        DecisionAxisBlock,
         HierarchyBlock,
         TimelineBlock,
         ConceptGridBlock,

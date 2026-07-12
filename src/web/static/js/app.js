@@ -687,9 +687,8 @@ class UIManager {
         const hint = document.getElementById('submit-hint');
 
         const selectedURL = getSelectedURL();
-        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
 
-        const canSubmit = selectedURL && token && !currentTask;
+        const canSubmit = selectedURL && !currentTask;
 
         btn.disabled = !canSubmit;
 
@@ -700,11 +699,7 @@ class UIManager {
         } else if (!selectedURL) {
             btnIcon.textContent = '↗';
             btnText.textContent = '开始解析';
-            if (hint) hint.textContent = '请先粘贴包含链接的内容。';
-        } else if (!token) {
-            btnIcon.textContent = '↗';
-            btnText.textContent = submitLabelForUrl(selectedURL);
-            if (hint) hint.textContent = '请在高级设置中填写 API 令牌。';
+            if (hint) hint.textContent = '';
         } else {
             btnIcon.textContent = '↗';
             btnText.textContent = submitLabelForUrl(selectedURL);
@@ -1424,11 +1419,21 @@ async function submitTranscription(event) {
     }
 
     const selectedURL = getSelectedURL();
-    const useSpeakerRecognition = document.getElementById('speaker-recognition').checked;
-    const preserveSourceFile = document.getElementById('preserve-source-file').checked;
-    const includeComments = document.getElementById('include-comments').checked;
-    const commentLimit = Number.parseInt(document.getElementById('comment-limit').value, 10) || 100;
-    const wechatWebhook = document.getElementById('wechat-webhook').value.trim();
+
+    const speakerRecEl = document.getElementById('speaker-recognition');
+    const useSpeakerRecognition = speakerRecEl ? speakerRecEl.checked : false;
+
+    const preserveEl = document.getElementById('preserve-source-file');
+    const preserveSourceFile = preserveEl ? preserveEl.checked : false;
+
+    const includeCommentsEl = document.getElementById('include-comments');
+    const includeComments = includeCommentsEl ? includeCommentsEl.checked : false;
+
+    const commentLimitEl = document.getElementById('comment-limit');
+    const commentLimit = commentLimitEl ? (Number.parseInt(commentLimitEl.value, 10) || 100) : 100;
+
+    const wechatWebhookEl = document.getElementById('wechat-webhook');
+    const wechatWebhook = wechatWebhookEl ? wechatWebhookEl.value.trim() : '';
     const originalText = document.getElementById('share-content').value.trim();
 
     if (!selectedURL) {
@@ -1452,22 +1457,7 @@ async function submitTranscription(event) {
     }
 
     const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
-    if (!token) {
-        UIManager.showStatus('error', '请先设置 API 令牌', '请在高级设置中填写你的 API 访问令牌（Bearer Token）');
-        // 自动展开高级设置
-        if (!isAdvancedSettingsExpanded) {
-            UIManager.toggleAdvancedSettings();
-        }
-        // 聚焦到 token 输入框
-        setTimeout(() => {
-            const tokenInput = document.getElementById('bearer-token');
-            if (tokenInput) {
-                tokenInput.focus();
-            }
-        }, 100);
-        setTimeout(UIManager.hideStatus, 5000);
-        return;
-    }
+    // Removed strict token validation to allow global fallback configurations to handle missing tokens
 
     try {
         currentTask = { url: selectedURL };
@@ -1553,24 +1543,29 @@ function initializePage() {
     const savedCommentLimit = StorageManager.get(APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT);
 
     if (savedToken) {
-        document.getElementById('bearer-token').value = savedToken;
+        const tokenEl = document.getElementById('bearer-token');
+        if (tokenEl) tokenEl.value = savedToken;
     }
 
     // 加载 webhook 地址
     if (savedWebhook) {
-        document.getElementById('wechat-webhook').value = savedWebhook;
+        const webhookEl = document.getElementById('wechat-webhook');
+        if (webhookEl) webhookEl.value = savedWebhook;
     }
 
-    if (savedSpeakerRecognition !== null) {
-        document.getElementById('speaker-recognition').checked = savedSpeakerRecognition;
+    const speakerRecEl = document.getElementById('speaker-recognition');
+    if (savedSpeakerRecognition !== null && speakerRecEl) {
+        speakerRecEl.checked = savedSpeakerRecognition;
     }
 
-    if (savedIncludeComments !== null) {
-        document.getElementById('include-comments').checked = savedIncludeComments;
+    const includeCommentsEl = document.getElementById('include-comments');
+    if (savedIncludeComments !== null && includeCommentsEl) {
+        includeCommentsEl.checked = savedIncludeComments;
     }
 
-    if (savedCommentLimit !== null) {
-        document.getElementById('comment-limit').value = String(savedCommentLimit);
+    const commentLimitEl = document.getElementById('comment-limit');
+    if (savedCommentLimit !== null && commentLimitEl) {
+        commentLimitEl.value = String(savedCommentLimit);
     }
     updateCommentLimitControl();
 
@@ -1584,8 +1579,9 @@ function initializePage() {
     previewContainer.hidden = true;
     previewContainer.innerHTML = '';
 
-    // 如果没有保存的 token，自动展开高级设置
-    if (!savedToken) {
+    // 如果没有保存的 token 且当前页面存在输入框，自动展开高级设置
+    const tokenEl = document.getElementById('bearer-token');
+    if (!savedToken && tokenEl) {
         UIManager.toggleAdvancedSettings();
     }
 
@@ -1598,51 +1594,66 @@ function initializePage() {
     }
 
     const tokenToggle = document.getElementById('toggle-token-visibility');
-    tokenToggle.addEventListener('click', UIManager.toggleTokenVisibility);
+    if (tokenToggle) {
+        tokenToggle.addEventListener('click', UIManager.toggleTokenVisibility);
+    }
 
     const clearWebhookBtn = document.getElementById('clear-webhook');
-    clearWebhookBtn.addEventListener('click', UIManager.clearWebhook);
+    if (clearWebhookBtn) {
+        clearWebhookBtn.addEventListener('click', UIManager.clearWebhook);
+    }
 
     // 监听设置变化
-    document.getElementById('bearer-token').addEventListener('input', (e) => {
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN, e.target.value);
-        UIManager.updateSubmitButton();
-    });
+    if (tokenEl) {
+        tokenEl.addEventListener('input', (e) => {
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN, e.target.value);
+            UIManager.updateSubmitButton();
+        });
+    }
 
-    document.getElementById('wechat-webhook').addEventListener('input', (e) => {
-        const webhookValue = e.target.value;
+    const webhookEl = document.getElementById('wechat-webhook');
+    if (webhookEl) {
+        webhookEl.addEventListener('input', (e) => {
+            const webhookValue = e.target.value;
 
-        // 立即保存到 localStorage
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK, webhookValue);
+            // 立即保存到 localStorage
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK, webhookValue);
 
-        // 清除之前的定时器
-        if (webhookSaveTimer) {
-            clearTimeout(webhookSaveTimer);
-        }
+            // 清除之前的定时器
+            if (webhookSaveTimer) {
+                clearTimeout(webhookSaveTimer);
+            }
 
-        // 设置新的定时器：用户停止输入 1 秒后显示保存成功提示
-        if (webhookValue.trim() !== '') {
-            webhookSaveTimer = setTimeout(() => {
-                UIManager.showWebhookSaved();
-            }, 1000);
-        }
-    });
+            // 设置新的定时器：用户停止输入 1 秒后显示保存成功提示
+            if (webhookValue.trim() !== '') {
+                webhookSaveTimer = setTimeout(() => {
+                    UIManager.showWebhookSaved();
+                }, 1000);
+            }
+        });
+    }
 
-    document.getElementById('speaker-recognition').addEventListener('change', (e) => {
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, e.target.checked);
-    });
+    if (speakerRecEl) {
+        speakerRecEl.addEventListener('change', (e) => {
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, e.target.checked);
+        });
+    }
 
-    document.getElementById('include-comments').addEventListener('change', (e) => {
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS, e.target.checked);
-        updateCommentLimitControl();
-    });
+    if (includeCommentsEl) {
+        includeCommentsEl.addEventListener('change', (e) => {
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS, e.target.checked);
+            updateCommentLimitControl();
+        });
+    }
 
-    document.getElementById('comment-limit').addEventListener('change', (e) => {
-        StorageManager.set(
-            APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT,
-            Number.parseInt(e.target.value, 10) || 100
-        );
-    });
+    if (commentLimitEl) {
+        commentLimitEl.addEventListener('change', (e) => {
+            StorageManager.set(
+                APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT,
+                Number.parseInt(e.target.value, 10) || 100
+            );
+        });
+    }
 
     // 渲染任务历史
     TaskHistoryManager.renderHistory();

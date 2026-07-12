@@ -12,7 +12,17 @@ from typing import Any, Callable
 from pydantic import ValidationError
 
 from ..llm import StructuredResult, call_llm_api
-from .prompts import build_outline_prompt, build_visual_prompt
+from .prompts import (
+    DIAGRAM_STRATEGY_PROMPT_VERSION,
+    DIAGRAM_STRATEGY_RESPONSE_SCHEMA,
+    VISUAL_BLOCK_SET_VERSION,
+    VISUAL_BRIEF_PROMPT_VERSION,
+    VISUAL_BRIEF_RESPONSE_SCHEMA,
+    build_diagram_strategy_prompt,
+    build_outline_prompt,
+    build_visual_brief_prompt,
+    build_visual_prompt,
+)
 from .progress import compose_workflow_progress
 from .repository import VisualLearningRepository
 from .schemas import (
@@ -32,6 +42,7 @@ from .source_resolver import (
 
 
 normalization_logger = logging.getLogger(__name__)
+DIAGRAM_COVERAGE_POLICY_VERSION = 1
 
 
 class VisualLearningGenerationError(RuntimeError):
@@ -63,14 +74,23 @@ def normalize_visual_document(payload: dict[str, Any]) -> dict[str, Any]:
             _log_resize(f"{path}.{key}" if path else key, len(value), limit)
             node[key] = value[:limit]
 
-    def walk(value: Any, path: str = "", parent_key: str = "") -> None:
+    def walk(
+        value: Any,
+        path: str = "",
+        parent_key: str = "",
+        block_context: str = "",
+    ) -> None:
         if isinstance(value, dict):
             block_type = value.get("type")
+            current_block_type = block_type or block_context
             block_limits = {
                 "hero_summary": {"points": 5},
                 "concept_chain": {"items": 10},
                 "process_flow": {"steps": 10},
                 "comparison": {"columns": 4},
+                "paired_contrast": {"pairs": 6},
+                "signal_flow": {"steps": 6},
+                "decision_axis": {"quadrants": 4},
                 "hierarchy": {"nodes": 16},
                 "timeline": {"events": 12},
                 "concept_grid": {"items": 12},
@@ -98,23 +118,42 @@ def normalize_visual_document(payload: dict[str, Any]) -> dict[str, Any]:
             for key in list(value):
                 item_path = f"{path}.{key}" if path else key
                 item = value[key]
-                if key in {"label", "time_label", "center_label", "headline"}:
+                if key in {
+                    "label",
+                    "time_label",
+                    "center_label",
+                    "headline",
+                    "bad_label",
+                    "risk_label",
+                    "better_label",
+                    "outcome_label",
+                    "low",
+                    "high",
+                }:
                     value[key] = trim_text(item, 40, item_path)
                 elif key == "title":
                     value[key] = trim_text(item, 160 if not path else 40, item_path)
+                elif key in {"bad_signal", "better_signal"}:
+                    value[key] = trim_text(item, 120, item_path)
                 elif key in {"description", "summary", "answer", "rationale", "text", "subtitle"}:
-                    value[key] = trim_text(item, 240, item_path)
+                    limit = (
+                        120
+                        if current_block_type in {"signal_flow", "decision_axis"}
+                        and parent_key in {"steps", "quadrants"}
+                        else 240
+                    )
+                    value[key] = trim_text(item, limit, item_path)
                 elif key in {"question", "learning_goal"}:
                     value[key] = trim_text(item, 160, item_path)
                 elif isinstance(item, (dict, list)):
-                    walk(item, item_path, key)
+                    walk(item, item_path, key, current_block_type)
         elif isinstance(value, list):
             for index, item in enumerate(value):
                 item_path = f"{path}[{index}]"
                 if isinstance(item, str) and parent_key in {"points", "children"}:
                     value[index] = trim_text(item, 40, item_path)
                 else:
-                    walk(item, item_path, parent_key)
+                    walk(item, item_path, parent_key, block_context)
 
     walk(normalized)
     return normalized
@@ -245,6 +284,42 @@ class VisualLearningService:
                 source_refs = [
                     ref for ref in source.source_refs if ref.id in allowed_ids
                 ]
+            brief = None
+            strategy = None
+            if document_type == "diagram":
+                self._update_progress(
+                    record["id"],
+                    generation_token,
+                    "planning_visual",
+                    "正在压缩图解意图",
+                    70,
+                )
+                brief = self._call_brief(
+                    source,
+                    document_type,
+                    outline=outline,
+                    evidence=evidence_text,
+                )
+                strategy_correction = ""
+                for strategy_attempt in range(2):
+                    candidate_strategy = self._call_strategy(
+                        source,
+                        brief,
+                        document_type,
+                        diagram_type,
+                        correction=strategy_correction,
+                    )
+                    try:
+                        self._validate_strategy(candidate_strategy)
+                        strategy = candidate_strategy
+                        break
+                    except VisualLearningGenerationError as exc:
+                        if strategy_attempt == 1:
+                            raise
+                        strategy_correction = (
+                            self._generation_correction(exc)
+                            or "strategy does not pass score thresholds"
+                        )
             self._update_progress(
                 record["id"], generation_token, "generating_visual", "正在生成多页图解" if long_diagram else "正在生成图解", 75
             )
@@ -271,6 +346,8 @@ class VisualLearningService:
                         model,
                         outline=outline,
                         evidence=evidence_text,
+                        brief=brief,
+                        strategy=strategy,
                         correction=correction,
                     )
                 raw_document["source_refs"] = [
@@ -318,10 +395,12 @@ class VisualLearningService:
                     break
                 except (VisualLearningGenerationError, ValidationError) as exc:
                     correction_message = self._generation_correction(exc)
-                    retryable = (
-                        attempt == 0
-                        and previous_success is None
-                        and document_type in {"overview", "full_note", "diagram"}
+                    retryable = attempt == 0 and (
+                        document_type == "diagram"
+                        or (
+                            previous_success is None
+                            and document_type in {"overview", "full_note"}
+                        )
                     )
                     if not retryable:
                         raise
@@ -748,6 +827,145 @@ class VisualLearningService:
             for section in source.interpretation_sections
         ]
 
+    @staticmethod
+    def _structured_payload(result: Any, label: str) -> dict[str, Any]:
+        if isinstance(result, StructuredResult):
+            if not result.success or not isinstance(result.data, dict):
+                raise VisualLearningGenerationError(
+                    f"structured {label} generation failed"
+                )
+            return copy.deepcopy(result.data)
+        if isinstance(result, dict):
+            return copy.deepcopy(result)
+        raise VisualLearningGenerationError(f"LLM returned an invalid {label}")
+
+    def _call_brief(
+        self,
+        source: VisualLearningSource,
+        document_type: str,
+        *,
+        outline: VisualOutline | None = None,
+        evidence: str = "",
+    ) -> dict[str, Any]:
+        result = self.llm_callable(
+            model=self._render_model(),
+            prompt=build_visual_brief_prompt(
+                source,
+                document_type,
+                outline=outline.model_dump(mode="json") if outline else None,
+                evidence=evidence,
+            ),
+            reasoning_effort=self._render_reasoning_effort(),
+            task_type="visual_brief",
+            response_schema=VISUAL_BRIEF_RESPONSE_SCHEMA,
+            config={"llm": self.llm_config},
+            system_prompt=(
+                "你是严谨的中文视觉学习策划。默认用户是不懂但想学会的学习者。"
+                "先抽象学习目标、概念障碍和证据边界，"
+                "不要输出最终 VisualDocument。"
+            ),
+        )
+        payload = self._structured_payload(result, "visual brief")
+        required = {
+            "core_thesis",
+            "learner_level",
+            "audience_task",
+            "content_archetype",
+            "must_answer",
+            "must_show",
+            "concrete_examples",
+            "confusing_terms",
+            "evidence_ref_ids",
+        }
+        if not required.issubset(payload):
+            raise VisualLearningGenerationError("visual brief missing required fields")
+        if not isinstance(payload.get("evidence_ref_ids"), list):
+            raise VisualLearningGenerationError("visual brief evidence_ref_ids invalid")
+        return payload
+
+    def _call_strategy(
+        self,
+        source: VisualLearningSource,
+        brief: dict[str, Any],
+        document_type: str,
+        diagram_type: str,
+        *,
+        correction: str = "",
+    ) -> dict[str, Any]:
+        result = self.llm_callable(
+            model=self._render_model(),
+            prompt=build_diagram_strategy_prompt(
+                source,
+                brief,
+                document_type,
+                diagram_type,
+                correction=correction,
+            ),
+            reasoning_effort=self._render_reasoning_effort(),
+            task_type="visual_strategy",
+            response_schema=DIAGRAM_STRATEGY_RESPONSE_SCHEMA,
+            config={"llm": self.llm_config},
+            system_prompt=(
+                "你是严谨的中文图解策略评审。必须先比较候选方案并按 rubric "
+                "选择最高分策略，不要输出最终 VisualDocument。"
+            ),
+        )
+        return self._structured_payload(result, "diagram strategy")
+
+    @staticmethod
+    def _validate_strategy(strategy: dict[str, Any]) -> None:
+        candidates = strategy.get("candidate_strategies")
+        selected_strategy = strategy.get("selected_strategy")
+        if not isinstance(candidates, list) or not 2 <= len(candidates) <= 3:
+            raise VisualLearningGenerationError(
+                "strategy candidate_strategies must contain two to three candidates"
+            )
+        if not isinstance(selected_strategy, str) or not selected_strategy:
+            raise VisualLearningGenerationError("strategy selected_strategy is required")
+        selected = None
+        highest_total = None
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                raise VisualLearningGenerationError("strategy candidate is invalid")
+            diagram_type = candidate.get("diagram_type")
+            scores = candidate.get("score_breakdown")
+            if not isinstance(diagram_type, str) or not isinstance(scores, dict):
+                raise VisualLearningGenerationError(
+                    "strategy candidate missing diagram_type or score_breakdown"
+                )
+            total = scores.get("total")
+            if not isinstance(total, (int, float)):
+                raise VisualLearningGenerationError(
+                    f"strategy total score is invalid for {diagram_type}"
+                )
+            highest_total = total if highest_total is None else max(highest_total, total)
+            if diagram_type == selected_strategy:
+                selected = candidate
+        if selected is None:
+            raise VisualLearningGenerationError(
+                "strategy selected_strategy does not match a candidate"
+            )
+        selected_scores = selected.get("score_breakdown") or {}
+        selected_total = selected_scores.get("total")
+        if selected_total != highest_total:
+            raise VisualLearningGenerationError(
+                "strategy selected_strategy must have the highest total score"
+            )
+        thresholds = {
+            "total": 80,
+            "task_fit": 18,
+            "cognitive_compression": 18,
+            "visual_relation": 14,
+            "evidence_fidelity": 16,
+            "space_efficiency": 6,
+        }
+        for key, minimum in thresholds.items():
+            value = selected_scores.get(key)
+            if not isinstance(value, (int, float)) or value < minimum:
+                raise VisualLearningGenerationError(
+                    f"strategy {key} score below threshold"
+                )
+
     def _call_llm(
         self,
         source: VisualLearningSource,
@@ -757,6 +975,8 @@ class VisualLearningService:
         *,
         outline: VisualOutline | None = None,
         evidence: str = "",
+        brief: dict[str, Any] | None = None,
+        strategy: dict[str, Any] | None = None,
         correction: str = "",
     ) -> dict[str, Any]:
         result = self.llm_callable(
@@ -772,6 +992,8 @@ class VisualLearningService:
                     if document_type in {"overview", "full_note"}
                     else None
                 ),
+                brief=brief,
+                strategy=strategy,
                 correction=correction,
             ),
             reasoning_effort=self._render_reasoning_effort(),
@@ -783,13 +1005,7 @@ class VisualLearningService:
                 "所有主要知识块必须引用真实 source ref，不得编造事实或引用。"
             ),
         )
-        if isinstance(result, StructuredResult):
-            if not result.success or not isinstance(result.data, dict):
-                raise VisualLearningGenerationError("structured LLM generation failed")
-            return copy.deepcopy(result.data)
-        if isinstance(result, dict):
-            return copy.deepcopy(result)
-        raise VisualLearningGenerationError("LLM returned an invalid structured result")
+        return self._structured_payload(result, "LLM")
 
     def _call_outline(
         self,
@@ -856,7 +1072,13 @@ class VisualLearningService:
         threshold = int(
             self.llm_config.get("visual_learning_long_content_chars") or 30000
         )
-        return document_type == "diagram" and source.total_content_chars > threshold
+        section_threshold = int(
+            self.llm_config.get("visual_learning_long_section_count") or 4
+        )
+        return document_type == "diagram" and (
+            source.total_content_chars > threshold
+            or len(source.interpretation_sections) >= section_threshold
+        )
 
     def _update_progress(
         self,
@@ -976,6 +1198,21 @@ class VisualLearningService:
             raise VisualLearningGenerationError(
                 "overview must cite evidence from at least three sections"
             )
+        for page, section in zip(pages[1:], outline.sections):
+            allowed_refs = {
+                ref.id for ref in evidence_by_section.get(section.id, [])
+            }
+            if not allowed_refs:
+                continue
+            page_refs = {
+                ref_id
+                for block in (page.get("blocks") or [])
+                for ref_id in (block.get("source_ref_ids") or [])
+            }
+            if not page_refs & allowed_refs:
+                raise VisualLearningGenerationError(
+                    "diagram section page must cite evidence from its outline section"
+                )
 
     @staticmethod
     def _validate_full_note_alignment(
@@ -1141,6 +1378,15 @@ class VisualLearningService:
             "render_model": render_model,
             "render_reasoning_effort": render_reasoning_effort,
         }
+        if document_type == "diagram":
+            payload.update(
+                {
+                    "visual_brief_prompt_version": VISUAL_BRIEF_PROMPT_VERSION,
+                    "diagram_strategy_prompt_version": DIAGRAM_STRATEGY_PROMPT_VERSION,
+                    "visual_block_set_version": VISUAL_BLOCK_SET_VERSION,
+                    "diagram_coverage_policy_version": DIAGRAM_COVERAGE_POLICY_VERSION,
+                }
+            )
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()

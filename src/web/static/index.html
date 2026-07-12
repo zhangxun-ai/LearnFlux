@@ -99,7 +99,7 @@
                                 data-lpignore="true"
                                 data-1p-ignore="true"
                                 data-form-type="other"
-                                placeholder="粘贴视频链接（如 Bilibili, YouTube, 小红书）或长文本内容..."
+                                placeholder="粘贴链接（如 视频号, 公众号, 小红书, Bilibili, YouTube）或长文本内容..."
                                 rows="3"></textarea>
 
                             <!-- URL 提取与选择（app.js 既有机制） -->
@@ -111,83 +111,7 @@
                             <div id="detect-banner" class="detect-banner" hidden></div>
                         </div>
 
-                        <!-- 高级设置 -->
-                        <details class="form-group advanced-details">
-                            <summary class="advanced-summary">解析选项与令牌</summary>
-                            <div id="advanced-settings" class="advanced-settings expanded">
-                                <!-- 视频专属选项：仅当识别为视频时显示 -->
-                                <div id="video-options" class="video-options" hidden>
-                                    <div class="checkbox-group">
-                                        <input type="checkbox" id="speaker-recognition" class="form-checkbox">
-                                        <label for="speaker-recognition" class="checkbox-label">
-                                            启用说话人识别
-                                            <span class="checkbox-desc">自动区分不同说话人，适用于多人对话、访谈等场景</span>
-                                        </label>
-                                    </div>
-                                    <div class="checkbox-group">
-                                        <input type="checkbox" id="preserve-source-file" class="form-checkbox">
-                                        <label for="preserve-source-file" class="checkbox-label">
-                                            保存源内容到本地
-                                            <span class="checkbox-desc">默认关闭；勾选后会在解析时额外保留源视频或文档文件</span>
-                                        </label>
-                                    </div>
-                                    <div class="comment-insight-options">
-                                        <div class="checkbox-group">
-                                            <input type="checkbox" id="include-comments" class="form-checkbox">
-                                            <label for="include-comments" class="checkbox-label">
-                                                分析高赞评论
-                                                <span class="checkbox-desc">仅获取平台热评窗口，按热度筛选后生成评论洞察</span>
-                                            </label>
-                                        </div>
-                                        <div id="comment-limit-control" class="comment-limit-control">
-                                            <label for="comment-limit" class="inline-select-label">热评上限</label>
-                                            <select id="comment-limit" class="form-select">
-                                                <option value="50">50 条</option>
-                                                <option value="100" selected>100 条</option>
-                                                <option value="200">200 条</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
 
-                                <div class="form-group">
-                                    <label for="bearer-token" class="form-label required">
-                                        API 访问令牌 <span class="required-mark">*</span>
-                                    </label>
-                                    <div class="input-group">
-                                        <input type="text" id="bearer-token" name="api-token-local-only"
-                                               class="form-input secret-masked"
-                                               placeholder="请输入API访问令牌" required
-                                               autocomplete="new-password"
-                                               autocorrect="off"
-                                               autocapitalize="none"
-                                               spellcheck="false"
-                                               data-lpignore="true"
-                                               data-1p-ignore="true"
-                                               data-form-type="other">
-                                        <button type="button" id="toggle-token-visibility" class="input-btn"
-                                                aria-label="显示 API 令牌">显示</button>
-                                    </div>
-                                    <small class="form-help">
-                                        <span class="required-text">必填项</span> · 即服务访问口令，首次使用请向管理员获取（自部署见 <code>config.jsonc</code> 的 <code>api.auth_token</code>，亦可在<a href="/settings" target="_blank" rel="noopener">设置页</a>查看/设定）。令牌仅保存在你的浏览器本地。
-                                    </small>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="wechat-webhook" class="form-label">
-                                        企业微信 Webhook 地址
-                                    </label>
-                                    <div class="input-group">
-                                        <input type="text" id="wechat-webhook" class="form-input"
-                                               placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...">
-                                        <button type="button" id="clear-webhook" class="input-btn">清空</button>
-                                    </div>
-                                    <small class="form-help">
-                                        可选项 - 用于接收任务完成通知，留空则使用系统默认配置。输入后自动保存到浏览器本地
-                                    </small>
-                                </div>
-                            </div>
-                        </details>
 
                         <div class="form-group">
                             <button type="submit" id="submit-btn" class="submit-btn" disabled>
@@ -240,10 +164,8 @@
             <div id="status-container" class="status-container" style="display: none;">
                 <div id="status-content" class="status-content"></div>
             </div>
-        </div> <!-- end main-content -->
-
-        <!-- 历史记录 -->
-        <div id="history-container" class="history-container" style="display: none;">
+            <!-- 历史记录 -->
+            <div id="history-container" class="history-container" style="display: none;">
                 <div class="history-header">
                     <h3>最近解析</h3>
                     <div class="history-controls">
@@ -271,7 +193,7 @@
                 <div id="history-list" class="history-list"></div>
                 <div id="history-pagination" class="history-pagination"></div>
             </div>
-        <!-- Note: main-content was closed earlier -->
+        </div> <!-- end main-content -->
 
         <footer class="footer">
             <p>Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source · <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">☆ Star on GitHub</a></p>

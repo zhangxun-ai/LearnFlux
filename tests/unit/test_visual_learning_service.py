@@ -163,6 +163,103 @@ def _full_note_document(*, title="从 LLM 到 Agent Skill"):
     return _document(document_type="full_note", pages=pages, title=title)
 
 
+def _brief():
+    return {
+        "core_thesis": "雇佣是人才采购",
+        "learner_level": "beginner",
+        "audience_task": "把简历表达改成老板能采购的信号",
+        "content_archetype": "signal_interpretation",
+        "must_answer": ["老板为什么会这样解读", "怎样把负面信号改成采购信号"],
+        "must_show": ["错误信号", "老板解读", "替代表达"],
+        "concrete_examples": ["把“身体不好”改成“长期耐力运动”"],
+        "confusing_terms": ["人才采购", "采购信号"],
+        "evidence_ref_ids": [_ref_id("line-1")],
+    }
+
+
+def _strategy():
+    return {
+        "candidate_strategies": [
+            {
+                "diagram_type": "paired_contrast",
+                "why_it_fits": "内容是在纠正错误表达",
+                "layout_intent": "错误信号到替代表达的行链路",
+                "text_budget": "每行四个短标签",
+                "risk": "不要变成两列表格",
+                "score_breakdown": {
+                    "task_fit": 22,
+                    "cognitive_compression": 22,
+                    "visual_relation": 18,
+                    "evidence_fidelity": 18,
+                    "space_efficiency": 8,
+                    "total": 88,
+                },
+            },
+            {
+                "diagram_type": "comparison",
+                "why_it_fits": "有雷区和加分项的表面对比",
+                "layout_intent": "两列对照",
+                "text_budget": "每列三项以内",
+                "risk": "容易退化成占空间的文字表格",
+                "score_breakdown": {
+                    "task_fit": 18,
+                    "cognitive_compression": 17,
+                    "visual_relation": 11,
+                    "evidence_fidelity": 18,
+                    "space_efficiency": 6,
+                    "total": 70,
+                },
+            },
+        ],
+        "selected_strategy": "paired_contrast",
+        "rejected_reasoning": "普通 comparison 会过度占空间",
+    }
+
+
+def _diagram_document_with_paired_contrast():
+    return _document(
+        document_type="diagram",
+        selected_diagram_type="paired_contrast",
+        diagram_recommendations=[
+            {
+                "diagram_type": "paired_contrast",
+                "label": "配对转化",
+                "rationale": "适合把错误表达转成可采购信号。",
+                "score": 0.91,
+            }
+        ],
+        pages=[
+            {
+                "id": "page-1",
+                "title": "信号转化",
+                "learning_goal": "学会把错误信号转成采购信号",
+                "blocks": [
+                    {
+                        "id": "contrast-1",
+                        "type": "paired_contrast",
+                        "title": "雷区转化",
+                        "source_ref_ids": [_ref_id("line-1")],
+                        "pairs": [
+                            {
+                                "bad_label": "抱怨消耗",
+                                "bad_signal": "低积累高消耗",
+                                "risk_label": "负资产",
+                                "better_label": "解决问题",
+                            },
+                            {
+                                "bad_label": "身体不好",
+                                "bad_signal": "出勤不稳",
+                                "risk_label": "履约风险",
+                                "better_label": "耐力运动",
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+    )
+
+
 def _service(tmp_path, llm, session=None, llm_config=None):
     from video_transcript_api.visual_learning.repository import VisualLearningRepository
     from video_transcript_api.visual_learning.service import VisualLearningService
@@ -195,9 +292,65 @@ def test_visual_prompt_requires_continuous_transitions(tmp_path):
     assert "前 N-1 页必须填写 transition" in prompt
     assert "能力缺口" in prompt
     assert "最后一页" in prompt
-    assert "完整、可连续阅读的知识地图" in prompt
+    assert "完整、可连续阅读的教学型知识地图" in prompt
+    assert "不懂但想学会" in prompt
+    assert "为什么需要" in prompt
+    assert "具体例子" in prompt
     assert "优先使用关系型视觉块" in prompt
-    assert "每页最多 4 个主要知识块" in prompt
+    assert "每页最多 2 个主要视觉块" in prompt
+    assert "1 个关系型主图 + 1 个辅助 callout" in prompt
+
+
+def test_visual_brief_prompt_requires_abstraction_not_final_document(tmp_path):
+    from video_transcript_api.visual_learning.prompts import build_visual_brief_prompt
+
+    service, _, _ = _service(tmp_path, FakeLLM())
+    source = service.source_resolver.resolve("view-1")
+
+    prompt = build_visual_brief_prompt(source, "diagram")
+
+    assert "不要输出 VisualDocument" in prompt
+    assert "learner_level" in prompt
+    assert "must_answer" in prompt
+    assert "content_archetype" in prompt
+    assert "concrete_examples" in prompt
+    assert "confusing_terms" in prompt
+    assert "must_show" in prompt
+    assert "details_to_defer" not in prompt
+    assert "只基于真实 source_ref_ids" in prompt
+
+
+def test_diagram_strategy_prompt_contains_weighted_rubric(tmp_path):
+    from video_transcript_api.visual_learning.prompts import build_diagram_strategy_prompt
+
+    service, _, _ = _service(tmp_path, FakeLLM())
+    source = service.source_resolver.resolve("view-1")
+    brief = {"core_thesis": "模型到工具再到 Skill", "content_archetype": "signal_interpretation"}
+
+    prompt = build_diagram_strategy_prompt(source, brief, "diagram")
+
+    assert "candidate_strategies" in prompt
+    assert "任务匹配 25" in prompt
+    assert "总分必须 >= 80" in prompt
+    assert "空间效率必须 >= 6/10" in prompt
+    assert "必须是 JSON number" in prompt
+    assert "禁止字符串" in prompt
+
+
+def test_diagram_strategy_schema_requires_numeric_scores():
+    from video_transcript_api.visual_learning.prompts import (
+        DIAGRAM_STRATEGY_RESPONSE_SCHEMA,
+    )
+
+    candidate = DIAGRAM_STRATEGY_RESPONSE_SCHEMA["properties"][
+        "candidate_strategies"
+    ]["items"]
+    score_properties = candidate["properties"]["score_breakdown"]["properties"]
+
+    assert candidate["additionalProperties"] is False
+    assert score_properties["total"]["type"] == "number"
+    assert score_properties["task_fit"]["type"] == "number"
+    assert score_properties["space_efficiency"]["maximum"] == 10
 
 
 def test_full_note_prompt_contains_complete_sections_and_allowed_refs(tmp_path):
@@ -322,6 +475,10 @@ def test_request_key_only_invalidates_diagram_pipeline(tmp_path):
                 "outline_reasoning_effort": "high",
                 "render_model": "render-test-model",
                 "render_reasoning_effort": "disabled",
+                "visual_brief_prompt_version": 2,
+                "diagram_strategy_prompt_version": 1,
+                "visual_block_set_version": 3,
+                "diagram_coverage_policy_version": 1,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -804,6 +961,71 @@ def test_study_overview_counts_original_evidence_toward_section_coverage(tmp_pat
     assert result["status"] == "success"
 
 
+def test_diagram_generation_uses_brief_strategy_then_visual(tmp_path):
+    visual = _diagram_document_with_paired_contrast()
+    llm = FakeLLM(_brief(), _strategy(), visual)
+    service, _, _ = _service(tmp_path, llm)
+
+    result = service.generate_study("view-1", "diagram")
+
+    assert result["status"] == "success"
+    assert [call["task_type"] for call in llm.calls] == [
+        "visual_brief",
+        "visual_strategy",
+        "visual_diagram",
+    ]
+
+
+def test_diagram_strategy_retries_once_then_uses_valid_strategy(tmp_path):
+    low_strategy = _strategy()
+    low_strategy["candidate_strategies"][0]["score_breakdown"] = {
+        "task_fit": 14,
+        "cognitive_compression": 22,
+        "visual_relation": 18,
+        "evidence_fidelity": 18,
+        "space_efficiency": 8,
+        "total": 80,
+    }
+    visual = _diagram_document_with_paired_contrast()
+    llm = FakeLLM(_brief(), low_strategy, _strategy(), visual)
+    service, _, _ = _service(tmp_path, llm)
+
+    result = service.generate_study("view-1", "diagram")
+
+    assert result["status"] == "success"
+    assert [call["task_type"] for call in llm.calls] == [
+        "visual_brief",
+        "visual_strategy",
+        "visual_strategy",
+        "visual_diagram",
+    ]
+    assert "strategy" in llm.calls[2]["prompt"]
+
+
+def test_diagram_generation_rejects_persistently_low_score_strategy(tmp_path):
+    low_strategy = _strategy()
+    low_strategy["candidate_strategies"][0]["score_breakdown"] = {
+        "task_fit": 14,
+        "cognitive_compression": 22,
+        "visual_relation": 18,
+        "evidence_fidelity": 18,
+        "space_efficiency": 8,
+        "total": 80,
+    }
+    llm = FakeLLM(_brief(), low_strategy, low_strategy)
+    service, _, _ = _service(tmp_path, llm)
+
+    result = service.generate_study("view-1", "diagram")
+
+    assert result["status"] == "failed"
+    assert "strategy" in result["error_message"]
+    assert [call["task_type"] for call in llm.calls] == [
+        "visual_brief",
+        "visual_strategy",
+        "visual_strategy",
+    ]
+
+
 def test_generate_diagram_returns_ranked_recommendations(tmp_path):
     recommendations = [
         {"diagram_type": "timeline", "label": "时间线", "rationale": "有阶段", "score": 0.4},
@@ -811,18 +1033,18 @@ def test_generate_diagram_returns_ranked_recommendations(tmp_path):
         {"diagram_type": "mind_map", "label": "思维导图", "rationale": "有分支", "score": 0.6},
         {"diagram_type": "process_flow", "label": "流程图", "rationale": "有步骤", "score": 0.95},
     ]
-    llm = FakeLLM(
-        _document(
-            document_type="diagram",
-            selected_diagram_type=None,
-            diagram_recommendations=recommendations,
-        )
-    )
+    visual = _diagram_document_with_paired_contrast()
+    visual["selected_diagram_type"] = None
+    visual["diagram_recommendations"] = recommendations
+    llm = FakeLLM(_brief(), _strategy(), visual)
     service, _, _ = _service(tmp_path, llm)
 
     result = service.generate_study("view-1", document_type="diagram")
 
-    assert [item["diagram_type"] for item in result["document_json"]["diagram_recommendations"]] == [
+    assert [
+        item["diagram_type"]
+        for item in result["document_json"]["diagram_recommendations"]
+    ] == [
         "process_flow",
         "comparison",
         "mind_map",
@@ -831,18 +1053,20 @@ def test_generate_diagram_returns_ranked_recommendations(tmp_path):
 
 
 def test_initial_diagram_retries_once_when_source_refs_are_invalid(tmp_path):
-    invalid = _document(document_type="diagram", title="引用无效")
-    invalid["pages"][0]["blocks"] = [_hero(refs=["invented-ref"])]
-    valid = _document(document_type="diagram", title="引用已纠正")
-    llm = FakeLLM(invalid, valid)
+    invalid = _diagram_document_with_paired_contrast()
+    invalid["title"] = "引用无效"
+    invalid["pages"][0]["blocks"][0]["source_ref_ids"] = ["invented-ref"]
+    valid = _diagram_document_with_paired_contrast()
+    valid["title"] = "引用已纠正"
+    llm = FakeLLM(_brief(), _strategy(), invalid, valid)
     service, _, _ = _service(tmp_path, llm)
 
     result = service.generate_study("view-1", document_type="diagram")
 
     assert result["status"] == "success"
     assert result["document_json"]["title"] == "引用已纠正"
-    assert len(llm.calls) == 2
-    assert "no valid source references" in llm.calls[1]["prompt"]
+    assert len(llm.calls) == 4
+    assert "no valid source references" in llm.calls[3]["prompt"]
 
 
 def test_invalid_source_refs_fail_without_overwriting_previous_success(tmp_path):
@@ -1157,6 +1381,21 @@ def _long_session():
     return session
 
 
+def _section_rich_short_session():
+    session = _long_session()
+    session["ai"]["overview"] = (
+        "## 知识选择\n"
+        "先判断知识价值，避免把低价值信息当成学习目标。\n\n"
+        "## 知识搜索\n"
+        "建立全景搜索视角，用多来源材料找到更好的解释。\n\n"
+        "## 深度理解\n"
+        "从思维模式和底层机制理解知识，而不是只记结论。\n\n"
+        "## 实践应用\n"
+        "按需学习并立即使用，让知识进入真实任务闭环。"
+    )
+    return session
+
+
 def _long_diagram_document():
     refs = [
         _ref_id("价值-0"),
@@ -1164,12 +1403,29 @@ def _long_diagram_document():
         _ref_id("理解-0"),
         _ref_id("应用-0"),
     ]
+
+    def chain(block_id, block_refs, labels):
+        return {
+            "id": block_id,
+            "type": "concept_chain",
+            "title": "核心链路",
+            "source_ref_ids": block_refs,
+            "items": [
+                {
+                    "id": f"{block_id}-{index}",
+                    "label": label,
+                    "description": f"{label}是学习闭环中的关键一步。",
+                }
+                for index, label in enumerate(labels, start=1)
+            ],
+        }
+
     pages = [
         {
             "id": "overview",
             "title": "全景地图",
             "learning_goal": "理解学习闭环",
-            "blocks": [_hero("overview-hero", refs=refs[:3])],
+            "blocks": [chain("overview-chain", refs[:3], ["价值", "搜索", "理解", "应用"])],
         }
     ]
     for section_id, title, _, topic in [
@@ -1183,14 +1439,46 @@ def _long_diagram_document():
                 "id": section_id,
                 "title": title,
                 "learning_goal": f"掌握{title}",
-                "blocks": [_hero(f"{section_id}-hero", refs=[_ref_id(f"{topic}-0")])],
+                "blocks": [
+                    chain(
+                        f"{section_id}-chain",
+                        [_ref_id(f"{topic}-0")],
+                        [f"{topic}问题", f"{topic}方法"],
+                    )
+                ],
             }
         )
     return _document(document_type="diagram", pages=pages)
 
 
+def test_section_rich_diagram_uses_outline_even_below_char_threshold(tmp_path):
+    llm = FakeLLM(_outline(), _brief(), _strategy(), _long_diagram_document())
+    service, _, _ = _service(tmp_path, llm, session=_section_rich_short_session())
+    source = service.source_resolver.resolve("view-1")
+
+    assert source.total_content_chars < 30000
+    assert len(source.interpretation_sections) == 4
+
+    result = service.generate_study("view-1", "diagram")
+
+    assert result["status"] == "success"
+    assert [call["task_type"] for call in llm.calls] == [
+        "visual_outline",
+        "visual_brief",
+        "visual_strategy",
+        "visual_diagram",
+    ]
+    assert [page["id"] for page in result["document_json"]["pages"]] == [
+        "overview",
+        "knowledge",
+        "search",
+        "understand",
+        "apply",
+    ]
+
+
 def test_long_document_uses_outline_then_evidence_backed_visual(tmp_path):
-    llm = FakeLLM(_outline(), _long_diagram_document())
+    llm = FakeLLM(_outline(), _brief(), _strategy(), _long_diagram_document())
     service, repository, _ = _service(
         tmp_path,
         llm,
@@ -1211,6 +1499,8 @@ def test_long_document_uses_outline_then_evidence_backed_visual(tmp_path):
     assert result["status"] == "success"
     assert [call["task_type"] for call in llm.calls] == [
         "visual_outline",
+        "visual_brief",
+        "visual_strategy",
         "visual_diagram",
     ]
     assert [page["id"] for page in result["document_json"]["pages"]] == [
@@ -1235,11 +1525,30 @@ def test_long_document_uses_outline_then_evidence_backed_visual(tmp_path):
     ][-1]
     assert evidence_progress["completed_units"] == 4
     assert evidence_progress["total_units"] == 4
-    assert evidence_progress["basis"] == "completed_sections"
+
+
+def test_long_diagram_retries_when_section_page_uses_wrong_evidence(tmp_path):
+    invalid = _long_diagram_document()
+    invalid["pages"][1]["blocks"][0]["source_ref_ids"] = [_ref_id("搜索-0")]
+    valid = _long_diagram_document()
+    valid["title"] = "章节引用已纠正"
+    llm = FakeLLM(_outline(), _brief(), _strategy(), invalid, valid)
+    service, _, _ = _service(
+        tmp_path,
+        llm,
+        session=_long_session(),
+        llm_config={"visual_learning_long_content_chars": 200},
+    )
+
+    result = service.generate_study("view-1", "diagram")
+
+    assert result["status"] == "success"
+    assert result["document_json"]["title"] == "章节引用已纠正"
+    assert "outline section" in llm.calls[-1]["prompt"]
 
 
 def test_long_document_uses_separate_outline_and_render_models(tmp_path):
-    llm = FakeLLM(_outline(), _long_diagram_document())
+    llm = FakeLLM(_outline(), _brief(), _strategy(), _long_diagram_document())
     service, _, _ = _service(
         tmp_path,
         llm,
@@ -1258,11 +1567,16 @@ def test_long_document_uses_separate_outline_and_render_models(tmp_path):
     assert result["status"] == "success"
     assert [
         (call["model"], call["reasoning_effort"]) for call in llm.calls
-    ] == [("outline-pro", "high"), ("render-pro", "disabled")]
+    ] == [
+        ("outline-pro", "high"),
+        ("render-pro", "disabled"),
+        ("render-pro", "disabled"),
+        ("render-pro", "disabled"),
+    ]
 
 
 def test_short_document_only_uses_render_model(tmp_path):
-    llm = FakeLLM(_document(document_type="diagram"))
+    llm = FakeLLM(_brief(), _strategy(), _diagram_document_with_paired_contrast())
     service, _, _ = _service(
         tmp_path,
         llm,
@@ -1277,12 +1591,14 @@ def test_short_document_only_uses_render_model(tmp_path):
 
     assert result["status"] == "success"
     assert [(call["model"], call["reasoning_effort"]) for call in llm.calls] == [
-        ("render-pro", "disabled")
+        ("render-pro", "disabled"),
+        ("render-pro", "disabled"),
+        ("render-pro", "disabled"),
     ]
 
 
 def test_legacy_visual_model_config_remains_supported(tmp_path):
-    llm = FakeLLM(_outline(), _long_diagram_document())
+    llm = FakeLLM(_outline(), _brief(), _strategy(), _long_diagram_document())
     service, _, _ = _service(
         tmp_path,
         llm,
@@ -1294,6 +1610,8 @@ def test_legacy_visual_model_config_remains_supported(tmp_path):
 
     assert result["status"] == "success"
     assert [(call["model"], call["reasoning_effort"]) for call in llm.calls] == [
+        ("visual-test-model", "high"),
+        ("visual-test-model", "high"),
         ("visual-test-model", "high"),
         ("visual-test-model", "high"),
     ]

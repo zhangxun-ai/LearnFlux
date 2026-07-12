@@ -90,6 +90,7 @@ def test_renderer_hides_inline_source_refs_unless_explicitly_enabled():
     assert "node('figure'" in js
     assert "renderReferences(block" in js
     assert "showInlineSourceRefs === true" in js
+    assert "showSectionEvidence === true" in js
     assert "showInlineSourceRefs: true" in study_js
     assert "onSectionEvidence" in js
 
@@ -104,6 +105,9 @@ def test_visual_learning_renderer_supports_every_schema_block():
         "concept_chain",
         "process_flow",
         "comparison",
+        "paired_contrast",
+        "signal_flow",
+        "decision_axis",
         "hierarchy",
         "timeline",
         "concept_grid",
@@ -112,6 +116,26 @@ def test_visual_learning_renderer_supports_every_schema_block():
         "review_questions",
     ):
         assert block_type in js
+    css = (
+        PROJECT_ROOT / "src/web/static/css/visual-learning.css"
+    ).read_text(encoding="utf-8")
+    assert "renderPairedContrast" in js
+    assert "renderSignalFlow" in js
+    assert "renderDecisionAxis" in js
+    assert "appendTeachingFields" in js
+    assert "item.why_needed" in js
+    assert "item.example" in js
+    assert "renderComparisonMatrix" in js
+    assert "comparisonRows(columns)" in js
+    assert "bridge.title = pair.risk_label" in js
+    assert ".vl-paired-contrast" in css
+    assert ".vl-teaching-fields" in css
+    assert ".vl-comparison-matrix" in css
+    assert ".vl-hierarchy-tree" in css
+    assert "grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr)" in css
+    assert ".vl-signal-flow" in css
+    assert ".vl-decision-axis" in css
+    assert ".innerHTML" not in js
     assert "visited" in js
 
 

@@ -5,53 +5,76 @@
 
 /* ---------- 输入卡片 + Tab ---------- */
 .input-card {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-primary);
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 4px 16px var(--shadow-light);
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+    box-shadow: none;
     margin-bottom: 24px;
 }
 
 .input-tabs {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--border-primary);
-    background: var(--bg-secondary);
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border: none;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 999px;
+    margin-bottom: 20px;
+    margin-left: 20px;
 }
 
 .input-tab {
-    flex: 1;
-    padding: 14px 16px;
+    flex: none;
+    padding: 8px 20px;
     border: none;
     background: transparent;
-    color: var(--text-secondary);
-    font-size: 0.98rem;
-    font-weight: 600;
+    color: rgba(0,0,0,0.5);
+    font-size: 0.92rem;
+    font-weight: 500;
     cursor: pointer;
     position: relative;
-    transition: color 0.18s ease, background 0.18s ease;
+    border-radius: 999px;
+    transition: all 0.2s ease;
 }
 
-.input-tab:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.input-tab:hover { color: rgba(0,0,0,0.8); background: rgba(0,0,0,0.02); }
 
-.input-tab.active { color: var(--accent-primary); background: var(--bg-primary); }
+.input-tab.active { color: rgba(0,0,0,0.9); background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.06); font-weight: 600; }
 
 .input-tab:focus-visible {
-    outline: 2px solid var(--accent-primary);
+    outline: 2px solid rgba(0,0,0,0.1);
     outline-offset: -2px;
 }
 
 .input-tab.active::after {
-    content: '';
-    position: absolute;
-    left: 0; right: 0; bottom: -1px;
-    height: 3px;
-    background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+    display: none;
 }
 
-.input-panel { padding: 22px; }
+.input-panel { padding: 0; }
 .input-panel[hidden], .input-panel:not(.active) { display: none; }
+
+/* ---------- 极致沉浸式输入框 ---------- */
+.form-textarea {
+    width: 100%;
+    border: none !important;
+    background: rgba(255, 255, 255, 0.72) !important;
+    border-radius: 16px !important;
+    padding: 24px !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.4) !important;
+    backdrop-filter: blur(24px) saturate(1.8) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
+    font-size: 1rem !important;
+    line-height: 1.6;
+    color: rgba(0,0,0,0.8) !important;
+    transition: all 0.3s ease !important;
+}
+
+.form-textarea:focus {
+    background: rgba(255, 255, 255, 0.95) !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255,255,255,0.8) !important;
+    outline: none !important;
+}
 
 /* ---------- 识别结果横幅 ---------- */
 .detect-banner {
@@ -407,40 +430,48 @@
 
 .app-home .input-card {
     margin: 0;
-    padding: 1.5rem;
-    border: 1px solid var(--line);
-    border-radius: 0.5rem;
-    background: #fff;
-    box-shadow: var(--shadow-sm);
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
     overflow: visible;
 }
 
 .app-home .input-tabs {
-    width: max-content;
-    max-width: 100%;
     display: inline-flex;
-    gap: 0.25rem;
-    padding: 0.32rem;
-    margin-bottom: 1.15rem;
-    border: 1px solid var(--line);
-    border-radius: 0.5rem;
-    background: #F8FAFC;
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 20px;
+    border: none;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 999px;
+    margin-left: 12px;
 }
 
 .app-home .input-tab {
     flex: 0 0 auto;
-    min-height: 2.55rem;
-    padding: 0 1.35rem;
-    border-radius: 0.4rem;
-    color: var(--ink-soft);
+    min-height: 2.5rem;
+    padding: 0 1.5rem;
+    border-radius: 999px;
+    color: rgba(0,0,0,0.5);
     font-size: 0.96rem;
-    font-weight: 800;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    transition: all 0.2s ease;
+}
+
+.app-home .input-tab:hover {
+    color: rgba(0,0,0,0.8);
+    background: rgba(0,0,0,0.02);
 }
 
 .app-home .input-tab.active {
-    color: var(--ink);
-    background: var(--card);
-    box-shadow: 0 1px 3px rgba(27, 26, 23, 0.06);
+    color: rgba(0,0,0,0.9);
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    font-weight: 600;
 }
 
 .app-home .input-tab.active::after {
@@ -458,17 +489,28 @@
 .app-home .form-textarea,
 .app-home .form-input,
 .app-home .form-select {
-    border: 1px solid var(--line);
-    border-radius: 0.5rem;
-    background: #fff;
-    color: var(--ink);
-    box-shadow: none;
+    border: none !important;
+    background: rgba(255, 255, 255, 0.72) !important;
+    color: rgba(0,0,0,0.8);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.4) !important;
+    backdrop-filter: blur(24px) saturate(1.8) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
+    border-radius: 16px !important;
+    transition: all 0.3s ease;
+}
+
+.app-home .form-textarea:focus,
+.app-home .form-input:focus,
+.app-home .form-select:focus {
+    background: rgba(255, 255, 255, 0.95) !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255,255,255,0.8) !important;
+    outline: none !important;
 }
 
 .app-home .form-textarea {
-    min-height: 11.5rem;
-    padding: 1rem 1.05rem;
-    font-size: 1.02rem;
+    min-height: 12.5rem;
+    padding: 1.5rem !important;
+    font-size: 1.05rem;
     line-height: 1.75;
 }
 
@@ -575,11 +617,11 @@
 }
 
 .app-home .advanced-details {
-    margin-top: 0.75rem;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #fff;
-    box-shadow: var(--shadow-sm);
+    margin-top: 1rem;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    box-shadow: none;
     overflow: hidden;
 }
 
@@ -589,9 +631,9 @@
     align-items: center;
     padding: 0 1rem;
     cursor: pointer;
-    color: var(--text-secondary);
+    color: rgba(0,0,0,0.5);
     font-size: 0.92rem;
-    font-weight: 750;
+    font-weight: 500;
     list-style: none;
 }
 
@@ -620,7 +662,7 @@
 }
 
 .app-home .advanced-details[open] .advanced-summary {
-    border-bottom: 1px solid var(--line);
+    border-bottom: none;
 }
 
 .app-home .advanced-details[open] .advanced-summary::after {
@@ -636,29 +678,32 @@
 }
 
 .app-home .submit-btn {
-    min-height: 3.35rem;
-    padding: 1rem 1.35rem;
-    border-radius: 0.5rem;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-ink) 100%);
-    box-shadow: 0 4px 12px rgba(214, 65, 45, 0.25);
-    font-size: 1.08rem;
-    font-weight: 800;
-    color: white;
-    border: none;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    min-height: 3.5rem !important;
+    padding: 1rem 1.35rem !important;
+    border-radius: 999px !important;
+    background: rgba(0, 0, 0, 0.85) !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    color: white !important;
+    border: none !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease !important;
 }
 
 .app-home .submit-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    background: linear-gradient(135deg, var(--accent-ink) 0%, #a32f1f 100%);
-    box-shadow: 0 6px 16px rgba(214, 65, 45, 0.35);
+    transform: translateY(-2px) !important;
+    background: black !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18) !important;
+    border: none !important;
 }
 
 .app-home .submit-btn:disabled {
-    opacity: 0.6;
-    transform: none;
-    box-shadow: none;
-    background: var(--muted);
+    opacity: 1 !important;
+    transform: none !important;
+    box-shadow: none !important;
+    background: rgba(0,0,0,0.06) !important;
+    color: rgba(0,0,0,0.3) !important;
+    border: none !important;
 }
 
 .app-home .submit-hint {
@@ -670,23 +715,31 @@
 
 .app-home .file-dropzone {
     min-height: 13.5rem;
-    border: 1.5px dashed var(--line);
-    border-radius: 0.5rem;
-    background: #fff;
+    border: 2px dashed rgba(0,0,0,0.1);
+    border-radius: 16px;
+    background: rgba(255,255,255,0.5);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: all 0.3s ease;
+}
+.app-home .file-dropzone:hover {
+    background: rgba(255,255,255,0.8);
+    border-color: rgba(0,0,0,0.2);
 }
 
 .app-home .status-container,
 .app-home .history-container {
-    border: 1px solid var(--line);
-    border-radius: 0.5rem;
-    background: #fff;
-    box-shadow: var(--shadow-sm);
+    border: none;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.72);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(255,255,255,0.4);
+    backdrop-filter: blur(24px) saturate(1.8);
+    -webkit-backdrop-filter: blur(24px) saturate(1.8);
+    padding: 24px;
+    margin-top: 24px;
 }
 
-.app-home .history-controls,
-.app-home .history-pagination {
-    display: none !important;
-}
+
 
 .app-home .history-header {
     border-bottom: 1px solid var(--border-primary);

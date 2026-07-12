@@ -483,89 +483,185 @@
         return button;
     }
 
-    function renderReaderVisual(panel, data, sectionId, options) {
+    function isGeneratingStatus(status) {
+        const value = String(status || '');
+        return value.includes('生成中') || value.includes('正在请求');
+    }
+
+    function mergedSourceRefs(documents) {
+        const refs = [];
+        const seen = new Set();
+        documents.forEach((doc) => {
+            ((doc && doc.source_refs) || []).forEach((ref) => {
+                const refId = String(ref.id || '');
+                if (!refId || seen.has(refId)) return;
+                seen.add(refId);
+                refs.push(ref);
+            });
+        });
+        return refs;
+    }
+
+    function visualAtlasPages(document, label, idPrefix) {
+        return ((document && document.pages) || []).map((page, index) => {
+            const rawId = String(page.id || `${idPrefix}-${index + 1}`);
+            return {
+                ...page,
+                id: idPrefix ? `${idPrefix}-${rawId}` : rawId,
+                title: label ? `${label} · ${page.title || `第 ${index + 1} 节`}` : page.title,
+            };
+        });
+    }
+
+    function composeVisualAtlasDocument(data) {
+        const globalOnly = data.visualScope === 'global';
         const overview = data.overview || null;
-        const fullNote = data.fullNote || null;
-        if (sectionId === 'review') {
-            if (data.fullNoteStale) {
-                panel.appendChild(node('div', 'vl-reader-empty', '逐段图解正在更新，当前文字仍可阅读。'));
+        const fullNote = globalOnly || data.fullNoteStale ? null : (data.fullNote || null);
+        const pages = [
+            ...visualAtlasPages(overview, '总览', 'global'),
+            ...visualAtlasPages(fullNote, '逐段', ''),
+        ];
+        if (!pages.length) return null;
+        const base = overview || fullNote || {};
+        return {
+            ...base,
+            title: data.title || base.title || '图解学习页',
+            subtitle: data.visualSubtitle || (globalOnly
+                ? '这是当前合集的全局图解，用来建立宏观结构；子内容图解请进入对应内容独立查看。'
+                : (fullNote
+                ? '全局总览与逐段图解已合并在同一个页面中，顺着读即可完成吸收。'
+                : '全局图解已生成；逐段图解可在后台继续补齐。')),
+            recommended_style: base.recommended_style || 'study-notes',
+            source_refs: mergedSourceRefs([overview, fullNote]),
+            pages: pages,
+        };
+    }
+
+    function annotateVisualAtlas(root, atlasDocument) {
+        const header = root.querySelector('.vl-document-head');
+        if (header) header.dataset.readerAnchor = 'global';
+        const pages = atlasDocument.pages || [];
+        root.querySelectorAll('.vl-page').forEach((pageNode, index) => {
+            const page = pages[index] || {};
+            pageNode.dataset.readerAnchor = visualPageAnchorId(page);
+        });
+    }
+
+    function visualPageAnchorId(page) {
+        const pageId = String((page && page.id) || '');
+        if (pageId.startsWith('global-')) return 'global';
+        const hasReview = ((page && page.blocks) || []).some((block) => block.type === 'review_questions');
+        if (hasReview) return 'review';
+        return pageId || 'global';
+    }
+
+    function visualReaderNavItems(data, atlasDocument, reviews) {
+        if (!atlasDocument || data.visualScope === 'global') return [];
+        const items = [{ id: 'global', title: '图解总览' }];
+        const seen = new Set(['global']);
+        (atlasDocument.pages || []).forEach((page, index) => {
+            const targetId = visualPageAnchorId(page);
+            if (!targetId || seen.has(targetId)) return;
+            seen.add(targetId);
+            items.push({
+                id: targetId,
+                title: page.title || `图解 ${index + 1}`,
+            });
+        });
+        if ((reviews || []).length && !seen.has('review')) {
+            items.push({ id: 'review', title: '复习' });
+        }
+        return items.length > 1 ? items : [];
+    }
+
+    function renderVisualStatusBlock(status, actionLabel, callback) {
+        const empty = node('section', 'vl-reader-detail-prompt');
+        const statusStr = status || '图解尚未生成';
+        if (isGeneratingStatus(statusStr)) {
+            empty.classList.add('is-generating');
+            empty.appendChild(node('div', 'vl-spinner'));
+            empty.appendChild(node('strong', '', statusStr));
+            empty.appendChild(node('p', '', '生成完成后会自动补到当前页面，不需要来回切换。'));
+        } else {
+            empty.appendChild(node('strong', '', statusStr));
+            empty.appendChild(node('p', '', '先阅读已有总览，需要更细颗粒度时再补齐逐段图解。'));
+            if (typeof callback === 'function') {
+                empty.appendChild(readerAction(actionLabel, 'vl-reader-primary', callback));
+            }
+        }
+        return empty;
+    }
+
+    function renderReaderVisual(panel, data, _sectionId, options, visualAtlasDocument) {
+        const atlasDocument = visualAtlasDocument || composeVisualAtlasDocument(data);
+        if (atlasDocument) {
+            const diagram = render(panel, atlasDocument, {
+                ...options,
+                readerMode: 'continuous',
+            });
+            diagram.classList.add('vl-diagram', 'vl-reader-visual-atlas');
+            diagram.dataset.diagramRole = 'macro';
+            diagram.setAttribute('data-focus-state', 'active');
+            annotateVisualAtlas(diagram, atlasDocument);
+            if (data.visualScope === 'global') {
                 return;
             }
-            const blocks = reviewBlocksForReader(data);
-            const sourceMap = new Map(((fullNote && fullNote.source_refs) || []).map((ref) => [ref.id, ref]));
-            const review = node('section', 'vl-reader-review');
-            review.appendChild(node('h2', '', '复习与自测'));
-            blocks.forEach((block) => review.appendChild(renderBlock(block, sourceMap, options, false)));
-            panel.appendChild(review);
-            return;
-        }
-        if (!sectionId) {
-            if (overview) {
-                render(panel, overview, options).classList.add('vl-diagram');
-            } else {
-                const empty = node('div', 'vl-reader-empty');
-                const statusStr = data.overviewStatus || '全局图解尚未生成';
-                const isGenerating = statusStr.includes('生成中') || statusStr.includes('正在请求');
-                
-                if (isGenerating) {
-                    empty.classList.add('is-generating');
-                    const spinner = node('div', 'vl-spinner');
-                    empty.appendChild(spinner);
-                    empty.appendChild(node('strong', '', statusStr));
-                    
-                    const skeleton = node('div', 'vl-skeleton');
-                    skeleton.appendChild(node('div', 'vl-skeleton-title'));
-                    skeleton.appendChild(node('div', 'vl-skeleton-box'));
-                    skeleton.appendChild(node('div', 'vl-skeleton-box'));
-                    empty.appendChild(skeleton);
-                } else {
-                    empty.appendChild(node('strong', '', statusStr));
-                    if (typeof options.onGenerateOverview === 'function') {
-                        empty.appendChild(readerAction('一键生成图解', 'vl-reader-primary', options.onGenerateOverview));
-                    }
-                }
-                panel.appendChild(empty);
+            if (data.fullNoteStale) {
+                panel.appendChild(renderVisualStatusBlock(
+                    '逐段图解正在更新，当前总览仍可阅读。',
+                    '重新生成逐段图解',
+                    options.onGenerateFullNote
+                ));
+            } else if (!data.fullNote) {
+                panel.appendChild(renderVisualStatusBlock(
+                    data.fullNoteStatus || '逐段图解尚未生成',
+                    '生成逐段图解',
+                    options.onGenerateFullNote
+                ));
             }
             return;
         }
-        if (data.fullNoteStale) {
-            panel.appendChild(node('div', 'vl-reader-empty', '逐段图解正在更新，当前文字仍可阅读。'));
-            return;
-        }
-        const page = ((fullNote && fullNote.pages) || []).find((item) => item.id === sectionId);
-        if (!page) {
-            const empty = node('div', 'vl-reader-empty');
-            const statusStr = data.fullNoteStatus || '逐段图解尚未生成';
-            const isGenerating = statusStr.includes('生成中') || statusStr.includes('正在请求');
-            
-            if (isGenerating) {
-                empty.classList.add('is-generating');
-                const spinner = node('div', 'vl-spinner');
-                empty.appendChild(spinner);
-                empty.appendChild(node('strong', '', statusStr));
-                
-                const skeleton = node('div', 'vl-skeleton');
-                skeleton.appendChild(node('div', 'vl-skeleton-title'));
-                skeleton.appendChild(node('div', 'vl-skeleton-box'));
-                skeleton.appendChild(node('div', 'vl-skeleton-box'));
-                empty.appendChild(skeleton);
-            } else {
-                empty.appendChild(node('strong', '', statusStr));
-                if (typeof options.onGenerateFullNote === 'function') {
-                    empty.appendChild(readerAction('生成逐段图解', 'vl-reader-primary', options.onGenerateFullNote));
-                }
+
+        const empty = node('div', 'vl-reader-empty');
+        const statusStr = data.overviewStatus || '全局图解尚未生成';
+        if (isGeneratingStatus(statusStr)) {
+            empty.classList.add('is-generating');
+            empty.appendChild(node('div', 'vl-spinner'));
+            empty.appendChild(node('strong', '', statusStr));
+            const skeleton = node('div', 'vl-skeleton');
+            skeleton.appendChild(node('div', 'vl-skeleton-title'));
+            skeleton.appendChild(node('div', 'vl-skeleton-box'));
+            skeleton.appendChild(node('div', 'vl-skeleton-box'));
+            empty.appendChild(skeleton);
+        } else {
+            empty.appendChild(node('strong', '', statusStr));
+            if (typeof options.onGenerateOverview === 'function') {
+                empty.appendChild(readerAction('一键生成图解', 'vl-reader-primary', options.onGenerateOverview));
             }
-            panel.appendChild(empty);
-            return;
         }
-        const pageDocument = {
-            ...fullNote,
-            pages: [{
-                ...page,
-                blocks: (page.blocks || []).filter((block) => block.type !== 'review_questions'),
-            }],
-        };
-        render(panel, pageDocument, options).classList.add('vl-diagram');
+        panel.appendChild(empty);
+    }
+
+    function setReaderNavActive(root, targetId) {
+        root.querySelectorAll('.vl-reader-sections button').forEach((button) => {
+            const active = button.dataset.readerSectionTarget === targetId;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-current', active ? 'location' : 'false');
+        });
+    }
+
+    function scrollReaderToAnchor(root, targetId) {
+        const anchorId = targetId || 'global';
+        root.dataset.readerSection = anchorId;
+        const body = root.querySelector('.vl-reader-body');
+        const target = Array.from(root.querySelectorAll('[data-reader-anchor]'))
+            .find((element) => element.dataset.readerAnchor === anchorId);
+        if (!body || !target) return;
+        body.scrollTo({
+            top: Math.max(0, target.offsetTop - 18),
+            behavior: 'smooth',
+        });
+        setReaderNavActive(root, anchorId);
     }
 
     function renderImmersiveReader(container, model, options) {
@@ -577,6 +673,7 @@
         const sections = data.sections || [];
         const reviews = reviewBlocksForReader(data);
         const scrollState = captureReaderScroll(container, mode, sectionId);
+        const visualAtlasDocument = mode === 'visual' ? composeVisualAtlasDocument(data) : null;
         const root = node('section', 'vl-immersive-reader');
         root.dataset.readerMode = mode;
         root.dataset.readerSection = sectionId || 'global';
@@ -602,26 +699,38 @@
         });
         toolbar.appendChild(tabs);
         const actions = node('div', 'vl-reader-actions');
+        if (mode === 'text' && typeof renderOptions.onExportText === 'function') {
+            actions.appendChild(readerAction('一键导出', '', renderOptions.onExportText));
+        }
         if (mode === 'visual' && typeof renderOptions.onExport === 'function') {
             actions.appendChild(readerAction('导出 SVG', '', renderOptions.onExport));
         }
         toolbar.appendChild(actions);
         root.appendChild(toolbar);
 
-        const sectionNav = node('nav', 'vl-reader-sections');
-        sectionNav.setAttribute('aria-label', '阅读章节');
-        const navItems = [{ id: '', title: '全局' }, ...sections];
-        if (mode === 'visual' && reviews.length) navItems.push({ id: 'review', title: '复习' });
-        navItems.forEach((section) => {
-            const button = readerAction(section.title, sectionId === section.id ? 'is-active' : '', () => {
-                if (typeof renderOptions.onSectionChange === 'function') {
-                    renderOptions.onSectionChange(section.id);
-                }
+        const navItems = mode === 'visual'
+            ? visualReaderNavItems(data, visualAtlasDocument, reviews)
+            : [{ id: '', title: '全局' }, ...sections];
+        if (navItems.length) {
+            const sectionNav = node('nav', 'vl-reader-sections');
+            sectionNav.setAttribute('aria-label', mode === 'visual' ? '图解页导航' : '阅读章节');
+            navItems.forEach((section) => {
+                const targetId = section.id || 'global';
+                const active = (sectionId || 'global') === targetId;
+                const button = readerAction(section.title, active ? 'is-active' : '', () => {
+                    if (mode === 'visual') scrollReaderToAnchor(root, targetId);
+                    if (typeof renderOptions.onSectionChange === 'function') {
+                        renderOptions.onSectionChange(section.id);
+                    }
+                });
+                button.dataset.readerSectionTarget = section.id || 'global';
+                button.setAttribute('aria-current', active ? 'location' : 'false');
+                sectionNav.appendChild(button);
             });
-            button.dataset.readerSectionTarget = section.id || 'global';
-            sectionNav.appendChild(button);
-        });
-        root.appendChild(sectionNav);
+            root.appendChild(sectionNav);
+        } else {
+            root.classList.add('vl-reader-no-sections');
+        }
 
         const body = node('main', 'vl-reader-body');
         const panel = node('article', `vl-reader-panel vl-reader-panel-${mode}`);
@@ -630,7 +739,7 @@
             const markdown = section ? section.markdown : data.globalMarkdown;
             panel.appendChild(renderSafeMarkdown(markdown || '当前文字解读不可用。'));
         } else {
-            renderReaderVisual(panel, data, sectionId, renderOptions);
+            renderReaderVisual(panel, data, sectionId, renderOptions, visualAtlasDocument);
         }
         body.appendChild(panel);
         root.appendChild(body);

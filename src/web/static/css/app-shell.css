@@ -232,7 +232,7 @@ body.app-shell.sidebar-collapsed {
 
 .nav-item:hover {
     background: rgba(27, 26, 23, 0.045);
-    transform: translateX(1px);
+    transform: translateY(-1px);
 }
 
 [data-theme="dark"] .nav-item:hover {
@@ -439,6 +439,9 @@ body.app-shell .page-stage > .container {
     margin-top: 0;
 }
 
+.mobile-menu-btn { display: none; }
+.sidebar-overlay { display: none; }
+
 @media (max-width: 900px) {
     :root {
         --shell-topbar: 56px;
@@ -459,7 +462,38 @@ body.app-shell .page-stage > .container {
         border-bottom: 0;
         box-shadow: 16px 0 42px rgba(31, 29, 26, 0.18);
         transform: translateX(-102%);
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         z-index: 30;
+    }
+
+    .sidebar-overlay {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(3px); /* Apple style glass overlay */
+        -webkit-backdrop-filter: blur(3px);
+        z-index: 20;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+    }
+
+    body.sidebar-drawer-open .sidebar-overlay {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .mobile-menu-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        padding: 4px;
+        margin-right: 8px;
+        cursor: pointer;
     }
 
     body.sidebar-drawer-open .sidebar {

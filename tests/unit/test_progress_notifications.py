@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from src.video_transcript_api.api.services.progress_notifications import (
     due_reminder_marker,
+    recover_stale_tasks_if_enabled,
     send_due_progress_reminders,
 )
 
@@ -13,12 +14,17 @@ class FakeCache:
     def __init__(self, tasks):
         self.tasks = tasks
         self.marked = []
+        self.recovered = []
 
     def list_active_tasks_for_progress_reminders(self):
         return self.tasks
 
     def mark_progress_reminder_sent(self, task_id, marker):
         self.marked.append((task_id, marker))
+
+    def recover_stale_tasks(self, timeout_minutes):
+        self.recovered.append(timeout_minutes)
+        return 2
 
 
 class FakeRouter:
@@ -100,3 +106,21 @@ def test_send_due_progress_reminders_skips_when_feishu_not_configured():
     assert sent_count == 0
     assert cache.marked == []
     assert router.calls == []
+
+
+def test_recover_stale_tasks_if_enabled_uses_configured_timeout():
+    cache = FakeCache([])
+
+    recovered = recover_stale_tasks_if_enabled(cache, "120")
+
+    assert recovered == 2
+    assert cache.recovered == [120]
+
+
+def test_recover_stale_tasks_if_enabled_skips_when_disabled():
+    cache = FakeCache([])
+
+    recovered = recover_stale_tasks_if_enabled(cache, 0)
+
+    assert recovered == 0
+    assert cache.recovered == []

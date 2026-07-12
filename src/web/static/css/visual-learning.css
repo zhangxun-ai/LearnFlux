@@ -1620,6 +1620,52 @@ body.vl-evidence-open {
     line-height: 1.9;
 }
 
+.vl-immersive-reader[data-reader-mode="text"] .vl-reader-body {
+    padding: clamp(34px, 5vw, 68px) 24px 76px;
+    background: #fffdf9;
+}
+
+.vl-immersive-reader[data-reader-mode="text"] .vl-reader-panel-text {
+    width: min(100%, 1120px);
+    min-height: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.vl-reader-panel-text .vl-original-markdown {
+    width: min(100%, 86ch);
+    margin: 0 auto;
+    color: #1f1d1a;
+    font-size: 1.25rem;
+    line-height: 1.92;
+}
+
+.vl-reader-panel-text .vl-original-markdown h1,
+.vl-reader-panel-text .vl-original-markdown h2 {
+    color: #171512;
+    line-height: 1.22;
+}
+
+.vl-reader-panel-text .vl-original-markdown h1 {
+    margin: 0 0 1.2em;
+    font-size: 2.35rem;
+}
+
+.vl-reader-panel-text .vl-original-markdown h2 {
+    margin: 2.2em 0 0.7em;
+    font-size: 1.9rem;
+}
+
+.vl-reader-panel-text .vl-original-markdown h3 {
+    margin: 1.8em 0 0.55em;
+    color: #24211d;
+    font-size: 1.5rem;
+    line-height: 1.28;
+}
+
 .vl-reader-panel .vl-original-markdown p {
     margin: 0 0 1.2em;
 }
@@ -1689,6 +1735,156 @@ body.vl-evidence-open {
     background: #e8523f;
 }
 
+.vl-immersive-reader[data-reader-mode="visual"] {
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+    background: #f2f4f1;
+}
+
+.vl-immersive-reader[data-reader-mode="visual"].vl-reader-no-sections {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.vl-immersive-reader[data-reader-mode="visual"] .vl-reader-toolbar {
+    grid-column: 1 / -1;
+}
+
+.vl-immersive-reader[data-reader-mode="visual"] .vl-reader-sections {
+    flex-direction: column;
+    grid-column: 1;
+    grid-row: 2;
+    gap: 5px;
+    min-height: 0;
+    padding: 22px 12px;
+    overflow: auto;
+    border-right: 1px solid #d8ded8;
+    border-bottom: 0;
+    background: #e9ede8;
+}
+
+.vl-immersive-reader[data-reader-mode="visual"] .vl-reader-sections button {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 11px;
+    border-radius: 7px;
+    text-align: left;
+    white-space: normal;
+}
+
+.vl-immersive-reader[data-reader-mode="visual"] .vl-reader-sections button.is-active {
+    border-color: #df4f3f;
+    background: #fffdf9;
+    color: #22211e;
+}
+
+.vl-immersive-reader[data-reader-mode="visual"] .vl-reader-body {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 0;
+    background: #f7f8f5;
+}
+
+.vl-immersive-reader[data-reader-mode="visual"].vl-reader-no-sections .vl-reader-body {
+    grid-column: 1;
+}
+
+.vl-immersive-reader[data-reader-mode="visual"] .vl-reader-panel-visual {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.vl-reader-visual-atlas.vl-continuous-article {
+    min-height: 100%;
+    background-color: #f7f8f5;
+    background-image:
+        linear-gradient(rgba(36, 91, 83, .045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(36, 91, 83, .045) 1px, transparent 1px);
+    background-size: 28px 28px;
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-document-head {
+    max-width: 1180px;
+    padding: clamp(24px, 4vw, 44px) clamp(24px, 6vw, 76px) 28px;
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-document-head::before {
+    content: "COMPLETE VISUAL PAGE";
+    margin-bottom: 16px;
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-document-head h1 {
+    max-width: 32ch;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif;
+    font-size: clamp(27px, 3vw, 36px);
+    font-weight: 900;
+    line-height: 1.12;
+    text-wrap: pretty;
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-document-head p {
+    max-width: 68ch;
+    margin-top: 18px;
+    font-size: clamp(16px, 1.5vw, 19px);
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-page {
+    max-width: 1180px;
+    padding: clamp(28px, 4vw, 48px) clamp(24px, 6vw, 76px);
+    scroll-margin-top: 22px;
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-page-head {
+    margin-bottom: 28px;
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-page-title h2 {
+    font-size: clamp(25px, 3vw, 38px);
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-block-grid {
+    gap: 18px;
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-block {
+    padding: clamp(18px, 2.4vw, 28px);
+    border: 1px solid rgba(217, 212, 202, .85);
+    border-radius: 8px;
+    background: rgba(255, 253, 249, .82);
+}
+
+.vl-reader-detail-prompt {
+    display: grid;
+    gap: 10px;
+    width: min(100% - 48px, 1040px);
+    margin: 0 auto 56px;
+    padding: 22px 24px;
+    border: 1px solid #ded6ca;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #6d665e;
+}
+
+.vl-reader-detail-prompt strong {
+    color: #24211d;
+    font-size: 16px;
+}
+
+.vl-reader-detail-prompt p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.vl-reader-detail-prompt .vl-reader-primary {
+    justify-self: start;
+}
+
 .vl-reader-review > h2 {
     margin-top: 0;
 }
@@ -1721,6 +1917,82 @@ body.vl-evidence-open {
         min-height: calc(100vh - 160px);
         padding: 22px 18px;
         border-radius: 14px;
+    }
+
+    .vl-immersive-reader[data-reader-mode="text"] .vl-reader-body {
+        padding: 24px 16px 48px;
+    }
+
+    .vl-immersive-reader[data-reader-mode="text"] .vl-reader-panel-text {
+        min-height: auto;
+        padding: 0;
+        border-radius: 0;
+    }
+
+    .vl-reader-panel-text .vl-original-markdown {
+        font-size: 1.125rem;
+    }
+
+    .vl-reader-panel-text .vl-original-markdown h1 {
+        font-size: 1.9rem;
+    }
+
+    .vl-reader-panel-text .vl-original-markdown h2 {
+        font-size: 1.55rem;
+    }
+
+    .vl-reader-panel-text .vl-original-markdown h3 {
+        font-size: 1.3rem;
+    }
+
+    .vl-immersive-reader[data-reader-mode="visual"] {
+        grid-template-rows: auto auto minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .vl-immersive-reader[data-reader-mode="visual"].vl-reader-no-sections {
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .vl-immersive-reader[data-reader-mode="visual"] .vl-reader-sections {
+        flex-direction: row;
+        grid-column: 1;
+        grid-row: 2;
+        gap: 7px;
+        padding: 9px 12px;
+        border-right: 0;
+        border-bottom: 1px solid #ddd5ca;
+    }
+
+    .vl-immersive-reader[data-reader-mode="visual"] .vl-reader-sections button {
+        flex: 0 0 auto;
+        width: auto;
+        min-height: 38px;
+        white-space: nowrap;
+    }
+
+    .vl-immersive-reader[data-reader-mode="visual"] .vl-reader-body {
+        grid-column: 1;
+        grid-row: 3;
+    }
+
+    .vl-immersive-reader[data-reader-mode="visual"].vl-reader-no-sections .vl-reader-body {
+        grid-row: 2;
+    }
+
+    .vl-immersive-reader[data-reader-mode="visual"] .vl-reader-panel {
+        padding: 0;
+        border-radius: 0;
+    }
+
+    .vl-reader-visual-atlas.vl-continuous-article .vl-page,
+    .vl-reader-visual-atlas.vl-continuous-article .vl-document-head {
+        padding-inline: 18px;
+    }
+
+    .vl-reader-detail-prompt {
+        width: calc(100% - 24px);
+        margin-bottom: 32px;
     }
 }
 

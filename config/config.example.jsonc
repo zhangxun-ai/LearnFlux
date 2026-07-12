@@ -87,7 +87,9 @@
         "workspace_dir": "./data/workspace",   // 转录工作目录
         "cache_dir": "./data/cache",          // 缓存目录（持久化存储）
         "source_files_dir": "./data/source_files", // 勾选保存源内容时的本地持久目录
-        "cache_retention_days": 360            // 缓存保留天数
+        "cache_retention_days": 360,           // 缓存保留天数
+        "source_file_cleanup_enabled": true,   // 启动时清理未被任务引用的过期源文件
+        "source_file_retention_days": 30       // 本地源文件保留天数；<=0 表示不清理
     },
 
     // ============================================================
@@ -132,7 +134,8 @@
     "task_progress": {
         "feishu_reminders_enabled": true,        // 长任务飞书提醒开关
         "reminder_threshold_minutes": [10, 30, 60], // 任务运行超过这些分钟数时提醒
-        "reminder_poll_interval_seconds": 60     // 后台扫描间隔
+        "reminder_poll_interval_seconds": 60,    // 后台扫描间隔
+        "stale_task_timeout_minutes": 120        // 超过该分钟数无进度心跳则自动标记失败；<=0 表示关闭
     },
 
     // ============================================================

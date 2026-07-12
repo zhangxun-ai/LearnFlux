@@ -114,15 +114,53 @@ def test_collection_reader_generation_rejects_response_after_owner_switch():
     assert result == {"late": False, "current": True}
 
 
-def test_transcript_one_click_requests_only_overview_and_explicit_detail_requests_full_note():
+def test_transcript_visual_view_requests_single_diagram_document():
     result = _run_transcript_reader(
         "({"
         "oneClick: window.TranscriptVisualReader.requestedDocumentTypes('one-click'),"
-        "detail: window.TranscriptVisualReader.requestedDocumentTypes('full-note')"
+        "detail: window.TranscriptVisualReader.requestedDocumentTypes('full-note'),"
+        "documentType: window.TranscriptVisualReader.documentType"
         "})"
     )
 
-    assert result == {"oneClick": ["overview"], "detail": ["full_note"]}
+    assert result == {
+        "oneClick": ["diagram"],
+        "detail": ["diagram"],
+        "documentType": "diagram",
+    }
+
+
+def test_transcript_visual_state_treats_source_processing_as_active_progress():
+    result = _run_transcript_reader(
+        "(() => {"
+        "const state = {"
+        "phase: 'source_processing',"
+        "workflow_progress: {stage: 'waiting_analysis', stage_label: '正在生成全文总结', overall_percent: 42}"
+        "};"
+        "return {"
+        "active: window.TranscriptVisualReader.isActiveVisualState(state, false),"
+        "label: window.TranscriptVisualReader.progressLabel(state),"
+        "percent: window.TranscriptVisualReader.progressPercent(state)"
+        "};"
+        "})()"
+    )
+
+    assert result == {
+        "active": True,
+        "label": "正在生成全文总结",
+        "percent": 42,
+    }
+
+
+def test_transcript_visual_state_recognizes_english_generation_failure():
+    result = _run_transcript_reader(
+        "window.TranscriptVisualReader.isFailedState({"
+        "phase: 'failed',"
+        "latest_attempt: {status: 'failed', error_message: 'no valid source references'}"
+        "})"
+    )
+
+    assert result is True
 
 
 def test_transcript_reader_generation_rejects_response_after_close():

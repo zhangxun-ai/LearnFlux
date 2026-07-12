@@ -321,7 +321,7 @@ class VisualLearningService:
                     retryable = (
                         attempt == 0
                         and previous_success is None
-                        and document_type in {"overview", "full_note"}
+                        and document_type in {"overview", "full_note", "diagram"}
                     )
                     if not retryable:
                         raise

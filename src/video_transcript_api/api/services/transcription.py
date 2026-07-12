@@ -3,12 +3,9 @@ import copy
 import datetime
 import inspect
 import os
-import re
-import shutil
 import subprocess
 import threading
 import time
-from pathlib import Path
 from typing import Optional, Dict, Any
 
 from fastapi import HTTPException, Header, Request
@@ -38,6 +35,12 @@ from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
 from ...utils.task_progress import estimate_eta_seconds
 from ...study.document_quality import assess_document_text
+from .source_preservation import (
+    DOC_EXTS as _DOC_EXTS,
+    extract_document_text as _extract_document_text,
+    preserve_source_file as _preserve_source_file_to_root,
+    source_kind_for_path as _source_kind_for_path,
+)
 
 logger = get_logger()
 config = get_config()
@@ -87,62 +90,6 @@ def _extract_audio_to_file(src_path: str, out_dir: str, media_id: str) -> Option
     return None
 
 
-# 文档类扩展名：走文本提取（而非音视频转写）
-_DOC_EXTS = {".txt", ".md", ".markdown", ".csv", ".log", ".pdf", ".docx"}
-
-
-def _extract_document_text(path: str, ext: str) -> str:
-    """从本地文档提取纯文本：txt/md/csv/log 直接读，pdf 用 pypdf，docx 用 python-docx。"""
-    ext = (ext or "").lower()
-    if ext in (".txt", ".md", ".markdown", ".csv", ".log"):
-        with open(path, "rb") as f:
-            raw = f.read()
-        for enc in ("utf-8", "gb18030", "latin-1"):
-            try:
-                return raw.decode(enc).strip()
-            except UnicodeDecodeError:
-                continue
-        return raw.decode("utf-8", errors="ignore").strip()
-    if ext == ".pdf":
-        from pypdf import PdfReader
-
-        reader = PdfReader(path)
-        parts = [(page.extract_text() or "") for page in reader.pages]
-        return "\n".join(parts).strip()
-    if ext == ".docx":
-        import docx
-
-        document = docx.Document(path)
-        return "\n".join(p.text for p in document.paragraphs).strip()
-    raise ValueError(f"不支持的文档格式: {ext}")
-
-
-def _online_source_files_dir() -> Path:
-    storage_cfg = get_config().get("storage", {}) or {}
-    source_root = Path(storage_cfg.get("source_files_dir") or "./data/source_files")
-    return source_root / "online_downloads"
-
-
-def _safe_source_stem(platform: str, media_id: str, title: str) -> str:
-    raw = "_".join(part for part in (platform, media_id) if part)
-    if not raw:
-        raw = title or "source"
-    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", raw).strip("._-")
-    return safe[:160] or "source"
-
-
-def _read_text_source(path: str, ext: str) -> str:
-    if ext in _DOC_EXTS:
-        return _extract_document_text(path, ext)
-    raw = Path(path).read_bytes()
-    for enc in ("utf-8", "gb18030", "latin-1"):
-        try:
-            return raw.decode(enc)
-        except UnicodeDecodeError:
-            continue
-    return raw.decode("utf-8", errors="ignore")
-
-
 def _preserve_source_file(
     source_path: Optional[str] = None,
     *,
@@ -152,43 +99,17 @@ def _preserve_source_file(
     source_kind: str = "media",
     source_text: Optional[str] = None,
 ) -> Optional[str]:
-    """Persist an online source file outside temp storage and return its path."""
-    source_ext = Path(source_path).suffix.lower() if source_path else ""
-    if source_kind == "video":
-        target_ext = ".mp4"
-    elif source_kind == "document":
-        target_ext = ".pdf" if source_ext == ".pdf" else ".md"
-    else:
-        target_ext = source_ext if source_ext and len(source_ext) <= 10 else ".bin"
-
-    target_dir = _online_source_files_dir()
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / f"{_safe_source_stem(platform, media_id, title)}{target_ext}"
-
-    if source_text is not None:
-        target_path.write_text(source_text, encoding="utf-8")
-        return str(target_path)
-
-    if not source_path or not os.path.exists(source_path):
-        return None
-
-    if source_kind == "document" and target_ext == ".md":
-        target_path.write_text(
-            _read_text_source(source_path, source_ext).strip(),
-            encoding="utf-8",
-        )
-    else:
-        shutil.copy2(source_path, target_path)
-    return str(target_path)
-
-
-def _source_kind_for_path(path: str) -> str:
-    ext = Path(path).suffix.lower()
-    if ext in _DOC_EXTS:
-        return "document"
-    if ext in {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".flv", ".avi"}:
-        return "video"
-    return "media"
+    storage_cfg = get_config().get("storage", {}) or {}
+    source_root = storage_cfg.get("source_files_dir") or "./data/source_files"
+    return _preserve_source_file_to_root(
+        source_path=source_path,
+        source_root=source_root,
+        platform=platform,
+        media_id=media_id,
+        title=title,
+        source_kind=source_kind,
+        source_text=source_text,
+    )
 
 
 def _persist_downloaded_source_if_requested(

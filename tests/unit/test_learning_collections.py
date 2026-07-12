@@ -1598,17 +1598,27 @@ def test_collections_page_restores_existing_collections():
     assert "max-height: none" in css
     assert "学习提纲" not in html
     assert "学习提纲" not in js
-    assert "summary-problem" in html
-    assert "summary-review" in html
-    assert "summaryProblem" in js
-    assert "summaryReview" in js
+    assert "collection-summary-text" in html
+    assert "collection-summary-visual" in html
+    assert "collection-summary-text-panel" in html
+    assert "collection-summary-visual-panel" in html
+    assert "collection-summary-article" in html
+    assert "collection-summary-visual-root" in html
+    assert "阅读全文" in html
+    assert "沉浸阅读全文" not in html
+    assert "collectionSummaryArticle" in js
+    assert "collectionSummaryVisualRoot" in js
+    assert "renderCollectionSummaryArticle" in js
+    assert "focusCollectionSummaryArticle" in js
+    assert "renderInlineSummaryVisual" in js
+    assert "setCollectionSummaryMode" in js
     assert "summaryToc" in js
     assert "summaryStructured" in js
     assert "summary-reader" in html
     assert "summary-toc" in html
     assert "summary-structured" in html
     assert "summary-dialog" in html
-    assert 'data-summary-card="problem"' in html
+    assert 'data-summary-card="problem"' not in html
     assert "renderSummaryReader" in js
     assert "openSummaryDialog" in js
     assert "buildSummarySections" in js
@@ -1617,7 +1627,10 @@ def test_collections_page_restores_existing_collections():
     assert "splitInlineNumberedItems" in js
     assert "data-summary-anchor" in js
     assert "aria-disabled" in js
-    assert ".lc-summary-card" in css
+    assert ".lc-summary-reader-head" in css
+    assert ".lc-summary-reader-actions" in css
+    assert ".lc-summary-inline-article" in css
+    assert ".lc-summary-inline-visual" in css
     assert ".lc-summary-dialog" in css
     assert ".lc-summary-reader" in css
     assert ".lc-summary-toc" in css
@@ -1638,12 +1651,9 @@ def test_collections_page_restores_existing_collections():
     assert "setBusy(true);" not in generate_summary_body
     assert "lc-btn-progress" in html
     assert "summary-progress-text" in html
-    assert "这个系列解决什么问题" in html
-    assert "为什么值得学" in html
-    assert "全系列主线" in html
-    assert "章节地图" in html
-    assert "核心框架" in html
-    assert "复习索引" in html
+    assert "文字版" in html
+    assert "图解版" in html
+    assert "内容总结" in html
     assert "源内容" in html
     assert "导出笔记" in html
     assert ">Markdown<" not in html
@@ -1673,8 +1683,9 @@ def test_collections_page_exposes_immersive_text_visual_reader():
 
     assert '/static/css/visual-learning.css?v=__ASSET_VERSION__' in html
     assert '/static/js/visual-learning.js?v=__ASSET_VERSION__' in html
-    assert 'data-view="visual"' in html
-    assert '>图解<' in html
+    assert 'data-view="visual"' not in html
+    assert 'data-view="summary"' in html
+    assert "图解版" in html
     for element_id in (
         "visual-view",
         "collection-visual-root",
@@ -1686,6 +1697,11 @@ def test_collections_page_exposes_immersive_text_visual_reader():
         "collection-visual-export",
         "collection-visual-print",
         "collection-visual-open",
+        "collection-summary-text",
+        "collection-summary-visual",
+        "collection-summary-text-panel",
+        "collection-summary-visual-panel",
+        "collection-summary-article",
         "collection-summary-reader-open",
         "collection-immersive-reader",
     ):
@@ -1700,25 +1716,47 @@ def test_collections_page_exposes_immersive_text_visual_reader():
     assert "window.VisualLearning.renderImmersiveReader" in js
     assert "window.VisualLearning.createReaderState" in js
     assert "function openCollectionReader(" in js
+    assert "function openCollectionSummaryReader(" in js
     assert "function closeCollectionReader(" in js
     summary_tab_branch = js[
         js.index("els.tabs.forEach((tab) => {") : js.index("if (els.collectionVisualOverviewRetry)")
     ]
     assert "currentView === 'summary'" in summary_tab_branch
-    assert "openCollectionReader('text', tab)" in summary_tab_branch
+    assert "openCollectionReader('text', tab)" not in summary_tab_branch
+    assert "openCollectionReader('visual', tab)" not in summary_tab_branch
+    assert "requestedView === 'visual'" in summary_tab_branch
+    assert "setCollectionSummaryMode('text', false)" in summary_tab_branch
+    assert "setCollectionSummaryMode('visual', true)" in summary_tab_branch
     assert "ensureCollectionVisualLayer('overview', false)" in js
+    assert "function renderInlineSummaryVisual()" in js
+    assert "function setCollectionSummaryMode(" in js
+    assert "function renderCollectionSummaryArticle(" in js
+    assert "function focusCollectionSummaryArticle(" in js
+    assert "renderCollectionSummaryArticle(markdown, waitingText)" in js
+    assert "visualScope: 'global'" in js
+    assert "onExportText: exportMarkdown" in js
+    assert "fullNote: null" in js
+    assert "合集全局图解" in html
+    assert "子内容图解请进入对应内容页独立查看" in js
     assert "readerGeneration" in js
     assert ".accepts(" in js
     assert "window.VisualLearning.activeDiagram" in js
     assert "function retryCollectionVisual(documentType)" in js
     assert "function parseCollectionVisualRef(" in js
     assert "function visualSummarySections()" in js
-    assert "visual-section:${target.sectionId}" in js
+    assert "function collectionReaderTextSections(" in js
+    assert "focusCollectionSummaryArticle('')" in js
+    assert "openCollectionReader('text', els.collectionSummaryReaderOpen)" not in js
+    assert "openCollectionReader('visual', els.collectionVisualOpen)" not in js
+    assert "openSummaryDialog(`card:${card.dataset.summaryCard || 'problem'}`, card)" not in js
     assert 'data-summary-section="${escapeHTML(section.id)}"' in js
     visual_navigation = js[
         js.index("async function navigateCollectionVisualRef(") : js.index("function exportCollectionVisualSvg(")
     ]
     assert ".find((section) => section.id === target.sectionId)" in visual_navigation
+    assert "focusCollectionSummaryArticle(readerSection ? readerSection.id : '')" in visual_navigation
+    assert "openCollectionReader('text'" not in visual_navigation
+    assert "openSummaryDialog(" not in visual_navigation
     assert ".find((section) => section.title.trim()" not in visual_navigation
     assert "collection:${collectionId}:source:" in js
     assert "collection:${collectionId}:summary:section:" in js

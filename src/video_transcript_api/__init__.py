@@ -6,8 +6,16 @@
 __version__ = "1.0.0"
 __author__ = "视频转录API团队"
 
-# 导出主要组件
-from .api.server import app
-from .utils.logging import setup_logger
+__all__ = ["app", "setup_logger"]
 
-__all__ = ['app', 'setup_logger']
+
+def __getattr__(name: str):
+    if name == "app":
+        from .api.server import app
+
+        return app
+    if name == "setup_logger":
+        from .utils.logging import setup_logger
+
+        return setup_logger
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

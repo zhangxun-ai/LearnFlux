@@ -111,6 +111,7 @@ class CacheManager:
                     progress_json TEXT,
                     progress_reminders_json TEXT,
                     source_file_path TEXT,
+                    last_heartbeat_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (cache_id) REFERENCES video_cache(id)
                 )
             ''')
@@ -198,8 +199,29 @@ class CacheManager:
                     logger.info("添加 source_file_path 字段到 task_status 表...")
                     cursor.execute("ALTER TABLE task_status ADD COLUMN source_file_path TEXT")
                     logger.info("source_file_path 字段添加成功")
+
+                # 迁移8: 添加 last_heartbeat_at 字段（运行期卡死任务回收）
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [col[1] for col in cursor.fetchall()]
+
+                if 'last_heartbeat_at' not in columns:
+                    logger.info("添加 last_heartbeat_at 字段到 task_status 表...")
+                    cursor.execute("ALTER TABLE task_status ADD COLUMN last_heartbeat_at TIMESTAMP")
+                    cursor.execute(
+                        """
+                        UPDATE task_status
+                        SET last_heartbeat_at = COALESCE(completed_at, created_at, CURRENT_TIMESTAMP)
+                        WHERE last_heartbeat_at IS NULL
+                        """
+                    )
+                    logger.info("last_heartbeat_at 字段添加成功")
                 else:
                     logger.debug("数据库结构正常，无需迁移")
+
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_task_heartbeat "
+                    "ON task_status(status, last_heartbeat_at)"
+                )
 
         except Exception as e:
             logger.error(f"数据库迁移失败: {e}")
@@ -240,6 +262,7 @@ class CacheManager:
                 progress_json TEXT,
                 progress_reminders_json TEXT,
                 source_file_path TEXT,
+                last_heartbeat_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (cache_id) REFERENCES video_cache(id)
             )
         ''')
@@ -273,14 +296,18 @@ class CacheManager:
                 row_map.get("progress_json"),
                 row_map.get("progress_reminders_json"),
                 row_map.get("source_file_path"),
+                row_map.get("last_heartbeat_at")
+                or row_map.get("completed_at")
+                or row_map.get("created_at"),
             ]
 
             cursor.execute('''
                 INSERT INTO task_status
                 (task_id, view_token, url, download_url, platform, media_id, use_speaker_recognition,
                  status, title, author, created_at, completed_at, cache_id, llm_config,
-                 error_message, progress_json, progress_reminders_json, source_file_path)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 error_message, progress_json, progress_reminders_json, source_file_path,
+                 last_heartbeat_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', new_row_data)
 
         logger.info(f"数据库迁移完成，恢复了 {len(existing_data)} 条记录")
@@ -777,6 +804,27 @@ class CacheManager:
         except (TypeError, json.JSONDecodeError):
             return None
 
+    @staticmethod
+    def _coerce_utc_naive(value=None) -> datetime.datetime:
+        if value is None:
+            return datetime.datetime.utcnow()
+        if isinstance(value, datetime.datetime):
+            parsed = value
+        elif isinstance(value, str) and value.strip():
+            parsed = datetime.datetime.fromisoformat(
+                value.strip().replace("Z", "+00:00").replace(" ", "T")
+            )
+        else:
+            raise ValueError("invalid datetime value")
+
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return parsed
+
+    @classmethod
+    def _sql_timestamp(cls, value=None) -> str:
+        return cls._coerce_utc_naive(value).strftime("%Y-%m-%d %H:%M:%S")
+
     def create_task(self, url: str, use_speaker_recognition: bool = False,
                     download_url: str = None, platform: str = None,
                     media_id: str = None) -> Dict[str, str]:
@@ -831,8 +879,9 @@ class CacheManager:
                 cursor.execute('''
                     INSERT INTO task_status
                     (task_id, view_token, url, download_url, use_speaker_recognition,
-                     status, platform, media_id, progress_json, progress_reminders_json)
-                    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)
+                     status, platform, media_id, progress_json, progress_reminders_json,
+                     last_heartbeat_at)
+                    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ''', (task_id, view_token, url, download_url, use_speaker_recognition,
                       platform, media_id, json.dumps(queued_progress, ensure_ascii=False),
                       json.dumps([], ensure_ascii=False)))
@@ -905,6 +954,7 @@ class CacheManager:
                 if source_file_path is not None:
                     update_fields.append("source_file_path = ?")
                     params.append(source_file_path)
+                update_fields.append("last_heartbeat_at = CURRENT_TIMESTAMP")
 
                 if status in TERMINAL_STATUSES:
                     update_fields.append("completed_at = CURRENT_TIMESTAMP")
@@ -987,7 +1037,8 @@ class CacheManager:
                 cursor.execute(
                     """
                     UPDATE task_status
-                    SET progress_json = ?
+                    SET progress_json = ?,
+                        last_heartbeat_at = CURRENT_TIMESTAMP
                     WHERE task_id = ? AND status NOT IN (?, ?, ?)
                     """,
                     (
@@ -1049,6 +1100,80 @@ class CacheManager:
             logger.error(f"标记长任务提醒失败: {e}")
             raise
 
+    def list_source_file_references(self) -> List[Dict[str, Any]]:
+        """Return task rows that may reference local source files."""
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT url, media_id, title, source_file_path
+                    FROM task_status
+                    WHERE source_file_path IS NOT NULL
+                       OR url LIKE 'local://%'
+                    """
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"查询本地源文件引用失败: {e}")
+            return []
+
+    def recover_stale_tasks(self, max_age_minutes: int = 30, now=None) -> int:
+        """Mark non-terminal tasks failed when progress heartbeat is stale."""
+        try:
+            timeout_minutes = int(max_age_minutes)
+        except (TypeError, ValueError):
+            timeout_minutes = 0
+        if timeout_minutes <= 0:
+            return 0
+
+        current_time = self._coerce_utc_naive(now)
+        cutoff = current_time - datetime.timedelta(minutes=timeout_minutes)
+        cutoff_sql = self._sql_timestamp(cutoff)
+        now_sql = self._sql_timestamp(current_time)
+        error_message = f"任务超过 {timeout_minutes} 分钟没有进度心跳，已自动标记失败"
+        progress = build_progress(
+            stage="failed",
+            basis="task_timeout",
+            confidence="high",
+            message=error_message,
+            evidence={"timeout_minutes": timeout_minutes},
+        )
+
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE task_status
+                    SET status = ?,
+                        completed_at = ?,
+                        last_heartbeat_at = ?,
+                        error_message = ?,
+                        progress_json = ?
+                    WHERE status IN (?, ?, ?)
+                      AND COALESCE(last_heartbeat_at, created_at) < ?
+                    """,
+                    (
+                        TaskStatus.FAILED,
+                        now_sql,
+                        now_sql,
+                        error_message,
+                        json.dumps(progress, ensure_ascii=False),
+                        TaskStatus.QUEUED,
+                        TaskStatus.PROCESSING,
+                        TaskStatus.CALIBRATING,
+                        cutoff_sql,
+                    ),
+                )
+                count = cursor.rowcount
+            if count:
+                logger.warning(
+                    f"运行期回收:将 {count} 个超过 {timeout_minutes} 分钟无心跳的任务标记为 failed"
+                )
+            return count
+        except Exception as e:
+            logger.error(f"运行期卡死任务回收失败: {e}")
+            return 0
+
     def recover_orphaned_tasks(self) -> int:
         """启动恢复:将中断的非终态任务标记为 failed.
 
@@ -1064,7 +1189,9 @@ class CacheManager:
         try:
             with self._get_cursor() as cursor:
                 cursor.execute(
-                    "UPDATE task_status SET status = ?, completed_at = CURRENT_TIMESTAMP "
+                    "UPDATE task_status "
+                    "SET status = ?, completed_at = CURRENT_TIMESTAMP, "
+                    "last_heartbeat_at = CURRENT_TIMESTAMP "
                     "WHERE status IN (?, ?, ?)",
                     (
                         TaskStatus.FAILED,

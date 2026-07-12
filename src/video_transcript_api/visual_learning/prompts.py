@@ -48,8 +48,11 @@ def build_visual_prompt(
             "review_questions 主动回忆题。"
         ),
         "diagram": (
-            "根据内容生成图解。短内容输出 1-3 页；如果提供了知识大纲，必须输出 1 页全景图"
-            "加每个 section 一页的核心笔记，并按大纲顺序排列；"
+            "根据内容生成一个完整、可连续阅读的知识地图，帮助用户快速提取全文精华。"
+            "短内容输出 1-3 页；如果提供了知识大纲，必须输出 1 页全景图"
+            "加每个 section 一页的核心笔记，并按大纲顺序排列；不要做成需要来回切换的幻灯片。"
+            "全景页优先呈现核心主线、关键节点、节点关系和最终结论；章节页只保留"
+            "支撑这条主线的必要概念、因果、流程或对比。"
             f"当前指定类型为 {diagram_type}，auto 表示自动选择。"
         ),
     }[document_type]
@@ -113,6 +116,7 @@ def build_visual_prompt(
 6. 如果提供了知识大纲，第 1 页 id 必须为 overview；之后每页 id 必须与对应 section id 完全相同，顺序一致。
 7. 全景页至少引用 3 个不同 section 的真实原文依据；章节页只讲对应 section，避免跨页重复。
 8. diagram 的前 N-1 页必须填写 transition，用一句“当前能力缺口 → 为什么需要下一节”的承接语连接下一页；最后一页 transition 留空，并在正文块中完成全文收束。
+9. diagram 必须优先使用关系型视觉块（concept_chain、hierarchy、process_flow、mind_map、comparison），每页最多 4 个主要知识块；禁止把长段解释拆成普通卡片堆叠。
 {interpretation_rules}
 {correction_text}
 """

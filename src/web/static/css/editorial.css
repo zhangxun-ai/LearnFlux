@@ -14,9 +14,9 @@
     --muted: #857E75;
     --line: #EBE4D9;
     --card: #FFFFFF;
-    --accent: #E4503A;
+    --accent: #D6412D; /* Updated for WCAG AA contrast against white */
     --accent-ink: #C23A26;
-    --accent-soft: rgba(228, 80, 58, 0.07);
+    --accent-soft: rgba(214, 65, 45, 0.07);
     --video: #E4503A;
     --article: #2F8F6B;
     --shadow-sm: 0 1px 1px rgba(27, 26, 23, 0.02), 0 4px 8px -4px rgba(27, 26, 23, 0.04), 0 16px 24px -8px rgba(27, 26, 23, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72);
@@ -165,7 +165,7 @@ body.focus-overlay-open {
 
 .site-topbar-kicker {
     color: var(--muted);
-    font-size: 0.72rem;
+    font-size: 0.78rem; /* Increased for better legibility */
     font-weight: 800;
     line-height: 1.2;
 }
@@ -761,14 +761,14 @@ body.has-app-shell .content td {
 
 body.has-app-shell th,
 body.has-app-shell .content th {
-    background: #F8FAFC;
+    background: var(--bg-tertiary); /* Use theme token instead of hardcoded hex for dark mode support */
     color: var(--ink-soft);
     font-size: 0.78rem;
     font-weight: 800;
 }
 
 body.has-app-shell :focus-visible {
-    outline: 3px solid rgba(228, 80, 58, 0.22);
+    outline: 2px solid var(--accent); /* Increased opacity for better contrast */
     outline-offset: 2px;
 }
 
@@ -800,6 +800,7 @@ body.has-app-shell :focus-visible {
     body.has-app-shell .study-head h1,
     body.has-app-shell .hero h1 {
         font-size: 1.45rem;
+        white-space: normal; /* Fix mobile overflow */
     }
 }
 

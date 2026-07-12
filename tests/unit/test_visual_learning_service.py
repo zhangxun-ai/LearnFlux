@@ -195,6 +195,9 @@ def test_visual_prompt_requires_continuous_transitions(tmp_path):
     assert "前 N-1 页必须填写 transition" in prompt
     assert "能力缺口" in prompt
     assert "最后一页" in prompt
+    assert "完整、可连续阅读的知识地图" in prompt
+    assert "优先使用关系型视觉块" in prompt
+    assert "每页最多 4 个主要知识块" in prompt
 
 
 def test_full_note_prompt_contains_complete_sections_and_allowed_refs(tmp_path):
@@ -825,6 +828,21 @@ def test_generate_diagram_returns_ranked_recommendations(tmp_path):
         "mind_map",
     ]
     assert result["document_json"]["selected_diagram_type"] == "process_flow"
+
+
+def test_initial_diagram_retries_once_when_source_refs_are_invalid(tmp_path):
+    invalid = _document(document_type="diagram", title="引用无效")
+    invalid["pages"][0]["blocks"] = [_hero(refs=["invented-ref"])]
+    valid = _document(document_type="diagram", title="引用已纠正")
+    llm = FakeLLM(invalid, valid)
+    service, _, _ = _service(tmp_path, llm)
+
+    result = service.generate_study("view-1", document_type="diagram")
+
+    assert result["status"] == "success"
+    assert result["document_json"]["title"] == "引用已纠正"
+    assert len(llm.calls) == 2
+    assert "no valid source references" in llm.calls[1]["prompt"]
 
 
 def test_invalid_source_refs_fail_without_overwriting_previous_success(tmp_path):

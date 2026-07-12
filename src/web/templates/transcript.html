@@ -12,11 +12,160 @@
 /* Section header with inline action */
 .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .section-header h2 { margin-bottom: 0; }
-.summary-reader-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.summary-reader-btn { border: 1px solid var(--border-color, #ddd); border-radius: 999px; padding: 8px 16px; cursor: pointer; background: var(--bg-primary, #fff); color: var(--text-primary, #222); }
-.summary-reader-btn.primary { border-color: #e8523f; color: #fff; background: #e8523f; }
-body.vl-reader-open { overflow: hidden; }
-#transcript-immersive-reader[hidden] { display: none; }
+.summary-reader-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 10px;
+    background: #f7f9fb;
+}
+.summary-reader-btn {
+    min-height: 36px;
+    border: 0;
+    border-radius: 7px;
+    padding: 0 14px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary, #666);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+.summary-reader-btn[aria-selected="true"] {
+    background: #202733;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
+}
+.summary-reader-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.summary-view-panel[hidden] { display: none; }
+.transcript-visual-panel { margin-top: 18px; }
+.transcript-visual-shell {
+    display: grid;
+    gap: 18px;
+    padding-top: 4px;
+}
+.transcript-visual-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    padding-bottom: 12px;
+}
+.transcript-visual-kicker {
+    display: block;
+    margin-bottom: 2px;
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+.transcript-visual-toolbar strong {
+    color: var(--text-primary, #222);
+    font-size: 1rem;
+}
+.transcript-visual-status {
+    margin: 3px 0 0;
+    color: var(--text-secondary, #666);
+    font-size: 0.86rem;
+}
+.transcript-visual-toolbar-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.transcript-visual-action {
+    min-height: 34px;
+    border: 1px solid var(--border-color, #d6dce5);
+    border-radius: 8px;
+    padding: 0 12px;
+    cursor: pointer;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #222);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+.transcript-visual-action.primary {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #fff;
+}
+.transcript-visual-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+.transcript-visual-empty {
+    display: grid;
+    justify-items: start;
+    gap: 12px;
+    min-height: 260px;
+    padding: clamp(24px, 5vw, 44px);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: var(--text-primary, #222);
+}
+.transcript-visual-empty.is-generating {
+    align-content: center;
+}
+.transcript-visual-empty strong {
+    font-size: 1.15rem;
+}
+.transcript-visual-empty p {
+    max-width: 62ch;
+    margin: 0;
+    color: var(--text-secondary, #666);
+    line-height: 1.7;
+}
+.transcript-visual-progress {
+    display: grid;
+    gap: 8px;
+    width: min(100%, 560px);
+    margin: 10px 0 6px;
+}
+.transcript-visual-progress-track {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e5e7eb;
+}
+.transcript-visual-progress-fill {
+    display: block;
+    width: 12%;
+    height: 100%;
+    border-radius: inherit;
+    background: #2563eb;
+    transition: width 0.24s ease;
+}
+.transcript-visual-progress-meta {
+    color: var(--text-secondary, #666);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+.transcript-visual-diagram .vl-reader-visual-atlas.vl-continuous-article {
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    overflow: hidden;
+}
+@media (max-width: 720px) {
+    .section-header { align-items: flex-start; flex-direction: column; }
+    .summary-reader-actions { width: 100%; }
+    .summary-reader-btn { flex: 1 1 0; }
+    .transcript-visual-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .transcript-visual-toolbar-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
 
 /* Recalibrate button */
 .recalibrate-btn {
@@ -477,6 +626,11 @@ body.vl-reader-open { overflow: hidden; }
         grid-template-columns: 1fr;
     }
 }
+
+.export-menu-item:hover {
+    background-color: var(--bg-secondary, #f0f0f0) !important;
+    color: var(--accent-color, #E4503A) !important;
+}
 </style>
 {% endblock %}
 
@@ -589,148 +743,39 @@ body.vl-reader-open { overflow: hidden; }
     </details>
     {% endif %}
 
-    <!-- 高级操作：导出与复制 -->
+    <!-- 高级操作：一键导出 -->
     {% if view_token %}
-    <details class="advanced-actions-details">
-        <summary>
-            <span>导出与复制</span>
-        </summary>
-        <div>
-            <div class="content-export-list" aria-label="解析内容复制和导出">
-                {% if calibrated_html %}
-                <div class="content-export-row">
-                    <span class="content-export-name">校对文本</span>
-                    <span class="content-export-actions">
-                        <button type="button" class="content-export-action quick-copy-btn" data-copy-path="/view/{{ view_token }}?raw=calibrated" title="复制校对文本内容">
-                            <span class="quick-copy-label">复制内容</span>
-                            <span class="quick-copy-action">复制</span>
-                        </button>
-                        <a class="content-export-action content-export-link" href="/export/{{ view_token }}/calibrated" download title="下载校对文本 TXT">TXT</a>
-                        <a class="content-export-action content-export-link" href="/view/{{ view_token }}?page=calibrated" target="_blank" rel="noopener" title="打开校对文本 HTML 页面">HTML</a>
-                    </span>
-                </div>
-                {% endif %}
-                {% if summary_html %}
-                <div class="content-export-row">
-                    <span class="content-export-name">内容总结</span>
-                    <span class="content-export-actions">
-                        <button type="button" class="content-export-action quick-copy-btn" data-copy-path="/view/{{ view_token }}?raw=summary" title="复制内容总结">
-                            <span class="quick-copy-label">复制内容</span>
-                            <span class="quick-copy-action">复制</span>
-                        </button>
-                        <a class="content-export-action content-export-link" href="/export/{{ view_token }}/summary" download title="下载内容总结 TXT">TXT</a>
-                        <a class="content-export-action content-export-link" href="/view/{{ view_token }}?page=summary" target="_blank" rel="noopener" title="打开内容总结 HTML 页面">HTML</a>
-                    </span>
-                </div>
-                {% endif %}
-                {% if comment_insight %}
-                <div class="content-export-row">
-                    <span class="content-export-name">评论洞察</span>
-                    <span class="content-export-actions">
-                        <button type="button" class="content-export-action quick-copy-btn" data-copy-path="/view/{{ view_token }}?raw=comment_insight" title="复制高赞评论洞察">
-                            <span class="quick-copy-label">复制内容</span>
-                            <span class="quick-copy-action">复制</span>
-                        </button>
-                        <a class="content-export-action content-export-link" href="/export/{{ view_token }}/comment_insight" download title="下载高赞评论洞察 TXT">TXT</a>
-                        <a class="content-export-action content-export-link" href="/view/{{ view_token }}?page=comment_insight" target="_blank" rel="noopener" title="打开高赞评论洞察 HTML 页面">HTML</a>
-                    </span>
-                </div>
-                {% endif %}
-                {% if stats and stats.original_length > 0 %}
-                <div class="content-export-row">
-                    <span class="content-export-name">原始转录</span>
-                    <span class="content-export-actions">
-                        <button type="button" class="content-export-action quick-copy-btn" data-copy-path="/view/{{ view_token }}?raw=transcript" title="复制原始转录">
-                            <span class="quick-copy-label">复制内容</span>
-                            <span class="quick-copy-action">复制</span>
-                        </button>
-                        <a class="content-export-action content-export-link" href="/export/{{ view_token }}/transcript" download title="下载原始转录 TXT">TXT</a>
-                        <a class="content-export-action content-export-link" href="/view/{{ view_token }}?page=transcript" target="_blank" rel="noopener" title="打开原始转录 HTML 页面">HTML</a>
-                    </span>
-                </div>
-                {% endif %}
+    <div class="one-click-export-bar" style="padding: 16px 30px; background: rgba(0,0,0,0.015); border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: flex-end;">
+        <div style="position: relative;" id="exportDropdownContainer">
+            <button type="button" id="exportMainBtn" class="quick-copy-btn" onclick="toggleExportMenu(event)" style="background: #E4503A; color: white; border-color: #E4503A; font-weight: 600; min-width: 120px; justify-content: center; display: inline-flex;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                一键导出
+            </button>
+            <div id="exportMenu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 8px; background: var(--bg-primary, white); border: 1px solid var(--border-primary, #ddd); border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); min-width: 160px; z-index: 100; overflow: hidden; padding: 4px 0;">
+                <button type="button" class="export-menu-item" onclick="executeExport('markdown', '{{ view_token }}')">Markdown 文档</button>
+                <button type="button" class="export-menu-item" onclick="executeExport('pdf', '{{ view_token }}')">PDF 文档</button>
+                <button type="button" class="export-menu-item" onclick="executeExport('html', '{{ view_token }}')">HTML 页面</button>
+                <button type="button" class="export-menu-item" onclick="executeExport('png', '{{ view_token }}')">PNG 长图</button>
             </div>
-
-            <div class="focus-handoff-bar" aria-label="送入心流写作">
-                <span class="focus-handoff-title">心流写作</span>
-                {% if calibrated_html %}
-                <button type="button" class="focus-handoff-btn" data-focus-handoff data-view-token="{{ view_token }}" data-focus-type="calibrated" data-focus-label="校对文本" data-focus-title="{{ title or '视频转录' }}">
-                    <span class="focus-handoff-label">校对文本</span>
-                    <span class="focus-handoff-action">送入</span>
-                </button>
-                {% endif %}
-                {% if summary_html %}
-                <button type="button" class="focus-handoff-btn" data-focus-handoff data-view-token="{{ view_token }}" data-focus-type="summary" data-focus-label="内容总结" data-focus-title="{{ title or '视频转录' }}">
-                    <span class="focus-handoff-label">内容总结</span>
-                    <span class="focus-handoff-action">送入</span>
-                </button>
-                {% endif %}
-                {% if comment_insight %}
-                <button type="button" class="focus-handoff-btn" data-focus-handoff data-view-token="{{ view_token }}" data-focus-type="comment_insight" data-focus-label="高赞评论洞察" data-focus-title="{{ title or '视频转录' }}">
-                    <span class="focus-handoff-label">评论洞察</span>
-                    <span class="focus-handoff-action">送入</span>
-                </button>
-                {% endif %}
-                {% if stats and stats.original_length > 0 %}
-                <button type="button" class="focus-handoff-btn" data-focus-handoff data-view-token="{{ view_token }}" data-focus-type="transcript" data-focus-label="原始转录" data-focus-title="{{ title or '视频转录' }}">
-                    <span class="focus-handoff-label">原始转录</span>
-                    <span class="focus-handoff-action">送入</span>
-                </button>
-                {% endif %}
-            </div>
-
-            <details class="export-links-details">
-                <summary class="export-links-summary">
-                    <span class="export-summary-label">更多导出选项</span>
-                </summary>
-                <div class="export-links-content">
-                    <div class="export-group">
-                        <span class="export-group-label">Raw 纯文本</span>
-                        <span class="export-group-items">
-                            <a href="/view/{{ view_token }}?raw=calibrated" title="导出校对文本（纯文本）">校对文本</a>
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?raw=summary" title="导出内容总结（纯文本）">总结</a>
-                            {% if comment_insight %}
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?raw=comment_insight" title="导出高赞评论洞察（纯文本）">评论洞察</a>
-                            {% endif %}
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?raw=transcript" title="导出原始转录（纯文本）">原始转录</a>
-                        </span>
-                        <span class="export-hint">下载 TXT / 粘贴 URL 到 ChatGPT、Claude 等 LLM 直接读取</span>
-                    </div>
-                    <div class="export-group">
-                        <span class="export-group-label">HTML 页面</span>
-                        <span class="export-group-items">
-                            <a href="/view/{{ view_token }}?page=calibrated" title="导出校对文本（HTML 页面）">校对文本</a>
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?page=summary" title="导出内容总结（HTML 页面）">总结</a>
-                            {% if comment_insight %}
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?page=comment_insight" title="导出高赞评论洞察（HTML 页面）">评论洞察</a>
-                            {% endif %}
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?page=transcript" title="导出原始转录（HTML 页面）">原始转录</a>
-                        </span>
-                        <span class="export-hint">带标题与 Meta 标签，适合 NotebookLM 等工具爬取</span>
-                    </div>
-                </div>
-            </details>
         </div>
-    </details>
+    </div>
     {% endif %}
 
     <div class="section">
         <div class="section-header">
             <h2>内容总结</h2>
             {% if view_token and summary %}
-            <div class="summary-reader-actions">
-                <button type="button" class="summary-reader-btn" id="transcript-reader-text">沉浸阅读</button>
-                <button type="button" class="summary-reader-btn primary" id="transcript-reader-visual">一键图解</button>
+            <div class="summary-reader-actions" role="tablist" aria-label="内容总结视图">
+                <button type="button" class="summary-reader-btn" id="transcript-reader-text" role="tab" aria-selected="true" aria-controls="transcript-summary-text-panel">文字版</button>
+                <button type="button" class="summary-reader-btn" id="transcript-reader-visual" role="tab" aria-selected="false" aria-controls="transcript-summary-visual-panel">图解版</button>
             </div>
             {% endif %}
         </div>
-        <div class="content" data-focus-section="summary">
+        <div class="content summary-view-panel is-active" id="transcript-summary-text-panel" role="tabpanel" aria-labelledby="transcript-reader-text" data-focus-section="summary">
             {% if summary_html %}
                 {{ summary_html|safe }}
             {% elif summary_missing %}
@@ -739,10 +784,13 @@ body.vl-reader-open { overflow: hidden; }
                 <p style="color: var(--text-secondary); font-style: italic;">总结处理中...</p>
             {% endif %}
         </div>
+        {% if view_token and summary %}
+        <div class="transcript-visual-panel summary-view-panel" id="transcript-summary-visual-panel" role="tabpanel" aria-labelledby="transcript-reader-visual" data-view-token="{{ view_token }}" data-reader-title="{{ title or '内容总结' }}" hidden></div>
+        {% endif %}
     </div>
 
     {% if comment_insight_html %}
-    <div class="section">
+    <div class="section transcript-secondary-section">
         <h2>高赞评论洞察</h2>
         <div class="content" data-focus-section="comment_insight">
             {{ comment_insight_html|safe }}
@@ -767,7 +815,7 @@ body.vl-reader-open { overflow: hidden; }
     {% endif %}
 
     {% if calibrated_html %}
-    <div class="section">
+    <div class="section transcript-secondary-section">
         <div class="section-header">
             <h2>校对文本</h2>
             {% if view_token %}
@@ -809,8 +857,6 @@ body.vl-reader-open { overflow: hidden; }
 <script src="/static/js/floating-toc.js?v=comment-toc-20260607"></script>
 {% if view_token %}
 <script src="/static/js/focus-handoff.js?v=20260617-1"></script>
-<div id="transcript-immersive-reader" data-view-token="{{ view_token }}" data-reader-title="{{ title or '内容总结' }}" hidden></div>
-<script id="transcript-summary-data" type="application/json">{{ (summary or '')|tojson }}</script>
 <script src="/static/js/visual-learning.js?v={{ asset_ver }}"></script>
 <script src="/static/js/transcript-visual-reader.js?v={{ asset_ver }}"></script>
 <script>
@@ -904,6 +950,102 @@ function pollTask(taskId, apiKey, area) {
             area.innerHTML = '<span class="recalibrate-status recalibrate-error">超时，请手动刷新页面</span>';
         }
     }, 3000);
+}
+
+function toggleExportMenu(e) {
+    e.stopPropagation();
+    var menu = document.getElementById('exportMenu');
+    if (menu) {
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    }
+}
+document.addEventListener('click', function(e) {
+    var menu = document.getElementById('exportMenu');
+    var btn = document.getElementById('exportMainBtn');
+    if (menu && btn && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+        menu.style.display = 'none';
+    }
+});
+
+async function executeExport(format, viewToken) {
+    var menu = document.getElementById('exportMenu');
+    if (menu) menu.style.display = 'none';
+    var btn = document.getElementById('exportMainBtn');
+    var originalText = btn.innerHTML;
+    btn.innerHTML = '导出中...';
+    btn.disabled = true;
+
+    try {
+        if (format === 'pdf') {
+            window.print();
+        } else if (format === 'html') {
+            var html = document.documentElement.outerHTML;
+            var blob = new Blob([html], { type: 'text/html' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = document.title + '.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        } else if (format === 'png') {
+            if (!window.html2canvas) {
+                var script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                script.onload = function() { doExportPng(); };
+                document.head.appendChild(script);
+            } else {
+                doExportPng();
+            }
+        } else if (format === 'markdown') {
+            var types = ['calibrated', 'summary', 'transcript'];
+            var mdContent = '# ' + document.title + '\n\n';
+            for (var i = 0; i < types.length; i++) {
+                var t = types[i];
+                try {
+                    var res = await fetch('/export/' + viewToken + '/' + t);
+                    if (res.ok) {
+                        var text = await res.text();
+                        var cleanText = text.replace(/^---[\s\S]*?---\n/, '');
+                        var sectionName = t === 'summary' ? '内容总结' : t === 'calibrated' ? '校对文本' : '原始转录';
+                        mdContent += '## ' + sectionName + '\n\n' + cleanText + '\n\n';
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch', t);
+                }
+            }
+            var blobMd = new Blob([mdContent], { type: 'text/markdown' });
+            var urlMd = URL.createObjectURL(blobMd);
+            var aMd = document.createElement('a');
+            aMd.href = urlMd;
+            aMd.download = document.title + '.md';
+            aMd.click();
+            URL.revokeObjectURL(urlMd);
+        }
+    } catch (e) {
+        alert('导出失败: ' + e.message);
+    } finally {
+        setTimeout(function() {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 1000);
+    }
+}
+
+function doExportPng() {
+    var btn = document.getElementById('exportMainBtn');
+    html2canvas(document.body, {
+        useCORS: true,
+        scale: window.devicePixelRatio || 2,
+        backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#121110' : '#f4f1eb'
+    }).then(function(canvas) {
+        var url = canvas.toDataURL('image/png');
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = document.title + '.png';
+        a.click();
+    }).catch(function(e) {
+        alert('生成图片失败: ' + e.message);
+    });
 }
 </script>
 {% endif %}

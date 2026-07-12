@@ -1254,6 +1254,163 @@ select:focus-visible,
     line-height: 1.25;
 }
 
+.lc-summary-reader-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+}
+
+.lc-summary-reader-head span {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.lc-summary-reader-head h3 {
+    margin: 5px 0 8px;
+    color: var(--ink);
+    font-size: 28px;
+    line-height: 1.2;
+}
+
+.lc-summary-reader-head p {
+    max-width: 62ch;
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.65;
+}
+
+.lc-summary-reader-tools {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.lc-summary-reader-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #f7f9fb;
+}
+
+.lc-summary-reader-actions button {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 850;
+}
+
+.lc-summary-reader-actions button.active,
+.lc-summary-reader-actions button[aria-selected="true"] {
+    background: #202733;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
+}
+
+.lc-summary-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.lc-summary-status-row > strong {
+    margin-right: auto;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 900;
+}
+
+.lc-summary-view-panel[hidden] {
+    display: none;
+}
+
+.lc-summary-inline-article {
+    width: min(100%, 88ch);
+    margin: 0 auto;
+    padding: 34px 0 48px;
+    color: var(--ink);
+    font-size: 20px;
+    line-height: 1.9;
+}
+
+.lc-summary-inline-article h1,
+.lc-summary-inline-article h2 {
+    color: var(--ink);
+    line-height: 1.22;
+}
+
+.lc-summary-inline-article h1 {
+    margin: 0 0 1.2em;
+    font-size: 38px;
+}
+
+.lc-summary-inline-article h2 {
+    margin: 2.2em 0 0.7em;
+    font-size: 30px;
+}
+
+.lc-summary-inline-article h3 {
+    margin: 1.8em 0 0.55em;
+    color: var(--ink);
+    font-size: 24px;
+    line-height: 1.28;
+}
+
+.lc-summary-inline-section {
+    scroll-margin-top: 18px;
+}
+
+.lc-summary-inline-section + .lc-summary-inline-section {
+    margin-top: 42px;
+}
+
+.lc-summary-inline-visual {
+    min-height: 420px;
+    padding: 20px 0 48px;
+}
+
+.lc-summary-inline-diagram .vl-reader-visual-atlas.vl-continuous-article {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.lc-summary-visual-empty {
+    display: grid;
+    place-items: center;
+    gap: 12px;
+    min-height: 360px;
+    color: var(--muted);
+    text-align: center;
+}
+
+.lc-summary-visual-empty strong {
+    color: var(--ink);
+    font-size: 18px;
+}
+
+.lc-summary-visual-empty p {
+    max-width: 58ch;
+    margin: 0;
+    line-height: 1.65;
+}
+
 .lc-summary-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 238px), 1fr));
@@ -2256,6 +2413,29 @@ body.vl-reader-open {
         gap: 12px;
     }
 
+    .lc-summary-reader-head,
+    .lc-summary-reader-tools,
+    .lc-summary-status-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .lc-summary-reader-head h3 {
+        font-size: 25px;
+    }
+
+    .lc-summary-reader-actions {
+        width: 100%;
+    }
+
+    .lc-summary-reader-actions button {
+        flex: 1 1 0;
+    }
+
+    .lc-summary-status-row > strong {
+        margin-right: 0;
+    }
+
     .lc-summary-structured,
     .lc-summary-article,
     .lc-summary-toc {
@@ -2270,6 +2450,24 @@ body.vl-reader-open {
 
     .lc-summary-article .lc-reader-section h2 {
         font-size: 19px;
+    }
+
+    .lc-summary-inline-article {
+        padding: 24px 0 40px;
+        font-size: 18px;
+        line-height: 1.82;
+    }
+
+    .lc-summary-inline-article h1 {
+        font-size: 30px;
+    }
+
+    .lc-summary-inline-article h2 {
+        font-size: 25px;
+    }
+
+    .lc-summary-inline-article h3 {
+        font-size: 21px;
     }
 
     .lc-summary-toc nav {

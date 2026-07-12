@@ -148,7 +148,10 @@ def get_templates() -> Jinja2Templates:
             static_dir = get_static_dir()
             version_files = [
                 static_dir / "css" / "editorial.css",
+                static_dir / "css" / "visual-learning.css",
                 static_dir / "js" / "pwa-register.js",
+                static_dir / "js" / "visual-learning.js",
+                static_dir / "js" / "transcript-visual-reader.js",
             ]
             version = max((f.stat().st_mtime for f in version_files if f.exists()), default=0)
             _templates.env.globals["asset_ver"] = str(int(version))

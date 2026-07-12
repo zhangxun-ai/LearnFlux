@@ -16,6 +16,7 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
     cache_manager = MagicMock()
     cache_manager.cache_dir = tmp_path / "cache"
     cache_manager.recover_orphaned_tasks.return_value = 0
+    source_cleanup = MagicMock()
 
     temp_manager = MagicMock()
     temp_manager.clean_up_old_files.return_value = 0
@@ -44,6 +45,7 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
     monkeypatch.setattr(app_module, "log_llm_config_summary", lambda config: None)
     monkeypatch.setattr(app_module, "log_llm_stats", lambda: None)
     monkeypatch.setattr(app_module, "YtdlpConfigBuilder", FakeYtdlpConfigBuilder)
+    monkeypatch.setattr(app_module, "cleanup_old_source_files", source_cleanup)
     monkeypatch.setattr(app_module, "process_task_queue", no_op_async)
     monkeypatch.setattr(app_module, "process_progress_reminders", no_op_async)
     monkeypatch.setattr(app_module, "process_llm_queue", lambda: None)
@@ -60,3 +62,18 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
             pass
 
     assert cache_manager.recover_orphaned_tasks.call_count == 1
+    assert source_cleanup.call_count == 1
+
+
+def test_source_file_cleanup_respects_disabled_config(monkeypatch):
+    app_module = importlib.import_module("video_transcript_api.api.app")
+    source_cleanup = MagicMock()
+    monkeypatch.setattr(app_module, "cleanup_old_source_files", source_cleanup)
+
+    app_module._run_source_file_cleanup(
+        MagicMock(),
+        {"source_file_cleanup_enabled": False},
+        MagicMock(),
+    )
+
+    source_cleanup.assert_not_called()

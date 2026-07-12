@@ -49,9 +49,18 @@ def test_visual_learning_renderer_exposes_immersive_reader_contract():
     assert "current.dataset.readerSection !== readerSection" in js
     assert "vl-reader-mode-tabs" in js
     assert "vl-reader-sections" in js
-    assert "vl-reader-review" in js
+    assert "review_questions" in js
+    assert "composeVisualAtlasDocument" in js
+    assert "visualReaderNavItems" in js
+    assert "vl-reader-visual-atlas" in js
+    assert "scrollReaderToAnchor" in js
+    assert "visualScope === 'global'" in js
+    assert "vl-reader-no-sections" in js
     assert ".vl-immersive-reader" in css
     assert ".vl-reader-panel" in css
+    assert '.vl-immersive-reader[data-reader-mode="visual"]' in css
+    assert '.vl-immersive-reader[data-reader-mode="visual"].vl-reader-no-sections' in css
+    assert ".vl-reader-visual-atlas" in css
     assert "prefers-reduced-motion" in css
     assert "原解读已不可用" in js
     assert "data-interpretation-section" in js

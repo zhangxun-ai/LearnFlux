@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ..utils.notifications import init_all_notifiers, shutdown_all_notifiers
+from ..utils.source_file_cleanup import cleanup_old_source_files
 from ..utils.ytdlp import YtdlpConfigBuilder
 from ..llm import set_default_config, log_llm_stats
 from ..llm.llm import log_llm_config_summary
@@ -66,6 +67,37 @@ def _release_runtime_lock(lock_file: TextIO | None) -> None:
         lock_file.seek(0)
         msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
     lock_file.close()
+
+
+def _source_cleanup_paths(storage_config: dict) -> tuple[Path, Path]:
+    configured_source_dir = storage_config.get("source_files_dir")
+    if configured_source_dir:
+        source_root = Path(configured_source_dir)
+        return source_root, source_root
+
+    source_root = Path("./data/source_files")
+    return source_root, source_root / "collection_uploads"
+
+
+def _run_source_file_cleanup(cache_manager, storage_config: dict, logger) -> None:
+    if not storage_config.get("source_file_cleanup_enabled", True):
+        return
+
+    retention_days = storage_config.get("source_file_retention_days", 30)
+    source_root, collection_source_dir = _source_cleanup_paths(storage_config)
+    result = cleanup_old_source_files(
+        cache_manager=cache_manager,
+        source_root=source_root,
+        collection_source_dir=collection_source_dir,
+        max_age_days=retention_days,
+    )
+    if result.deleted_count or result.error_count:
+        logger.info(
+            f"源文件清理完成: scanned={result.scanned_count} "
+            f"deleted={result.deleted_count} "
+            f"skipped_referenced={result.skipped_referenced_count} "
+            f"errors={result.error_count}"
+        )
 
 
 def create_app() -> FastAPI:
@@ -155,6 +187,15 @@ def create_app() -> FastAPI:
                     )
             except Exception as exc:
                 logger.exception("启动恢复扫描失败: %s", exc)
+
+            try:
+                _run_source_file_cleanup(
+                    cache_manager,
+                    config.get("storage", {}) or {},
+                    logger,
+                )
+            except Exception as exc:
+                logger.exception("源文件清理失败: %s", exc)
 
         # 设置 LLM 模块默认配置（用于 JSON 结构化输出）
         set_default_config(config)

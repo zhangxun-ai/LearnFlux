@@ -94,6 +94,12 @@
         summaryArticle: document.getElementById('summary-article'),
         summaryToc: document.getElementById('summary-toc'),
         summaryModes: Array.from(document.querySelectorAll('[data-summary-mode]')),
+        collectionSummaryText: document.getElementById('collection-summary-text'),
+        collectionSummaryVisual: document.getElementById('collection-summary-visual'),
+        collectionSummaryTextPanel: document.getElementById('collection-summary-text-panel'),
+        collectionSummaryVisualPanel: document.getElementById('collection-summary-visual-panel'),
+        collectionSummaryArticle: document.getElementById('collection-summary-article'),
+        collectionSummaryVisualRoot: document.getElementById('collection-summary-visual-root'),
         generateSummary: document.getElementById('generate-summary'),
         summaryProgressText: document.getElementById('summary-progress-text'),
         summaryProgressFill: document.getElementById('summary-progress-fill'),
@@ -149,6 +155,7 @@
     let sourceSummaryDisplayMode = 'preview';
     let markdownDisplayMode = 'preview';
     let summaryMode = 'guide';
+    let collectionSummaryMode = 'text';
     let lastSummaryTrigger = null;
     const sourceDetailRequests = new Map();
     let busy = false;
@@ -658,6 +665,14 @@
             title: section.title,
             body: section.lines.join('\n').trim()
         })).filter((section) => section.title || section.body);
+    }
+
+    function collectionReaderTextSections(markdown) {
+        return buildSummarySections(markdown).map((section) => ({
+            id: section.id,
+            title: section.title,
+            markdown: [`## ${section.title}`, section.body].filter(Boolean).join('\n\n')
+        }));
     }
 
     function visualSummarySections() {
@@ -2203,9 +2218,11 @@
         renderSummaryCard(els.summaryChapters, markdown ? summarizeMarkdownSection(markdown, ['章节地图', '章节作用', '小节地图'], 2) : [], waitingText);
         renderSummaryCard(els.summaryFramework, markdown ? summarizeMarkdownSection(markdown, ['核心框架', '核心概念', '判断标准', '方法步骤'], 2) : [], waitingText);
         renderSummaryCard(els.summaryReview, markdown ? summarizeMarkdownSection(markdown, ['复习索引', '复习路径', '回看'], 2) : [], waitingText);
+        renderCollectionSummaryArticle(markdown, waitingText);
         renderSummaryReader(markdown, waitingText);
         renderSummaryCardStates(markdown);
         renderMarkdownExport(markdown, ready);
+        setCollectionSummaryMode(collectionSummaryMode, false);
         renderVisibleSummaryProgress();
         const collectionId = currentCollection && currentCollection.id;
         els.generateSummary.disabled = busy || !ready || isSummaryGenerating(collectionId);
@@ -2621,7 +2638,11 @@
         }
         if (collectionVisual.loading[documentType]) return '正在请求生成…';
         const state = collectionVisual.states[documentType];
-        if (!state) return currentView === 'visual' ? '正在读取状态…' : '打开图解后加载';
+        if (!state) {
+            return (currentView === 'summary' && collectionSummaryMode === 'visual')
+                ? '正在读取状态…'
+                : '切换到图解版后加载';
+        }
         if (state.uiError) return state.uiError;
         const latestStatus = state.latest_attempt && state.latest_attempt.status;
         if (latestStatus === 'failed' || state.phase === 'failed') {
@@ -2645,6 +2666,66 @@
         );
     }
 
+    function isCollectionVisualConsumerActive() {
+        return Boolean(
+            collectionReader.open
+            || currentView === 'visual'
+            || (currentView === 'summary' && collectionSummaryMode === 'visual')
+        );
+    }
+
+    function ensureCollectionReaderState(collectionId, mode) {
+        if (!window.VisualLearning || !window.VisualLearning.createReaderState) return false;
+        if (!collectionReader.state) {
+            collectionReader.state = window.VisualLearning.createReaderState(collectionId, mode || 'text');
+        } else if (collectionReader.state.snapshot().ownerId !== collectionId) {
+            collectionReader.state.resetOwner(collectionId);
+        }
+        return true;
+    }
+
+    function summaryReaderSectionId(mode) {
+        if (!mode || mode === 'full') return '';
+        const sections = collectionReaderTextSections(currentCollection && currentCollection.summary_markdown);
+        const target = findSummarySection(sections, summaryModeAliases(mode));
+        return target ? target.id : '';
+    }
+
+    function renderCollectionSummaryArticle(markdown, fallback) {
+        if (!els.collectionSummaryArticle) return;
+        const sections = buildSummarySections(markdown);
+        if (!sections.length) {
+            renderMarkdownPreview(els.collectionSummaryArticle, markdown, fallback);
+            return;
+        }
+        els.collectionSummaryArticle.classList.remove('lc-markdown-source');
+        els.collectionSummaryArticle.innerHTML = sections.map((section) => `
+            <section class="lc-summary-inline-section" id="${escapeHTML(section.id)}">
+                <h2>${renderInlineMarkdown(section.title)}</h2>
+                ${markdownToHTML(section.body)}
+            </section>
+        `).join('');
+    }
+
+    function focusCollectionSummaryArticle(sectionId) {
+        const markdown = currentCollection && currentCollection.summary_markdown;
+        if (!markdown) {
+            showToast('请先生成全系列解读');
+            return;
+        }
+        currentView = 'summary';
+        setCollectionSummaryMode('text', false);
+        renderTabs();
+        window.requestAnimationFrame(() => {
+            const target = sectionId ? document.getElementById(sectionId) : null;
+            const element = target || els.collectionSummaryArticle;
+            if (!element) return;
+            element.tabIndex = -1;
+            element.focus({ preventScroll: true });
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+
     function renderCollectionReader() {
         if (!collectionReader.open || !els.collectionImmersiveReader) return;
         if (!window.VisualLearning || !window.VisualLearning.renderImmersiveReader) return;
@@ -2654,44 +2735,37 @@
             || {};
         const sections = interpretationState.interpretation_sections || [];
         const fullNoteState = collectionVisual.states.full_note || {};
+        const textSections = collectionReaderTextSections(currentCollection && currentCollection.summary_markdown);
         window.VisualLearning.renderImmersiveReader(els.collectionImmersiveReader, {
             mode: snapshot.mode,
             sectionId: snapshot.sectionId,
             title: (currentCollection && currentCollection.title) || '全系列解读',
             contextLabel: '全系列沉浸阅读',
             globalMarkdown: (currentCollection && currentCollection.summary_markdown) || '',
-            sections: sections,
+            sections: snapshot.mode === 'text' ? textSections : sections,
             overview: collectionVisual.documents.overview,
-            fullNote: collectionVisual.documents.full_note,
+            fullNote: null,
             fullNoteStale: Boolean(fullNoteState.stale),
             overviewStatus: collectionVisualStatusText('overview'),
             fullNoteStatus: collectionVisualStatusText('full_note'),
-            theme: collectionVisual.theme
+            theme: collectionVisual.theme,
+            visualScope: 'global',
+            visualSubtitle: '这是当前合集的全局图解，用来建立宏观结构；子内容图解请进入对应内容独立查看。'
         }, {
             onClose: () => closeCollectionReader(true),
             onModeChange: (mode) => {
                 collectionReader.state.setMode(mode);
                 renderCollectionReader();
-                if (mode === 'visual') {
-                    ensureCollectionVisualLayer('overview');
-                    const sectionId = collectionReader.state.snapshot().sectionId;
-                    if (sectionId && sectionId !== 'review') ensureCollectionVisualLayer('full_note');
-                }
+                if (mode === 'visual') ensureCollectionVisualLayer('overview');
             },
             onSectionChange: (sectionId) => {
                 collectionReader.state.setSection(sectionId);
-                renderCollectionReader();
-                if (
-                    collectionReader.state.snapshot().mode === 'visual'
-                    && sectionId
-                    && sectionId !== 'review'
-                ) {
-                    ensureCollectionVisualLayer('full_note');
-                }
+                if (collectionReader.state.snapshot().mode !== 'visual') renderCollectionReader();
             },
             onGenerateOverview: () => requestCollectionVisual('overview', false),
             onGenerateFullNote: () => requestCollectionVisual('full_note', false),
             onExport: exportCollectionVisualSvg,
+            onExportText: exportMarkdown,
             onSourceRef: (refId) => navigateCollectionVisualRef(refId),
             onSectionEvidence: (evidence) => {
                 const references = (evidence && evidence.references) || [];
@@ -2701,18 +2775,17 @@
         });
     }
 
-    function openCollectionReader(mode, trigger) {
+    function openCollectionReader(mode, trigger, sectionId) {
         const collectionId = selectedCollectionKey();
         if (!collectionId || !currentCollection || !currentCollection.summary_markdown) {
             showToast('请先生成全系列解读');
             return;
         }
-        if (!collectionReader.state) {
-            collectionReader.state = window.VisualLearning.createReaderState(collectionId, mode);
-        } else if (collectionReader.state.snapshot().ownerId !== collectionId) {
-            collectionReader.state.resetOwner(collectionId);
-        }
+        if (!ensureCollectionReaderState(collectionId, mode)) return;
         collectionReader.state.setMode(mode);
+        if (sectionId !== undefined) {
+            collectionReader.state.setSection(sectionId);
+        }
         collectionReader.open = true;
         collectionReader.trigger = trigger || document.activeElement;
         collectionReader.scrollY = window.scrollY;
@@ -2721,6 +2794,96 @@
         renderCollectionReader();
         if (mode === 'visual') ensureCollectionVisualLayer('overview');
         else ensureCollectionVisualLayer('overview', false);
+    }
+
+    function openCollectionSummaryReader(mode, trigger) {
+        const markdown = currentCollection && currentCollection.summary_markdown;
+        if (!markdown) {
+            showToast('请先生成全系列解读');
+            return;
+        }
+        summaryMode = mode || summaryMode || 'full';
+        const sectionId = summaryReaderSectionId(summaryMode);
+        lastSummaryTrigger = trigger || document.activeElement;
+        focusCollectionSummaryArticle(sectionId);
+        renderSummaryModeButtons();
+        renderSummaryCardStates(markdown);
+    }
+
+    function renderInlineSummaryVisual() {
+        if (!els.collectionSummaryVisualRoot) return;
+        const markdown = currentCollection && currentCollection.summary_markdown;
+        const overview = collectionVisual.documents.overview;
+        els.collectionSummaryVisualRoot.replaceChildren();
+        if (!markdown) {
+            els.collectionSummaryVisualRoot.appendChild(document.createTextNode('生成全系列解读后显示图解。'));
+            return;
+        }
+        if (overview && window.VisualLearning && window.VisualLearning.render) {
+            const host = document.createElement('div');
+            host.className = 'lc-summary-inline-diagram';
+            const diagram = window.VisualLearning.render(host, overview, {
+                readerMode: 'continuous',
+                showInlineSourceRefs: false,
+                onSourceRef: (refId) => navigateCollectionVisualRef(refId),
+                onSectionEvidence: (evidence) => {
+                    const references = (evidence && evidence.references) || [];
+                    if (references.length === 1) navigateCollectionVisualRef(references[0].refId);
+                    else if (references.length > 1) showToast('本节有多个依据，请在图中选择具体原文引用');
+                }
+            });
+            diagram.classList.add('vl-diagram', 'vl-reader-visual-atlas');
+            els.collectionSummaryVisualRoot.appendChild(host);
+            return;
+        }
+        const empty = document.createElement('div');
+        empty.className = 'lc-summary-visual-empty';
+        const status = document.createElement('strong');
+        status.textContent = collectionVisualStatusText('overview');
+        const detail = document.createElement('p');
+        detail.textContent = '这里展示合集层面的全局图解；每个子内容的图解仍在对应内容页查看。';
+        empty.append(status, detail);
+        if (markdown) {
+            const action = document.createElement('button');
+            action.className = 'lc-btn primary';
+            action.type = 'button';
+            action.textContent = collectionVisual.loading.overview ? '正在生成…' : '生成图解';
+            action.disabled = collectionVisual.loading.overview;
+            action.addEventListener('click', () => requestCollectionVisual('overview', false));
+            empty.appendChild(action);
+        }
+        els.collectionSummaryVisualRoot.appendChild(empty);
+    }
+
+    function setCollectionSummaryMode(mode, generateIfMissing) {
+        collectionSummaryMode = mode === 'visual' ? 'visual' : 'text';
+        const visual = collectionSummaryMode === 'visual';
+        if (els.collectionSummaryTextPanel) {
+            els.collectionSummaryTextPanel.hidden = visual;
+            els.collectionSummaryTextPanel.classList.toggle('is-active', !visual);
+        }
+        if (els.collectionSummaryVisualPanel) {
+            els.collectionSummaryVisualPanel.hidden = !visual;
+            els.collectionSummaryVisualPanel.classList.toggle('is-active', visual);
+        }
+        if (els.collectionSummaryText) {
+            els.collectionSummaryText.classList.toggle('active', !visual);
+            els.collectionSummaryText.setAttribute('aria-selected', visual ? 'false' : 'true');
+            els.collectionSummaryText.tabIndex = visual ? -1 : 0;
+        }
+        if (els.collectionSummaryVisual) {
+            els.collectionSummaryVisual.classList.toggle('active', visual);
+            els.collectionSummaryVisual.setAttribute('aria-selected', visual ? 'true' : 'false');
+            els.collectionSummaryVisual.tabIndex = visual ? 0 : -1;
+        }
+        if (visual) {
+            renderInlineSummaryVisual();
+            const collectionId = selectedCollectionKey();
+            if (collectionId && currentCollection && currentCollection.summary_markdown) {
+                ensureCollectionReaderState(collectionId, 'visual');
+                ensureCollectionVisualLayer('overview', Boolean(generateIfMissing));
+            }
+        }
     }
 
     function closeCollectionReader(restorePosition) {
@@ -2751,20 +2914,20 @@
         els.collectionVisualFullNoteRetry.disabled = !canRetry || collectionVisual.loading.full_note;
 
         const overview = collectionVisual.documents.overview;
-        const fullNote = collectionVisual.documents.full_note;
-        els.collectionVisualExport.disabled = !(overview || fullNote);
-        els.collectionVisualPrint.disabled = !(overview || fullNote);
+        els.collectionVisualExport.disabled = !overview;
+        els.collectionVisualPrint.disabled = !overview;
         const message = document.createElement('div');
         message.className = 'lc-visual-entry';
         const title = document.createElement('strong');
-        title.textContent = overview || fullNote ? '图解已经准备好' : '图解将在沉浸阅读器中生成';
+        title.textContent = overview ? '合集全局图解已经准备好' : '合集全局图解将在图解版中生成';
         const detail = document.createElement('p');
         detail.textContent = canRetry
-            ? '文字与图解分开显示，进入后可在全局和各小节之间快速切换。'
+            ? '这里只展示合集宏观图解；子内容图解请进入对应内容页独立查看。'
             : '请先生成全系列解读。';
         message.append(title, detail);
         els.collectionVisualRoot.replaceChildren(message);
         renderCollectionReader();
+        renderInlineSummaryVisual();
     }
 
     function storeCollectionVisualState(documentType, state) {
@@ -2774,6 +2937,7 @@
             collectionVisual.documents[documentType] = documentRecord.document_json;
         }
         renderCollectionVisual();
+        renderInlineSummaryVisual();
     }
 
     function stopCollectionVisualPoll(documentType) {
@@ -2785,7 +2949,7 @@
         stopCollectionVisualPoll(documentType);
         const readerGeneration = collectionReader.state.generation();
         collectionVisual.pollTimers[documentType] = window.setInterval(async () => {
-            if (!collectionReader.open || !collectionReaderAccepts(collectionId, readerGeneration)) {
+            if (!isCollectionVisualConsumerActive() || !collectionReaderAccepts(collectionId, readerGeneration)) {
                 stopCollectionVisualPoll(documentType);
                 return;
             }
@@ -2813,10 +2977,12 @@
 
     async function requestCollectionVisual(documentType, force) {
         const collectionId = selectedCollectionKey();
-        if (!collectionId || !collectionReader.open || !currentCollection.summary_markdown) return;
+        if (!collectionId || !currentCollection.summary_markdown) return;
+        if (!ensureCollectionReaderState(collectionId, 'visual')) return;
         const readerGeneration = collectionReader.state.generation();
         collectionVisual.loading[documentType] = true;
         renderCollectionVisual();
+        renderInlineSummaryVisual();
         try {
             const payload = await apiJSON(
                 `/api/visual-learning/collections/${encodeURIComponent(collectionId)}/generate`,
@@ -2853,7 +3019,8 @@
 
     async function ensureCollectionVisualLayer(documentType, generateIfMissing = true) {
         const collectionId = selectedCollectionKey();
-        if (!collectionId || !collectionReader.open) return;
+        if (!collectionId || !isCollectionVisualConsumerActive()) return;
+        if (!ensureCollectionReaderState(collectionId, 'visual')) return;
         const readerGeneration = collectionReader.state.generation();
         try {
             const payload = await apiJSON(
@@ -2951,18 +3118,13 @@
             showToast('对应的全系列解读小节已不存在');
             return;
         }
-        openSummaryDialog(
-            matching ? `visual-section:${target.sectionId}` : 'full',
-            els.collectionVisualRoot
-        );
-        if (matching) {
-            window.requestAnimationFrame(() => {
-                const section = document.getElementById(matching.id);
-                if (!section) return;
-                section.tabIndex = -1;
-                section.focus({ preventScroll: true });
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            });
+        const textSections = collectionReaderTextSections(currentCollection.summary_markdown);
+        const readerSection = matching
+            ? textSections.find((section) => section.id === matching.id)
+            : null;
+        focusCollectionSummaryArticle(readerSection ? readerSection.id : '');
+        if (matching && !readerSection) {
+            showToast('已打开全系列解读，当前图解引用无法精确定位到文字章节');
         }
     }
 
@@ -3276,21 +3438,25 @@
 
         els.tabs.forEach((tab) => {
             tab.addEventListener('click', () => {
-                currentView = tab.dataset.view;
+                const requestedView = tab.dataset.view || 'map';
+                currentView = requestedView === 'visual' ? 'summary' : requestedView;
                 render();
-                if (currentView === 'visual') {
-                    openCollectionReader('visual', tab);
-                    activateCollectionVisuals().catch((error) => {
-                        showToast(error.message || '图解加载失败');
-                    });
+                if (requestedView === 'visual') {
+                    setCollectionSummaryMode('visual', true);
                 } else if (currentView === 'summary') {
-                    openCollectionReader('text', tab);
+                    setCollectionSummaryMode('text', false);
                 } else {
                     stopCollectionVisualPoll('overview');
                     stopCollectionVisualPoll('full_note');
                 }
             });
         });
+        if (els.collectionSummaryText) {
+            els.collectionSummaryText.addEventListener('click', () => setCollectionSummaryMode('text', false));
+        }
+        if (els.collectionSummaryVisual) {
+            els.collectionSummaryVisual.addEventListener('click', () => setCollectionSummaryMode('visual', true));
+        }
         if (els.collectionVisualOverviewRetry) {
             els.collectionVisualOverviewRetry.addEventListener('click', () => retryCollectionVisual('overview'));
         }
@@ -3308,13 +3474,14 @@
         }
         if (els.collectionVisualOpen) {
             els.collectionVisualOpen.addEventListener('click', () => {
-                openCollectionReader('visual', els.collectionVisualOpen);
-                activateCollectionVisuals();
+                currentView = 'summary';
+                render();
+                setCollectionSummaryMode('visual', true);
             });
         }
         if (els.collectionSummaryReaderOpen) {
             els.collectionSummaryReaderOpen.addEventListener('click', () => {
-                openCollectionReader('text', els.collectionSummaryReaderOpen);
+                focusCollectionSummaryArticle('');
             });
         }
         if (els.collectionVisualExport) {
@@ -3335,7 +3502,7 @@
                     showToast('请先生成全系列解读');
                     return;
                 }
-                openSummaryDialog(`card:${card.dataset.summaryCard || 'problem'}`, card);
+                openCollectionSummaryReader(`card:${card.dataset.summaryCard || 'problem'}`, card);
             };
             card.addEventListener('click', openCard);
             card.addEventListener('keydown', (event) => {
@@ -3362,7 +3529,7 @@
         }
         els.summaryModes.forEach((button) => {
             button.addEventListener('click', () => {
-                openSummaryDialog(button.dataset.summaryMode || 'guide', button);
+                openCollectionSummaryReader(button.dataset.summaryMode || 'guide', button);
             });
         });
 

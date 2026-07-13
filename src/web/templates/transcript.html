@@ -927,10 +927,6 @@
     <div class="section transcript-secondary-section">
         <div class="section-header">
             <h2>校对文本</h2>
-            {% if view_token %}
-            <span id="recalibrateArea" style="font-size: 0.85rem; color: var(--text-secondary);">
-            </span>
-            {% endif %}
         </div>
         {% if use_speaker_recognition %}
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
@@ -988,8 +984,7 @@ function submitRecalibrate() {
     .then(function(data) {
         var taskId = data.data && data.data.task_id;
         if (!taskId) throw new Error('No task_id returned');
-        // Close dialog, show inline status on the button area
-        dialog.close();
+        // Show inline status on the fixed area
         area.innerHTML = '<span class="recalibrate-status">校对中... (0s)</span>';
         pollTask(taskId, apiKey, area);
     })

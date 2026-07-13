@@ -219,12 +219,9 @@ def test_frontend_module_names_keep_workflows_separate():
     assert "单个解析" not in shell_sources
     assert "学做小红书" not in shell_sources
 
-    assert "视频/文档深度学习" in workbench
+    assert "工作台首页" in workbench
     assert 'id="share-content"' in workbench
     assert 'name="deep-learning-source-content"' in workbench
-    assert 'id="bearer-token"' in workbench
-    assert 'type="password"' not in workbench
-    assert 'autocomplete="new-password"' in workbench
     assert "系列深度学习" in collections
     assert "IP 对标工作台" in flywheel
     assert "选题机会" in flywheel

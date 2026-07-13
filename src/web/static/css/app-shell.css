@@ -46,7 +46,7 @@ body.app-shell.has-app-shell {
     margin: 0;
     padding: 0 !important;
     display: flex;
-    overflow-x: hidden;
+    overflow-x: clip;
     background:
         radial-gradient(90% 46% at 50% -14%, var(--shell-ambient), transparent 68%),
         var(--shell-bg);

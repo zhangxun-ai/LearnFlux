@@ -849,6 +849,7 @@
     background:
         radial-gradient(110% 52% at 55% -18%, rgba(228, 80, 58, 0.08), transparent 68%),
         var(--paper);
+    box-shadow: var(--shadow-sm);
 }
 
 .vl-control-pane {

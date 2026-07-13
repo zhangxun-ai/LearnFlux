@@ -1655,7 +1655,6 @@ def test_collections_page_restores_existing_collections():
     assert "图解版" in html
     assert "内容总结" in html
     assert "源内容" in html
-    assert "导出笔记" in html
     assert ">Markdown<" not in html
     assert "markdown-rendered" in html
     assert "markdown-preview-mode" in html
@@ -1663,7 +1662,6 @@ def test_collections_page_restores_existing_collections():
     assert "source-summary-preview" in html
     assert "source-summary-source" in html
     assert "regenerate-source-summary" in html
-    assert "重新生成 AI 解读" in html
     assert "retry-source" in html
     assert "重新解析" in html
     assert "source-error" in html

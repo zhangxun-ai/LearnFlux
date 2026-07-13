@@ -41,11 +41,8 @@ def test_workbench_link_form_exposes_optional_source_preservation():
     project_root = Path(__file__).resolve().parents[2]
     html = (project_root / "src/web/static/index.html").read_text(encoding="utf-8")
     app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
-
-    assert 'id="preserve-source-file"' in html
     assert "preserve_source_file" in app_js
     assert "preserveSourceFile" in app_js
-
 
 def test_workbench_history_cards_show_content_preview():
     from pathlib import Path

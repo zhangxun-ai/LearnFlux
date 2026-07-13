@@ -545,6 +545,7 @@
         const item = trendRadarData.find((entry) => entry.id === state.selectedId) || trendRadarData[0];
         if (!item || !els.detail) {
             els.detail.innerHTML = '<div class="empty-state">请选择一个趋势。</div>';
+            if (els.evidenceContainer) els.evidenceContainer.innerHTML = '';
             return;
         }
         const stage = stageMeta[item.stage] || stageMeta.noise;
@@ -576,11 +577,20 @@
                     <p>${escapeHtml(item.evidenceSummary || item.brief.limitations || "报告不替代人工阅读原文和访谈验证。")}</p>
                 </section>
             </div>
-            <section class="evidence-section">
-                <h3>优先核查来源</h3>
-                ${renderEvidence(item.evidence)}
-            </section>
         `;
+        if (els.evidenceContainer) {
+            els.evidenceContainer.innerHTML = `
+                <section class="evidence-section full-width-evidence">
+                    <div class="evidence-section-header">
+                        <h3>优先核查来源</h3>
+                        <p>跨领域信号追踪，自动关联底层依据</p>
+                    </div>
+                    <div class="evidence-grid">
+                        ${renderEvidence(item.evidence)}
+                    </div>
+                </section>
+            `;
+        }
     }
 
     function briefRow(label, value) {
@@ -627,6 +637,7 @@
         els.curation.innerHTML = html;
         els.list.innerHTML = html;
         els.detail.innerHTML = html;
+        if (els.evidenceContainer) els.evidenceContainer.innerHTML = '';
     }
 
     function renderAll() {

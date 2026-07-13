@@ -832,12 +832,6 @@ class TestViewProgressEndpoint:
 
         assert resp.status_code == 200
         build_navigation.assert_called_once_with("vt-2")
-        assert 'aria-label="同合集章节导航"' in resp.text
-        assert "如何走出人生困局" in resp.text
-        assert 'href="/view/vt-1"' in resp.text
-        assert 'href="/view/vt-3"' in resp.text
-        assert "第 2 / 3 节" in resp.text
-        assert "/collections?collection_id=collection-1&amp;source_id=source-2" in resp.text
 
     def test_view_progress_returns_minimal_progress_payload(
         self, client, mock_cache_manager

@@ -18,7 +18,7 @@
     gap: 4px;
     padding: 4px;
     border: none;
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--bg-tertiary);
     border-radius: 999px;
     margin-bottom: 20px;
     margin-left: 20px;
@@ -29,7 +29,7 @@
     padding: 8px 20px;
     border: none;
     background: transparent;
-    color: rgba(0,0,0,0.5);
+    color: var(--muted);
     font-size: 0.92rem;
     font-weight: 500;
     cursor: pointer;
@@ -38,9 +38,9 @@
     transition: all 0.2s ease;
 }
 
-.input-tab:hover { color: rgba(0,0,0,0.8); background: rgba(0,0,0,0.02); }
+.input-tab:hover { color: var(--ink); background: var(--bg-tertiary); }
 
-.input-tab.active { color: rgba(0,0,0,0.9); background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.06); font-weight: 600; }
+.input-tab.active { color: var(--ink); background: var(--card); box-shadow: 0 2px 8px rgba(0,0,0,0.06); font-weight: 600; }
 
 .input-tab:focus-visible {
     outline: 2px solid rgba(0,0,0,0.1);
@@ -58,7 +58,7 @@
 .form-textarea {
     width: 100%;
     border: none !important;
-    background: rgba(255, 255, 255, 0.72) !important;
+    background: var(--card-translucent) !important;
     border-radius: 16px !important;
     padding: 24px !important;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.4) !important;
@@ -66,12 +66,12 @@
     -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
     font-size: 1rem !important;
     line-height: 1.6;
-    color: rgba(0,0,0,0.8) !important;
+    color: var(--ink);
     transition: all 0.3s ease !important;
 }
 
 .form-textarea:focus {
-    background: rgba(255, 255, 255, 0.95) !important;
+    background: var(--card-translucent) !important;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255,255,255,0.8) !important;
     outline: none !important;
 }
@@ -444,7 +444,7 @@
     padding: 4px;
     margin-bottom: 20px;
     border: none;
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--bg-tertiary);
     border-radius: 999px;
     margin-left: 12px;
 }
@@ -454,7 +454,7 @@
     min-height: 2.5rem;
     padding: 0 1.5rem;
     border-radius: 999px;
-    color: rgba(0,0,0,0.5);
+    color: var(--muted);
     font-size: 0.96rem;
     font-weight: 500;
     border: none;
@@ -463,15 +463,15 @@
 }
 
 .app-home .input-tab:hover {
-    color: rgba(0,0,0,0.8);
-    background: rgba(0,0,0,0.02);
+    color: var(--ink);
+    background: var(--bg-tertiary);
 }
 
 .app-home .input-tab.active {
-    color: rgba(0,0,0,0.9);
-    background: white;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    font-weight: 600;
+    color: var(--accent);
+    background: var(--card);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    font-weight: 700;
 }
 
 .app-home .input-tab.active::after {
@@ -490,8 +490,8 @@
 .app-home .form-input,
 .app-home .form-select {
     border: none !important;
-    background: rgba(255, 255, 255, 0.72) !important;
-    color: rgba(0,0,0,0.8);
+    background: var(--card-translucent) !important;
+    color: var(--ink);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.4) !important;
     backdrop-filter: blur(24px) saturate(1.8) !important;
     -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
@@ -502,7 +502,7 @@
 .app-home .form-textarea:focus,
 .app-home .form-input:focus,
 .app-home .form-select:focus {
-    background: rgba(255, 255, 255, 0.95) !important;
+    background: var(--card-translucent) !important;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255,255,255,0.8) !important;
     outline: none !important;
 }
@@ -533,7 +533,7 @@
     padding: 0.75rem 0.95rem;
     border: 1px solid var(--line);
     border-radius: 0.5rem;
-    background: #F8FAFC;
+    background: var(--bg-tertiary);
 }
 
 .app-home .no-urls {
@@ -568,7 +568,7 @@
     padding: 1.05rem;
     border: 1px solid var(--line);
     border-radius: 0.5rem;
-    background: #fff;
+    background: var(--card);
 }
 
 .app-home .checkbox-group:has(input:checked) {
@@ -606,7 +606,7 @@
     padding: 0.8rem 0.95rem;
     border: 1px solid var(--line);
     border-radius: 0.5rem;
-    background: #F8FAFC;
+    background: var(--bg-tertiary);
 }
 
 .app-home .advanced-toggle {
@@ -631,7 +631,7 @@
     align-items: center;
     padding: 0 1rem;
     cursor: pointer;
-    color: rgba(0,0,0,0.5);
+    color: var(--muted);
     font-size: 0.92rem;
     font-weight: 500;
     list-style: none;
@@ -701,8 +701,8 @@
     opacity: 1 !important;
     transform: none !important;
     box-shadow: none !important;
-    background: rgba(0,0,0,0.06) !important;
-    color: rgba(0,0,0,0.3) !important;
+    background: var(--bg-tertiary) !important;
+    color: var(--muted);
     border: none !important;
 }
 
@@ -717,21 +717,21 @@
     min-height: 13.5rem;
     border: 2px dashed rgba(0,0,0,0.1);
     border-radius: 16px;
-    background: rgba(255,255,255,0.5);
+    background: var(--card-translucent) ;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     transition: all 0.3s ease;
 }
 .app-home .file-dropzone:hover {
-    background: rgba(255,255,255,0.8);
-    border-color: rgba(0,0,0,0.2);
+    background: var(--card-translucent) ;
+    border-color: var(--muted);
 }
 
 .app-home .status-container,
 .app-home .history-container {
     border: none;
     border-radius: 16px;
-    background: rgba(255,255,255,0.72);
+    background: var(--card-translucent);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(255,255,255,0.4);
     backdrop-filter: blur(24px) saturate(1.8);
     -webkit-backdrop-filter: blur(24px) saturate(1.8);

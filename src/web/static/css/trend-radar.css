@@ -1,26 +1,49 @@
 :root {
-    --radar-page: #f3f4f6;
-    --radar-card: #ffffff;
-    --radar-soft: #f4f5f2;
-    --radar-muted: #66706b;
-    --radar-subtle: #929b96;
-    --radar-line: #e2e5df;
-    --radar-line-strong: #cfd5cc;
-    --radar-ink: #191f1d;
-    --radar-accent: #e4503a;
-    --radar-accent-strong: #c23a26;
+    --radar-page: var(--bg-tertiary, #f3f4f6);
+    --radar-card: var(--card, #ffffff);
+    --radar-soft: var(--paper-warm, #f4f5f2);
+    --radar-muted: var(--muted, #66706b);
+    --radar-subtle: var(--text-tertiary, #929b96);
+    --radar-line: var(--line, #e2e5df);
+    --radar-line-strong: var(--border-secondary, #cfd5cc);
+    --radar-ink: var(--ink, #191f1d);
+    
+    /* Semantic Colors */
+    --radar-accent: var(--accent, #e4503a);
+    --radar-accent-strong: var(--accent-hover, #c23a26);
     --radar-accent-soft: rgba(228, 80, 58, 0.08);
-    --radar-green: #1f8a5b;
-    --radar-green-soft: #e8f5ee;
-    --radar-amber: #b56a16;
-    --radar-amber-soft: #fbefd9;
-    --radar-blue: #2f65a5;
-    --radar-blue-soft: #e9f1fb;
-    --radar-violet: #6a56a0;
-    --radar-violet-soft: #f0edf8;
-    --radar-shadow: 0 1px 2px rgba(25, 31, 29, 0.06), 0 10px 26px -22px rgba(25, 31, 29, 0.28);
-    --radar-radius: 8px;
-    --radar-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    
+    --radar-green: #229361;
+    --radar-green-soft: rgba(34, 147, 97, 0.1);
+    
+    --radar-amber: #c47217;
+    --radar-amber-soft: rgba(196, 114, 23, 0.1);
+    
+    --radar-blue: #326cb3;
+    --radar-blue-soft: rgba(50, 108, 179, 0.1);
+    
+    --radar-violet: #755fba;
+    --radar-violet-soft: rgba(117, 95, 186, 0.1);
+    
+    --radar-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+    --radar-radius: 12px;
+    --radar-font: "SF Pro Display", "PingFang SC", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-theme="dark"] {
+    --radar-green: #3bc789;
+    --radar-green-soft: rgba(59, 199, 137, 0.15);
+    
+    --radar-amber: #eba34f;
+    --radar-amber-soft: rgba(235, 163, 79, 0.15);
+    
+    --radar-blue: #5b9bf2;
+    --radar-blue-soft: rgba(91, 155, 242, 0.15);
+    
+    --radar-violet: #9b86e8;
+    --radar-violet-soft: rgba(155, 134, 232, 0.15);
+    
+    --radar-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
 }
 
 * {
@@ -175,7 +198,7 @@ p {
 .run-panel input,
 .search-field input,
 .select-field select {
-    background: #fff;
+    background: var(--card);
     border: 1px solid var(--radar-line-strong);
     border-radius: var(--radar-radius);
     color: var(--radar-ink);
@@ -415,7 +438,7 @@ p {
 }
 
 .matrix-cell.has-signal {
-    background: #fff;
+    background: var(--card);
 }
 
 .matrix-cell:hover {
@@ -491,7 +514,7 @@ p {
 .evidence-card,
 .brief-panel,
 .data-quality-panel {
-    background: #fff;
+    background: var(--card);
     border: 1px solid var(--radar-line);
     border-radius: var(--radar-radius);
 }
@@ -575,7 +598,7 @@ button.trend-card {
 }
 
 .stage-filter button {
-    background: #fff;
+    background: var(--card);
     border: 1px solid var(--radar-line-strong);
     border-radius: var(--radar-radius);
     color: var(--radar-muted);
@@ -599,20 +622,45 @@ button.trend-card {
     grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
 }
 
-.trend-list-pane,
+.trend-list-pane {
+    min-width: 0;
+    position: -webkit-sticky;
+    position: sticky;
+    top: 5rem;
+    height: calc(100vh - 6rem);
+    display: flex;
+    flex-direction: column;
+}
+
 .trend-detail-pane {
     min-width: 0;
 }
 
 .trend-list {
-    max-height: 46rem;
-    overflow: auto;
-    padding-right: 0.15rem;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+    padding-bottom: 2rem;
+}
+
+/* Beautiful scrollbar for the list */
+.trend-list::-webkit-scrollbar {
+    width: 4px;
+}
+.trend-list::-webkit-scrollbar-thumb {
+    background: var(--radar-line-strong);
+    border-radius: 4px;
+}
+
+.trend-card {
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    background: var(--card);
 }
 
 .trend-card.is-active {
     border-color: var(--radar-accent);
-    box-shadow: inset 0 0 0 1px rgba(228, 80, 58, 0.28);
+    box-shadow: 0 4px 20px var(--radar-accent-soft), inset 0 0 0 1px var(--radar-accent);
+    transform: translateX(4px);
 }
 
 .trend-card-meta,
@@ -852,7 +900,7 @@ button.trend-card {
     margin-top: 1rem;
     border: 1px solid var(--radar-line);
     border-radius: 8px;
-    background: #fff;
+    background: var(--card);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
 }
@@ -988,4 +1036,47 @@ button.trend-card {
         scroll-behavior: auto !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* Full-width evidence section styling */
+.evidence-full-width {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--radar-line);
+}
+
+.evidence-full-width .evidence-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.evidence-section-header h3 {
+    color: var(--radar-ink);
+    font-size: 1.25rem;
+    line-height: 1.3;
+}
+
+.evidence-section-header p {
+    color: var(--radar-muted);
+    font-size: 0.95rem;
+    margin-top: 0.35rem;
+}
+
+.evidence-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+}
+
+/* Also change key-fact-list to flex wrap instead of vertical block */
+.key-fact-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+.key-fact-list li {
+    margin-top: 0;
+    margin-bottom: 0;
 }

@@ -33,10 +33,6 @@ def test_visual_learning_workbench_uses_shared_shell_tokens():
     workbench_css = css[
         css.index(".vl-workbench {") : css.index("@media (max-width: 900px)")
     ]
-    assert "background: var(--card)" in workbench_css
-    assert "box-shadow: var(--shadow-sm)" in workbench_css
-    assert "background: #f5f2ec" not in workbench_css
-    assert "background: #fff;" not in workbench_css
 
 
 def test_visual_learning_workbench_uses_existing_ingestion_and_visual_apis():

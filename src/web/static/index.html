@@ -2,13 +2,24 @@
 <html lang="zh-CN" data-theme="light">
 <head>
     <script>
-    (function() {
-        document.documentElement.setAttribute('data-theme', 'light');
-    })();
+        (function() {
+            try {
+                var theme = localStorage.getItem('vta_theme_preference');
+                if (theme) {
+                    var parsedTheme = theme;
+                    try { parsedTheme = JSON.parse(theme); } catch(e) {}
+                    document.documentElement.setAttribute('data-theme', parsedTheme);
+                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch(e) {}
+        })();
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>视频/文档深度学习 - 内容解析工作台</title>
+    <title>工作台首页 - 内容解析工作台</title>
     <meta name="description" content="视频转录、文档解析、AI 精华提炼，把内容沉淀成可复习的学习笔记">
     <meta name="theme-color" content="#FBF8F3">
     <meta name="robots" content="noindex">

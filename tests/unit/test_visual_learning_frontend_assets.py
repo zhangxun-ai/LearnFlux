@@ -56,6 +56,8 @@ def test_visual_learning_renderer_exposes_immersive_reader_contract():
     assert "scrollReaderToAnchor" in js
     assert "visualScope === 'global'" in js
     assert "vl-reader-no-sections" in js
+    assert ".vl-reader-visual-atlas.vl-continuous-article .vl-concept-chain" in css
+    assert "minmax(min(100%, 260px), 1fr)" in css
     assert ".vl-immersive-reader" in css
     assert ".vl-reader-panel" in css
     assert '.vl-immersive-reader[data-reader-mode="visual"]' in css

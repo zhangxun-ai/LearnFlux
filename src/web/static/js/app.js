@@ -512,6 +512,7 @@ class TaskHistoryManager {
         renderHistoryPagination(filtered.length, page, totalPages);
         refreshHistoryStatuses();
         refreshHistoryPreviews();
+        ensureHistoryStatusPolling();
     }
 }
 
@@ -636,7 +637,7 @@ class UIManager {
     /**
      * 显示状态信息
      */
-    static showStatus(type, message, details = '') {
+    static showStatus(type, message, details = '', options = {}) {
         const container = document.getElementById('status-container');
         const content = document.getElementById('status-content');
 
@@ -666,7 +667,9 @@ class UIManager {
         `;
 
         // 滚动到状态区域
-        container.scrollIntoView({ behavior: 'smooth' });
+        if (options.scroll !== false) {
+            container.scrollIntoView({ behavior: 'smooth' });
+        }
     }
 
     /**
@@ -938,6 +941,9 @@ function compactText(s, maxLen) {
 /** 每页历史条数 */
 const HISTORY_PAGE_SIZE = 8;
 const HISTORY_PREVIEW_LOADING = new Set();
+const HISTORY_STATUS_POLL_MS = 5000;
+let historyStatusPollTimer = null;
+let submittedTaskPollTimer = null;
 
 /** 日期范围判断（today / 7d / 30d / 90d / all） */
 function inDateRange(ts, rangeKey) {
@@ -1089,44 +1095,174 @@ function hydrateHistoryPreview(entry, card) {
     });
 }
 
-/** 历史视频任务的状态最佳努力刷新（复用既有 getTaskStatus，容错字段名） */
-function refreshHistoryStatuses() {
+function isTerminalHistoryStatus(status, type) {
+    const cls = statusInfo(status, type).cls;
+    return cls === 'done' || cls === 'failed';
+}
+
+function applyTaskStatusToEntry(entry, raw) {
+    if (!entry || !raw) return false;
+    let changed = false;
+    const status = raw.status || raw.task_status || raw.state;
+    if (status) {
+        const norm = String(status).toLowerCase();
+        if (entry.status !== norm) {
+            entry.status = norm;
+            changed = true;
+        }
+    }
+    ['title', 'author', 'platform', 'view_token', 'completed_at'].forEach((key) => {
+        if (raw[key] && entry[key] !== raw[key]) {
+            entry[key] = raw[key];
+            changed = true;
+        }
+    });
+    if (raw.error_message && entry.error_message !== raw.error_message) {
+        entry.error_message = raw.error_message;
+        changed = true;
+    }
+    return changed;
+}
+
+function findVisibleHistoryCard(entry) {
+    if (!entry) return null;
+    const taskId = entry.id ? String(entry.id) : '';
+    if (taskId) {
+        const byTask = Array.from(document.querySelectorAll('.hist-card[data-task-id]'))
+            .find((node) => node.getAttribute('data-task-id') === taskId);
+        if (byTask) return byTask;
+    }
+    const viewToken = entry.view_token ? String(entry.view_token) : '';
+    if (!viewToken) return null;
+    return Array.from(document.querySelectorAll('.hist-card[data-view-token]'))
+        .find((node) => node.getAttribute('data-view-token') === viewToken) || null;
+}
+
+function replaceVisibleHistoryCard(entry, card) {
+    const target = card && card.isConnected ? card : findVisibleHistoryCard(entry);
+    if (!target || !target.parentNode) return;
+    const nextCard = buildHistoryCard(entry);
+    target.replaceWith(nextCard);
+    hydrateHistoryPreview(entry, nextCard);
+}
+
+function updateHistoryEntryFromStatus(taskId, raw, card) {
+    const history = TaskHistoryManager.getHistory();
+    const entry = history.find((t) => t && t.id === taskId);
+    if (!entry) return null;
+    const changed = applyTaskStatusToEntry(entry, raw);
+    if (changed) {
+        StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
+    }
+    replaceVisibleHistoryCard(entry, card);
+    return entry;
+}
+
+async function refreshHistoryEntryStatus(taskId, card) {
     let token = null;
     try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return; }
     if (!token) return;
-    const history = TaskHistoryManager.getHistory();
+    if (!taskId) return;
+    const resp = await APIManager.getTaskStatus(taskId);
+    const raw = (resp && (resp.data || resp)) || {};
+    updateHistoryEntryFromStatus(taskId, raw, card);
+}
+
+/** 历史视频任务的状态最佳努力刷新（复用既有 getTaskStatus，容错字段名） */
+function refreshHistoryStatuses() {
     document.querySelectorAll('.hist-card[data-task-id][data-type="video"]').forEach((card) => {
         const taskId = card.getAttribute('data-task-id');
-        if (!taskId) return;
-        APIManager.getTaskStatus(taskId).then((resp) => {
-            const raw = (resp && (resp.data || resp)) || {};
-            const s = raw.status || raw.task_status || raw.state;
-            if (!s) return;
-            const norm = String(s).toLowerCase();
-            const entry = history.find((t) => t && t.id === taskId);
-            if (!entry) return;
-            let changed = false;
-            if (entry.status !== norm) {
-                entry.status = norm;
-                changed = true;
-            }
-            ['title', 'author', 'platform', 'view_token'].forEach((key) => {
-                if (raw[key] && entry[key] !== raw[key]) {
-                    entry[key] = raw[key];
-                    changed = true;
-                }
-            });
-            if (changed) {
-                StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
-            }
-            // 用最新状态重建整张卡片：徽章与动作按钮（查看/重试/处理中）保持一致
-            if (card.parentNode) {
-                const nextCard = buildHistoryCard(entry);
-                card.replaceWith(nextCard);
-                hydrateHistoryPreview(entry, nextCard);
-            }
-        }).catch(() => { /* best-effort, ignore */ });
+        refreshHistoryEntryStatus(taskId, card).catch(() => { /* best-effort, ignore */ });
     });
+}
+
+async function refreshRunningHistoryStatuses() {
+    const history = TaskHistoryManager.getHistory();
+    const tasks = history.filter((task) => {
+        const type = histTypeOf(task);
+        return type === 'video' && task.id && !isTerminalHistoryStatus(task.status, type);
+    });
+    await Promise.all(tasks.map((task) => (
+        refreshHistoryEntryStatus(task.id).catch(() => { /* best-effort, ignore */ })
+    )));
+}
+
+function ensureHistoryStatusPolling() {
+    if (historyStatusPollTimer) {
+        clearTimeout(historyStatusPollTimer);
+        historyStatusPollTimer = null;
+    }
+    let token = null;
+    try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return; }
+    if (!token) return;
+    const hasRunningTask = TaskHistoryManager.getHistory().some((task) => {
+        const type = histTypeOf(task);
+        return type === 'video' && task.id && !isTerminalHistoryStatus(task.status, type);
+    });
+    if (!hasRunningTask) return;
+    historyStatusPollTimer = setTimeout(async () => {
+        historyStatusPollTimer = null;
+        await refreshRunningHistoryStatuses();
+        ensureHistoryStatusPolling();
+    }, HISTORY_STATUS_POLL_MS);
+}
+
+function renderSubmittedTaskStatus(taskId, viewToken, raw, entry, isDuplicate, options = {}) {
+    const status = raw && (raw.status || raw.task_status || raw.state) || (entry && entry.status) || 'processing';
+    const token = raw && raw.view_token || viewToken || (entry && entry.view_token) || '';
+    const type = histTypeOf(entry || { view_token: token });
+    const state = statusInfo(status, type);
+    const taskLink = token
+        ? `<a href="/view/${encodeURIComponent(token)}" target="_blank" style="color: #667eea; text-decoration: underline;">查看任务页面</a>`
+        : '';
+    const title = raw && raw.title || (entry && entry.title) || '';
+    const duplicateNote = isDuplicate
+        ? '<br><span style="color: #a36b20;">相同链接的旧任务记录已更新</span>'
+        : '';
+    if (state.cls === 'done') {
+        const detail = `${title ? `内容：${escapeHtml(title)}<br>` : ''}${taskLink}`;
+        UIManager.showStatus('success', '解析完成', detail, options);
+        return;
+    }
+    if (state.cls === 'failed') {
+        const reason = raw && raw.error_message ? escapeHtml(raw.error_message) : '请打开任务页面查看失败原因';
+        const detail = `${reason}${taskLink ? `<br>${taskLink}` : ''}`;
+        UIManager.showStatus('error', '解析失败', detail, options);
+        return;
+    }
+    const detail = `任务ID: ${escapeHtml(taskId)}<br>当前页面会自动同步状态，进度页会展示实时处理进度。${duplicateNote}${taskLink ? `<br>${taskLink}` : ''}`;
+    UIManager.showStatus('loading', '任务已提交，正在解析', detail, options);
+}
+
+function watchSubmittedTask(taskId, viewToken, options = {}) {
+    if (submittedTaskPollTimer) {
+        clearTimeout(submittedTaskPollTimer);
+        submittedTaskPollTimer = null;
+    }
+
+    let showDuplicateNote = Boolean(options.isDuplicate);
+    const poll = async () => {
+        try {
+            const resp = await APIManager.getTaskStatus(taskId);
+            const raw = (resp && (resp.data || resp)) || {};
+            const entry = updateHistoryEntryFromStatus(taskId, raw);
+            renderSubmittedTaskStatus(taskId, viewToken, raw, entry, showDuplicateNote, { scroll: false });
+            showDuplicateNote = false;
+            const type = histTypeOf(entry || { view_token: viewToken });
+            const status = raw.status || raw.task_status || raw.state || (entry && entry.status);
+            if (!isTerminalHistoryStatus(status, type)) {
+                submittedTaskPollTimer = setTimeout(poll, HISTORY_STATUS_POLL_MS);
+            } else {
+                submittedTaskPollTimer = null;
+                ensureHistoryStatusPolling();
+            }
+        } catch (error) {
+            submittedTaskPollTimer = setTimeout(poll, HISTORY_STATUS_POLL_MS);
+        }
+    };
+
+    renderSubmittedTaskStatus(taskId, viewToken, { status: 'processing', view_token: viewToken }, null, showDuplicateNote);
+    submittedTaskPollTimer = setTimeout(poll, 2500);
 }
 
 function refreshHistoryPreviews() {
@@ -1491,19 +1627,9 @@ async function submitTranscription(event) {
 
             // 添加到历史记录
             const historyResult = TaskHistoryManager.addTask(taskData);
-
-            // 根据是否重复显示不同的提示
-            let statusMessage = '任务提交成功！';
-            let statusDetails = `任务ID: ${response.data.task_id}<br>转录将在后台进行，完成后会通过配置的企业微信通知您<br>`;
-
-            if (historyResult.isDuplicate) {
-                statusMessage = '任务提交成功！(检测到重复URL)';
-                statusDetails += `<span style="color: #a36b20;">相同链接的旧任务记录已被更新</span><br>`;
-            }
-
-            statusDetails += `<a href="/view/${response.data.view_token}" target="_blank" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
-
-            UIManager.showStatus('success', statusMessage, statusDetails);
+            watchSubmittedTask(response.data.task_id, response.data.view_token, {
+                isDuplicate: Boolean(historyResult.isDuplicate)
+            });
 
             // 清空表单
             document.getElementById('share-content').value = '';

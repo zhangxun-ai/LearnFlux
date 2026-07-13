@@ -1075,9 +1075,15 @@ class VisualLearningService:
         section_threshold = int(
             self.llm_config.get("visual_learning_long_section_count") or 4
         )
+        section_min_chars = int(
+            self.llm_config.get("visual_learning_long_section_min_chars") or 8000
+        )
         return document_type == "diagram" and (
             source.total_content_chars > threshold
-            or len(source.interpretation_sections) >= section_threshold
+            or (
+                len(source.interpretation_sections) >= section_threshold
+                and source.total_content_chars >= section_min_chars
+            )
         )
 
     def _update_progress(

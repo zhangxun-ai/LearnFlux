@@ -25,6 +25,7 @@ from ..context import (
 )
 from ...utils.rendering import (
     get_base_url,
+    normalize_markdown_text,
     render_calibrated_content_smart,
     render_markdown_to_html,
     render_transcript_content,
@@ -836,6 +837,12 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
     return f"{safe_title}-{content_name}-{platform_name}.txt"
 
 
+def _normalize_export_content(export_type: str, content: str) -> str:
+    if export_type in {"summary", "comment_insight"}:
+        return normalize_markdown_text(content)
+    return content
+
+
 def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
     """
     处理 Raw 模式导出请求（GitHub Raw 模式）
@@ -914,6 +921,7 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
     # 5. 读取文件内容
     try:
         content = file_path.read_text(encoding="utf-8")
+        content = _normalize_export_content(export_type, content)
     except Exception as exc:
         logger.error("读取文件失败: %s, 错误: %s", file_path, exc)
         return Response(
@@ -1072,6 +1080,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
 
         try:
             content = file_path.read_text(encoding="utf-8")
+            content = _normalize_export_content(export_type, content)
         except Exception as exc:
             logger.error("读取文件失败: %s, 错误: %s", file_path, exc)
             return Response(

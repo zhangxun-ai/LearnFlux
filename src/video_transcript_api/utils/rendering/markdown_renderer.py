@@ -273,6 +273,34 @@ def _fix_list_spacing(text: str) -> str:
 
     return '\n'.join(fixed_lines)
 
+
+def normalize_markdown_text(text: str) -> str:
+    """Normalize common LLM Markdown artifacts before rendering or exporting."""
+    lines = str(text or "").split("\n")
+    normalized_lines = []
+    in_code_block = False
+
+    for line in lines:
+        if line.strip().startswith("```"):
+            in_code_block = not in_code_block
+            normalized_lines.append(line)
+            continue
+
+        if in_code_block:
+            normalized_lines.append(line)
+            continue
+
+        normalized_lines.append(
+            re.sub(
+                r"^([ \t]{0,3}#{1,6}[ \t]+)(#{1,6}[ \t]+)+",
+                r"\1",
+                line,
+            )
+        )
+
+    return "\n".join(normalized_lines)
+
+
 def render_markdown_to_html(markdown_text: str) -> str:
     """
     将Markdown文本渲染为HTML
@@ -300,6 +328,9 @@ def render_markdown_to_html(markdown_text: str) -> str:
         
         if not markdown_text:
             return ""
+
+        # 预处理0：清理 LLM 偶发的重复标题标记（如 "#### ##### 标题"）
+        markdown_text = normalize_markdown_text(markdown_text)
 
         # 预处理1：修复缩进的表格
         markdown_text = _fix_indented_tables(markdown_text)

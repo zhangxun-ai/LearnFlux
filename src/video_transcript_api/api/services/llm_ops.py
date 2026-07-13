@@ -29,7 +29,7 @@ from ...utils.notifications import (
     get_notification_router,
 )
 from ...utils.notifications.channel import _clean_url, _apply_risk_control_safe
-from ...utils.rendering import get_base_url
+from ...utils.rendering import get_base_url, normalize_markdown_text
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
 
@@ -707,7 +707,7 @@ def _save_llm_results(
                     media_id=media_id,
                     use_speaker_recognition=use_speaker_recognition,
                     llm_type="summary",
-                    content=summary_text,
+                    content=normalize_markdown_text(summary_text),
                 )
             else:
                 logger.warning(f"总结生成失败，跳过保存: {task_id}")

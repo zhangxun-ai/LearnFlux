@@ -1451,9 +1451,68 @@ def _long_diagram_document():
     return _document(document_type="diagram", pages=pages)
 
 
-def test_section_rich_diagram_uses_outline_even_below_char_threshold(tmp_path):
-    llm = FakeLLM(_outline(), _brief(), _strategy(), _long_diagram_document())
+def _short_diagram_document_for_long_source():
+    return _document(
+        document_type="diagram",
+        pages=[
+            {
+                "id": "page-1",
+                "title": "核心主线",
+                "learning_goal": "理解学习闭环的关键动作",
+                "blocks": [
+                    {
+                        "id": "chain-1",
+                        "type": "concept_chain",
+                        "title": "短图解主线",
+                        "source_ref_ids": [_ref_id("价值-0"), _ref_id("搜索-0")],
+                        "items": [
+                            {
+                                "id": "value",
+                                "label": "判断价值",
+                                "description": "先判断知识是否值得投入。",
+                            },
+                            {
+                                "id": "search",
+                                "label": "全景搜索",
+                                "description": "再用多来源找到更好解释。",
+                            },
+                        ],
+                    }
+                ],
+            }
+        ],
+    )
+
+
+def test_section_rich_short_diagram_stays_compact_by_default(tmp_path):
+    llm = FakeLLM(_brief(), _strategy(), _short_diagram_document_for_long_source())
     service, _, _ = _service(tmp_path, llm, session=_section_rich_short_session())
+    source = service.source_resolver.resolve("view-1")
+
+    assert source.total_content_chars < 30000
+    assert len(source.interpretation_sections) == 4
+
+    result = service.generate_study("view-1", "diagram")
+
+    assert result["status"] == "success"
+    assert [call["task_type"] for call in llm.calls] == [
+        "visual_brief",
+        "visual_strategy",
+        "visual_diagram",
+    ]
+    assert [page["id"] for page in result["document_json"]["pages"]] == [
+        "page-1",
+    ]
+
+
+def test_section_rich_diagram_uses_outline_when_min_chars_is_lowered(tmp_path):
+    llm = FakeLLM(_outline(), _brief(), _strategy(), _long_diagram_document())
+    service, _, _ = _service(
+        tmp_path,
+        llm,
+        session=_section_rich_short_session(),
+        llm_config={"visual_learning_long_section_min_chars": 200},
+    )
     source = service.source_resolver.resolve("view-1")
 
     assert source.total_content_chars < 30000

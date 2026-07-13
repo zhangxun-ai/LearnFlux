@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vta-pwa-20260712-shell-13';
+const CACHE_NAME = 'vta-pwa-20260712-shell-15';
 
 const PRECACHE_URLS = [
   '/',

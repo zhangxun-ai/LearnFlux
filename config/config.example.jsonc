@@ -215,6 +215,7 @@
         "visual_learning_outline_reasoning_effort": "high",
         "visual_learning_render_model": "deepseek-v4-pro",  // 最终出图：同一强模型负责结构化表达
         "visual_learning_render_reasoning_effort": "disabled", // 提纲已有依据，关闭重复深思以降低延迟
+        "visual_learning_long_section_min_chars": 8000, // 多章节短内容仍用紧凑图解；正文达到该字数才因章节数进入长图解
         "collection_summary_context_tokens": 1000000,   // DeepSeek V4 Pro/Flash 官方 1M 上下文
         "collection_summary_reserved_output_tokens": 100000,  // 为最终长文和思考预留 token
         "collection_summary_context_safety_ratio": 0.85, // 超过可用上下文才进入分层处理

@@ -2244,6 +2244,17 @@ body.vl-evidence-open {
     background: rgba(255, 253, 249, .82);
 }
 
+.vl-reader-visual-atlas.vl-continuous-article .vl-concept-chain,
+.vl-reader-visual-atlas.vl-continuous-article .vl-process-flow,
+.vl-reader-visual-atlas.vl-continuous-article .vl-signal-steps {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
+.vl-reader-visual-atlas.vl-continuous-article .vl-process-flow > li:not(:last-child)::after,
+.vl-reader-visual-atlas.vl-continuous-article .vl-signal-step:not(:last-child)::after {
+    content: none;
+}
+
 .vl-reader-detail-prompt {
     display: grid;
     gap: 10px;

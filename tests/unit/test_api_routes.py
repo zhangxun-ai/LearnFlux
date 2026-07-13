@@ -522,6 +522,38 @@ class TestViewProgressEndpoint:
         assert "/view/vt-1/progress" in resp.text
         assert "正在下载音视频" in resp.text
         assert "已处理" in resp.text
+        assert "完成后会自动打开结果页" in resp.text
+        assert "技术细节" not in resp.text
+        assert "置信度" not in resp.text
+        assert "依据" not in resp.text
+        assert "刷新页面" not in resp.text
+        assert "预计剩余" not in resp.text
+
+    def test_raw_summary_export_normalizes_duplicate_heading_markers(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "llm_summary.txt").write_text(
+            "#### ##### 2.1 睡前一小时\n\n正文",
+            encoding="utf-8",
+        )
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "url": "https://example.com/video",
+            "platform": "youtube",
+            "media_id": "video-1",
+            "cache_dir": str(cache_dir),
+        }
+
+        resp = client.get("/view/vt-1?raw=summary")
+
+        assert resp.status_code == 200
+        assert "#####" not in resp.text
+        assert "#### 2.1 睡前一小时" in resp.text
 
     def test_failed_view_is_not_cached(self, client, mock_cache_manager):
         mock_cache_manager.get_view_data_by_token.return_value = {

@@ -58,6 +58,21 @@ def test_workbench_history_cards_show_content_preview():
     assert ".hist-preview" in css
 
 
+def test_workbench_submission_and_history_statuses_keep_polling():
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+
+    assert "watchSubmittedTask" in app_js
+    assert "ensureHistoryStatusPolling" in app_js
+    assert "refreshRunningHistoryStatuses" in app_js
+    assert "updateHistoryEntryFromStatus" in app_js
+    assert "任务已提交，正在解析" in app_js
+    assert "解析完成" in app_js
+    assert "任务提交成功" not in app_js
+
+
 def test_workbench_exposes_pasted_text_study_entry():
     from pathlib import Path
 

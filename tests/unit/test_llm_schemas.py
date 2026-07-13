@@ -33,6 +33,8 @@ from src.video_transcript_api.llm.prompts import (
     VALIDATION_SYSTEM_PROMPT,
     UNIFIED_VALIDATION_SYSTEM_PROMPT,
     SPEAKER_INFERENCE_SYSTEM_PROMPT,
+    SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER,
+    SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER,
     build_calibrate_user_prompt,
     build_structured_calibrate_user_prompt,
     build_validation_user_prompt,
@@ -350,6 +352,10 @@ class TestBuildSummaryUserPrompt:
         assert "V" in result
         assert "A" in result
         assert "D" in result
+
+    def test_summary_system_prompts_forbid_duplicate_heading_markers(self):
+        assert "禁止重复标题标记" in SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER
+        assert "禁止重复标题标记" in SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER
 
 
 # ============================================================

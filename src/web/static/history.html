@@ -304,6 +304,16 @@
             border-radius: 50%;
             background: var(--hist-accent);
         }
+        .task-card.selected {
+            border-color: var(--hist-accent);
+            background: var(--hist-accent-soft);
+        }
+        .row-checkbox {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--hist-accent);
+            cursor: pointer;
+        }
 
         /* 卡片头部 */
         .task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
@@ -389,6 +399,39 @@
         .wh-status.err { background: rgba(239, 68, 68, 0.1); color: #EF4444; }
         .wh-alias { font-weight: 600; color: var(--text-primary); }
         .wh-detail { color: var(--text-tertiary); font-family: monospace; }
+
+        /* 摘要预览卡片 */
+        .summary-tooltip {
+            position: fixed;
+            background: var(--hist-card);
+            border: 1px solid var(--hist-border);
+            border-radius: var(--hist-radius);
+            padding: 14px 16px;
+            width: 340px;
+            max-height: 240px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            z-index: 1000;
+            box-shadow: var(--hist-shadow-hover);
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
+        }
+        .summary-tooltip.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .summary-tooltip-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
 
         /* 卡片底部动作 */
         .task-footer {
@@ -1106,17 +1149,11 @@ function buildRow(item, readSet) {
         ? rawTime.replace('T', ' ').slice(0, 16)
         : '—';
 
-    const titleHtml = item.title
-        ? `<div class="task-title">${esc(item.title)}</div><div class="task-author">${esc(item.author || '')}</div>`
-        : `<div class="task-title" style="color:var(--text-tertiary)">${esc(item.video_url || '(无标题)')}</div>
-           ${!isCompleted ? `<div class="task-author"><span class="task-status-badge status-${item.status}">${item.status}</span></div>` : ''}`;
-
     const platformLabel = item.platform ? (PLATFORM_LABELS[item.platform] || item.platform) : '—';
-    const webhookLabel = item.wechat_webhook ? shortWebhook(item.wechat_webhook) : '—';
 
-    const classes = ['task-row'];
+    const classes = ['task-row', 'task-card'];
     if (isRead) classes.push('read');
-    if (!canClick) classes.push('unclickable');
+    if (!isRead && canClick) classes.push('unread');
 
     const vtAttr = canClick ? `data-vt="${esc(item.view_token)}"` : '';
     const clickHandler = canClick
@@ -1124,16 +1161,34 @@ function buildRow(item, readSet) {
         : '';
 
     const checkboxHtml = canClick
-        ? `<input type="checkbox" class="row-checkbox" onclick="event.stopPropagation()">`
-        : `<span></span>`;
+        ? `<div style="display:flex;align-items:center;margin-right:12px;margin-top:2px;"><input type="checkbox" class="row-checkbox" onclick="event.stopPropagation()"></div>`
+        : ``;
+
+    let statusCls = '';
+    let statusTxt = item.status;
+    if (item.status === 'success') { statusCls = 'status-completed'; statusTxt = '已完成'; }
+    else if (item.status === 'failed') { statusCls = 'status-failed'; statusTxt = '失败'; }
+    else { statusCls = 'status-processing'; statusTxt = '处理中'; }
+
+    const titleText = item.title || item.video_url || '(无标题)';
 
     return `
-        <div class="${classes.join(' ')}" ${vtAttr} ${clickHandler}>
-            ${!isRead && canClick ? '<div class="read-dot"></div>' : ''}
-            ${checkboxHtml}
-            <div class="task-time">${time}</div>
-            <div class="task-title-cell">${titleHtml}</div>
-            <div class="task-platform">${platformLabel}</div>
+        <div class="${classes.join(' ')}" ${vtAttr} style="${canClick ? 'cursor:pointer;' : ''}">
+            <div class="task-header" ${clickHandler}>
+                <div style="display:flex; flex:1; min-width:0;">
+                    ${checkboxHtml}
+                    <div class="task-meta">
+                        <div class="task-title" title="${esc(titleText)}">${esc(titleText)}</div>
+                        <div class="task-subtitle">
+                            <span>${time}</span>
+                            ${item.author ? `<span>·</span><span>${esc(item.author)}</span>` : ''}
+                            <span>·</span><span>${platformLabel}</span>
+                        </div>
+                    </div>
+                </div>
+                <div><span class="task-status ${statusCls}">${statusTxt}</span></div>
+            </div>
+            ${item.error ? `<div class="task-body"><div class="task-error">${esc(item.error)}</div></div>` : ''}
         </div>`;
 }
 
@@ -1143,8 +1198,7 @@ function renderReadState() {
         const vt = row.dataset.vt;
         if (readSet.has(vt)) {
             row.classList.add('read');
-            const dot = row.querySelector('.read-dot');
-            if (dot) dot.remove();
+            row.classList.remove('unread');
         }
     });
     updateUnreadBadgeFromDOM();

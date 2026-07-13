@@ -38,23 +38,18 @@
     <style>
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --st-accent: #E4503A;
-            --st-accent-hover: #D03D28;
-            --st-accent-soft: rgba(228,80,58,0.08);
+        :root, [data-theme="light"], [data-theme="dark"] {
+            --st-accent: var(--accent-primary);
+            --st-accent-hover: var(--accent-hover);
+            --st-accent-soft: var(--accent-soft);
             --st-card: var(--bg-primary);
             --st-card-secondary: var(--bg-secondary);
             --st-border: var(--border-primary);
-            --st-border-hover: rgba(228,80,58,0.3);
-            --st-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-            --st-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.08);
+            --st-border-hover: var(--border-strong);
+            --st-shadow: var(--shadow-sm);
+            --st-shadow-hover: var(--shadow);
             --st-radius: 12px;
             --st-radius-lg: 16px;
-        }
-        [data-theme="dark"] {
-            --st-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-            --st-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.5);
-            --st-accent-soft: rgba(228,80,58,0.15);
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;

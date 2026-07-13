@@ -38,22 +38,17 @@
     <style>
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --hist-accent: #E4503A;
-            --hist-accent-hover: #D03D28;
-            --hist-accent-soft: rgba(228,80,58,0.08);
+        :root, [data-theme="light"], [data-theme="dark"] {
+            --hist-accent: var(--accent-primary);
+            --hist-accent-hover: var(--accent-hover);
+            --hist-accent-soft: var(--accent-soft);
             --hist-card: var(--bg-primary);
             --hist-card-hover: var(--bg-secondary);
             --hist-border: var(--border-primary);
-            --hist-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-            --hist-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.08);
+            --hist-shadow: var(--shadow-sm);
+            --hist-shadow-hover: var(--shadow);
             --hist-radius: 12px;
             --hist-radius-lg: 16px;
-        }
-        [data-theme="dark"] {
-            --hist-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            --hist-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.5);
-            --hist-accent-soft: rgba(228,80,58,0.15);
         }
         
         body {

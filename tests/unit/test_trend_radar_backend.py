@@ -238,6 +238,11 @@ def test_collector_latest_x_prioritizes_recent_records_over_old_viral_posts():
         {"max_items_per_call": 2},
     )
 
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    fresh_date = (now - timedelta(hours=2)).strftime("%a %b %d %H:%M:%S +0000 %Y")
+    old_date = (now - timedelta(days=30)).strftime("%a %b %d %H:%M:%S +0000 %Y")
+
     signals = collector._normalize_response(
         "x",
         "agentic-workflow",
@@ -249,14 +254,14 @@ def test_collector_latest_x_prioritizes_recent_records_over_old_viral_posts():
                     {
                         "tweet_id": "old",
                         "screen_name": "viral",
-                        "created_at": "Wed Jul 01 09:44:37 +0000 2026",
+                        "created_at": old_date,
                         "text": "AI agents viral thread with huge engagement.",
                         "favorites": 100000,
                     },
                     {
                         "tweet_id": "fresh",
                         "screen_name": "operator",
-                        "created_at": "Sun Jul 05 23:08:06 +0000 2026",
+                        "created_at": fresh_date,
                         "text": "Fresh discussion about AI agents entering procurement workflows.",
                         "favorites": 20,
                     },

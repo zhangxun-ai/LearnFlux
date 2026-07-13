@@ -7,18 +7,14 @@
 <style>
 
     /* ===== Global Variables & Reset ===== */
-    :root {
-        --post-accent: #E4503A;
-        --post-accent-hover: #D03D28;
-        --post-bg: var(--bg-primary);
-        --post-card-bg: var(--bg-secondary);
+    :root, [data-theme="light"], [data-theme="dark"] {
+        --post-accent: var(--accent-primary);
+        --post-accent-hover: var(--accent-hover);
+        --post-bg: var(--bg-secondary);
+        --post-card-bg: var(--bg-primary);
         --post-card-border: var(--border-primary);
-        --post-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        --post-shadow: var(--shadow-sm);
         --post-radius: 12px;
-    }
-    
-    [data-theme="dark"] {
-        --post-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     }
 
     /* ===== 入口表单 (Hero Section) ===== */
@@ -352,8 +348,8 @@
         margin-top: 16px; 
         padding: 16px; 
         border-radius: 8px;
-        background: var(--bg-tertiary); 
-        border: 1px dashed var(--border-secondary);
+        background: var(--bg-secondary); 
+        border: 1px dashed var(--border-primary);
         white-space: pre-wrap; 
         word-break: break-word; 
         line-height: 1.7; 
@@ -477,13 +473,6 @@
                 复制全文精华
             </button>
         </div>
-        <details class="thread-details" id="thread-details">
-            <summary>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><line x1="9" y1="21" x2="21" y2="3"></line><line x1="21" y1="21" x2="21" y2="15"></line><line x1="3" y1="15" x2="9" y2="21"></line><line x1="3" y1="3" x2="9" y2="9"></line></svg>
-                展开作者原文 thread
-            </summary>
-            <div class="thread-raw" id="thread-raw"></div>
-        </details>
     </div>
 </div>
 {% endblock %}
@@ -579,14 +568,7 @@
             container.appendChild(card);
         });
 
-        // 原文 thread
-        var threadWrap = $('thread-details');
-        if (data.thread_text) {
-            $('thread-raw').textContent = data.thread_text;
-            show(threadWrap);
-        } else {
-            hide(threadWrap);
-        }
+        // 原文 thread 已移除（视为噪音），但如有需要可以在此处理数据
 
         // 复制
         var copyBtn = $('copy-btn');

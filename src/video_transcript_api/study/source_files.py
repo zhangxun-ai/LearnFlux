@@ -21,7 +21,7 @@ _MEDIA_TYPES = {
     ".flac": "audio/flac",
 }
 
-_DOCUMENT_EXTS = {".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".log"}
+_DOCUMENT_EXTS = {".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".log", ".html", ".htm"}
 _VIDEO_EXTS = {ext for ext, media_type in _MEDIA_TYPES.items() if media_type.startswith("video/")}
 _AUDIO_EXTS = {ext for ext, media_type in _MEDIA_TYPES.items() if media_type.startswith("audio/")}
 
@@ -96,6 +96,8 @@ def describe_study_source(
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 "text/plain",
                 "text/markdown",
+                "text/html",
+                "application/xhtml+xml",
             }:
                 kind = "document"
             elif existing_kind in {"video", "audio", "document", "text"}:

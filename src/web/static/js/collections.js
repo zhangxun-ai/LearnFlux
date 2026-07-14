@@ -2,7 +2,7 @@
     const STORAGE_KEY = 'vta_bearer_token';
     const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
     const VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.mp3', '.m4a', '.wav', '.aac', '.flac'];
-    const DOC_EXTS = ['.txt', '.md', '.markdown', '.csv', '.log', '.pdf', '.docx'];
+    const DOC_EXTS = ['.txt', '.md', '.markdown', '.csv', '.log', '.html', '.htm', '.pdf', '.docx'];
     const POLL_MS = 2500;
     const DEFAULT_MAP_ZOOM = 1.16;
     const VISUAL_DOCUMENT_TYPES = ['overview', 'full_note'];

@@ -153,6 +153,72 @@
     border-radius: 8px;
     overflow: hidden;
 }
+.section-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.transcript-copy-btn.quick-copy-btn {
+    display: inline-flex;
+    grid-template-columns: none;
+    grid-template-rows: none;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 6px 10px;
+    border-color: rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.018);
+    color: rgba(0, 0, 0, 0.62);
+    font-size: 0.82rem;
+    box-shadow: none;
+}
+.transcript-copy-btn.quick-copy-btn:hover {
+    border-color: rgba(228, 80, 58, 0.28);
+    background: rgba(228, 80, 58, 0.05);
+    color: rgba(0, 0, 0, 0.86);
+}
+.transcript-copy-btn.quick-copy-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.transcript-copy-btn.quick-copy-btn svg {
+    width: 14px;
+    height: 14px;
+    opacity: 0.72;
+}
+.transcript-copy-btn.quick-copy-btn .quick-copy-label {
+    font-weight: 600;
+}
+.transcript-copy-btn.quick-copy-btn .quick-copy-action {
+    position: static;
+    grid-row: auto;
+    grid-column: auto;
+    border-left: 0;
+    padding-left: 0;
+    color: rgba(0, 0, 0, 0.46);
+    font-size: 0.78rem;
+}
+.transcript-copy-btn.quick-copy-btn.copied {
+    border-color: rgba(16, 185, 129, 0.28);
+    background: rgba(16, 185, 129, 0.08);
+}
+.transcript-copy-btn.quick-copy-btn.copied .quick-copy-action {
+    color: #059669;
+}
+[data-theme="dark"] .transcript-copy-btn.quick-copy-btn {
+    border-color: rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.72);
+}
+[data-theme="dark"] .transcript-copy-btn.quick-copy-btn:hover {
+    border-color: rgba(194, 83, 63, 0.36);
+    background: rgba(194, 83, 63, 0.10);
+    color: rgba(255, 255, 255, 0.92);
+}
+[data-theme="dark"] .transcript-copy-btn.quick-copy-btn .quick-copy-action {
+    color: rgba(255, 255, 255, 0.5);
+}
 @media (max-width: 720px) {
     .section-header { align-items: flex-start; flex-direction: column; }
     .summary-reader-actions { width: 100%; }
@@ -164,6 +230,9 @@
     .transcript-visual-toolbar-actions {
         width: 100%;
         justify-content: flex-start;
+    }
+    .section-header-actions {
+        width: 100%;
     }
 }
 
@@ -927,6 +996,25 @@
     <div class="section transcript-secondary-section">
         <div class="section-header">
             <h2>校对文本</h2>
+            {% if view_token %}
+            <div class="section-header-actions">
+                <button
+                    type="button"
+                    class="quick-copy-btn transcript-copy-btn"
+                    data-copy-path="/export/{{ view_token }}/calibrated"
+                    data-copy-strip-metadata="true"
+                    aria-label="复制逐字稿"
+                    title="复制逐字稿"
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span class="quick-copy-label">逐字稿</span>
+                    <span class="quick-copy-action">复制</span>
+                </button>
+            </div>
+            {% endif %}
         </div>
         {% if use_speaker_recognition %}
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">

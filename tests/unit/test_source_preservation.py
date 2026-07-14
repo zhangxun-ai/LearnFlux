@@ -54,7 +54,41 @@ def test_extract_document_text_reads_plain_text_with_fallback_encoding(tmp_path)
     assert extract_document_text(str(source), ".txt") == "中文内容"
 
 
+def test_extract_document_text_reads_html_without_script_or_style(tmp_path):
+    source = tmp_path / "deck.html"
+    source.write_text(
+        """
+        <!doctype html>
+        <html>
+          <head>
+            <title>课程页</title>
+            <style>.hidden { display: none; }</style>
+            <script>window.noise = "ignore me";</script>
+          </head>
+          <body>
+            <section class="slide">
+              <h1>第一讲：定位问题</h1>
+              <p>先识别真实约束，再决定行动顺序。</p>
+              <ul><li>用户目标</li><li>可控变量</li></ul>
+            </section>
+          </body>
+        </html>
+        """,
+        encoding="utf-8",
+    )
+
+    text = extract_document_text(str(source), ".html")
+
+    assert "第一讲：定位问题" in text
+    assert "先识别真实约束，再决定行动顺序。" in text
+    assert "用户目标" in text
+    assert "可控变量" in text
+    assert "ignore me" not in text
+    assert ".hidden" not in text
+
+
 def test_source_kind_for_path_classifies_document_video_and_media():
     assert source_kind_for_path("guide.pdf") == "document"
+    assert source_kind_for_path("slides.html") == "document"
     assert source_kind_for_path("lesson.mp4") == "video"
     assert source_kind_for_path("archive.bin") == "media"

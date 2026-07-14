@@ -289,7 +289,7 @@ def process_local_upload(
 ) -> Dict[str, Any]:
     """处理本地上传的音视频或文档，复用 LLM 后处理与结果页。
 
-    音视频：本地 mlx-whisper 转写（先抽小音频省空间）。文档(txt/md/pdf/docx)：直接提取文本。
+    音视频：本地 mlx-whisper 转写（先抽小音频省空间）。文档(txt/md/html/pdf/docx)：直接提取文本。
     两者都与平台字幕路径同构地 save_cache + 入 LLM 队列；/view/<view_token> 查看；临时文件用后即删。
     """
     tracker = PerfTracker(task_id=task_id)
@@ -319,7 +319,7 @@ def process_local_upload(
             )
             transcript = _extract_document_text(file_path, ext)
             empty_msg = "未能从文档中提取到文本（可能是扫描件/图片型 PDF）"
-            if document_fast_path and ext in {".pdf", ".docx", ".txt", ".md", ".markdown"}:
+            if document_fast_path and ext in {".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm"}:
                 try:
                     document_quality = assess_document_text(transcript).to_evidence()
                 except Exception as exc:

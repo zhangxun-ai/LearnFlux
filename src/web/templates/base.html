@@ -1240,6 +1240,17 @@
                 }
             }
 
+            function stripMetadataHeader(text) {
+                if (typeof text !== 'string' || text.indexOf('---\n') !== 0) {
+                    return text;
+                }
+                var end = text.indexOf('\n---\n', 4);
+                if (end === -1) {
+                    return text;
+                }
+                return text.slice(end + 5).replace(/^\n/, '');
+            }
+
             function setCopyState(btn, actionEl, text, className) {
                 if (className) btn.classList.add(className);
                 actionEl.textContent = text;
@@ -1249,6 +1260,7 @@
                 btn.addEventListener('click', function() {
                     var path = btn.getAttribute('data-path');
                     var copyPath = btn.getAttribute('data-copy-path');
+                    var stripMetadata = btn.getAttribute('data-copy-strip-metadata') === 'true';
                     var targetPath = copyPath || path;
                     if (!targetPath) return;
 
@@ -1264,6 +1276,9 @@
                             .then(function(resp) {
                                 if (!resp.ok) throw new Error('Fetch failed: ' + resp.status);
                                 return resp.text();
+                            })
+                            .then(function(text) {
+                                return stripMetadata ? stripMetadataHeader(text) : text;
                             })
                             .then(copyText);
                     } else {

@@ -9,22 +9,35 @@ from pathlib import Path
 from typing import Optional
 
 
-DOC_EXTS = {".txt", ".md", ".markdown", ".csv", ".log", ".pdf", ".docx"}
+DOC_EXTS = {".txt", ".md", ".markdown", ".csv", ".log", ".html", ".htm", ".pdf", ".docx"}
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".flv", ".avi"}
+
+
+def _read_text_file(path: str) -> str:
+    with open(path, "rb") as f:
+        raw = f.read()
+    for enc in ("utf-8", "gb18030", "latin-1"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="ignore")
 
 
 def extract_document_text(path: str, ext: str) -> str:
     """Extract plain text from supported local document files."""
     ext = (ext or "").lower()
     if ext in (".txt", ".md", ".markdown", ".csv", ".log"):
-        with open(path, "rb") as f:
-            raw = f.read()
-        for enc in ("utf-8", "gb18030", "latin-1"):
-            try:
-                return raw.decode(enc).strip()
-            except UnicodeDecodeError:
-                continue
-        return raw.decode("utf-8", errors="ignore").strip()
+        return _read_text_file(path).strip()
+    if ext in (".html", ".htm"):
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(_read_text_file(path), "html.parser")
+        for tag in soup(["script", "style", "noscript", "template"]):
+            tag.decompose()
+        root = soup.body or soup
+        lines = [line.strip() for line in root.get_text("\n").splitlines()]
+        return "\n".join(line for line in lines if line).strip()
     if ext == ".pdf":
         from pypdf import PdfReader
 

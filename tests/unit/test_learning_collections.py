@@ -74,6 +74,15 @@ def test_collection_repository_rejects_mixed_source_type(tmp_path):
         raise AssertionError("Expected mixed source type to be rejected")
 
 
+def test_collection_service_classifies_html_as_document_source():
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    service = LearningCollectionService.__new__(LearningCollectionService)
+
+    assert service.source_type_for_filename("slides.html") == "document"
+    assert service.source_type_for_filename("slides.htm") == "document"
+
+
 def test_collection_summary_requires_all_sources_ready(tmp_path):
     from video_transcript_api.collections.repository import LearningCollectionRepository
     from video_transcript_api.collections.service import LearningCollectionService

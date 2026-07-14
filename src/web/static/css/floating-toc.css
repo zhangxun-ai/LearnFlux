@@ -41,6 +41,12 @@
     --toc-shadow: rgba(0, 0, 0, 0.1);
 }
 
+@media (min-width: 769px) {
+    body.has-app-shell .page-stage > .container {
+        padding-right: calc(1.5rem + var(--toc-width-collapsed) + var(--toc-right-offset));
+    }
+}
+
 /* ========== PC 端浮动 TOC ========== */
 .floating-toc-container {
     position: fixed;

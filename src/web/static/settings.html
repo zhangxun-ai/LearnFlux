@@ -273,6 +273,8 @@
     <script>
     (function () {
         var TOKEN_KEY = 'vta_settings_token';
+        var WORKBENCH_TOKEN_KEY = 'vta_bearer_token';
+        var ENCRYPTION_KEY = 'vta_encrypt_key_2024';
         var providers = [];
 
         function $(id) { return document.getElementById(id); }
@@ -281,6 +283,15 @@
         function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); }, 2400); }
         function getToken() { return $('token').value.trim(); }
         function authHeaders() { return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }; }
+        function encryptToken(text) {
+            if (!text) return '';
+            try {
+                var encoded = btoa(unescape(encodeURIComponent(text + ENCRYPTION_KEY)));
+                return encoded.split('').reverse().join('');
+            } catch (e) {
+                return text;
+            }
+        }
 
         function fieldHTML(f) {
             var key = esc(f.key);
@@ -464,6 +475,7 @@
                 providers = json.data.providers || providers;
                 fillValues(json.data.groups || []);
                 localStorage.setItem(TOKEN_KEY, getToken());
+                localStorage.setItem(WORKBENCH_TOKEN_KEY, encryptToken(getToken()));
             } catch (e) { showAuth(false, '网络错误'); }
         }
 

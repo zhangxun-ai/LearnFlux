@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..context import get_audit_logger, get_cache_manager, get_logger
 from ..services.transcription import TranscribeResponse, verify_token
+from ...marks import ContentMarkRepository
 from ...utils.timeutil import format_datetime_with_timezone
 
 logger = get_logger()
@@ -70,6 +71,7 @@ async def get_history(
     author: Optional[str] = Query(None, description="频道/作者过滤，支持逗号分隔多选"),
     q: Optional[str] = Query(None, description="关键词搜索：匹配标题、频道名、视频URL"),
     status: Optional[str] = Query(None, description="任务状态过滤，默认只显示 success（已完成）"),
+    marked: bool = Query(False, description="仅返回已标记精华的任务"),
     limit: int = Query(20, ge=1, le=10000, description="每页条数，客户端已读过滤时传大值"),
     offset: int = Query(0, ge=0, description="分页偏移"),
     user_info: dict = Depends(verify_token),
@@ -83,9 +85,14 @@ async def get_history(
     api_key_masked = audit_logger._mask_api_key(api_key)
     cache_manager = get_cache_manager()
     cache_db_path = str(cache_manager.db_path)
+    marks_repository = ContentMarkRepository(db_path=cache_db_path)
+    marks_repository.close()
 
     # 构建 WHERE 条件
-    conditions = ["a.api_key_masked = ?", "a.task_id IS NOT NULL"]
+    conditions = [
+        "a.api_key_masked = ?",
+        "COALESCE(a.task_id, t.task_id) IS NOT NULL",
+    ]
     params: list = [api_key_masked]
 
     if webhook:
@@ -131,13 +138,16 @@ async def get_history(
         )
         params.extend([pattern, pattern, pattern])
 
+    if marked:
+        cache_conditions.append("m.id IS NOT NULL")
+
     where_clause = " AND ".join(conditions + cache_conditions)
 
     history_cte = f"""
         WITH filtered AS (
             SELECT
                 a.id AS audit_id,
-                a.task_id,
+                COALESCE(a.task_id, t.task_id) AS task_id,
                 COALESCE(NULLIF(a.video_url, ''), t.url) AS video_url,
                 a.wechat_webhook,
                 COALESCE(t.created_at, a.request_time) AS request_time,
@@ -147,9 +157,10 @@ async def get_history(
                 t.author,
                 t.platform,
                 t.status,
-                COALESCE(t.view_token, a.task_id) AS dedupe_key,
+                CASE WHEN m.id IS NULL THEN 0 ELSE 1 END AS is_marked,
+                COALESCE(t.view_token, a.task_id, t.task_id) AS dedupe_key,
                 ROW_NUMBER() OVER (
-                    PARTITION BY COALESCE(t.view_token, a.task_id)
+                    PARTITION BY COALESCE(t.view_token, a.task_id, t.task_id)
                     ORDER BY
                         COALESCE(t.created_at, a.request_time) DESC,
                         CASE WHEN a.video_url IS NOT NULL AND a.video_url != '' THEN 0 ELSE 1 END,
@@ -157,7 +168,18 @@ async def get_history(
                         a.id DESC
                 ) AS rn
             FROM api_audit_logs a
-            LEFT JOIN cache.task_status t ON a.task_id = t.task_id
+            LEFT JOIN cache.task_status t
+                ON a.task_id = t.task_id
+                OR (
+                    a.task_id IS NULL
+                    AND a.video_url IS NOT NULL
+                    AND a.video_url != ''
+                    AND a.video_url = t.url
+                )
+            LEFT JOIN cache.content_marks m
+                ON m.owner_type = 'transcript'
+               AND m.owner_id = t.view_token
+               AND m.user_key = a.api_key_masked
             WHERE {where_clause}
         )
     """
@@ -173,7 +195,8 @@ async def get_history(
             title,
             author,
             platform,
-            status
+            status,
+            is_marked
         FROM filtered
         WHERE rn = 1
         ORDER BY request_time DESC, audit_id DESC
@@ -217,6 +240,7 @@ async def get_history(
                     "author": row[7],
                     "platform": row[8],
                     "status": row[9] or "unknown",
+                    "is_marked": bool(row[10]),
                 })
             return total, items
         finally:

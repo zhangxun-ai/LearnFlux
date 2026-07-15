@@ -58,6 +58,35 @@ def test_workbench_history_cards_show_content_preview():
     assert ".hist-preview" in css
 
 
+def test_workbench_history_exposes_marked_filter_and_badge():
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    html = (project_root / "src/web/static/index.html").read_text(encoding="utf-8")
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+
+    assert 'data-filter="marked"' in html
+    assert "精华" in html
+    assert "task.is_marked" in app_js
+    assert "/api/marks/transcripts/" in app_js
+    assert "refreshHistoryMarks" in app_js
+    assert "/api/audit/history" in app_js
+    assert "syncMarkedHistoryFromServer" in app_js
+    assert "mergeMarkedHistoryItems" in app_js
+    assert "typeFilter === 'marked' && task.is_marked" in app_js
+
+
+def test_workbench_local_upload_adds_file_to_recent_history():
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+
+    assert "TaskHistoryManager.addTask" in app_js
+    assert "type: 'file'" in app_js
+    assert "title: fileObj.name" in app_js
+
+
 def test_workbench_submission_and_history_statuses_keep_polling():
     from pathlib import Path
 

@@ -5,6 +5,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import unquote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -40,10 +41,39 @@ static_dir = get_static_dir()
 
 router = APIRouter()
 
+_LOCAL_DOCUMENT_EXTS = {
+    ".txt",
+    ".md",
+    ".markdown",
+    ".csv",
+    ".log",
+    ".html",
+    ".htm",
+    ".pdf",
+    ".docx",
+}
+
 
 def _no_store(response: Response) -> Response:
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def _is_local_document_view(view_data: Dict[str, Any]) -> bool:
+    url = str(view_data.get("url") or "")
+    if not url.startswith("local://"):
+        return False
+    ext = os.path.splitext(url.split("?", 1)[0])[1].lower()
+    return ext in _LOCAL_DOCUMENT_EXTS
+
+
+def _local_url_filename(view_data: Dict[str, Any]) -> str:
+    url = str(view_data.get("url") or "")
+    if not url.startswith("local://"):
+        return ""
+    path = url.split("?", 1)[0].rstrip("/")
+    filename = path.rsplit("/", 1)[-1]
+    return unquote(filename) if filename else ""
 
 
 # robots.txt：允许首页和分享页面被收录，禁止 API 和静态资源
@@ -1232,13 +1262,26 @@ async def view_transcript(
         _decorate_source_link(view_data)
 
         if view_data["status"] == "processing":
+            is_document = _is_local_document_view(view_data)
+            if is_document and not view_data.get("title"):
+                view_data["title"] = _local_url_filename(view_data) or "本地文档"
             return _no_store(
                 templates.TemplateResponse(
                     "processing.html",
                     {
                         "request": request,
                         **view_data,
-                        "page_title": f"正在处理 - {view_data.get('title', '转录任务')}",
+                        "page_title": view_data.get("title") or (
+                            "文档解析处理中" if is_document else "转录处理中"
+                        ),
+                        "processing_heading": (
+                            "文档解析处理中" if is_document else "转录处理中"
+                        ),
+                        "processing_subtitle": (
+                            "完成后会自动打开文档解读结果页，无需手动刷新。"
+                            if is_document
+                            else "完成后会自动打开结果页，无需手动刷新。"
+                        ),
                     },
                 )
             )

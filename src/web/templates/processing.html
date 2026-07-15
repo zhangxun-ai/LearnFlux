@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}处理中 - 视频转录查看器{% endblock %}
+{% block title %}{{ page_title or title or "处理中" }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -132,9 +132,9 @@
         <div class="status-processing">
             <div class="processing-shell" aria-live="polite">
                 <h2 id="progress-title" class="processing-title">
-                    <span class="processing-pulse" aria-hidden="true"></span>转录处理中
+                    <span class="processing-pulse" aria-hidden="true"></span>{{ processing_heading or "处理中" }}
                 </h2>
-                <p class="processing-subtitle">完成后会自动打开结果页，无需手动刷新。</p>
+                <p class="processing-subtitle">{{ processing_subtitle or "完成后会自动打开结果页，无需手动刷新。" }}</p>
 
                 <div class="progress-panel">
                     <div class="progress-header">

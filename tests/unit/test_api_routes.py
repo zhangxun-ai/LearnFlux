@@ -13,7 +13,7 @@ All console output must be in English only (no emoji, no Chinese).
 
 import asyncio
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -330,6 +330,54 @@ class TestTranscribeEndpoint:
         assert mock_audit_logger.log_api_call.call_count >= 2
 
 
+class TestUploadTranscribeEndpoint:
+    """Tests for POST /api/upload-transcribe."""
+
+    def test_upload_transcribe_logs_task_id_for_history(
+        self, client, mock_audit_logger, tmp_path
+    ):
+        with patch(
+            "video_transcript_api.api.routes.tasks.config",
+            {"storage": {"temp_dir": str(tmp_path)}},
+        ), patch(
+            "video_transcript_api.api.routes.tasks.process_local_upload"
+        ):
+            resp = client.post(
+                "/api/upload-transcribe",
+                files={"file": ("notes.pdf", b"%PDF-1.4\ntext", "application/pdf")},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["code"] == 202
+        audit_kwargs = mock_audit_logger.log_api_call.call_args.kwargs
+        assert audit_kwargs["endpoint"] == "/api/upload-transcribe"
+        assert audit_kwargs["task_id"] == "task-abc-123"
+        assert audit_kwargs["status_code"] == 202
+
+    def test_upload_transcribe_sets_local_file_title_for_processing_view(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        with patch(
+            "video_transcript_api.api.routes.tasks.config",
+            {"storage": {"temp_dir": str(tmp_path)}},
+        ), patch(
+            "video_transcript_api.api.routes.tasks.process_local_upload"
+        ):
+            resp = client.post(
+                "/api/upload-transcribe",
+                files={"file": ("notes.md", b"# Notes", "text/markdown")},
+            )
+
+        assert resp.status_code == 200
+        mock_cache_manager.update_task_status.assert_called_once_with(
+            "task-abc-123",
+            "queued",
+            platform="generic",
+            media_id=ANY,
+            title="notes.md",
+        )
+
+
 class TestGetTaskStatus:
     """Tests for GET /api/task/{task_id}.
 
@@ -528,6 +576,33 @@ class TestViewProgressEndpoint:
         assert "依据" not in resp.text
         assert "刷新页面" not in resp.text
         assert "预计剩余" not in resp.text
+
+    def test_processing_view_uses_document_copy_for_local_markdown(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "processing",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": None,
+            "url": "local://abc/notes.md",
+            "platform": "generic",
+            "created_at": "2026-06-08T10:00:00",
+            "elapsed_display": "21 秒",
+            "progress": {
+                "stage": "calibrating",
+                "stage_label": "正在校对和总结",
+                "percent": 94,
+            },
+        }
+
+        resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert "notes.md" in resp.text
+        assert "文档解析处理中" in resp.text
+        assert "视频转录查看器" not in resp.text
+        assert "转录处理中" not in resp.text
 
     def test_raw_summary_export_normalizes_duplicate_heading_markers(
         self, client, mock_cache_manager, tmp_path

@@ -340,6 +340,16 @@
         .status-completed { background: rgba(16, 185, 129, 0.1); color: #10B981; border-color: rgba(16, 185, 129, 0.2); }
         .status-failed { background: rgba(239, 68, 68, 0.1); color: #EF4444; border-color: rgba(239, 68, 68, 0.2); }
         .status-processing { background: rgba(245, 158, 11, 0.1); color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); }
+        .mark-badge {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
+            color: #E4503A;
+            background: rgba(228, 80, 58, 0.1);
+            border: 1px solid rgba(228, 80, 58, 0.2);
+        }
 
         /* 卡片内容区 */
         .task-body { display: flex; flex-direction: column; gap: 16px; }
@@ -612,6 +622,13 @@
                 <option value="read">已读</option>
             </select>
         </div>
+        <div class="filter-group">
+            <label>精华</label>
+            <select id="filterMarked" onchange="serializeFiltersToURL(); loadHistory(0)">
+                <option value="all">全部</option>
+                <option value="marked">仅精华</option>
+            </select>
+        </div>
         <div class="filter-group" style="min-width:200px; flex:1">
             <label>搜索</label>
             <input type="text" id="filterQ" placeholder="标题 / 频道 / URL..."
@@ -793,6 +810,7 @@ function serializeFiltersToURL() {
     const author    = get('filterAuthor');
     const status    = get('filterStatus');
     const read      = get('filterRead');
+    const marked    = get('filterMarked');
 
     if (q)         params.set('q', q);
     if (startDate) params.set('start_date', startDate);
@@ -803,6 +821,7 @@ function serializeFiltersToURL() {
     // 默认值不写入 URL，保持简洁
     if (status && status !== 'success') params.set('status', status);
     if (read   && read   !== 'all')     params.set('read', read);
+    if (marked && marked !== 'all')     params.set('marked', '1');
 
     const qs = params.toString();
     history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
@@ -832,6 +851,11 @@ function loadFiltersFromURL() {
     }
     set('filterStatus',     'status');
     set('filterRead',       'read');
+    const markedParam = params.get('marked');
+    if (markedParam === '1' || markedParam === 'true') {
+        const el = document.getElementById('filterMarked');
+        if (el) el.value = 'marked';
+    }
 }
 
 function getAliasMap() {
@@ -1005,6 +1029,7 @@ function resetFilter() {
     document.getElementById('filterAuthor').value = '';
     document.getElementById('filterStatus').value = 'success';
     document.getElementById('filterRead').value = 'all';
+    document.getElementById('filterMarked').value = 'all';
     const qEl = document.getElementById('filterQ'); if (qEl) qEl.value = '';
     history.replaceState(null, '', window.location.pathname);  // 清空 URL 参数
     loadHistory(0);
@@ -1060,6 +1085,7 @@ async function fetchHistory() {
     const platform  = document.getElementById('filterPlatform').value;
     const author    = document.getElementById('filterAuthor').value;
     const status    = document.getElementById('filterStatus').value;
+    const marked    = document.getElementById('filterMarked')?.value || 'all';
     const q = document.getElementById('filterQ')?.value.trim() || '';
 
     if (startDate) params.start_date = startDate;
@@ -1067,6 +1093,7 @@ async function fetchHistory() {
     if (platform)  params.platform = platform;
     if (author)    params.author = author;
     if (status)    params.status = status;
+    if (marked === 'marked') params.marked = 'true';
     if (q)         params.q = q;
 
     try {
@@ -1186,7 +1213,10 @@ function buildRow(item, readSet) {
                         </div>
                     </div>
                 </div>
-                <div><span class="task-status ${statusCls}">${statusTxt}</span></div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    ${item.is_marked ? '<span class="mark-badge">精华</span>' : ''}
+                    <span class="task-status ${statusCls}">${statusTxt}</span>
+                </div>
             </div>
             ${item.error ? `<div class="task-body"><div class="task-error">${esc(item.error)}</div></div>` : ''}
         </div>`;

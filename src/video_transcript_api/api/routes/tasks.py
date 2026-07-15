@@ -261,6 +261,7 @@ async def upload_transcribe(
     user_info: dict = Depends(verify_token),
 ):
     """接收本地音视频文件，转录后复用 LLM 后处理与结果页（不走下载）。"""
+    start_time = datetime.datetime.now()
     filename = (file.filename or "upload").strip() or "upload"
     media_id = uuid.uuid4().hex
 
@@ -308,12 +309,24 @@ async def upload_transcribe(
     )
     task_id = task_info["task_id"]
     view_token = task_info["view_token"]
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.QUEUED,
+        platform="generic",
+        media_id=media_id,
+        title=filename,
+    )
 
     audit_logger.log_api_call(
         api_key=user_info.get("api_key"),
         user_id=user_info.get("user_id"),
         endpoint="/api/upload-transcribe",
         video_url=display_url,
+        processing_time_ms=int(
+            (datetime.datetime.now() - start_time).total_seconds() * 1000
+        ),
+        status_code=202,
+        task_id=task_id,
         user_agent=request.headers.get("User-Agent"),
         remote_ip=request.client.host if request.client else None,
     )

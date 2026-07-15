@@ -11,6 +11,7 @@ from ..llm import call_llm_api
 from ..utils.logging import setup_logger
 from ..utils.task_status import NON_TERMINAL_STATUSES, TaskStatus
 from .repository import LearningCollectionRepository
+from .titles import source_display_title
 
 logger = setup_logger("learning_collection_service")
 
@@ -181,7 +182,10 @@ class LearningCollectionService:
         items = [
             {
                 "id": source["id"],
-                "title": source.get("title") or f"Source {index + 1}",
+                "title": (
+                    source_display_title(source.get("title"))
+                    or f"Source {index + 1}"
+                ),
                 "position": source.get("position"),
                 "task_status": source.get("task_status"),
                 "view_token": source.get("view_token") or "",
@@ -471,6 +475,7 @@ class LearningCollectionService:
         decorated["status"] = task_status
         decorated["task_status"] = task_status
         decorated["task_title"] = task.get("title")
+        decorated["display_title"] = source_display_title(source.get("title"))
         decorated["author"] = task.get("author")
         decorated["error_message"] = task.get("error_message")
         decorated["progress"] = task.get("progress")
@@ -560,7 +565,9 @@ class LearningCollectionService:
             ready.append(
                 {
                     **source,
-                    "title": source.get("title") or cache_data.get("title") or "",
+                    "title": source_display_title(
+                        source.get("title") or cache_data.get("title") or ""
+                    ),
                     "transcript": transcript,
                     "single_summary": cache_data.get("llm_summary") or "",
                 }

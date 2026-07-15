@@ -32,6 +32,7 @@ from ...utils.rendering import (
     render_transcript_content,
 )
 from ...utils.timeutil import format_datetime_for_display, get_configured_timezone
+from ...collections.titles import source_display_title
 
 logger = get_logger()
 cache_manager = get_cache_manager()
@@ -186,6 +187,17 @@ def _build_collection_navigation(view_token: str) -> Optional[Dict[str, Any]]:
     except Exception as exc:
         logger.debug(f"collection navigation unavailable: {exc}")
         return None
+
+
+def _decorate_collection_display_title(view_data: Dict[str, Any]) -> None:
+    url = str(view_data.get("url") or "")
+    if not url.startswith("local://collection-source/"):
+        return
+    display_title = source_display_title(
+        view_data.get("title") or _local_url_filename(view_data)
+    )
+    if display_title:
+        view_data["title"] = display_title
 
 
 def _parse_task_datetime(value) -> Optional[datetime]:
@@ -1351,6 +1363,7 @@ async def view_transcript(
 
         _decorate_view_timing(view_data)
         _decorate_source_link(view_data)
+        _decorate_collection_display_title(view_data)
 
         if view_data["status"] == "processing":
             is_document = _is_local_document_view(view_data)

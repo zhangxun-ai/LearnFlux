@@ -968,6 +968,8 @@ class TestViewProgressEndpoint:
 
         assert resp.status_code == 200
         build_navigation.assert_called_once_with("vt-2")
+        assert "<h1>2</h1>" in resp.text
+        assert "如何走出人生困局/2.mp4" not in resp.text
 
     def test_view_progress_returns_minimal_progress_payload(
         self, client, mock_cache_manager

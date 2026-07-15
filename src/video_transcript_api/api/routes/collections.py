@@ -17,6 +17,7 @@ from ..context import get_cache_manager, get_config, get_logger, get_static_dir
 from ..services.transcription import TranscribeResponse, process_local_upload, verify_token
 from ...collections.repository import LearningCollectionRepository
 from ...collections.service import LearningCollectionService
+from ...collections.titles import source_basename
 
 logger = get_logger()
 config = get_config()
@@ -228,7 +229,7 @@ async def upload_collection_sources(
         next_position = (max(existing_positions) if existing_positions else 0) + 1
         append_position = next_position
         for file in files:
-            filename = (file.filename or "upload").strip() or "upload"
+            filename = source_basename(file.filename or "upload") or "upload"
             position = _source_position_from_filename(filename) or append_position
             append_position = max(append_position, position + 1)
             source_type = service.validate_source_type_for_collection(collection_id, filename)

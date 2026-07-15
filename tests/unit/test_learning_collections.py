@@ -596,7 +596,7 @@ def test_collection_source_navigation_by_view_token(tmp_path):
                 collection_id=collection["id"],
                 task_id=f"task-{index}",
                 view_token=f"view-{index}",
-                title=f"{index}.mp4",
+                title=f"如何走出人生困局/{index}.mp4",
                 source_type="video",
                 position=index,
             )
@@ -610,7 +610,7 @@ def test_collection_source_navigation_by_view_token(tmp_path):
     )
     assert navigation["current_number"] == 2
     assert navigation["total"] == 3
-    assert navigation["current"]["title"] == "2.mp4"
+    assert navigation["current"]["title"] == "2"
     assert navigation["previous"]["view_url"] == "/view/view-1"
     assert navigation["next"]["view_url"] == "/view/view-3"
     assert [item["is_current"] for item in navigation["items"]] == [False, True, False]
@@ -639,7 +639,7 @@ def test_collection_source_detail_exposes_preserved_local_source_file(tmp_path):
         use_speaker_recognition=False,
         transcript_data="第一节说明困局要先拆出可控变量。",
         transcript_type="capswriter",
-        title="1.mp4",
+        title="课程目录/1.mp4",
         author="本地上传",
         description="",
     )
@@ -663,14 +663,17 @@ def test_collection_source_detail_exposes_preserved_local_source_file(tmp_path):
         collection_id=collection["id"],
         task_id=task_info["task_id"],
         view_token=task_info["view_token"],
-        title="1.mp4",
+        title="课程目录/1.mp4",
         source_type="video",
         position=1,
     )
 
     detail = service.get_source_detail(collection["id"], source["id"])
 
+    assert detail["title"] == "课程目录/1.mp4"
+    assert detail["display_title"] == "1"
     assert detail["source_access"]["kind"] == "local_file"
+    assert detail["source_access"]["filename"] == "课程目录/1.mp4"
     assert detail["source_access"]["url"].endswith(f"/sources/{source['id']}/file")
     assert detail["source_access"]["reveal_url"].endswith(f"/sources/{source['id']}/reveal")
     assert service.get_source_file_path(collection["id"], source["id"]).endswith("local_hash.mp4")
@@ -1390,8 +1393,8 @@ def test_collection_upload_appends_after_existing_sources(tmp_path, monkeypatch)
     response = client.post(
         f"/api/collections/{collection['id']}/sources/upload",
         files=[
-            ("files", ("02.mp4", b"second video bytes", "video/mp4")),
-            ("files", ("03.mp4", b"third video bytes", "video/mp4")),
+            ("files", ("课程目录/02.mp4", b"second video bytes", "video/mp4")),
+            ("files", ("课程目录/03.mp4", b"third video bytes", "video/mp4")),
         ],
     )
 
@@ -1402,6 +1405,7 @@ def test_collection_upload_appends_after_existing_sources(tmp_path, monkeypatch)
         ("02.mp4", 2),
         ("03.mp4", 3),
     ]
+    assert [source["display_title"] for source in detail["sources"]] == ["01", "02", "03"]
 
 
 def test_collection_upload_inserts_numbered_source_by_filename_prefix(tmp_path, monkeypatch):
@@ -1568,6 +1572,8 @@ def test_collections_import_uses_one_primary_choice_and_collapsed_history():
     assert '<details class="lc-history lc-history-panel"' in html
     assert '<summary class="lc-history-summary">' in html
     assert '<details class="lc-history lc-history-panel" open' not in html
+    assert "formData.append('files', file, file.name);" in js
+    assert "displaySourceTitle(source)" in js
 
 
 def test_collections_page_restores_existing_collections():

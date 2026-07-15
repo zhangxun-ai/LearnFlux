@@ -508,6 +508,16 @@
             .replace(/'/g, '&#39;');
     }
 
+    function displaySourceTitle(source) {
+        const value = String((source && (source.display_title || source.title)) || '');
+        const filename = value.replace(/\\/g, '/').split('/').pop();
+        const lower = filename.toLowerCase();
+        const extension = [...VIDEO_EXTS, ...DOC_EXTS].find((ext) => lower.endsWith(ext));
+        return extension && filename.length > extension.length
+            ? filename.slice(0, -extension.length)
+            : filename;
+    }
+
     function formatDuration(seconds) {
         if (seconds === null || seconds === undefined || Number.isNaN(Number(seconds))) return '';
         const total = Math.max(0, Number(seconds));
@@ -849,8 +859,7 @@
     async function uploadFiles(collectionId, files) {
         const formData = new FormData();
         files.forEach((file) => {
-            const name = file.webkitRelativePath || file.name;
-            formData.append('files', file, name);
+            formData.append('files', file, file.name);
         });
         return apiJSON(`/api/collections/${collectionId}/sources/upload`, {
             method: 'POST',
@@ -1353,7 +1362,7 @@
                 anchorSeconds: typeof anchor === 'object' ? anchor.seconds : null,
                 sourceIds,
                 sourceId: firstSource ? firstSource.id : null,
-                sourceTitle: firstSource ? firstSource.title : '',
+                sourceTitle: firstSource ? displaySourceTitle(firstSource) : '',
                 sourceViewToken: firstSource ? firstSource.view_token : ''
             };
         });
@@ -1371,7 +1380,7 @@
         }
         return {
             type: scope,
-            title: raw.title || (scope === 'collection' ? '集合知识地图' : `${source ? source.title : 'Source'} 知识地图`),
+            title: raw.title || (scope === 'collection' ? '集合知识地图' : `${source ? displaySourceTitle(source) : 'Source'} 知识地图`),
             subtitle: raw.central_question
                 ? `中心问题：${raw.central_question}`
                 : (raw.user_value || '点击节点查看它讲什么、有什么用，以及对应的原文位置。'),
@@ -1404,7 +1413,7 @@
         if (knowledgeMapScope === 'source' && source && source.task_status !== 'success') {
             return {
                 empty: true,
-                title: `${source.title} 知识地图`,
+                title: `${displaySourceTitle(source)} 知识地图`,
                 subtitle: '当前小节解析完成后才能生成。',
                 message: `当前状态：${statusLabel(source.task_status)}。解析完成后可生成小节地图。`
             };
@@ -1412,7 +1421,7 @@
         if (knowledgeMapLoading || knowledgeMapRequests.has(currentMapKey())) {
             return {
                 empty: true,
-                title: knowledgeMapScope === 'collection' ? '集合知识地图' : `${source ? source.title : 'Source'} 知识地图`,
+                title: knowledgeMapScope === 'collection' ? '集合知识地图' : `${source ? displaySourceTitle(source) : 'Source'} 知识地图`,
                 subtitle: '正在读取或生成高质量知识地图。',
                 message: 'AI 正在理解内容并提炼地图，请稍等。'
             };
@@ -1431,7 +1440,7 @@
         }
         return {
             empty: true,
-            title: knowledgeMapScope === 'collection' ? '集合知识地图' : `${source ? source.title : 'Source'} 知识地图`,
+            title: knowledgeMapScope === 'collection' ? '集合知识地图' : `${source ? displaySourceTitle(source) : 'Source'} 知识地图`,
             subtitle: knowledgeMapScope === 'collection'
                 ? '生成后会展示系列主线、整体价值和每个 source 的贡献。'
                 : '生成后会展示这份内容最关键的节点，并绑定原文位置。',
@@ -1642,7 +1651,7 @@
             <button type="button" data-map-related-source="${escapeHTML(source.id)}" title="打开源内容">
                 <span>${index + 1}</span>
                 <div>
-                    <strong>${escapeHTML(compactText(source.title, 28))}</strong>
+                    <strong>${escapeHTML(compactText(displaySourceTitle(source), 28))}</strong>
                     <em>打开源内容</em>
                 </div>
             </button>
@@ -1828,12 +1837,15 @@
             const status = source.task_status || 'pending';
             const stage = sourceStageText(source);
             const duration = source.elapsed_seconds ? ` · ${formatDuration(source.elapsed_seconds)}` : '';
+            const taskTitle = source.task_title
+                ? displaySourceTitle({ title: source.task_title })
+                : '';
             return `
                 <button class="lc-source-item${active}" type="button" data-source-id="${escapeHTML(source.id)}">
                     <span class="lc-source-index">${index + 1}</span>
                     <span class="lc-source-main">
-                        <span class="lc-source-title">${escapeHTML(source.title)}</span>
-                        <span class="lc-source-meta">${escapeHTML(stage || source.task_title || source.source_type || '')}${escapeHTML(duration)}</span>
+                        <span class="lc-source-title" title="${escapeHTML(source.title)}">${escapeHTML(displaySourceTitle(source))}</span>
+                        <span class="lc-source-meta">${escapeHTML(stage || taskTitle || source.source_type || '')}${escapeHTML(duration)}</span>
                     </span>
                     <span class="lc-status ${escapeHTML(status)}">${statusLabel(status)}</span>
                 </button>
@@ -2351,7 +2363,7 @@
         }
 
         selectedSourceId = source.id;
-        els.sourceTitle.textContent = source.title;
+        els.sourceTitle.textContent = displaySourceTitle(source);
         els.sourceMeta.textContent = `${statusLabel(source.task_status)} · ${sourceStageText(source)}`;
         els.sourceTiming.textContent = source.elapsed_seconds
             ? `处理耗时 ${formatDuration(source.elapsed_seconds)}`

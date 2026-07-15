@@ -630,6 +630,35 @@ class TestViewProgressEndpoint:
         assert "#####" not in resp.text
         assert "#### 2.1 睡前一小时" in resp.text
 
+    def test_scoped_bundle_export_returns_markdown_download(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "llm_summary.txt").write_text("AI analysis", encoding="utf-8")
+        (cache_dir / "llm_calibrated.txt").write_text("Proofread text", encoding="utf-8")
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "url": "https://example.com/video",
+            "platform": "youtube",
+            "media_id": "video-1",
+            "cache_dir": str(cache_dir),
+        }
+
+        resp = client.get("/export/vt-1/bundle?scope=analysis")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert "filename*=UTF-8''Demo-AI%E8%A7%A3%E6%9E%90-YouTube.md" in resp.headers[
+            "content-disposition"
+        ]
+        assert "## 内容总结" in resp.text
+        assert "AI analysis" in resp.text
+        assert "Proofread text" not in resp.text
+
     def test_failed_view_is_not_cached(self, client, mock_cache_manager):
         mock_cache_manager.get_view_data_by_token.return_value = {
             "status": "failed",

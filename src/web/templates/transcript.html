@@ -700,6 +700,100 @@
     background-color: var(--bg-secondary, #f0f0f0) !important;
     color: var(--accent-color, #E4503A) !important;
 }
+.export-hidden-for-export {
+    display: none !important;
+}
+.export-print-nav {
+    display: none;
+}
+body.export-document-mode .top-actions,
+body.export-document-mode .summary-reader-actions,
+body.export-document-mode .section-header-actions,
+body.export-document-mode #recalibrateArea {
+    display: none !important;
+}
+body.export-document-mode .export-print-nav {
+    display: block;
+    margin: 0 0 32px;
+    padding: 22px 24px;
+    border: 1px solid var(--line, rgba(0,0,0,0.08));
+    border-radius: 8px;
+    background: var(--card, #fff);
+}
+.export-print-nav h2 {
+    margin: 0 0 12px;
+    font-size: 1.2rem;
+}
+.export-print-nav ol {
+    margin: 0;
+    padding-left: 20px;
+}
+.export-print-nav li {
+    margin: 6px 0;
+}
+.export-print-nav a {
+    color: inherit;
+    text-decoration: none;
+}
+.export-transcript-section pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    font-family: inherit;
+    line-height: 1.75;
+}
+@media print {
+    @page {
+        margin: 16mm 14mm;
+    }
+    body.app-shell {
+        display: block !important;
+        background: #fff !important;
+        color: #111 !important;
+    }
+    body.app-shell .sidebar,
+    body.app-shell .sidebar-overlay,
+    body.app-shell .topbar,
+    body.app-shell .top-actions,
+    body.app-shell .minimal-nav,
+    body.app-shell .summary-reader-actions,
+    body.app-shell .section-header-actions,
+    body.app-shell #recalibrateArea {
+        display: none !important;
+    }
+    body.app-shell .main-area,
+    body.app-shell .page-stage,
+    body.app-shell .page-stage > .container {
+        display: block !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    body.app-shell .export-print-nav {
+        display: block !important;
+        page-break-after: always;
+        break-after: page;
+        border: 1px solid #ddd;
+        box-shadow: none;
+    }
+    body.app-shell .section {
+        break-inside: auto;
+        page-break-inside: auto;
+        margin-bottom: 28px !important;
+    }
+    body.app-shell h1,
+    body.app-shell h2,
+    body.app-shell h3,
+    body.app-shell h4 {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+    body.app-shell .content {
+        font-size: 11pt;
+        line-height: 1.75;
+    }
+}
 </style>
 {% endblock %}
 
@@ -833,12 +927,59 @@
         padding: 6px;
     }
     .export-menu-item {
+        display: block;
+        width: 100%;
+        border: 0;
         border-radius: 6px;
         margin-bottom: 2px;
+        padding: 9px 10px;
+        background: transparent;
+        color: var(--ink, #1B1A17);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.86rem;
+        font-weight: 600;
+        text-align: left;
     }
     .export-menu-item:hover {
         background: rgba(0,0,0,0.04) !important;
         color: var(--ink, #1B1A17) !important;
+    }
+    .export-menu-section + .export-menu-section {
+        border-top: 1px solid rgba(0,0,0,0.08);
+        margin-top: 6px;
+        padding-top: 6px;
+    }
+    .export-menu-title {
+        padding: 4px 10px 6px;
+        color: var(--muted, rgba(0,0,0,0.5));
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+    .export-scope-options {
+        display: grid;
+        gap: 4px;
+    }
+    .export-scope-option {
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: transparent;
+        color: var(--ink, #1B1A17);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.84rem;
+        font-weight: 600;
+        text-align: left;
+    }
+    .export-scope-option:hover {
+        background: rgba(0,0,0,0.04);
+    }
+    .export-scope-option.is-active {
+        border-color: rgba(228, 80, 58, 0.22);
+        background: rgba(228, 80, 58, 0.08);
+        color: #E4503A;
     }
 
     /* Redefine section headers to be cleaner */
@@ -930,11 +1071,22 @@
                     </svg>
                     导出
                 </button>
-                <div id="exportMenu" style="display: none; position: absolute; right: 0; min-width: 140px; z-index: 1000;">
-                    <button type="button" class="export-menu-item" onclick="executeExport('markdown', '{{ view_token }}')">Markdown 文档</button>
-                    <button type="button" class="export-menu-item" onclick="executeExport('pdf', '{{ view_token }}')">PDF 文档</button>
-                    <button type="button" class="export-menu-item" onclick="executeExport('html', '{{ view_token }}')">HTML 页面</button>
-                    <button type="button" class="export-menu-item" onclick="executeExport('png', '{{ view_token }}')">PNG 长图</button>
+                <div id="exportMenu" style="display: none; position: absolute; right: 0; min-width: 220px; z-index: 1000;">
+                    <div class="export-menu-section">
+                        <div class="export-menu-title">导出内容</div>
+                        <div class="export-scope-options" role="radiogroup" aria-label="导出内容范围">
+                            <button type="button" class="export-scope-option" data-export-scope="analysis" aria-checked="false" onclick="selectExportScope('analysis', event)">AI 解析</button>
+                            <button type="button" class="export-scope-option" data-export-scope="calibrated" aria-checked="false" onclick="selectExportScope('calibrated', event)">校对文本</button>
+                            <button type="button" class="export-scope-option is-active" data-export-scope="full" aria-checked="true" onclick="selectExportScope('full', event)">全内容</button>
+                        </div>
+                    </div>
+                    <div class="export-menu-section">
+                        <div class="export-menu-title">导出格式</div>
+                        <button type="button" class="export-menu-item" onclick="executeExport('markdown', '{{ view_token }}')">Markdown 文档</button>
+                        <button type="button" class="export-menu-item" onclick="executeExport('pdf', '{{ view_token }}')">PDF 文档</button>
+                        <button type="button" class="export-menu-item" onclick="executeExport('html', '{{ view_token }}')">HTML 页面</button>
+                        <button type="button" class="export-menu-item" onclick="executeExport('png', '{{ view_token }}')">PNG 长图</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -981,7 +1133,7 @@
 
 
 
-    <div class="section">
+    <div class="section" data-export-section="summary">
         <div class="section-header">
             <h2>内容总结</h2>
             {% if view_token and summary %}
@@ -1006,7 +1158,7 @@
     </div>
 
     {% if comment_insight_html %}
-    <div class="section transcript-secondary-section">
+    <div class="section transcript-secondary-section" data-export-section="comment_insight">
         <h2>高赞评论洞察</h2>
         <div class="content" data-focus-section="comment_insight">
             {{ comment_insight_html|safe }}
@@ -1031,7 +1183,7 @@
     {% endif %}
 
     {% if calibrated_html %}
-    <div class="section transcript-secondary-section">
+    <div class="section transcript-secondary-section" data-export-section="calibrated">
         <div class="section-header">
             <h2>校对文本</h2>
             {% if view_token %}
@@ -1240,6 +1392,166 @@ document.addEventListener('click', function(e) {
     }
 });
 
+var selectedExportScope = 'full';
+var exportScopeLabels = {
+    analysis: 'AI 解析',
+    calibrated: '校对文本',
+    full: '全内容'
+};
+
+function selectExportScope(scope, event) {
+    if (event) event.stopPropagation();
+    selectedExportScope = exportScopeLabels[scope] ? scope : 'full';
+    document.querySelectorAll('.export-scope-option').forEach(function(btn) {
+        var active = btn.dataset.exportScope === selectedExportScope;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+}
+
+function getExportScopeSections(scope) {
+    if (scope === 'analysis') return ['summary', 'comment_insight'];
+    if (scope === 'calibrated') return ['calibrated'];
+    return ['summary', 'comment_insight', 'calibrated', 'transcript'];
+}
+
+function escapeHtml(text) {
+    return String(text || '').replace(/[&<>"']/g, function(char) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[char];
+    });
+}
+
+function stripExportMetadata(text) {
+    return String(text || '').replace(/^---[\s\S]*?---\s*/, '').trim();
+}
+
+function ensureElementId(element, prefix, index) {
+    if (!element.id) {
+        element.id = prefix + '-' + index + '-' + Math.random().toString(36).slice(2, 8);
+    }
+    return element.id;
+}
+
+async function ensureExportTranscriptSection(viewToken) {
+    if (document.querySelector('[data-export-section="transcript"]')) return;
+
+    try {
+        var res = await fetch('/export/' + viewToken + '/transcript');
+        if (!res.ok) return;
+        var rawText = stripExportMetadata(await res.text());
+        if (!rawText) return;
+
+        var section = document.createElement('div');
+        section.className = 'section transcript-secondary-section export-transcript-section';
+        section.setAttribute('data-export-section', 'transcript');
+        section.innerHTML = '<h2>原始转录</h2><div class="content"><pre>' + escapeHtml(rawText) + '</pre></div>';
+
+        var container = document.querySelector('.page-stage > .container') || document.querySelector('.container') || document.body;
+        container.appendChild(section);
+    } catch (e) {
+        console.error('Failed to prepare transcript export section', e);
+    }
+}
+
+function updateExportVisibility(scope) {
+    var allowed = getExportScopeSections(scope);
+    document.querySelectorAll('[data-export-section]').forEach(function(section) {
+        var sectionName = section.getAttribute('data-export-section');
+        section.classList.toggle('export-hidden-for-export', allowed.indexOf(sectionName) === -1);
+    });
+}
+
+function buildExportPrintNav(scope) {
+    var existing = document.getElementById('exportPrintNav');
+    if (existing) existing.remove();
+
+    var navItems = [];
+    var visibleSections = Array.from(document.querySelectorAll('[data-export-section]')).filter(function(section) {
+        return !section.classList.contains('export-hidden-for-export');
+    });
+
+    visibleSections.forEach(function(section, sectionIndex) {
+        var sectionHeading = section.querySelector('h2');
+        if (sectionHeading) {
+            navItems.push({
+                id: ensureElementId(sectionHeading, 'export-section', sectionIndex),
+                text: sectionHeading.textContent.trim()
+            });
+        }
+
+        Array.from(section.querySelectorAll('.content h1, .content h2, .content h3')).slice(0, 60).forEach(function(heading, headingIndex) {
+            var text = heading.textContent.trim();
+            if (!text) return;
+            navItems.push({
+                id: ensureElementId(heading, 'export-heading', sectionIndex + '-' + headingIndex),
+                text: text
+            });
+        });
+    });
+
+    if (!navItems.length) return;
+
+    var nav = document.createElement('nav');
+    nav.id = 'exportPrintNav';
+    nav.className = 'export-print-nav';
+    nav.setAttribute('aria-label', '导出目录');
+    nav.innerHTML = '<h2>目录</h2><ol>' + navItems.map(function(item) {
+        return '<li><a href="#' + item.id + '">' + escapeHtml(item.text) + '</a></li>';
+    }).join('') + '</ol>';
+
+    var firstSection = visibleSections[0] || document.querySelector('.section');
+    if (firstSection && firstSection.parentNode) {
+        firstSection.parentNode.insertBefore(nav, firstSection);
+    }
+}
+
+async function prepareScopedPageExport(scope, viewToken, options) {
+    options = options || {};
+    if (scope === 'full') {
+        await ensureExportTranscriptSection(viewToken);
+    }
+    document.body.classList.add('export-document-mode');
+    document.body.setAttribute('data-export-scope', scope);
+    updateExportVisibility(scope);
+    if (options.includeNav) {
+        buildExportPrintNav(scope);
+    }
+}
+
+function resetScopedPageExport() {
+    document.body.classList.remove('export-document-mode');
+    document.body.removeAttribute('data-export-scope');
+    document.querySelectorAll('.export-hidden-for-export').forEach(function(section) {
+        section.classList.remove('export-hidden-for-export');
+    });
+    var nav = document.getElementById('exportPrintNav');
+    if (nav) nav.remove();
+    document.querySelectorAll('.export-transcript-section').forEach(function(section) {
+        section.remove();
+    });
+}
+
+function exportDownloadName(extension) {
+    return document.title + '-' + (exportScopeLabels[selectedExportScope] || exportScopeLabels.full) + '.' + extension;
+}
+
+function loadHtml2Canvas() {
+    if (window.html2canvas) return Promise.resolve();
+    return new Promise(function(resolve, reject) {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+        script.onload = resolve;
+        script.onerror = function() { reject(new Error('图片导出组件加载失败')); };
+        document.head.appendChild(script);
+    });
+}
+
 async function executeExport(format, viewToken) {
     var menu = document.getElementById('exportMenu');
     if (menu) menu.style.display = 'none';
@@ -1247,56 +1559,42 @@ async function executeExport(format, viewToken) {
     var originalText = btn.innerHTML;
     btn.innerHTML = '导出中...';
     btn.disabled = true;
+    var cleanupAfterPrint = false;
+    var scope = selectedExportScope;
 
     try {
-        if (format === 'pdf') {
+        if (format === 'markdown') {
+            var aMd = document.createElement('a');
+            aMd.href = '/export/' + viewToken + '/bundle?scope=' + encodeURIComponent(scope);
+            aMd.download = exportDownloadName('md');
+            aMd.click();
+        } else if (format === 'pdf') {
+            await prepareScopedPageExport(scope, viewToken, { includeNav: true });
+            cleanupAfterPrint = true;
+            window.addEventListener('afterprint', resetScopedPageExport, { once: true });
+            await new Promise(function(resolve) { requestAnimationFrame(resolve); });
             window.print();
         } else if (format === 'html') {
+            await prepareScopedPageExport(scope, viewToken, { includeNav: true });
             var html = document.documentElement.outerHTML;
             var blob = new Blob([html], { type: 'text/html' });
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = document.title + '.html';
+            a.download = exportDownloadName('html');
             a.click();
             URL.revokeObjectURL(url);
         } else if (format === 'png') {
-            if (!window.html2canvas) {
-                var script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-                script.onload = function() { doExportPng(); };
-                document.head.appendChild(script);
-            } else {
-                doExportPng();
-            }
-        } else if (format === 'markdown') {
-            var types = ['calibrated', 'summary', 'transcript'];
-            var mdContent = '# ' + document.title + '\n\n';
-            for (var i = 0; i < types.length; i++) {
-                var t = types[i];
-                try {
-                    var res = await fetch('/export/' + viewToken + '/' + t);
-                    if (res.ok) {
-                        var text = await res.text();
-                        var cleanText = text.replace(/^---[\s\S]*?---\n/, '');
-                        var sectionName = t === 'summary' ? '内容总结' : t === 'calibrated' ? '校对文本' : '原始转录';
-                        mdContent += '## ' + sectionName + '\n\n' + cleanText + '\n\n';
-                    }
-                } catch (e) {
-                    console.error('Failed to fetch', t);
-                }
-            }
-            var blobMd = new Blob([mdContent], { type: 'text/markdown' });
-            var urlMd = URL.createObjectURL(blobMd);
-            var aMd = document.createElement('a');
-            aMd.href = urlMd;
-            aMd.download = document.title + '.md';
-            aMd.click();
-            URL.revokeObjectURL(urlMd);
+            await prepareScopedPageExport(scope, viewToken, { includeNav: false });
+            await loadHtml2Canvas();
+            await doExportPng();
         }
     } catch (e) {
         alert('导出失败: ' + e.message);
     } finally {
+        if (!cleanupAfterPrint) {
+            resetScopedPageExport();
+        }
         setTimeout(function() {
             btn.innerHTML = originalText;
             btn.disabled = false;
@@ -1305,8 +1603,7 @@ async function executeExport(format, viewToken) {
 }
 
 function doExportPng() {
-    var btn = document.getElementById('exportMainBtn');
-    html2canvas(document.body, {
+    return html2canvas(document.body, {
         useCORS: true,
         scale: window.devicePixelRatio || 2,
         backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#121110' : '#f4f1eb'
@@ -1314,7 +1611,7 @@ function doExportPng() {
         var url = canvas.toDataURL('image/png');
         var a = document.createElement('a');
         a.href = url;
-        a.download = document.title + '.png';
+        a.download = exportDownloadName('png');
         a.click();
     }).catch(function(e) {
         alert('生成图片失败: ' + e.message);

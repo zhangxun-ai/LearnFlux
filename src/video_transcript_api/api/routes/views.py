@@ -41,6 +41,32 @@ static_dir = get_static_dir()
 
 router = APIRouter()
 
+_EXPORT_TYPE_LABELS = {
+    "calibrated": "校对文本",
+    "summary": "总结文本",
+    "comment_insight": "高赞评论洞察",
+    "transcript": "原始转录",
+}
+
+_EXPORT_SECTION_LABELS = {
+    "calibrated": "校对文本",
+    "summary": "内容总结",
+    "comment_insight": "高赞评论洞察",
+    "transcript": "原始转录",
+}
+
+_EXPORT_SCOPE_LABELS = {
+    "analysis": "AI解析",
+    "calibrated": "校对文本",
+    "full": "全内容",
+}
+
+_EXPORT_SCOPE_SECTIONS = {
+    "analysis": ("summary", "comment_insight"),
+    "calibrated": ("calibrated",),
+    "full": ("summary", "comment_insight", "calibrated", "transcript"),
+}
+
 _LOCAL_DOCUMENT_EXTS = {
     ".txt",
     ".md",
@@ -479,6 +505,11 @@ def resolve_export_file_path(cache_dir: str, export_type: str) -> Optional[Path]
     return None
 
 
+def get_export_scope_sections(scope: str) -> tuple[str, ...]:
+    """Return export section types for a user-facing export scope."""
+    return _EXPORT_SCOPE_SECTIONS.get(scope, _EXPORT_SCOPE_SECTIONS["full"])
+
+
 def _build_text_metadata_header(view_data: Dict[str, Any], export_type: str) -> str:
     """生成纯文本导出的 YAML front matter 风格元数据头.
 
@@ -489,17 +520,12 @@ def _build_text_metadata_header(view_data: Dict[str, Any], export_type: str) -> 
     Returns:
         包含元数据的字符串，以 '---' 分隔
     """
-    type_map = {
-        "calibrated": "校对文本",
-        "summary": "总结文本",
-        "comment_insight": "高赞评论洞察",
-        "transcript": "原始转录",
-    }
-
     title = view_data.get("title", "未命名")
     platform = view_data.get("platform", "unknown")
     source_url = view_data.get("url", "")
-    content_type_cn = type_map.get(export_type, export_type)
+    content_type_cn = _EXPORT_TYPE_LABELS.get(
+        export_type, _EXPORT_SCOPE_LABELS.get(export_type, export_type)
+    )
     from ...utils.timeutil.timezone_helper import get_configured_timezone
     export_date = datetime.now(get_configured_timezone()).strftime("%Y-%m-%d")
 
@@ -582,16 +608,9 @@ def _build_page_html(
     """
     import html as html_module
 
-    type_map = {
-        "calibrated": "校对文本",
-        "summary": "内容总结",
-        "comment_insight": "高赞评论洞察",
-        "transcript": "原始转录",
-    }
-
     title = view_data.get("title", "未命名")
     platform = view_data.get("platform", "unknown")
-    content_type_cn = type_map.get(export_type, export_type)
+    content_type_cn = _EXPORT_SECTION_LABELS.get(export_type, export_type)
     source_url = view_data.get("url", "")
 
     # HTML 转义防止 XSS
@@ -823,14 +842,17 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
-def generate_download_filename(title: str, platform: str, content_type: str) -> str:
+def generate_download_filename(
+    title: str, platform: str, content_type: str, extension: str = "txt"
+) -> str:
     """
     生成下载文件名：视频标题-校对文本-平台.txt
 
     Args:
         title: 视频标题
         platform: 平台名称（youtube/bilibili/douyin等）
-        content_type: 内容类型（calibrated/summary/transcript）
+        content_type: 内容类型（calibrated/summary/transcript/analysis/full）
+        extension: 文件扩展名，不带点
 
     Returns:
         str: 格式化的文件名
@@ -840,10 +862,8 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
 
     # 内容类型映射
     type_map = {
-        "calibrated": "校对文本",
-        "summary": "总结文本",
-        "comment_insight": "高赞评论洞察",
-        "transcript": "原始转录",
+        **_EXPORT_TYPE_LABELS,
+        **_EXPORT_SCOPE_LABELS,
     }
 
     # 平台名称映射
@@ -864,13 +884,49 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
     if len(safe_title) > max_title_length:
         safe_title = safe_title[:max_title_length] + "..."
 
-    return f"{safe_title}-{content_name}-{platform_name}.txt"
+    safe_extension = sanitize_filename(extension).lstrip(".") or "txt"
+    return f"{safe_title}-{content_name}-{platform_name}.{safe_extension}"
 
 
 def _normalize_export_content(export_type: str, content: str) -> str:
     if export_type in {"summary", "comment_insight"}:
         return normalize_markdown_text(content)
     return content
+
+
+def build_export_bundle_markdown(view_data: Dict[str, Any], scope: str) -> str:
+    """Build a scoped Markdown export from cached section files."""
+    cache_dir = view_data.get("cache_dir")
+    if not cache_dir or not os.path.exists(cache_dir):
+        return ""
+
+    sections = []
+    for export_type in get_export_scope_sections(scope):
+        file_path = resolve_export_file_path(cache_dir, export_type)
+        if not file_path or not file_path.exists():
+            continue
+
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            logger.error("读取导出分段失败: %s, 错误: %s", file_path, exc)
+            continue
+
+        content = _normalize_export_content(export_type, content).strip()
+        if not content:
+            continue
+
+        label = _EXPORT_SECTION_LABELS.get(export_type, export_type)
+        sections.append((label, content))
+
+    if not sections:
+        return ""
+
+    title = str(view_data.get("title") or "未命名").strip() or "未命名"
+    lines = [f"# {title}", ""]
+    for label, content in sections:
+        lines.extend([f"## {label}", "", content, ""])
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
@@ -1085,6 +1141,41 @@ async def export_content(view_token: str, export_type: str, request: Request):
                 content="❌ 缓存文件不存在\n\n该文件可能已被清理。",
                 media_type="text/plain; charset=utf-8",
                 status_code=404,
+            )
+
+        if export_type == "bundle":
+            scope = request.query_params.get("scope", "full")
+            content = build_export_bundle_markdown(view_data, scope)
+            if not content:
+                return Response(
+                    content="❌ 没有可导出的内容\n\n该任务可能未生成所选内容。",
+                    media_type="text/plain; charset=utf-8",
+                    status_code=404,
+                )
+
+            title = view_data.get("title", "未命名")
+            platform = view_data.get("platform", "unknown")
+            content_type = scope if scope in _EXPORT_SCOPE_LABELS else "full"
+            filename = generate_download_filename(title, platform, content_type, "md")
+            from urllib.parse import quote
+
+            encoded_filename = quote(filename)
+            custom_headers = _build_metadata_headers(view_data, content_type)
+            logger.info(
+                "导出组合文件: scope=%s, 文件名: %s, view_token: %s",
+                content_type,
+                filename,
+                view_data.get("view_token", "unknown")[:20],
+            )
+
+            return Response(
+                content=content,
+                media_type="text/markdown; charset=utf-8",
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                    "X-Content-Type-Options": "nosniff",
+                    **custom_headers,
+                },
             )
 
         file_path = resolve_export_file_path(cache_dir, export_type)

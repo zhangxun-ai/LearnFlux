@@ -1,7 +1,11 @@
 (function () {
     const STORAGE_KEY = 'vta_bearer_token';
     const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
-    const viewToken = window.STUDY_VIEW_TOKEN || '';
+    let viewToken = window.STUDY_VIEW_TOKEN || '';
+    let collectionId = window.STUDY_COLLECTION_ID || '';
+    let sourceId = window.STUDY_SOURCE_ID || '';
+    let pageMode = window.STUDY_PAGE_MODE || (viewToken ? 'single' : 'library');
+    const playerRuntime = window.StudyPlayerRuntime;
     const state = {
         session: null,
         currentLineId: '',
@@ -17,6 +21,12 @@
         activeVisualType: 'overview',
         requestedVisualSourceApplied: false,
         chatMessages: [],
+        libraryKind: 'single',
+        libraryTimer: null,
+        localObjectUrl: '',
+        progressSavedAt: 0,
+        transcriptFollow: true,
+        isSeeking: false,
     };
 
     const els = {
@@ -33,6 +43,7 @@
         videoFrame: document.getElementById('video-frame'),
         video: document.getElementById('study-video'),
         videoEmpty: document.getElementById('video-empty'),
+        audioTitle: document.getElementById('study-audio-title'),
         playToggle: document.getElementById('play-toggle'),
         progress: document.getElementById('video-progress'),
         videoTime: document.getElementById('video-time'),
@@ -45,6 +56,7 @@
         progressTitle: document.getElementById('study-progress-title'),
         progressDetail: document.getElementById('study-progress-detail'),
         progressFill: document.getElementById('study-progress-fill'),
+        retry: document.getElementById('study-retry'),
         aiOverview: document.getElementById('ai-overview'),
         visualOverview: document.getElementById('visual-learning-overview'),
         visualStatus: document.getElementById('visual-learning-status'),
@@ -72,7 +84,36 @@
         toast: document.getElementById('study-toast'),
         exportMarkdown: document.getElementById('export-markdown'),
         copyCurrentLine: document.getElementById('copy-current-line'),
+        library: document.getElementById('study-library'),
+        player: document.getElementById('study-player'),
+        librarySearch: document.getElementById('study-library-search'),
+        libraryList: document.getElementById('study-library-list'),
+        libraryState: document.getElementById('study-library-state'),
+        libraryCount: document.getElementById('study-library-count'),
+        libraryListTitle: document.getElementById('study-library-list-title'),
+        singleImport: document.getElementById('study-single-import'),
+        collectionImport: document.getElementById('study-collection-import'),
+        singleFile: document.getElementById('study-single-file'),
+        collectionFolder: document.getElementById('study-collection-folder'),
+        collectionFiles: document.getElementById('study-collection-files'),
+        collectionNav: document.getElementById('study-collection-nav'),
+        collectionSelect: document.getElementById('study-collection-select'),
+        collectionPrev: document.getElementById('study-collection-prev'),
+        collectionNext: document.getElementById('study-collection-next'),
+        collectionPosition: document.getElementById('study-collection-position'),
+        currentCaption: document.getElementById('current-caption'),
+        currentCaptionTime: document.getElementById('current-caption-time'),
+        currentCaptionText: document.getElementById('current-caption-text'),
+        askCurrentCaption: document.getElementById('ask-current-caption'),
+        transcriptFollow: document.getElementById('transcript-follow'),
     };
+
+    function studyApiBase() {
+        if (pageMode === 'collection' && collectionId && sourceId) {
+            return `/api/study/collections/${encodeURIComponent(collectionId)}/sources/${encodeURIComponent(sourceId)}`;
+        }
+        return `/api/study/${encodeURIComponent(viewToken)}`;
+    }
 
     function decryptToken(encoded) {
         if (!encoded) return '';
@@ -157,29 +198,38 @@
     function renderSession(session) {
         state.session = session;
         const metadata = session.metadata || {};
+        if (metadata.view_token) viewToken = metadata.view_token;
         const playback = session.playback || {};
         const source = session.source || { kind: 'unknown' };
         const transcript = session.transcript || { lines: [] };
 
         const documentSource = ['document', 'text'].includes(source.kind);
         const sourceLabel = documentSource ? '文档学习' : (source.kind === 'audio' ? '音频学习' : '视频学习');
+        
+        let displayTitle = metadata.title || sourceLabel;
+        if (typeof displayTitle === 'string') {
+            displayTitle = displayTitle.replace(/\.(mp3|mp4|m4a|wav|aac|flac|mov|mkv|webm)$/i, '');
+        }
+
         els.studyPageContext.textContent = sourceLabel;
         els.studyWorkbenchTitle.textContent = sourceLabel;
-        document.title = `${metadata.title || sourceLabel} - 内容解析工作台`;
-        els.title.textContent = metadata.title || sourceLabel;
-        els.videoTitle.textContent = metadata.title || sourceLabel;
-        els.breadcrumbs.textContent = `${sourceLabel} / ${metadata.title || '学习模式'}`;
-        els.subtitle.textContent = metadata.author
-            ? `作者：${metadata.author}`
-            : (documentSource ? '原文、AI 解读、图解和问答围绕同一份文档组织。' : '视频、文稿、AI 解读和问答围绕同一条时间轴组织。');
+        document.title = `${displayTitle} - 内容解析工作台`;
+        els.title.textContent = displayTitle;
+        els.videoTitle.textContent = displayTitle;
+        els.breadcrumbs.textContent = sourceLabel;
+        els.subtitle.textContent = documentSource ? '原文、AI 解读、图解和问答围绕同一份文档组织。' : '视频、文稿、AI 解读和问答围绕同一条时间轴组织。';
         els.state.textContent = stateLabel(session.state);
         els.transcriptCount.textContent = `${transcript.lines.length} 段`;
         els.aiModel.textContent = modelLabel(session.ai && session.ai.chat_model);
         els.aiOverview.innerHTML = renderMarkdown(aiOverviewText(session));
         els.exportMarkdown.disabled = isPendingState(session.state) && !transcript.lines.length;
 
+        els.library.hidden = true;
+        els.player.hidden = false;
+
         renderSourceMode(source);
         renderPlayback(playback, source);
+        renderCollectionNavigation(session.collection);
         renderProgress(session);
         renderTranscript(transcript.lines || [], session);
         renderChat();
@@ -192,6 +242,7 @@
     function renderSourceMode(source) {
         const documentSource = ['document', 'text'].includes(source.kind);
         document.body.classList.toggle('is-document-source', documentSource);
+        document.body.classList.toggle('is-audio-source', source.kind === 'audio');
         els.videoFrame.hidden = documentSource;
         els.playStrip.hidden = documentSource;
         els.sourceCard.hidden = !documentSource;
@@ -216,13 +267,41 @@
             if (els.video.getAttribute('src') !== playback.source_url) {
                 els.video.src = playback.source_url;
             }
+            if (state.localObjectUrl) {
+                URL.revokeObjectURL(state.localObjectUrl);
+                state.localObjectUrl = '';
+            }
             els.videoFrame.classList.add('has-video');
-            els.videoMeta.textContent = '本地视频 · 已保留源文件';
+            els.videoMeta.textContent = source.kind === 'audio' ? '本地音频 · 已保留源文件' : '本地视频 · 已保留源文件';
+            return;
+        }
+        if (state.localObjectUrl) {
+            if (els.video.getAttribute('src') !== state.localObjectUrl) els.video.src = state.localObjectUrl;
+            els.videoFrame.classList.add('has-video');
+            els.videoMeta.textContent = '本地文件 · 正在后台解析';
             return;
         }
         els.video.removeAttribute('src');
         els.videoFrame.classList.remove('has-video');
         els.videoMeta.textContent = playback.unavailable_reason || '源视频不可用';
+    }
+
+    function renderCollectionNavigation(collection) {
+        if (!collection || !Array.isArray(collection.sources)) {
+            els.collectionNav.hidden = true;
+            return;
+        }
+        collectionId = collection.id || collectionId;
+        sourceId = collection.current_source_id || sourceId;
+        const sources = collection.sources;
+        const index = Math.max(0, sources.findIndex((item) => item.id === sourceId));
+        els.collectionSelect.innerHTML = sources.map((item, itemIndex) => (
+            `<option value="${escapeHTML(item.id)}"${item.id === sourceId ? ' selected' : ''}>${escapeHTML(`${String(itemIndex + 1).padStart(2, '0')}｜${item.title}`)}</option>`
+        )).join('');
+        els.collectionPrev.disabled = index <= 0;
+        els.collectionNext.disabled = index >= sources.length - 1;
+        els.collectionPosition.textContent = `第 ${index + 1}/${sources.length} 集`;
+        els.collectionNav.hidden = false;
     }
 
     function renderProgress(session) {
@@ -240,6 +319,7 @@
         const percent = Number(progress.percent);
         const width = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 8;
         els.progressFill.style.width = `${width}%`;
+        els.retry.hidden = session.state !== 'failed' && session.state !== 'canceled';
     }
 
     function progressTitle(session) {
@@ -350,25 +430,20 @@
             }
             return;
         }
-        const paragraphs = groupTranscriptLines(lines, 5).map((group) => (
-            `<p>${group.map((line) => {
-                const disabled = line.seekable ? '' : ' disabled';
-                const time = line.seekable ? formatTime(line.start_seconds) : '--:--';
-                const title = line.estimated ? `${time} 估算时间` : time;
-                return `<button class="transcript-segment" type="button" data-line-id="${escapeHTML(line.id)}" data-time="${line.start_seconds ?? ''}" title="${escapeHTML(title)}"${disabled}>${escapeHTML(line.text)}</button>`;
-            }).join('')}</p>`
-        )).join('');
+        const rows = lines.map((line) => {
+            const disabled = line.seekable ? '' : ' disabled';
+            const time = line.seekable ? formatTime(line.start_seconds) : '--:--';
+            const title = line.estimated ? `${time} · 估算时间` : time;
+            const current = line.id === state.currentLineId ? ' is-current' : '';
+            return `<div class="transcript-row${current}" data-line-id="${escapeHTML(line.id)}">
+                <time>${escapeHTML(time)}</time>
+                <button class="transcript-segment" type="button" data-line-id="${escapeHTML(line.id)}" data-time="${line.start_seconds ?? ''}" title="${escapeHTML(title)}"${disabled}>${escapeHTML(line.text)}</button>
+            </div>`;
+        }).join('');
 
-        els.transcriptList.innerHTML = `<article class="manuscript-reader">${paragraphs}</article>
-            <button class="back-playhead" type="button">回播放处</button>`;
-    }
-
-    function groupTranscriptLines(lines, size) {
-        const groups = [];
-        for (let index = 0; index < lines.length; index += size) {
-            groups.push(lines.slice(index, index + size));
-        }
-        return groups;
+        els.transcriptList.innerHTML = `<article class="manuscript-reader">${rows}</article>
+            <button class="back-playhead" type="button">回到当前字幕</button>`;
+        syncTranscriptFollowButton();
     }
 
     function visualSourceReady(session) {
@@ -644,13 +719,13 @@
         }
         if (!line) return;
         state.currentLineId = line.id;
-        const target = Array.from(document.querySelectorAll('.transcript-segment'))
-            .find((button) => button.dataset.lineId === line.id);
+        const target = Array.from(document.querySelectorAll('.transcript-row'))
+            .find((row) => row.dataset.lineId === line.id);
         if (target) {
-            document.querySelectorAll('.transcript-segment').forEach((button) => {
-                button.classList.toggle('is-current', button === target);
+            document.querySelectorAll('.transcript-row').forEach((row) => {
+                row.classList.toggle('is-current', row === target);
             });
-            target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            scrollTranscriptTarget(target);
         }
     }
 
@@ -741,14 +816,23 @@
     }
 
     function bindTranscript() {
+        els.transcriptFollow.addEventListener('click', () => {
+            state.transcriptFollow = !state.transcriptFollow;
+            syncTranscriptFollowButton();
+            if (state.transcriptFollow) scrollActiveTranscriptIntoView();
+        });
         els.transcriptList.addEventListener('click', (event) => {
             const scrollButton = event.target.closest('.back-playhead');
             if (scrollButton) {
+                state.transcriptFollow = true;
+                syncTranscriptFollowButton();
                 scrollActiveTranscriptIntoView();
                 return;
             }
             const button = event.target.closest('.transcript-segment');
             if (!button || button.disabled) return;
+            state.transcriptFollow = true;
+            syncTranscriptFollowButton();
             const seconds = Number(button.dataset.time);
             seekTo(seconds);
         });
@@ -763,21 +847,59 @@
     }
 
     function bindVideo() {
-        els.playToggle.addEventListener('click', () => {
+        els.playToggle.addEventListener('click', async () => {
             if (!els.video.src) return;
-            if (els.video.paused) {
-                els.video.play().catch(() => showToast('浏览器阻止了自动播放，请直接点击视频播放'));
-            } else {
-                els.video.pause();
+            try {
+                await playerRuntime.togglePlayback(els.video);
+            } catch (error) {
+                showToast('音视频暂时无法播放，请检查源文件后重试');
             }
         });
-        els.video.addEventListener('play', () => { els.playToggle.textContent = 'Ⅱ'; });
-        els.video.addEventListener('pause', () => { els.playToggle.textContent = '▶'; });
+        els.video.addEventListener('play', () => setPlaybackButtonState(true));
+        els.video.addEventListener('pause', () => setPlaybackButtonState(false));
         els.video.addEventListener('timeupdate', updateVideoProgress);
         els.video.addEventListener('loadedmetadata', () => {
             updateVideoProgress();
             applyEstimatedTranscriptTimes();
+            restorePlaybackProgress();
         });
+        els.progress.addEventListener('input', () => {
+            const duration = Number(els.video.duration || 0);
+            if (!duration) return;
+            state.isSeeking = true;
+            const progress = Math.max(0, Math.min(100, Number(els.progress.value || 0)));
+            const seconds = playerRuntime.progressSeconds(progress, duration);
+            els.progress.style.setProperty('--value', `${progress}%`);
+            els.videoTime.textContent = `${formatTime(seconds)} / ${formatTime(duration)}`;
+            els.progress.setAttribute('aria-valuetext', `${formatTime(seconds)} / ${formatTime(duration)}`);
+            highlightTranscript(seconds);
+        });
+        els.progress.addEventListener('change', async () => {
+            const duration = Number(els.video.duration || 0);
+            if (!duration) return;
+            try {
+                await playerRuntime.seekFromProgress(els.video, els.progress.value);
+            } catch (error) {
+                showToast('无法从所选位置播放，请检查音视频文件后重试');
+            } finally {
+                state.isSeeking = false;
+                updateVideoProgress();
+            }
+        });
+        els.progress.addEventListener('pointercancel', cancelProgressPreview);
+        els.video.addEventListener('pause', savePlaybackProgress);
+        window.addEventListener('beforeunload', savePlaybackProgress);
+    }
+
+    function cancelProgressPreview() {
+        state.isSeeking = false;
+        updateVideoProgress();
+    }
+
+    function setPlaybackButtonState(isPlaying) {
+        els.playToggle.textContent = isPlaying ? 'Ⅱ' : '▶';
+        els.playToggle.setAttribute('aria-label', isPlaying ? '暂停' : '播放');
+        els.playToggle.title = isPlaying ? '暂停' : '播放';
     }
 
     function seekTo(seconds) {
@@ -789,41 +911,84 @@
     }
 
     function updateVideoProgress() {
+        if (state.isSeeking) return;
         const duration = els.video.duration || 0;
         const current = els.video.currentTime || 0;
         const value = duration ? `${Math.min(100, (current / duration) * 100)}%` : '0%';
         els.progress.style.setProperty('--value', value);
+        els.progress.value = duration ? String(Math.min(100, (current / duration) * 100)) : '0';
         els.videoTime.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+        els.progress.setAttribute('aria-valuetext', `${formatTime(current)} / ${formatTime(duration)}`);
         highlightTranscript(current);
+        if (Date.now() - state.progressSavedAt > 5000) savePlaybackProgress();
     }
 
     function highlightTranscript(currentSeconds) {
         const lines = (state.session && state.session.transcript && state.session.transcript.lines) || [];
-        let active = null;
-        for (const line of lines) {
-            if (!line.seekable) continue;
-            if (line.start_seconds <= currentSeconds) {
-                active = line;
-            }
-        }
+        const active = playerRuntime.activeLineAt(lines, currentSeconds);
         if (!active || active.id === state.currentLineId) return;
         state.currentLineId = active.id;
-        document.querySelectorAll('.transcript-segment').forEach((button) => {
-            button.classList.toggle('is-current', button.dataset.lineId === active.id);
+        document.querySelectorAll('.transcript-row').forEach((row) => {
+            row.classList.toggle('is-current', row.dataset.lineId === active.id);
         });
+        els.currentCaptionTime.textContent = formatTime(active.start_seconds);
+        els.currentCaptionText.textContent = active.text || '';
+        if (state.transcriptFollow) scrollActiveTranscriptIntoView();
+    }
+
+    function progressKey() {
+        if (pageMode === 'collection') return `vta_study_progress:${collectionId}:${sourceId}`;
+        return `vta_study_progress:${viewToken || 'local'}`;
+    }
+
+    function savePlaybackProgress() {
+        if (!els.video || !Number.isFinite(Number(els.video.currentTime))) return;
+        state.progressSavedAt = Date.now();
+        localStorage.setItem(progressKey(), JSON.stringify({
+            time: Number(els.video.currentTime || 0),
+            duration: Number(els.video.duration || 0),
+            updated_at: new Date().toISOString(),
+        }));
+    }
+
+    function restorePlaybackProgress() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(progressKey()) || '{}');
+            const seconds = Number(saved.time || 0);
+            if (seconds > 0 && seconds < Number(els.video.duration || Infinity) - 2) {
+                els.video.currentTime = seconds;
+            }
+        } catch (error) {
+            // Ignore malformed browser-local progress.
+        }
     }
 
     function scrollActiveTranscriptIntoView() {
-        const current = document.querySelector('.transcript-segment.is-current');
+        const current = document.querySelector('.transcript-row.is-current');
         if (current) {
-            current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            scrollTranscriptTarget(current);
             return;
         }
         const line = getCurrentTranscriptLine();
         if (!line) return;
-        const target = Array.from(document.querySelectorAll('.transcript-segment'))
-            .find((button) => button.dataset.lineId === line.id);
-        if (target) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        const target = Array.from(document.querySelectorAll('.transcript-row'))
+            .find((row) => row.dataset.lineId === line.id);
+        if (target) scrollTranscriptTarget(target);
+    }
+
+    function scrollTranscriptTarget(target) {
+        const viewport = document.getElementById('tab-transcript');
+        if (!viewport || !target) return;
+        const viewportRect = viewport.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const offset = targetRect.top - viewportRect.top - ((viewport.clientHeight - targetRect.height) / 2);
+        viewport.scrollTo({ top: viewport.scrollTop + offset, behavior: 'smooth' });
+    }
+
+    function syncTranscriptFollowButton() {
+        els.transcriptFollow.setAttribute('aria-pressed', state.transcriptFollow ? 'true' : 'false');
+        els.transcriptFollow.textContent = state.transcriptFollow ? '● 跟随中' : '跟随播放';
+        els.transcriptFollow.title = state.transcriptFollow ? '点击暂停自动跟随' : '点击恢复自动跟随';
     }
 
     function getCurrentTranscriptLine() {
@@ -833,14 +998,7 @@
         if (currentLine) return currentLine;
 
         const currentSeconds = Number(els.video.currentTime || 0);
-        let active = null;
-        for (const line of lines) {
-            if (!line.seekable) continue;
-            if (line.start_seconds <= currentSeconds) {
-                active = line;
-            }
-        }
-        return active || lines[0];
+        return playerRuntime.activeLineAt(lines, currentSeconds) || lines[0];
     }
 
     function applyEstimatedTranscriptTimes() {
@@ -854,14 +1012,7 @@
         const token = `${session.metadata && session.metadata.view_token}:${Math.round(duration)}:${lines.length}`;
         if (state.estimatedToken === token) return;
 
-        const step = duration / lines.length;
-        session.transcript.lines = lines.map((line, index) => ({
-            ...line,
-            start_seconds: Number((index * step).toFixed(3)),
-            end_seconds: Number(Math.min(duration, (index + 1) * step).toFixed(3)),
-            seekable: true,
-            estimated: true,
-        }));
+        session.transcript.lines = playerRuntime.estimateTimeline(lines, duration);
         state.estimatedToken = token;
         renderTranscript(session.transcript.lines, session);
     }
@@ -890,6 +1041,30 @@
     function bindActions() {
         els.copyCurrentLine.addEventListener('click', copyCurrentLine);
         els.exportMarkdown.addEventListener('click', exportMarkdown);
+        els.retry.addEventListener('click', retryStudy);
+    }
+
+    async function retryStudy() {
+        if (els.retry.disabled) return;
+        els.retry.disabled = true;
+        try {
+            if (pageMode === 'collection') {
+                await apiJSON(
+                    `/api/collections/${encodeURIComponent(collectionId)}/sources/${encodeURIComponent(sourceId)}/retry`,
+                    { method: 'POST' }
+                );
+            } else {
+                const result = await apiJSON(`${studyApiBase()}/retry`, { method: 'POST' });
+                viewToken = result.view_token;
+                history.replaceState({}, '', `/study/${encodeURIComponent(viewToken)}`);
+            }
+            showToast('已重新提交解析');
+            await loadSession();
+        } catch (error) {
+            showToast(error.message || '重新解析失败');
+        } finally {
+            els.retry.disabled = false;
+        }
     }
 
     function bindVisualLearning() {
@@ -967,7 +1142,7 @@
         startChatThinking(pendingId);
         els.sendChat.disabled = true;
         try {
-            const result = await apiJSON(`/api/study/${encodeURIComponent(viewToken)}/ai-chat`, {
+            const result = await apiJSON(`${studyApiBase()}/ai-chat`, {
                 method: 'POST',
                 body: JSON.stringify({
                     question,
@@ -1050,7 +1225,7 @@
         }
         els.exportMarkdown.disabled = true;
         try {
-            const response = await fetch(`/api/study/${encodeURIComponent(viewToken)}/export/markdown`, {
+            const response = await fetch(`${studyApiBase()}/export/markdown`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) {
@@ -1079,10 +1254,240 @@
         return String(value || 'study-notes').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80) || 'study-notes';
     }
 
+    function setLibraryKind(kind) {
+        state.libraryKind = kind === 'collection' ? 'collection' : 'single';
+        document.querySelectorAll('[data-library-kind]').forEach((button) => {
+            const active = button.dataset.libraryKind === state.libraryKind;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        els.singleImport.hidden = state.libraryKind !== 'single';
+        els.collectionImport.hidden = state.libraryKind !== 'collection';
+        els.libraryListTitle.textContent = state.libraryKind === 'collection' ? '我的合集' : '最近学习';
+        loadLibrary();
+    }
+
+    async function loadLibrary() {
+        window.clearTimeout(state.libraryTimer);
+        els.libraryState.hidden = false;
+        els.libraryState.textContent = '正在读取真实内容…';
+        els.libraryList.replaceChildren();
+        try {
+            const query = (els.librarySearch.value || '').trim();
+            const data = await apiJSON(
+                `/api/study/library?kind=${encodeURIComponent(state.libraryKind)}&q=${encodeURIComponent(query)}&limit=50`
+            );
+            renderLibrary(data.items || [], Number(data.total || 0));
+        } catch (error) {
+            els.libraryCount.textContent = '';
+            els.libraryState.hidden = false;
+            els.libraryState.innerHTML = `${escapeHTML(error.message || '内容读取失败')}。<a href="/settings">前往设置</a>`;
+        }
+    }
+
+    function renderLibrary(items, total) {
+        els.libraryCount.textContent = total ? `共 ${total} 项` : '';
+        if (!items.length) {
+            els.libraryState.hidden = false;
+            els.libraryState.textContent = state.libraryKind === 'collection'
+                ? '还没有可播放的合集。你可以直接选择一个文件夹或多个音视频。'
+                : '还没有保留源文件的已解析内容。你可以直接选择本地音视频开始。';
+            return;
+        }
+        els.libraryState.hidden = true;
+        els.libraryList.innerHTML = items.map((item) => {
+            const isCollection = state.libraryKind === 'collection';
+            const meta = isCollection
+                ? `${item.source_count || 0} 集 · ${item.ready_count || 0} 集已解析${item.creator_name ? ` · ${item.creator_name}` : ''}`
+                : `${item.source_kind === 'audio' ? '音频' : '视频'} · ${stateLabel(item.state)}${item.author ? ` · ${item.author}` : ''}`;
+            return `<a class="study-library-card" href="${escapeHTML(item.study_url || '#')}">
+                <span class="study-library-card-icon" aria-hidden="true">${isCollection ? '▥' : (item.source_kind === 'audio' ? '♪' : '▶')}</span>
+                <span><strong>${escapeHTML(item.title || '未命名内容')}</strong><span>${escapeHTML(meta)}</span></span>
+                <span class="study-library-card-action">${isCollection ? '选择一集' : '进入播放器'} →</span>
+            </a>`;
+        }).join('');
+    }
+
+    function acceptedMediaFiles(fileList) {
+        const extensions = /\.(mp3|m4a|wav|aac|flac|mp4|mov|mkv|webm|avi|m4v)$/i;
+        return Array.from(fileList || [])
+            .filter((file) => /^(audio|video)\//.test(file.type || '') || extensions.test(file.name || ''))
+            .sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(
+                b.webkitRelativePath || b.name,
+                undefined,
+                { numeric: true, sensitivity: 'base' }
+            ));
+    }
+
+    function showLocalPreview(file, contextLabel) {
+        if (state.localObjectUrl) URL.revokeObjectURL(state.localObjectUrl);
+        state.localObjectUrl = URL.createObjectURL(file);
+        const audio = (file.type || '').startsWith('audio/') || /\.(mp3|m4a|wav|aac|flac)$/i.test(file.name);
+        renderSession({
+            state: 'ready',
+            metadata: { title: file.name, view_token: viewToken },
+            playback: { source_available: false, source_url: '', unavailable_reason: '' },
+            source: { kind: audio ? 'audio' : 'video', filename: file.name, media_type: file.type || '' },
+            transcript: { lines: [] },
+            ai: { overview: '本地文件正在后台上传和解析。播放不需要等待；逐字稿生成后会自动出现在右侧。', chat_model: 'deepseek-v4-pro' },
+            notes: [],
+            progress: {},
+        });
+        els.studyPageContext.textContent = contextLabel;
+        window.setTimeout(() => els.video.play().catch(() => {}), 0);
+    }
+
+    async function importSingleFile(file) {
+        if (!file) return;
+        pageMode = 'single';
+        viewToken = '';
+        showLocalPreview(file, '单个内容 · 本地文件');
+        const form = new FormData();
+        form.append('file', file, file.name);
+        try {
+            const result = await apiJSON('/api/study/upload', { method: 'POST', body: form });
+            viewToken = result.view_token;
+            history.replaceState({}, '', `/study/${encodeURIComponent(viewToken)}`);
+            await loadSession();
+        } catch (error) {
+            els.progressCard.hidden = false;
+            els.progressTitle.textContent = '上传或解析启动失败';
+            els.progressDetail.textContent = `${error.message || '请重新选择文件'}；当前本地播放不受影响。`;
+            showToast(error.message || '上传失败');
+        } finally {
+            els.singleFile.value = '';
+        }
+    }
+
+    function collectionTitle(files) {
+        const relative = files[0] && files[0].webkitRelativePath;
+        if (relative && relative.includes('/')) return relative.split('/')[0].trim() || '本地音视频合集';
+        const stem = String((files[0] && files[0].name) || '').replace(/\.[^.]+$/, '');
+        return stem.replace(/^[\s\d._-]+/, '').replace(/[\s_-]*\d+$/, '').trim() || '本地音视频合集';
+    }
+
+    async function importCollectionFiles(fileList) {
+        const files = acceptedMediaFiles(fileList);
+        if (!files.length) {
+            showToast('没有找到支持的音视频文件');
+            return;
+        }
+        pageMode = 'collection';
+        collectionId = '';
+        sourceId = '';
+        viewToken = '';
+        showLocalPreview(files[0], `合集内容 · ${collectionTitle(files)}`);
+        try {
+            const collection = await apiJSON('/api/collections', {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: collectionTitle(files),
+                    creator_name: '未归属',
+                    collection_type: 'video_course',
+                    import_method: 'study_local_import',
+                }),
+            });
+            collectionId = collection.id;
+            const form = new FormData();
+            files.forEach((file) => form.append('files', file, file.name));
+            const result = await apiJSON(
+                `/api/collections/${encodeURIComponent(collectionId)}/sources/upload`,
+                { method: 'POST', body: form }
+            );
+            const sources = result.sources || [];
+            if (!sources.length) throw new Error('合集没有创建出可播放内容');
+            sourceId = sources[0].id;
+            history.replaceState(
+                {},
+                '',
+                `/study/collections/${encodeURIComponent(collectionId)}/sources/${encodeURIComponent(sourceId)}`
+            );
+            await loadSession();
+        } catch (error) {
+            els.progressCard.hidden = false;
+            els.progressTitle.textContent = '合集导入失败';
+            els.progressDetail.textContent = `${error.message || '请重新选择文件'}；当前第一集仍可在本地播放。`;
+            showToast(error.message || '合集导入失败');
+        } finally {
+            els.collectionFolder.value = '';
+            els.collectionFiles.value = '';
+        }
+    }
+
+    async function navigateCollectionSource(nextSourceId, pushHistory) {
+        if (!nextSourceId || nextSourceId === sourceId) return;
+        savePlaybackProgress();
+        sourceId = nextSourceId;
+        state.currentLineId = '';
+        state.chatMessages = [];
+        state.visualDocuments = {};
+        state.visualStates = {};
+        if (pushHistory !== false) {
+            history.pushState(
+                {},
+                '',
+                `/study/collections/${encodeURIComponent(collectionId)}/sources/${encodeURIComponent(sourceId)}`
+            );
+        }
+        await loadSession();
+    }
+
+    function bindLibrary() {
+        document.querySelectorAll('[data-library-kind]').forEach((button) => {
+            button.addEventListener('click', () => setLibraryKind(button.dataset.libraryKind));
+        });
+        els.librarySearch.addEventListener('input', () => {
+            window.clearTimeout(state.libraryTimer);
+            state.libraryTimer = window.setTimeout(loadLibrary, 260);
+        });
+        els.singleFile.addEventListener('change', () => importSingleFile(acceptedMediaFiles(els.singleFile.files)[0]));
+        els.collectionFolder.addEventListener('change', () => importCollectionFiles(els.collectionFolder.files));
+        els.collectionFiles.addEventListener('change', () => importCollectionFiles(els.collectionFiles.files));
+    }
+
+    function bindCollectionNavigation() {
+        els.collectionSelect.addEventListener('change', () => navigateCollectionSource(els.collectionSelect.value));
+        els.collectionPrev.addEventListener('click', () => {
+            const index = els.collectionSelect.selectedIndex;
+            if (index > 0) navigateCollectionSource(els.collectionSelect.options[index - 1].value);
+        });
+        els.collectionNext.addEventListener('click', () => {
+            const index = els.collectionSelect.selectedIndex;
+            if (index >= 0 && index < els.collectionSelect.options.length - 1) {
+                navigateCollectionSource(els.collectionSelect.options[index + 1].value);
+            }
+        });
+        els.askCurrentCaption.addEventListener('click', () => {
+            const line = getCurrentTranscriptLine();
+            activateTab('chat');
+            els.chatQuestion.value = line ? `请解释这句话：“${line.text}”` : '';
+            autosizeChatInput();
+            els.chatQuestion.focus();
+        });
+        window.addEventListener('popstate', () => {
+            const collectionMatch = location.pathname.match(/^\/study\/collections\/([^/]+)\/sources\/([^/]+)$/);
+            if (collectionMatch) {
+                pageMode = 'collection';
+                collectionId = decodeURIComponent(collectionMatch[1]);
+                sourceId = decodeURIComponent(collectionMatch[2]);
+                loadSession();
+                return;
+            }
+            const singleMatch = location.pathname.match(/^\/study\/([^/]+)$/);
+            if (singleMatch) {
+                pageMode = 'single';
+                viewToken = decodeURIComponent(singleMatch[1]);
+                loadSession();
+                return;
+            }
+            location.reload();
+        });
+    }
+
     async function loadSession() {
         window.clearTimeout(state.pollTimer);
         try {
-            const session = await apiJSON(`/api/study/${encodeURIComponent(viewToken)}`);
+            const session = await apiJSON(studyApiBase());
             renderSession(session);
         } catch (error) {
             const message = escapeHTML(error.message || '请稍后重试');
@@ -1112,7 +1517,17 @@
         bindChat();
         bindActions();
         bindVisualLearning();
-        loadSession();
+        bindLibrary();
+        bindCollectionNavigation();
+        if (pageMode === 'library') {
+            els.library.hidden = false;
+            els.player.hidden = true;
+            loadLibrary();
+        } else {
+            els.library.hidden = true;
+            els.player.hidden = false;
+            loadSession();
+        }
     }
 
     init();

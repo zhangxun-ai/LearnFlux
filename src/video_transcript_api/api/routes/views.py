@@ -247,6 +247,21 @@ def _format_local_datetime(value, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
     return parsed.astimezone(get_configured_timezone()).strftime(fmt)
 
 
+def _decorate_title_and_tags(view_data: Dict[str, Any]):
+    """Extract hashtags from title and clean it up."""
+    import re
+    title = view_data.get("title", "")
+    if not title or not isinstance(title, str):
+        return
+    
+    tags = re.findall(r'#([^\s#]+)', title)
+    if tags:
+        clean_title = re.sub(r'#([^\s#]+)', '', title).strip()
+        clean_title = re.sub(r'[\s\-]+$', '', clean_title)
+        view_data["title"] = clean_title
+        existing_tags = view_data.get("tags") or []
+        view_data["tags"] = list(dict.fromkeys(existing_tags + tags))
+
 def _decorate_view_timing(view_data: Dict[str, Any], now: Optional[datetime] = None):
     """Add user-facing elapsed/duration/progress time fields in-place."""
     current_time = now or datetime.now(timezone.utc)
@@ -1393,6 +1408,7 @@ async def view_transcript(
         _decorate_view_timing(view_data)
         _decorate_source_link(view_data)
         _decorate_collection_display_title(view_data)
+        _decorate_title_and_tags(view_data)
 
         if view_data["status"] == "processing":
             is_document = _is_local_document_view(view_data)

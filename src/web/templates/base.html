@@ -87,22 +87,54 @@
         }
 
         .header .meta {
-            margin-top: 10px;
+            margin-top: 12px;
             display: flex;
+            align-items: center;
             flex-wrap: wrap;
-            gap: 0.45rem 0.75rem;
-            opacity: 1;
-            font-size: 0.9rem;
+            gap: 12px;
+            font-size: 14px;
             color: var(--text-secondary);
         }
 
+        .header .meta > span {
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .header .meta > span:not(:last-child)::after {
+            content: "·";
+            margin-left: 12px;
+            opacity: 0.5;
+        }
+
         .header .meta a {
-            color: var(--accent-ink);
+            color: var(--text-secondary);
             text-decoration: none;
+            transition: color 0.15s ease;
         }
 
         .header .meta a:hover {
-            text-decoration: underline;
+            color: var(--accent-ink);
+        }
+
+        .header .tags {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .header .tag {
+            background: rgba(0, 0, 0, 0.04);
+            color: var(--text-secondary);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        [data-theme="dark"] .header .tag {
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .section {
@@ -1064,11 +1096,18 @@
             <div class="container">
                 <div class="header">
                     <h1>{{ title or "视频转录查看器" }}</h1>
-            {% if author or url %}
+                    {% if tags %}
+                    <div class="tags">
+                        {% for tag in tags %}
+                        <span class="tag">#{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+            {% if author or url or created_at_display or created_at %}
                 <div class="meta">
                     {% if author %}<span>作者：{{ author }}</span>{% endif %}
                     {% if source_link_url %}
-                        <span><a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }}</a></span>
+                        <span><a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }} ↗</a></span>
                     {% endif %}
                     {% if source_reveal_url %}
                         <span><button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button></span>

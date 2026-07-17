@@ -196,7 +196,8 @@ docs/
 - [配置示例](../config/config.example.jsonc) - 配置文件模板
 
 ### 测试
-- [运行测试](../scripts/run_tests.py) - 测试运行脚本
+- [开发与验证命令](../AGENTS.md) - 项目工作流的唯一事实来源
+- [测试说明](../tests/README.md) - 默认验证与显式外部检查
 - [单元测试](../tests/unit/) - 单元测试目录
 - [集成测试](../tests/integration/) - 集成测试目录
 

@@ -6,28 +6,20 @@ Core code lives in `src/video_transcript_api`: `api/server.py` hosts FastAPI, `d
 
 ## Build, Test, and Development Commands
 
-### Using uv (Recommended)
+Use uv for dependency management and command execution.
 
 ```bash
-# Install uv (if not already installed)
-pip install uv
+# Install project and test dependencies
+uv sync --extra dev
 
-# Sync dependencies (auto-creates .venv)
-uv sync
-
-# Start the API when transcription backends are reachable
+# Start the API
 uv run python main.py --start
 
-# Run unit and integration suites
-uv run pytest tests/unit
-uv run pytest tests/integration
+# verify-fast: fast unit suite
+uv run --extra dev pytest tests/unit
 
-# Run performance or manual tests (when services and credentials are configured)
-uv run python tests/performance/test_concurrent.py
-uv run python tests/manual/test_transcribe.py <audio_path>
-
-# Run all tests (unittest-style discovery)
-uv run python scripts/run_tests.py
+# verify-full: all default offline tests
+uv run --extra dev pytest
 
 # Add new dependencies
 uv add <package-name>
@@ -36,37 +28,19 @@ uv add <package-name>
 uv lock
 ```
 
-### Using pip (Traditional)
+Feature, integration, LLM, platform, manual, and performance checks are opt-in because they may require credentials, reachable services, network access, local media, or data writes. Run only the specific file needed:
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start the API when transcription backends are reachable
-python main.py --start
-
-# Run unit and integration suites
-python -m pytest tests/unit
-python -m pytest tests/integration
-
-# Run performance or manual tests (when services and credentials are configured)
-python tests/performance/test_concurrent.py
-python tests/manual/test_transcribe.py <audio_path>
-
-# Run all tests (unittest-style discovery)
-python scripts/run_tests.py
+uv run --extra dev pytest tests/integration/<test_file>.py -s
+uv run python tests/performance/test_concurrent.py
+uv run python tests/manual/test_transcribe.py <audio_path>
 ```
 
 ## Coding Style & Naming Conventions
-Target Python 3.11+, keep PEP 8 spacing (4-space indents), and use snake_case for modules, functions, and variables. Follow the established Google-style docstrings on public APIs. Route logging through `video_transcript_api.utils.logging.setup_logger` so loguru manages stdout and rotation in `logs/`, and keep console output ASCII-only per `CLAUDE.md`. Prefer type hints and build on helpers inside the relevant `utils.*` subpackages to keep features modular.
+Target Python 3.11+, keep PEP 8 spacing (4-space indents), and use snake_case for modules, functions, and variables. Follow the established Google-style docstrings on public APIs. Route logging through `video_transcript_api.utils.logging.setup_logger` so loguru manages stdout and rotation in `logs/`. Keep console and test output in English ASCII; communicate with the user in Chinese. Prefer type hints and build on helpers inside the relevant `utils.*` subpackages to keep features modular.
 
 ## Testing Guidelines
-Prefer pytest, naming files `test_*.py` for compatibility with pytest and the bundled unittest runner. Mock CapsWriter, FunASR, TikHub, and WeCom clients in fast feedback tests; reserve `tests/manual/` and `tests/performance/` for orchestrated runs. Redirect transient media into `tests/cache/` and clean up afterward to avoid polluting `data/`. Update `tests/README.md` when you add new suites or flags.
+Use pytest. `verify-fast` covers unit tests; `verify-full` covers the default offline suite. Feature, integration, LLM, platform, manual, and performance tests must be run explicitly. Mock CapsWriter, FunASR, TikHub, and WeCom clients in fast feedback tests. Redirect transient media into `tests/cache/` and clean up afterward to avoid polluting `data/`. Update `tests/README.md` when you add new suites or flags.
 
 ## Commit & Pull Request Guidelines
 Commit messages follow the current log style: concise, imperative Chinese summaries (`修复 API 并发重试`). Group related edits before opening a PR. PR descriptions should outline scope, note config or schema touchpoints, reference issues with `#123`, and attach evidence (pytest output, manual steps, API samples). Flag any follow-up actions such as restarting services or updating `config/config.json`.
@@ -78,4 +52,4 @@ Do not commit live credentials; extend `config.example.json` and document defaul
 For new social-media data features, first evaluate TikHub REST APIs for deterministic product flows such as video/detail extraction, comments, search, account posts, rankings, and monitoring. Keep TikHub calls centralized, configurable by base URL (`api.tikhub.io` or `api.tikhub.dev`), cached where reasonable, and covered by mocked fast tests. Treat TikHub MCP as an agent research tool for Codex/Claude Code exploration, not as the default synchronous API path.
 
 ## GitNexus Impact Checks
-Before modifying shared functions, classes, FastAPI handlers, downloader/transcriber/cache logic, task queues, webhooks, authentication, authorization, storage, or other high-impact code, inspect the target with GitNexus `context` and run GitNexus `impact` upstream when this repository is indexed. If the index is missing or stale, run `gitnexus analyze --skip-agents-md --skip-skills --skip-embeddings --workers 1` from the repository root before relying on graph results. After edits to indexed code, run GitNexus `detect_changes` and combine it with normal pytest/typecheck/lint/build verification.
+Before modifying shared functions, classes, FastAPI handlers, downloader/transcriber/cache logic, task queues, webhooks, authentication, authorization, storage, or other high-impact code, inspect the target with GitNexus `context` and run GitNexus `impact` upstream when this repository is indexed. If the index is missing or stale, run `gitnexus analyze --skip-agents-md --skip-skills --workers 1` from the repository root before relying on graph results. After edits to indexed code, run GitNexus `detect_changes` plus the relevant verification command above.

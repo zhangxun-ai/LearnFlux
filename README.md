@@ -50,7 +50,7 @@ cd video-transcript-api
 
 # 安装依赖（使用 uv）
 curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync
+uv sync --extra dev
 
 # 配置服务
 cp config/config.example.jsonc config/config.jsonc
@@ -183,10 +183,11 @@ video-transcript-api/
 
 ## 测试
 
+项目工作流以 [AGENTS.md](AGENTS.md) 为准，测试分类与外部依赖说明见 [tests/README.md](tests/README.md)。
+
 ```bash
-uv run python scripts/run_tests.py     # 运行所有测试
-uv run pytest tests/unit/              # 单元测试
-uv run pytest tests/integration/       # 集成测试
+uv run --extra dev pytest tests/unit  # verify-fast
+uv run --extra dev pytest             # verify-full: 默认离线测试
 ```
 
 ---

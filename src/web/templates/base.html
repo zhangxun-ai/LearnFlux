@@ -1096,13 +1096,6 @@
             <div class="container">
                 <div class="header">
                     <h1>{{ title or "视频转录查看器" }}</h1>
-                    {% if tags %}
-                    <div class="tags">
-                        {% for tag in tags %}
-                        <span class="tag">#{{ tag }}</span>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
             {% if author or url or created_at_display or created_at %}
                 <div class="meta">
                     {% if author %}<span>作者：{{ author }}</span>{% endif %}

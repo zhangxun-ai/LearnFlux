@@ -580,6 +580,15 @@
             document.body.classList.remove('toc-pinned');
         }
 
+        if (container) {
+            container.addEventListener('mouseenter', () => {
+                document.body.classList.add('toc-hovered');
+            });
+            container.addEventListener('mouseleave', () => {
+                document.body.classList.remove('toc-hovered');
+            });
+        }
+
         // 设置滚动监听
         setupScrollObserver();
 

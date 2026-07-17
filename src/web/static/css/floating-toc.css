@@ -48,8 +48,9 @@
         transition: padding-right 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     
-    /* 当目录被固定（Pin）时，为右侧让出完整的目录宽度空间，避免遮挡正文 */
-    body.app-shell.toc-pinned .page-stage {
+    /* 当目录悬停预览（Hover）或被固定（Pin）时，为右侧让出完整的目录宽度空间，避免遮挡正文 */
+    body.app-shell.toc-pinned .page-stage,
+    body.app-shell.toc-hovered .page-stage {
         padding-right: calc(1.5rem + var(--toc-width-expanded) + var(--toc-right-offset));
     }
 }

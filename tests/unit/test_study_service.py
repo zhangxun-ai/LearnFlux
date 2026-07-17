@@ -77,6 +77,44 @@ def test_study_service_builds_ready_session_with_source_file(tmp_path):
     assert session["notes"][0]["body"] == "重点复看"
 
 
+def test_study_service_exposes_one_stable_collection_note_document(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    repo = StudyRepository(db_path=str(tmp_path / "study.db"))
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=repo,
+        source_root=tmp_path / "sources",
+    )
+
+    first = service.get_note_document(
+        "view-old",
+        owner_user_id="user-1",
+        collection_id="course-1",
+        source_id="lesson-1",
+    )
+    saved = service.save_note_document(
+        "view-old",
+        body="一篇持续编辑的课程笔记",
+        expected_revision=first["revision"],
+        owner_user_id="user-1",
+        collection_id="course-1",
+        source_id="lesson-1",
+    )
+    retried = service.get_note_document(
+        "view-new",
+        owner_user_id="user-1",
+        collection_id="course-1",
+        source_id="lesson-1",
+    )
+
+    assert retried["id"] == saved["id"]
+    assert retried["body"] == "一篇持续编辑的课程笔记"
+    assert retried["current_view_token"] == "view-new"
+
+
 def test_study_service_exposes_document_source_metadata(tmp_path):
     from video_transcript_api.study.repository import StudyRepository
     from video_transcript_api.study.service import StudyService

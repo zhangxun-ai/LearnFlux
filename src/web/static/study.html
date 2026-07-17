@@ -213,6 +213,7 @@
                 <aside class="panel" aria-label="右侧学习面板">
                     <div class="right-tabs" role="tablist" aria-label="学习内容视图">
                         <button class="is-active" type="button" data-tab="transcript">同步逐字稿</button>
+                        <button type="button" data-tab="notes">我的笔记</button>
                         <button type="button" data-tab="ai">AI 解读</button>
                         <button type="button" data-tab="visual">图解</button>
                         <button type="button" data-tab="chat">问 AI</button>
@@ -277,6 +278,22 @@
                         </div>
                     </div>
 
+                    <div class="study-panel-view" id="tab-notes">
+                        <div class="panel-head study-note-head">
+                            <div>
+                                <h3>我的笔记</h3>
+                                <span>每节课一篇自由 Markdown，自动保存到学习页</span>
+                            </div>
+                            <span class="study-note-status" id="study-note-status" role="status" aria-live="polite">正在加载</span>
+                        </div>
+                        <label class="sr-only" for="study-note-editor">课程笔记 Markdown</label>
+                        <textarea class="study-note-editor" id="study-note-editor" placeholder="在这里记录本节课的想法、要点和行动……" disabled></textarea>
+                        <div class="study-note-actions">
+                            <button class="btn ghost" id="study-note-binding" type="button">目录绑定</button>
+                            <button class="btn primary" id="study-note-sync" type="button" disabled>同步到 Obsidian</button>
+                        </div>
+                    </div>
+
                     <div class="study-panel-view" id="tab-chat">
                         <div class="panel-head chat-head">
                             <div>
@@ -329,6 +346,57 @@
                 </div>
             </header>
             <div class="study-visual-modal-content" id="visual-learning-modal-content"></div>
+        </div>
+    </dialog>
+
+    <dialog class="obsidian-dialog" id="obsidian-binding-dialog" aria-labelledby="obsidian-binding-title">
+        <div class="obsidian-dialog-shell">
+            <header class="obsidian-dialog-head">
+                <div>
+                    <span>本地 Obsidian</span>
+                    <h2 id="obsidian-binding-title">绑定课程目录</h2>
+                </div>
+                <button class="study-visual-close" id="obsidian-binding-close" type="button" aria-label="关闭目录绑定">×</button>
+            </header>
+            <p class="obsidian-dialog-copy" id="obsidian-binding-scope">合集只需绑定一次，后续分集会自动沿用。</p>
+            <div class="obsidian-binding-fields">
+                <label for="obsidian-transcript-directory">
+                    <span>文字稿目录（raw 下）</span>
+                    <select id="obsidian-transcript-directory"></select>
+                </label>
+                <label for="obsidian-note-directory">
+                    <span>课程笔记目录</span>
+                    <select id="obsidian-note-directory"></select>
+                </label>
+            </div>
+            <div class="obsidian-dialog-status" id="obsidian-binding-status" role="status" aria-live="polite"></div>
+            <footer class="obsidian-dialog-actions">
+                <button class="btn ghost" id="obsidian-binding-cancel" type="button">取消</button>
+                <button class="btn primary" id="obsidian-binding-save" type="button">保存绑定</button>
+            </footer>
+        </div>
+    </dialog>
+
+    <dialog class="obsidian-dialog" id="obsidian-conflict-dialog" aria-labelledby="obsidian-conflict-title">
+        <div class="obsidian-dialog-shell obsidian-conflict-shell">
+            <header class="obsidian-dialog-head">
+                <div>
+                    <span>需要你确认</span>
+                    <h2 id="obsidian-conflict-title">笔记存在双边修改</h2>
+                </div>
+                <button class="study-visual-close" id="obsidian-conflict-close" type="button" aria-label="关闭冲突处理">×</button>
+            </header>
+            <p class="obsidian-dialog-copy" id="obsidian-conflict-message">请选择要保留的版本，系统不会自动覆盖。</p>
+            <div class="obsidian-conflict-grid">
+                <label for="obsidian-conflict-app"><span>学习页版本</span><textarea id="obsidian-conflict-app" readonly></textarea></label>
+                <label for="obsidian-conflict-file"><span>Obsidian 版本</span><textarea id="obsidian-conflict-file" readonly></textarea></label>
+            </div>
+            <footer class="obsidian-dialog-actions obsidian-conflict-actions">
+                <button class="btn primary" type="button" data-choice="app">采用学习页版本</button>
+                <button class="btn ghost" type="button" data-choice="obsidian">采用 Obsidian 版本</button>
+                <button class="btn primary" type="button" data-choice="recreate_from_app" hidden>用学习页笔记重建文件</button>
+                <button class="btn danger" type="button" data-choice="accept_external_deletion" hidden>接受 Obsidian 删除</button>
+            </footer>
         </div>
     </dialog>
 

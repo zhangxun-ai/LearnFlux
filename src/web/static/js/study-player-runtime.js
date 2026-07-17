@@ -39,6 +39,23 @@
         return rate;
     }
 
+    function mediaResourceIdentity(value) {
+        const source = String(value || '').trim();
+        if (!source) return '';
+        if (/^(blob:|data:)/i.test(source)) return source;
+        try {
+            return new URL(source, 'http://vta.local').pathname;
+        } catch (error) {
+            return source.split(/[?#]/, 1)[0];
+        }
+    }
+
+    function sameMediaResource(currentSource, nextSource) {
+        const currentIdentity = mediaResourceIdentity(currentSource);
+        const nextIdentity = mediaResourceIdentity(nextSource);
+        return Boolean(currentIdentity && currentIdentity === nextIdentity);
+    }
+
     function estimateTimeline(lines, duration) {
         const safeDuration = Number(duration || 0);
         if (!Array.isArray(lines) || !lines.length || !Number.isFinite(safeDuration) || safeDuration <= 0) {
@@ -78,6 +95,7 @@
         progressSeconds,
         seekFromProgress,
         setPlaybackRate,
+        sameMediaResource,
         estimateTimeline,
         activeLineAt,
     };

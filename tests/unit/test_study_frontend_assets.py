@@ -33,7 +33,7 @@ def test_study_page_uses_note_and_manuscript_panels():
     assert 'class="chat-composer"' in html
     assert 'class="chat-input-row"' in html
     assert 'data-tab="chat"' in html
-    assert 'data-tab="notes"' not in html
+    assert 'data-tab="notes"' in html
     assert 'data-tab="courseware"' not in html
     assert "课件大纲" not in html
     assert "记当前点" not in html
@@ -75,6 +75,7 @@ def test_study_page_uses_note_and_manuscript_panels():
     assert "studyPageContext" in js
     assert "studyWorkbenchTitle" in js
     assert "panel-seek" in js
+    assert "playerRuntime.sameMediaResource" in js
     assert "正在转录本地视频" in js
     assert "正在生成 AI 总结" in js
     assert "window.setTimeout(loadSession" in js
@@ -92,6 +93,57 @@ def test_study_page_uses_note_and_manuscript_panels():
     assert ".chat-time-option" not in css
     assert "position: sticky" in css
     assert "overflow: auto" in css
+
+
+def test_study_note_editor_supports_autosave_binding_sync_and_conflicts():
+    html = (PROJECT_ROOT / "src/web/static/study.html").read_text(encoding="utf-8")
+    js = (PROJECT_ROOT / "src/web/static/js/study.js").read_text(encoding="utf-8")
+    css = (PROJECT_ROOT / "src/web/static/css/study.css").read_text(encoding="utf-8")
+
+    for fragment in (
+        'id="study-note-editor"',
+        'id="study-note-status"',
+        'id="study-note-sync"',
+        'id="study-note-binding"',
+        'id="obsidian-binding-dialog"',
+        'id="obsidian-transcript-directory"',
+        'id="obsidian-note-directory"',
+        'id="obsidian-binding-save"',
+        'id="obsidian-conflict-dialog"',
+        'id="obsidian-conflict-app"',
+        'id="obsidian-conflict-file"',
+        'data-choice="app"',
+        'data-choice="obsidian"',
+        'data-choice="recreate_from_app"',
+        'data-choice="accept_external_deletion"',
+    ):
+        assert fragment in html
+
+    assert "function noteContextKey" in js
+    assert "function bindingApiBase" in js
+    assert "async function loadStudyNote" in js
+    assert "new AbortController()" in js
+    assert "async function saveStudyNote" in js
+    assert "expected_revision" in js
+    assert "window.setTimeout(saveStudyNote" in js
+    assert "async function syncStudyNoteToObsidian" in js
+    assert "/note-document" in js
+    assert "/obsidian-binding" in js
+    assert "/obsidian-sync" in js
+    assert "/obsidian-conflict/resolve" in js
+    assert "/api/obsidian/directories?root=raw" in js
+    assert "/api/obsidian/directories?root=vault" in js
+    assert "result.overall === 'partial'" in js
+    assert "文字稿未就绪，笔记已保存在学习页" in js
+    assert "showObsidianConflict" in js
+    assert "recreate_from_app" in js
+    assert "accept_external_deletion" in js
+
+    assert ".study-note-editor" in css
+    assert ".study-note-actions" in css
+    assert ".obsidian-dialog" in css
+    assert ".obsidian-conflict-grid" in css
+    assert ":focus-visible" in css
 
 
 def test_study_visual_tab_activates_and_renders_both_layers_continuously():

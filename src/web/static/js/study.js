@@ -29,6 +29,14 @@
         transcriptFollow: true,
         isSeeking: false,
         playbackRate: 1,
+        noteContext: '',
+        noteDocument: null,
+        noteDirty: false,
+        noteSaving: false,
+        noteSaveTimer: null,
+        noteLoadController: null,
+        noteBinding: null,
+        noteConflict: null,
     };
 
     const els = {
@@ -114,6 +122,24 @@
         currentCaptionText: document.getElementById('current-caption-text'),
         askCurrentCaption: document.getElementById('ask-current-caption'),
         transcriptFollow: document.getElementById('transcript-follow'),
+        noteEditor: document.getElementById('study-note-editor'),
+        noteStatus: document.getElementById('study-note-status'),
+        noteSync: document.getElementById('study-note-sync'),
+        noteBinding: document.getElementById('study-note-binding'),
+        bindingDialog: document.getElementById('obsidian-binding-dialog'),
+        bindingClose: document.getElementById('obsidian-binding-close'),
+        bindingCancel: document.getElementById('obsidian-binding-cancel'),
+        bindingSave: document.getElementById('obsidian-binding-save'),
+        bindingScope: document.getElementById('obsidian-binding-scope'),
+        bindingStatus: document.getElementById('obsidian-binding-status'),
+        transcriptDirectory: document.getElementById('obsidian-transcript-directory'),
+        noteDirectory: document.getElementById('obsidian-note-directory'),
+        conflictDialog: document.getElementById('obsidian-conflict-dialog'),
+        conflictClose: document.getElementById('obsidian-conflict-close'),
+        conflictTitle: document.getElementById('obsidian-conflict-title'),
+        conflictMessage: document.getElementById('obsidian-conflict-message'),
+        conflictApp: document.getElementById('obsidian-conflict-app'),
+        conflictFile: document.getElementById('obsidian-conflict-file'),
     };
 
     function studyApiBase() {
@@ -121,6 +147,20 @@
             return `/api/study/collections/${encodeURIComponent(collectionId)}/sources/${encodeURIComponent(sourceId)}`;
         }
         return `/api/study/${encodeURIComponent(viewToken)}`;
+    }
+
+    function noteContextKey() {
+        if (pageMode === 'collection') {
+            return `collection:${collectionId}:${sourceId}`;
+        }
+        return `single:${viewToken}`;
+    }
+
+    function bindingApiBase() {
+        if (pageMode === 'collection' && collectionId) {
+            return `/api/study/collections/${encodeURIComponent(collectionId)}/obsidian-binding`;
+        }
+        return `${studyApiBase()}/obsidian-binding`;
     }
 
     function decryptToken(encoded) {
@@ -159,11 +199,314 @@
         const response = await fetch(url, { ...init, headers });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.code >= 400) {
-            const error = new Error(payload.detail || payload.message || '请求失败');
+            const detail = payload.detail;
+            const message = typeof detail === 'string'
+                ? detail
+                : ((detail && (detail.message || detail.code)) || payload.message || '请求失败');
+            const error = new Error(message);
             error.status = response.status;
+            error.detail = detail;
             throw error;
         }
         return payload.data;
+    }
+
+    function setNoteStatus(message, status) {
+        if (!els.noteStatus) return;
+        els.noteStatus.textContent = message;
+        els.noteStatus.dataset.state = status || '';
+    }
+
+    function resetStudyNoteState() {
+        window.clearTimeout(state.noteSaveTimer);
+        if (state.noteLoadController) state.noteLoadController.abort();
+        state.noteLoadController = null;
+        state.noteDocument = null;
+        state.noteDirty = false;
+        state.noteSaving = false;
+        state.noteBinding = null;
+        state.noteConflict = null;
+        els.noteEditor.value = '';
+        els.noteEditor.disabled = true;
+        els.noteSync.disabled = true;
+        setNoteStatus('正在加载', 'saving');
+    }
+
+    async function loadStudyNote(force) {
+        const context = noteContextKey();
+        if (!viewToken || (pageMode === 'collection' && (!collectionId || !sourceId))) return;
+        if (!force && state.noteContext === context && state.noteDocument) return;
+        if (state.noteLoadController) state.noteLoadController.abort();
+        const controller = new AbortController();
+        state.noteLoadController = controller;
+        state.noteContext = context;
+        setNoteStatus('正在加载', 'saving');
+        try {
+            const result = await apiJSON(`${studyApiBase()}/note-document`, {
+                signal: controller.signal,
+            });
+            if (state.noteContext !== context) return;
+            state.noteDocument = result.document;
+            state.noteDirty = false;
+            state.noteConflict = null;
+            els.noteEditor.value = (result.document && result.document.body) || '';
+            els.noteEditor.disabled = false;
+            els.noteSync.disabled = false;
+            if (result.state === 'clean') {
+                setNoteStatus('已同步', 'synced');
+            } else if (result.state === 'binding_required') {
+                setNoteStatus('已保存 · 尚未绑定', 'dirty');
+            } else if (result.state === 'skipped_empty') {
+                setNoteStatus('已保存 · 空笔记不建文件', 'dirty');
+            } else {
+                setNoteStatus('已保存 · 尚未同步', 'dirty');
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            const detail = error.detail || {};
+            if (error.status === 409 && (detail.state === 'conflict' || detail.state === 'external_deleted')) {
+                state.noteDocument = {
+                    body: detail.app_body || '',
+                    revision: detail.preconditions && detail.preconditions.expected_revision,
+                };
+                els.noteEditor.value = state.noteDocument.body;
+                els.noteEditor.disabled = false;
+                els.noteSync.disabled = false;
+                showObsidianConflict(detail);
+                return;
+            }
+            setNoteStatus(error.message || '笔记加载失败', 'error');
+        } finally {
+            if (state.noteLoadController === controller) state.noteLoadController = null;
+        }
+    }
+
+    function scheduleStudyNoteSave() {
+        if (!state.noteDocument || els.noteEditor.disabled) return;
+        state.noteDirty = true;
+        setNoteStatus('尚未保存', 'dirty');
+        window.clearTimeout(state.noteSaveTimer);
+        state.noteSaveTimer = window.setTimeout(saveStudyNote, 700);
+    }
+
+    async function saveStudyNote() {
+        window.clearTimeout(state.noteSaveTimer);
+        if (!state.noteDirty || state.noteSaving || !state.noteDocument) return state.noteDocument;
+        const context = noteContextKey();
+        const body = els.noteEditor.value;
+        const revision = Number(state.noteDocument.revision || 0);
+        if (!revision) return state.noteDocument;
+        state.noteSaving = true;
+        setNoteStatus('正在保存', 'saving');
+        try {
+            const document = await apiJSON(`${studyApiBase()}/note-document`, {
+                method: 'PUT',
+                body: JSON.stringify({ body, expected_revision: revision }),
+            });
+            if (state.noteContext !== context) return document;
+            state.noteDocument = document;
+            state.noteDirty = els.noteEditor.value !== body;
+            if (state.noteDirty) {
+                setNoteStatus('有新的修改待保存', 'dirty');
+                state.noteSaveTimer = window.setTimeout(saveStudyNote, 700);
+            } else {
+                setNoteStatus('已保存 · 尚未同步', 'dirty');
+            }
+            return document;
+        } catch (error) {
+            const current = error.detail && error.detail.current;
+            if (error.status === 409 && current) {
+                state.noteDocument = current;
+                setNoteStatus('另一页面已修改，当前草稿已暂停保存', 'conflict');
+            } else {
+                setNoteStatus(error.message || '保存失败', 'error');
+            }
+            throw error;
+        } finally {
+            state.noteSaving = false;
+        }
+    }
+
+    async function loadObsidianBinding() {
+        const data = await apiJSON(bindingApiBase());
+        state.noteBinding = data.binding || null;
+        return data;
+    }
+
+    function populateDirectorySelect(select, items, selectedValue) {
+        const values = Array.from(new Set([...(items || []), selectedValue].filter(Boolean)));
+        select.innerHTML = values.map((value) => (
+            `<option value="${escapeHTML(value)}"${value === selectedValue ? ' selected' : ''}>${escapeHTML(value)}</option>`
+        )).join('');
+        if (!values.length) {
+            select.innerHTML = '<option value="">没有可选目录</option>';
+        }
+    }
+
+    async function openObsidianBindingDialog() {
+        if (!els.bindingDialog.open) els.bindingDialog.showModal();
+        els.bindingSave.disabled = true;
+        els.bindingStatus.textContent = '正在读取 Vault 目录…';
+        els.bindingScope.textContent = pageMode === 'collection'
+            ? '这是合集目录绑定：保存一次后，同合集其他分集会自动沿用。修改绑定不会移动或删除旧文件。'
+            : '这是单篇内容绑定：只影响当前学习内容。修改绑定不会移动或删除旧文件。';
+        try {
+            const [status, bindingData, transcriptData, noteData] = await Promise.all([
+                apiJSON('/api/obsidian/status'),
+                loadObsidianBinding(),
+                apiJSON('/api/obsidian/directories?root=raw'),
+                apiJSON('/api/obsidian/directories?root=vault'),
+            ]);
+            if (!status.available) throw new Error('Obsidian Vault 当前不可用，请检查本地配置');
+            const binding = bindingData.binding || {};
+            populateDirectorySelect(
+                els.transcriptDirectory,
+                transcriptData.items,
+                binding.transcript_directory
+            );
+            populateDirectorySelect(
+                els.noteDirectory,
+                noteData.items,
+                binding.note_directory
+            );
+            els.bindingStatus.textContent = `${status.display_path || '本地 Vault'} · 请选择两个已存在目录`;
+            els.bindingSave.disabled = false;
+        } catch (error) {
+            els.bindingStatus.textContent = error.message || 'Vault 目录读取失败';
+        }
+    }
+
+    async function saveObsidianBinding() {
+        const transcriptDirectory = els.transcriptDirectory.value;
+        const noteDirectory = els.noteDirectory.value;
+        if (!transcriptDirectory || !noteDirectory) {
+            els.bindingStatus.textContent = '请先选择文字稿和笔记目录';
+            return;
+        }
+        els.bindingSave.disabled = true;
+        els.bindingStatus.textContent = '正在保存绑定…';
+        try {
+            const binding = await apiJSON(bindingApiBase(), {
+                method: 'PUT',
+                body: JSON.stringify({
+                    transcript_directory: transcriptDirectory,
+                    note_directory: noteDirectory,
+                    expected_revision: state.noteBinding ? state.noteBinding.revision : null,
+                }),
+            });
+            state.noteBinding = binding;
+            els.bindingDialog.close();
+            setNoteStatus('已保存 · 尚未同步', 'dirty');
+            showToast(pageMode === 'collection' ? '合集目录绑定已保存' : '目录绑定已保存');
+        } catch (error) {
+            els.bindingStatus.textContent = error.message || '目录绑定保存失败';
+        } finally {
+            els.bindingSave.disabled = false;
+        }
+    }
+
+    function showObsidianConflict(detail) {
+        state.noteConflict = detail;
+        const externalDeleted = detail.state === 'external_deleted';
+        els.conflictTitle.textContent = externalDeleted ? 'Obsidian 笔记文件已删除' : '笔记存在双边修改';
+        els.conflictMessage.textContent = externalDeleted
+            ? '请选择用学习页笔记重建文件，或明确接受删除。系统不会自动处理。'
+            : '学习页和 Obsidian 都有修改，请明确选择要保留的版本。';
+        els.conflictApp.value = detail.app_body || '';
+        els.conflictFile.value = externalDeleted ? '（文件已不存在）' : (detail.obsidian_body || '');
+        els.conflictDialog.querySelectorAll('[data-choice]').forEach((button) => {
+            const externalChoice = ['recreate_from_app', 'accept_external_deletion'].includes(button.dataset.choice);
+            button.hidden = externalDeleted ? !externalChoice : externalChoice;
+        });
+        setNoteStatus('存在冲突', 'conflict');
+        if (!els.conflictDialog.open) els.conflictDialog.showModal();
+    }
+
+    async function resolveObsidianConflict(choice) {
+        const conflict = state.noteConflict;
+        if (!conflict || !conflict.preconditions) return;
+        const button = els.conflictDialog.querySelector(`[data-choice="${choice}"]`);
+        if (button) button.disabled = true;
+        try {
+            const result = await apiJSON(`${studyApiBase()}/obsidian-conflict/resolve`, {
+                method: 'POST',
+                body: JSON.stringify({ choice, ...conflict.preconditions }),
+            });
+            state.noteConflict = null;
+            state.noteDocument = result.document;
+            state.noteDirty = false;
+            els.noteEditor.value = (result.document && result.document.body) || '';
+            els.conflictDialog.close();
+            setNoteStatus(choice === 'accept_external_deletion' ? '已接受删除' : '已同步', 'synced');
+            showToast('冲突已处理');
+        } catch (error) {
+            const detail = error.detail || {};
+            if (error.status === 409 && detail.preconditions) {
+                showObsidianConflict(detail);
+                showToast('内容又发生了变化，请重新确认');
+            } else {
+                showToast(error.message || '冲突处理失败');
+            }
+        } finally {
+            if (button) button.disabled = false;
+        }
+    }
+
+    async function syncStudyNoteToObsidian() {
+        if (els.noteSync.disabled) return;
+        els.noteSync.disabled = true;
+        try {
+            if (state.noteDirty) await saveStudyNote();
+            if (state.noteDirty) return;
+            const bindingData = await loadObsidianBinding();
+            if (bindingData.required) {
+                await openObsidianBindingDialog();
+                return;
+            }
+            setNoteStatus('正在同步', 'saving');
+            const result = await apiJSON(`${studyApiBase()}/obsidian-sync`, { method: 'POST' });
+            if (result.overall === 'partial') {
+                setNoteStatus('部分同步成功，可重试', 'error');
+                showToast('部分文件同步失败，再点一次即可重试');
+            } else {
+                setNoteStatus('已同步', 'synced');
+                showToast('文字稿和笔记已同步到 Obsidian');
+            }
+        } catch (error) {
+            const detail = error.detail || {};
+            if (detail.code === 'binding_required') {
+                await openObsidianBindingDialog();
+            } else if (detail.code === 'transcript_not_ready') {
+                setNoteStatus('文字稿未就绪，笔记已保存在学习页', 'dirty');
+                showToast('文字稿未就绪，稍后再同步到 Obsidian');
+            } else if (detail.state === 'conflict' || detail.state === 'external_deleted') {
+                showObsidianConflict(detail);
+            } else {
+                setNoteStatus(error.message || '同步失败', 'error');
+                showToast(error.message || '同步失败');
+            }
+        } finally {
+            els.noteSync.disabled = false;
+        }
+    }
+
+    function bindStudyNote() {
+        els.noteEditor.addEventListener('input', scheduleStudyNoteSave);
+        els.noteSync.addEventListener('click', syncStudyNoteToObsidian);
+        els.noteBinding.addEventListener('click', openObsidianBindingDialog);
+        els.bindingSave.addEventListener('click', saveObsidianBinding);
+        els.bindingClose.addEventListener('click', () => els.bindingDialog.close());
+        els.bindingCancel.addEventListener('click', () => els.bindingDialog.close());
+        els.bindingDialog.addEventListener('click', (event) => {
+            if (event.target === els.bindingDialog) els.bindingDialog.close();
+        });
+        els.conflictClose.addEventListener('click', () => els.conflictDialog.close());
+        els.conflictDialog.addEventListener('click', (event) => {
+            if (event.target === els.conflictDialog) els.conflictDialog.close();
+        });
+        els.conflictDialog.querySelectorAll('[data-choice]').forEach((button) => {
+            button.addEventListener('click', () => resolveObsidianConflict(button.dataset.choice));
+        });
     }
 
     function formatTime(seconds) {
@@ -246,6 +589,12 @@
         renderSourceMode(source);
         renderPlayback(playback, source);
         renderCollectionNavigation(session.collection);
+        const currentNoteContext = noteContextKey();
+        if (state.noteContext !== currentNoteContext) {
+            resetStudyNoteState();
+            state.noteContext = currentNoteContext;
+            loadStudyNote(true);
+        }
         renderProgress(session);
         renderTranscript(transcript.lines || [], session);
         renderChat();
@@ -280,7 +629,10 @@
             return;
         }
         if (playback.source_available && playback.source_url) {
-            if (els.video.getAttribute('src') !== playback.source_url) {
+            if (!playerRuntime.sameMediaResource(
+                els.video.getAttribute('src'),
+                playback.source_url
+            )) {
                 els.video.src = playback.source_url;
             }
             if (state.localObjectUrl) {
@@ -827,6 +1179,7 @@
                 });
                 state.visualTabActive = tab === 'visual';
                 if (tab === 'visual') activateVisualLearning();
+                if (tab === 'notes' && !state.noteDocument) loadStudyNote(true);
             });
         });
     }
@@ -1456,6 +1809,8 @@
         state.chatMessages = [];
         state.visualDocuments = {};
         state.visualStates = {};
+        resetStudyNoteState();
+        state.noteContext = '';
         if (pushHistory !== false) {
             history.pushState(
                 {},
@@ -1552,6 +1907,7 @@
         bindPanelSeek();
         bindVideo();
         bindChat();
+        bindStudyNote();
         bindActions();
         bindVisualLearning();
         bindLibrary();

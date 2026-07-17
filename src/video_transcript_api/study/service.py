@@ -185,6 +185,44 @@ class StudyService:
             source_id=source_id,
         )
 
+    def get_note_document(
+        self,
+        view_token: str,
+        *,
+        owner_user_id: str,
+        collection_id: str = "",
+        source_id: str = "",
+        claim_unowned_single_legacy: bool = False,
+    ) -> dict[str, Any]:
+        """Return the single editable note document for a Study context."""
+        return self.repository.get_or_create_note_document(
+            owner_user_id=owner_user_id,
+            view_token=view_token,
+            collection_id=collection_id,
+            source_id=source_id,
+            claim_unowned_single_legacy=claim_unowned_single_legacy,
+        )
+
+    def save_note_document(
+        self,
+        view_token: str,
+        *,
+        body: str,
+        expected_revision: int,
+        owner_user_id: str,
+        collection_id: str = "",
+        source_id: str = "",
+    ) -> dict[str, Any]:
+        """Save a note body when the caller still holds the current revision."""
+        return self.repository.update_note_document(
+            owner_user_id=owner_user_id,
+            view_token=view_token,
+            collection_id=collection_id,
+            source_id=source_id,
+            body=body,
+            expected_revision=expected_revision,
+        )
+
     def ask_ai(
         self,
         view_token: str,

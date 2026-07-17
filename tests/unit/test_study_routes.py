@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 
@@ -16,6 +17,49 @@ def _build_app():
     app.include_router(study.router)
     app.dependency_overrides[verify_token] = _fake_verify_token
     return app
+
+
+def _build_app_with_obsidian():
+    from video_transcript_api.api.routes import obsidian, study
+    from video_transcript_api.api.services.transcription import verify_token
+
+    app = FastAPI()
+    app.include_router(obsidian.router)
+    app.include_router(study.router)
+    app.dependency_overrides[verify_token] = _fake_verify_token
+    return app
+
+
+def _study_session(title="Lesson"):
+    return {
+        "metadata": {"title": title},
+        "transcript": {"lines": [{"text": "body", "seekable": False}]},
+    }
+
+
+def test_obsidian_sync_service_is_shared_across_requests(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import obsidian
+
+    cache_manager = MagicMock()
+    cache_manager.db_path = tmp_path / "study.db"
+    monkeypatch.setattr(
+        obsidian,
+        "_configured_settings",
+        lambda: {
+            "vault_id": "vault-1",
+            "vault_path": str(tmp_path / "vault"),
+        },
+    )
+    monkeypatch.setattr(obsidian, "get_cache_manager", lambda: cache_manager)
+
+    obsidian.get_obsidian_sync_service.cache_clear()
+    try:
+        first = obsidian.get_obsidian_sync_service()
+        second = obsidian.get_obsidian_sync_service()
+    finally:
+        obsidian.get_obsidian_sync_service.cache_clear()
+
+    assert first is second
 
 
 def test_get_study_session_returns_read_model(monkeypatch):
@@ -149,6 +193,261 @@ def test_create_study_note(monkeypatch):
     assert response.status_code == 200
     assert response.json()["data"]["id"] == "note-1"
     service.create_note.assert_called_once_with("view-123", 8.5, "重点")
+
+
+def test_single_note_document_get_and_put_use_owned_context(monkeypatch):
+    from video_transcript_api.api.routes import study
+    from video_transcript_api.study.repository import StudyRevisionConflict
+
+    study_service = MagicMock()
+    study_service.get_session.return_value = _study_session()
+    sync_service = MagicMock()
+    sync_service.load_note.return_value = {
+        "document": {"id": "doc-1", "body": "draft", "revision": 2},
+        "state": "app_dirty",
+    }
+    sync_service.save_note.return_value = {
+        "id": "doc-1",
+        "body": "updated",
+        "revision": 3,
+    }
+    monkeypatch.setattr(study, "get_study_service", lambda: study_service)
+    monkeypatch.setattr(study, "get_obsidian_sync_service", lambda: sync_service)
+    client = TestClient(_build_app_with_obsidian())
+
+    loaded = client.get("/api/study/view-123/note-document")
+    saved = client.put(
+        "/api/study/view-123/note-document",
+        json={"body": "updated", "expected_revision": 2},
+    )
+
+    assert loaded.status_code == 200
+    assert loaded.json()["data"]["document"]["body"] == "draft"
+    assert saved.status_code == 200
+    context = sync_service.load_note.call_args.args[0]
+    assert context.view_token == "view-123"
+    assert context.collection_id == ""
+    assert context.owner_user_id == "test-user"
+    sync_service.save_note.assert_called_once_with(
+        context, body="updated", expected_revision=2
+    )
+
+    sync_service.save_note.side_effect = StudyRevisionConflict(
+        {"id": "doc-1", "body": "newer", "revision": 4}
+    )
+    conflict = client.put(
+        "/api/study/view-123/note-document",
+        json={"body": "stale", "expected_revision": 2},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["current"]["body"] == "newer"
+
+
+def test_collection_note_and_binding_use_collection_scope(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    collection_service = MagicMock()
+    collection_service.repository.get_collection.return_value = {
+        "id": "c1",
+        "owner_user_id": "test-user",
+    }
+    collection_service.get_source_detail.return_value = {
+        "id": "s1",
+        "view_token": "view-shared",
+        "title": "Episode 1",
+    }
+    collection_service.get_collection_detail.return_value = {
+        "id": "c1",
+        "title": "Course",
+        "sources": [],
+    }
+    study_service = MagicMock()
+    study_service.get_collection_session.return_value = _study_session("Episode 1")
+    sync_service = MagicMock()
+    sync_service.load_note.return_value = {
+        "document": {"id": "doc-c1-s1", "body": "", "revision": 1},
+        "state": "skipped_empty",
+    }
+    sync_service.save_binding.return_value = {
+        "id": "binding-c1",
+        "scope_type": "collection",
+        "revision": 1,
+    }
+    monkeypatch.setattr(study, "get_collection_service", lambda: collection_service)
+    monkeypatch.setattr(study, "get_study_service", lambda: study_service)
+    monkeypatch.setattr(study, "get_obsidian_sync_service", lambda: sync_service)
+    client = TestClient(_build_app_with_obsidian())
+
+    note = client.get("/api/study/collections/c1/sources/s1/note-document")
+    binding = client.put(
+        "/api/study/collections/c1/obsidian-binding",
+        json={
+            "transcript_directory": "raw/Course",
+            "note_directory": "Course/笔记",
+            "expected_revision": None,
+        },
+    )
+
+    assert note.status_code == 200
+    assert binding.status_code == 200
+    note_context = sync_service.load_note.call_args.args[0]
+    binding_context = sync_service.save_binding.call_args.args[0]
+    assert (note_context.collection_id, note_context.source_id) == ("c1", "s1")
+    assert (binding_context.collection_id, binding_context.source_id) == ("c1", "")
+    assert binding_context.course == "Course"
+
+
+@pytest.mark.parametrize(
+    ("result", "status_code"),
+    [
+        (
+            {
+                "overall": "success",
+                "transcript": {"status": "created"},
+                "note": {"status": "created"},
+            },
+            200,
+        ),
+        (
+            {
+                "overall": "partial",
+                "transcript": {"status": "created"},
+                "note": {"status": "failed"},
+            },
+            207,
+        ),
+        (
+            {
+                "overall": "failed",
+                "transcript": {"status": "failed"},
+                "note": {"status": "failed"},
+            },
+            500,
+        ),
+    ],
+)
+def test_single_obsidian_sync_maps_per_file_result_status(monkeypatch, result, status_code):
+    from video_transcript_api.api.routes import study
+
+    study_service = MagicMock()
+    study_service.get_session.return_value = _study_session()
+    sync_service = MagicMock()
+    sync_service.sync.return_value = result
+    monkeypatch.setattr(study, "get_study_service", lambda: study_service)
+    monkeypatch.setattr(study, "get_obsidian_sync_service", lambda: sync_service)
+
+    response = TestClient(_build_app_with_obsidian()).post(
+        "/api/study/view-123/obsidian-sync"
+    )
+
+    assert response.status_code == status_code
+    assert response.json()["data"] == result
+
+
+def test_obsidian_conflict_payload_returns_409(monkeypatch):
+    from video_transcript_api.api.routes import study
+    from video_transcript_api.obsidian.service import ObsidianConflict
+
+    study_service = MagicMock()
+    study_service.get_session.return_value = _study_session()
+    sync_service = MagicMock()
+    sync_service.sync.side_effect = ObsidianConflict(
+        {
+            "code": "conflict",
+            "state": "conflict",
+            "preconditions": {
+                "expected_revision": 2,
+                "expected_obsidian_hash": "obs-hash",
+                "expected_baseline_hash": "base-hash",
+            },
+        }
+    )
+    monkeypatch.setattr(study, "get_study_service", lambda: study_service)
+    monkeypatch.setattr(study, "get_obsidian_sync_service", lambda: sync_service)
+
+    response = TestClient(_build_app_with_obsidian()).post(
+        "/api/study/view-123/obsidian-sync"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "conflict"
+
+
+def test_conflict_resolution_forwards_all_stale_preconditions(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    study_service = MagicMock()
+    study_service.get_session.return_value = _study_session()
+    sync_service = MagicMock()
+    sync_service.resolve_conflict.return_value = {
+        "document": {"body": "kept", "revision": 3},
+        "note_relative_path": "Course/笔记/Lesson.md",
+    }
+    monkeypatch.setattr(study, "get_study_service", lambda: study_service)
+    monkeypatch.setattr(study, "get_obsidian_sync_service", lambda: sync_service)
+
+    response = TestClient(_build_app_with_obsidian()).post(
+        "/api/study/view-123/obsidian-conflict/resolve",
+        json={
+            "choice": "recreate_from_app",
+            "expected_revision": 2,
+            "expected_obsidian_hash": "__absent__",
+            "expected_baseline_hash": "base-hash",
+        },
+    )
+
+    assert response.status_code == 200
+    context = sync_service.resolve_conflict.call_args.args[0]
+    sync_service.resolve_conflict.assert_called_once_with(
+        context,
+        choice="recreate_from_app",
+        expected_revision=2,
+        expected_obsidian_hash="__absent__",
+        expected_baseline_hash="base-hash",
+    )
+
+
+def test_obsidian_global_status_and_directories_are_authenticated_and_redacted(
+    monkeypatch, tmp_path
+):
+    from video_transcript_api.api.routes import obsidian
+
+    vault = tmp_path / "SecretVault"
+    (vault / "raw" / "Course").mkdir(parents=True)
+    (vault / ".obsidian").mkdir()
+    monkeypatch.setattr(
+        obsidian,
+        "get_obsidian_settings",
+        lambda: {
+            "enabled": True,
+            "vault_id": "vault-1",
+            "vault_path": str(vault),
+        },
+    )
+    client = TestClient(_build_app_with_obsidian())
+
+    status = client.get("/api/obsidian/status")
+    directories = client.get("/api/obsidian/directories?root=vault")
+    created = client.post(
+        "/api/obsidian/directories",
+        json={"parent_relative_path": "raw/Course", "name": "笔记"},
+    )
+
+    assert status.status_code == 200
+    assert status.json()["data"]["available"] is True
+    assert str(tmp_path) not in status.text
+    assert ".obsidian" not in directories.text
+    assert created.json()["data"]["relative_path"] == "raw/Course/笔记"
+
+    async def unauthorized():
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    from video_transcript_api.api.services.transcription import verify_token
+
+    unauthorized_app = FastAPI()
+    unauthorized_app.include_router(obsidian.router)
+    unauthorized_app.dependency_overrides[verify_token] = unauthorized
+    assert TestClient(unauthorized_app).get("/api/obsidian/status").status_code == 401
 
 
 def test_ask_study_ai(monkeypatch):

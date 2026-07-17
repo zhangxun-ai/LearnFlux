@@ -8,12 +8,17 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 from ..context import get_audit_logger, get_cache_manager, get_config, get_logger, get_user_manager
 from ..services.transcription import TranscribeResponse, process_local_upload, verify_token
-from ...study.repository import StudyRepository
+from ...obsidian.service import (
+    ObsidianConflict,
+    ObsidianSyncError,
+    StudySyncContext,
+)
+from ...study.repository import StudyRepository, StudyRevisionConflict
 from ...study.library import StudyLibraryService
 from ...study.media_access import StudyMediaAccess
 from ...study.service import StudyService
@@ -24,6 +29,7 @@ from ...study.source_files import (
     safe_extension,
 )
 from .collections import get_collection_service
+from .obsidian import get_obsidian_sync_service
 
 router = APIRouter(prefix="/api/study", tags=["study"])
 
@@ -61,6 +67,29 @@ class StudyTextRequest(BaseModel):
     @classmethod
     def strip_text_fields(cls, value):
         return str(value or "").strip()
+
+
+class StudyNoteDocumentRequest(BaseModel):
+    body: str = Field(default="", max_length=500000)
+    expected_revision: int = Field(..., ge=1)
+
+
+class ObsidianBindingRequest(BaseModel):
+    transcript_directory: str = Field(..., min_length=1, max_length=500)
+    note_directory: str = Field(..., min_length=1, max_length=500)
+    expected_revision: int | None = Field(None, ge=1)
+
+
+class ObsidianConflictResolutionRequest(BaseModel):
+    choice: Literal[
+        "app",
+        "obsidian",
+        "recreate_from_app",
+        "accept_external_deletion",
+    ]
+    expected_revision: int = Field(..., ge=1)
+    expected_obsidian_hash: str = Field(..., min_length=1, max_length=128)
+    expected_baseline_hash: str | None = Field(None, max_length=128)
 
 
 def get_source_root() -> Path:
@@ -122,6 +151,155 @@ def _require_owned_single(view_token: str, user_info: dict) -> None:
     }
     if not task_id or task_id not in owned_task_ids:
         raise HTTPException(status_code=404, detail="学习内容不存在")
+
+
+def _single_obsidian_context(view_token: str, user_info: dict) -> StudySyncContext:
+    _require_owned_single(view_token, user_info)
+    session = get_study_service().get_session(view_token)
+    if not session:
+        raise HTTPException(status_code=404, detail="学习内容不存在")
+    metadata = session.get("metadata") or {}
+    return StudySyncContext(
+        owner_user_id=user_info.get("user_id") or "",
+        view_token=view_token,
+        title=metadata.get("title") or "未命名课程",
+        course="",
+        transcript_lines=((session.get("transcript") or {}).get("lines") or []),
+    )
+
+
+def _collection_obsidian_context(
+    collection_id: str,
+    source_id: str,
+    user_info: dict,
+) -> StudySyncContext:
+    _, detail, source = _get_owned_collection_context(
+        collection_id, source_id, user_info
+    )
+    view_token = source.get("view_token") or ""
+    session = get_study_service().get_collection_session(
+        view_token,
+        owner_user_id=user_info.get("user_id") or "",
+        collection_id=collection_id,
+        source_id=source_id,
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="学习内容不存在")
+    metadata = session.get("metadata") or {}
+    return StudySyncContext(
+        owner_user_id=user_info.get("user_id") or "",
+        view_token=view_token,
+        title=metadata.get("title") or source.get("title") or "未命名课程",
+        course=detail.get("title") or "学习合集",
+        transcript_lines=((session.get("transcript") or {}).get("lines") or []),
+        collection_id=collection_id,
+        source_id=source_id,
+    )
+
+
+def _collection_binding_context(
+    collection_id: str,
+    user_info: dict,
+) -> StudySyncContext:
+    collection_service = get_collection_service()
+    collection = collection_service.repository.get_collection(collection_id)
+    if not collection or (collection.get("owner_user_id") or "") != (
+        user_info.get("user_id") or ""
+    ):
+        raise HTTPException(status_code=404, detail="学习合集不存在")
+    try:
+        detail = collection_service.get_collection_detail(collection_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return StudySyncContext(
+        owner_user_id=user_info.get("user_id") or "",
+        view_token="",
+        title=detail.get("title") or "学习合集",
+        course=detail.get("title") or "学习合集",
+        transcript_lines=[],
+        collection_id=collection_id,
+    )
+
+
+def _raise_obsidian_http_error(exc: Exception) -> None:
+    if isinstance(exc, StudyRevisionConflict):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "revision_conflict", "current": exc.current},
+        )
+    if isinstance(exc, ObsidianConflict):
+        raise HTTPException(status_code=409, detail=exc.payload)
+    if isinstance(exc, ObsidianSyncError):
+        status_code = 409 if exc.code in {
+            "binding_required",
+            "binding_directory_missing",
+            "conflict_not_found",
+            "invalid_conflict_choice",
+        } else 400
+        raise HTTPException(status_code=status_code, detail={"code": exc.code})
+    raise exc
+
+
+def _note_document_response(context: StudySyncContext):
+    try:
+        result = get_obsidian_sync_service().load_note(context)
+    except Exception as exc:
+        _raise_obsidian_http_error(exc)
+    if result.get("conflict"):
+        raise HTTPException(status_code=409, detail=result["conflict"])
+    return TranscribeResponse(code=200, message="课程笔记", data=result)
+
+
+def _save_note_document_response(
+    context: StudySyncContext,
+    request: StudyNoteDocumentRequest,
+):
+    try:
+        document = get_obsidian_sync_service().save_note(
+            context,
+            body=request.body,
+            expected_revision=request.expected_revision,
+        )
+    except Exception as exc:
+        _raise_obsidian_http_error(exc)
+    return TranscribeResponse(code=200, message="课程笔记已保存", data=document)
+
+
+def _sync_response(context: StudySyncContext):
+    try:
+        result = get_obsidian_sync_service().sync(context)
+    except Exception as exc:
+        _raise_obsidian_http_error(exc)
+    if result.get("overall") == "binding_required":
+        raise HTTPException(status_code=409, detail={"code": "binding_required"})
+    status_code = {"success": 200, "partial": 207, "failed": 500}.get(
+        result.get("overall"), 500
+    )
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "code": status_code,
+            "message": "Obsidian sync result",
+            "data": result,
+        },
+    )
+
+
+def _resolve_conflict_response(
+    context: StudySyncContext,
+    request: ObsidianConflictResolutionRequest,
+):
+    try:
+        result = get_obsidian_sync_service().resolve_conflict(
+            context,
+            choice=request.choice,
+            expected_revision=request.expected_revision,
+            expected_obsidian_hash=request.expected_obsidian_hash,
+            expected_baseline_hash=request.expected_baseline_hash,
+        )
+    except Exception as exc:
+        _raise_obsidian_http_error(exc)
+    return TranscribeResponse(code=200, message="Obsidian conflict resolved", data=result)
 
 
 def _collection_episode_data(detail: dict, source_id: str) -> dict:
@@ -377,6 +555,164 @@ async def export_collection_study_markdown(
             "Cache-Control": "no-cache",
             "Content-Disposition": f'attachment; filename="{source_id}.md"',
         },
+    )
+
+
+@router.get("/collections/{collection_id}/sources/{source_id}/note-document")
+async def get_collection_note_document(
+    collection_id: str,
+    source_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    return _note_document_response(
+        _collection_obsidian_context(collection_id, source_id, user_info)
+    )
+
+
+@router.put("/collections/{collection_id}/sources/{source_id}/note-document")
+async def update_collection_note_document(
+    collection_id: str,
+    source_id: str,
+    request: StudyNoteDocumentRequest,
+    user_info: dict = Depends(verify_token),
+):
+    return _save_note_document_response(
+        _collection_obsidian_context(collection_id, source_id, user_info), request
+    )
+
+
+@router.get("/collections/{collection_id}/obsidian-binding")
+async def get_collection_obsidian_binding(
+    collection_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    context = _collection_binding_context(collection_id, user_info)
+    try:
+        binding = get_obsidian_sync_service().get_binding(context)
+    except Exception as exc:
+        _raise_obsidian_http_error(exc)
+    return TranscribeResponse(
+        code=200,
+        message="Obsidian collection binding",
+        data={"binding": binding, "required": binding is None},
+    )
+
+
+@router.put("/collections/{collection_id}/obsidian-binding")
+async def update_collection_obsidian_binding(
+    collection_id: str,
+    request: ObsidianBindingRequest,
+    user_info: dict = Depends(verify_token),
+):
+    context = _collection_binding_context(collection_id, user_info)
+    try:
+        binding = get_obsidian_sync_service().save_binding(
+            context,
+            transcript_directory=request.transcript_directory,
+            note_directory=request.note_directory,
+            expected_revision=request.expected_revision,
+        )
+    except Exception as exc:
+        _raise_obsidian_http_error(exc)
+    return TranscribeResponse(code=200, message="Obsidian binding saved", data=binding)
+
+
+@router.post("/collections/{collection_id}/sources/{source_id}/obsidian-sync")
+async def sync_collection_source_to_obsidian(
+    collection_id: str,
+    source_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    return _sync_response(
+        _collection_obsidian_context(collection_id, source_id, user_info)
+    )
+
+
+@router.post(
+    "/collections/{collection_id}/sources/{source_id}/obsidian-conflict/resolve"
+)
+async def resolve_collection_obsidian_conflict(
+    collection_id: str,
+    source_id: str,
+    request: ObsidianConflictResolutionRequest,
+    user_info: dict = Depends(verify_token),
+):
+    return _resolve_conflict_response(
+        _collection_obsidian_context(collection_id, source_id, user_info), request
+    )
+
+
+@router.get("/{view_token}/note-document")
+async def get_single_note_document(
+    view_token: str,
+    user_info: dict = Depends(verify_token),
+):
+    return _note_document_response(_single_obsidian_context(view_token, user_info))
+
+
+@router.put("/{view_token}/note-document")
+async def update_single_note_document(
+    view_token: str,
+    request: StudyNoteDocumentRequest,
+    user_info: dict = Depends(verify_token),
+):
+    return _save_note_document_response(
+        _single_obsidian_context(view_token, user_info), request
+    )
+
+
+@router.get("/{view_token}/obsidian-binding")
+async def get_single_obsidian_binding(
+    view_token: str,
+    user_info: dict = Depends(verify_token),
+):
+    context = _single_obsidian_context(view_token, user_info)
+    try:
+        binding = get_obsidian_sync_service().get_binding(context)
+    except Exception as exc:
+        _raise_obsidian_http_error(exc)
+    return TranscribeResponse(
+        code=200,
+        message="Obsidian single binding",
+        data={"binding": binding, "required": binding is None},
+    )
+
+
+@router.put("/{view_token}/obsidian-binding")
+async def update_single_obsidian_binding(
+    view_token: str,
+    request: ObsidianBindingRequest,
+    user_info: dict = Depends(verify_token),
+):
+    context = _single_obsidian_context(view_token, user_info)
+    try:
+        binding = get_obsidian_sync_service().save_binding(
+            context,
+            transcript_directory=request.transcript_directory,
+            note_directory=request.note_directory,
+            expected_revision=request.expected_revision,
+        )
+    except Exception as exc:
+        _raise_obsidian_http_error(exc)
+    return TranscribeResponse(code=200, message="Obsidian binding saved", data=binding)
+
+
+@router.post("/{view_token}/obsidian-sync")
+async def sync_single_to_obsidian(
+    view_token: str,
+    user_info: dict = Depends(verify_token),
+):
+    return _sync_response(_single_obsidian_context(view_token, user_info))
+
+
+@router.post("/{view_token}/obsidian-conflict/resolve")
+async def resolve_single_obsidian_conflict(
+    view_token: str,
+    request: ObsidianConflictResolutionRequest,
+    user_info: dict = Depends(verify_token),
+):
+    return _resolve_conflict_response(
+        _single_obsidian_context(view_token, user_info), request
     )
 
 

@@ -144,6 +144,33 @@ def test_player_runtime_applies_bounded_playback_rate():
     }
 
 
+def test_player_runtime_treats_rotated_media_token_as_same_source():
+    result = _run_node(
+        f"""
+        const runtime = require({json.dumps(str(RUNTIME_JS))});
+        const first = '/api/study/view-1/source-file?media_token=first';
+        const rotated = '/api/study/view-1/source-file?media_token=second';
+        const different = '/api/study/view-2/source-file?media_token=third';
+        console.log(JSON.stringify({{
+          rotated: runtime.sameMediaResource(first, rotated),
+          absoluteRotated: runtime.sameMediaResource(
+            'http://127.0.0.1:8001' + first,
+            rotated
+          ),
+          different: runtime.sameMediaResource(first, different),
+          missing: runtime.sameMediaResource('', rotated)
+        }}));
+        """
+    )
+
+    assert result == {
+        "rotated": True,
+        "absoluteRotated": True,
+        "different": False,
+        "missing": False,
+    }
+
+
 def test_study_player_keeps_controls_before_media_and_exposes_follow_toggle():
     html = STUDY_HTML.read_text(encoding="utf-8")
 

@@ -822,6 +822,190 @@ button {
     padding-right: 0;
 }
 
+#tab-notes.is-active {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    overflow: hidden;
+    padding-right: 0;
+}
+
+.study-note-head {
+    align-items: center;
+}
+
+.study-note-status {
+    flex: 0 0 auto;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+    color: var(--ink-soft);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.study-note-status[data-state="dirty"],
+.study-note-status[data-state="saving"] {
+    background: #fff4d6;
+    color: #8a5a00;
+}
+
+.study-note-status[data-state="synced"] {
+    background: #e8f7ee;
+    color: #187443;
+}
+
+.study-note-status[data-state="conflict"],
+.study-note-status[data-state="error"] {
+    background: #fff0ed;
+    color: #a53626;
+}
+
+.study-note-editor {
+    width: 100%;
+    min-height: 360px;
+    flex: 1 1 auto;
+    resize: none;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    background: var(--card);
+    color: var(--ink);
+    font: 14px/1.75 ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    outline: none;
+}
+
+.study-note-editor:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(228, 80, 58, .12);
+}
+
+.study-note-editor:disabled {
+    cursor: wait;
+    background: var(--bg-tertiary);
+}
+
+.study-note-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn.danger {
+    border-color: #c53f32;
+    background: #fff0ed;
+    color: #a53626;
+}
+
+.obsidian-dialog {
+    width: min(680px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: 0 24px 80px rgba(40, 34, 28, .24);
+}
+
+.obsidian-dialog::backdrop {
+    background: rgba(28, 24, 20, .48);
+    backdrop-filter: blur(3px);
+}
+
+.obsidian-dialog-shell {
+    display: grid;
+    gap: 18px;
+    padding: 22px;
+}
+
+.obsidian-dialog-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.obsidian-dialog-head span,
+.obsidian-binding-fields label > span,
+.obsidian-conflict-grid label > span {
+    color: var(--ink-soft);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.obsidian-dialog-head h2 {
+    margin: 4px 0 0;
+    font-size: 20px;
+}
+
+.obsidian-dialog-copy,
+.obsidian-dialog-status {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.obsidian-binding-fields {
+    display: grid;
+    gap: 14px;
+}
+
+.obsidian-binding-fields label,
+.obsidian-conflict-grid label {
+    display: grid;
+    gap: 7px;
+}
+
+.obsidian-binding-fields select {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0 12px;
+    background: var(--paper-warm);
+    color: var(--ink);
+}
+
+.obsidian-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.obsidian-conflict-shell {
+    width: min(900px, calc(100vw - 32px));
+}
+
+.obsidian-conflict-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.obsidian-conflict-grid textarea {
+    min-height: 260px;
+    resize: vertical;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    color: var(--ink);
+    font: 13px/1.65 ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+}
+
+.obsidian-dialog button:focus-visible,
+.obsidian-dialog select:focus-visible,
+.study-note-actions button:focus-visible {
+    outline: 3px solid rgba(228, 80, 58, .24);
+    outline-offset: 2px;
+}
+
 .overview-card,
 .status-card,
 .empty-panel,
@@ -2006,6 +2190,28 @@ body.has-app-shell .surface {
     .note-visual {
         margin-left: 0;
     }
+
+    .right-tabs {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .right-tabs button {
+        flex: 0 0 auto;
+    }
+
+    .study-note-editor {
+        min-height: 320px;
+        resize: vertical;
+    }
+
+    .obsidian-conflict-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .obsidian-dialog-actions .btn {
+        flex: 1 1 180px;
+    }
 }
 
 @media print {
@@ -2040,6 +2246,8 @@ body.has-app-shell .surface {
     #tab-ai,
     #tab-transcript,
     #tab-chat,
+    #tab-notes,
+    .obsidian-dialog,
     .study-visual-dialog {
         display: none !important;
     }

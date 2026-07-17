@@ -66,6 +66,7 @@ class LearningCollectionService:
         description: str = "",
         import_method: str = "",
         tags: str = "",
+        owner_user_id: str = "",
     ) -> Dict[str, Any]:
         return self.repository.create_collection(
             title=title,
@@ -75,6 +76,7 @@ class LearningCollectionService:
             description=description,
             import_method=import_method,
             tags=tags,
+            owner_user_id=owner_user_id,
         )
 
     def list_collections(
@@ -85,6 +87,7 @@ class LearningCollectionService:
         date_to: Optional[str] = None,
         collection_type: Optional[str] = None,
         status: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         collections = self.repository.list_collections(
             creator_name=creator_name,
@@ -92,6 +95,7 @@ class LearningCollectionService:
             date_from=date_from,
             date_to=date_to,
             collection_type=collection_type,
+            owner_user_id=owner_user_id,
         )
         decorated = [self._decorate_collection_for_list(item) for item in collections]
         if status:
@@ -100,8 +104,52 @@ class LearningCollectionService:
             ]
         return decorated
 
-    def get_filter_options(self) -> Dict[str, List[str]]:
-        return self.repository.get_filter_options()
+    def get_filter_options(self, owner_user_id: Optional[str] = None) -> Dict[str, List[str]]:
+        return self.repository.get_filter_options(owner_user_id=owner_user_id)
+
+    def list_study_collections(
+        self,
+        *,
+        owner_user_id: str,
+        q: str = "",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        query = (q or "").strip().casefold()
+        items = []
+        for collection in self.list_collections(owner_user_id=owner_user_id):
+            haystack = f"{collection.get('title', '')} {collection.get('creator_name', '')}".casefold()
+            if query and query not in haystack:
+                continue
+            detail = self.get_collection_detail(collection["id"])
+            playable = []
+            for source in detail.get("sources") or []:
+                if source.get("source_type") != "video":
+                    continue
+                task_info = self.cache_manager.get_task_by_id(source.get("task_id")) or {}
+                if not self._local_source_file_path(source, task_info):
+                    continue
+                playable.append({
+                    "id": source.get("id"),
+                    "title": source.get("title") or "未命名内容",
+                    "position": source.get("position"),
+                    "state": source.get("task_status") or "queued",
+                })
+            if not playable:
+                continue
+            playable.sort(key=lambda item: (int(item.get("position") or 0), item.get("title") or ""))
+            first_source_id = playable[0]["id"]
+            items.append({
+                "id": detail.get("id"),
+                "title": detail.get("title") or "学习合集",
+                "creator_name": detail.get("creator_name") or "",
+                "source_count": len(playable),
+                "ready_count": sum(1 for source in playable if source["state"] == "success"),
+                "sources": playable,
+                "study_available": True,
+                "study_url": f"/study/collections/{detail['id']}/sources/{first_source_id}",
+            })
+        return {"items": items[offset:offset + limit], "total": len(items)}
 
     def get_collection_detail(self, collection_id: str) -> Dict[str, Any]:
         detail = self.repository.get_collection_detail(collection_id)
@@ -121,10 +169,21 @@ class LearningCollectionService:
 
         task_info = self.cache_manager.get_task_by_id(source["task_id"]) or {}
         source_access = self._build_source_access(collection_id, source, task_info)
+        local_source = self._local_source_file_path(source, task_info)
+        study_available = source.get("source_type") == "video" and bool(local_source)
+        study_fields = {
+            "study_available": study_available,
+            "study_url": (
+                f"/study/collections/{collection_id}/sources/{source_id}"
+                if study_available
+                else ""
+            ),
+        }
         cache_data = self.cache_manager.get_cache_by_view_token(source["view_token"])
         if not cache_data:
             return {
                 **source,
+                **study_fields,
                 "summary": "",
                 "transcript": "",
                 "raw_transcript": "",
@@ -142,6 +201,7 @@ class LearningCollectionService:
 
         return {
             **source,
+            **study_fields,
             "summary": cache_data.get("llm_summary") or "",
             "transcript": transcript,
             "raw_transcript": raw_transcript,

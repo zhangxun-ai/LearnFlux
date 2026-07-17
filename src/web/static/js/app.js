@@ -1064,6 +1064,9 @@ function buildHistoryCard(task) {
     } else {
         viewBtn = `<a class="hist-btn" href="/add_task_by_web">重新提交</a>`;
     }
+    const studyPreviewButton = task.study_available && task.study_url
+        ? `<a class="hist-btn" href="${escapeHtml(task.study_url)}">边播边学</a>`
+        : '';
 
     const tags = [];
     if (task.is_marked) tags.push('<span class="hist-feature-tag">精华</span>');
@@ -1101,6 +1104,7 @@ function buildHistoryCard(task) {
                     </div>
                 </div>
                 <div class="hist-actions">
+                    ${studyPreviewButton}
                     ${viewBtn}
                     <button class="hist-btn" onclick="copyToClipboard('${jsAttr(task.url)}')">复制</button>
                     <button class="hist-btn danger" onclick="TaskHistoryManager.deleteTask('${jsAttr(task.id)}')">删除</button>

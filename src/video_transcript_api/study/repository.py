@@ -11,7 +11,7 @@ logger = setup_logger("study_repository")
 
 
 class StudyRepository:
-    """SQLite repository for local study-mode notes and lightweight session state."""
+    """SQLite repository for context-isolated Study notes."""
 
     def __init__(self, db_path: str):
         self.db_path = Path(db_path)
@@ -55,6 +55,9 @@ class StudyRepository:
                 CREATE TABLE IF NOT EXISTS study_notes (
                     id TEXT PRIMARY KEY,
                     view_token TEXT NOT NULL,
+                    owner_user_id TEXT,
+                    collection_id TEXT,
+                    source_id TEXT,
                     time_seconds REAL,
                     body TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -62,10 +65,15 @@ class StudyRepository:
                 )
                 """
             )
+            cursor.execute("PRAGMA table_info(study_notes)")
+            columns = {row[1] for row in cursor.fetchall()}
+            for column in ("owner_user_id", "collection_id", "source_id"):
+                if column not in columns:
+                    cursor.execute(f"ALTER TABLE study_notes ADD COLUMN {column} TEXT")
             cursor.execute(
                 """
-                CREATE INDEX IF NOT EXISTS idx_study_notes_view_token
-                ON study_notes(view_token, created_at)
+                CREATE INDEX IF NOT EXISTS idx_study_notes_context
+                ON study_notes(view_token, owner_user_id, collection_id, source_id, created_at)
                 """
             )
 
@@ -74,47 +82,80 @@ class StudyRepository:
         view_token: str,
         time_seconds: Optional[float],
         body: str,
+        *,
+        owner_user_id: str = "",
+        collection_id: str = "",
+        source_id: str = "",
     ) -> dict[str, Any]:
         note_id = uuid.uuid4().hex
         clean_body = (body or "").strip()
         with self._get_cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO study_notes (id, view_token, time_seconds, body)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO study_notes (
+                    id, view_token, owner_user_id, collection_id, source_id, time_seconds, body
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (note_id, view_token, time_seconds, clean_body),
+                (
+                    note_id,
+                    view_token,
+                    owner_user_id,
+                    collection_id,
+                    source_id,
+                    time_seconds,
+                    clean_body,
+                ),
             )
-        return self.get_note(note_id, view_token) or {
-            "id": note_id,
-            "view_token": view_token,
-            "time_seconds": time_seconds,
-            "body": clean_body,
-        }
+        return self.get_note(
+            note_id,
+            view_token,
+            owner_user_id=owner_user_id,
+            collection_id=collection_id,
+            source_id=source_id,
+        ) or {"id": note_id, "view_token": view_token, "time_seconds": time_seconds, "body": clean_body}
 
-    def get_note(self, note_id: str, view_token: str) -> Optional[dict[str, Any]]:
+    def get_note(
+        self,
+        note_id: str,
+        view_token: str,
+        *,
+        owner_user_id: str = "",
+        collection_id: str = "",
+        source_id: str = "",
+    ) -> Optional[dict[str, Any]]:
         with self._get_cursor() as cursor:
             cursor.execute(
                 """
-                SELECT *
-                FROM study_notes
+                SELECT * FROM study_notes
                 WHERE id = ? AND view_token = ?
+                  AND COALESCE(owner_user_id, '') = ?
+                  AND COALESCE(collection_id, '') = ?
+                  AND COALESCE(source_id, '') = ?
                 """,
-                (note_id, view_token),
+                (note_id, view_token, owner_user_id, collection_id, source_id),
             )
             row = cursor.fetchone()
         return dict(row) if row else None
 
-    def list_notes(self, view_token: str) -> list[dict[str, Any]]:
+    def list_notes(
+        self,
+        view_token: str,
+        *,
+        owner_user_id: str = "",
+        collection_id: str = "",
+        source_id: str = "",
+    ) -> list[dict[str, Any]]:
         with self._get_cursor() as cursor:
             cursor.execute(
                 """
-                SELECT *
-                FROM study_notes
+                SELECT * FROM study_notes
                 WHERE view_token = ?
+                  AND COALESCE(owner_user_id, '') = ?
+                  AND COALESCE(collection_id, '') = ?
+                  AND COALESCE(source_id, '') = ?
                 ORDER BY COALESCE(time_seconds, 999999999), created_at
                 """,
-                (view_token,),
+                (view_token, owner_user_id, collection_id, source_id),
             )
             return [dict(row) for row in cursor.fetchall()]
 
@@ -124,6 +165,10 @@ class StudyRepository:
         view_token: str,
         body: str,
         time_seconds: Optional[float],
+        *,
+        owner_user_id: str = "",
+        collection_id: str = "",
+        source_id: str = "",
     ) -> Optional[dict[str, Any]]:
         with self._get_cursor() as cursor:
             cursor.execute(
@@ -131,17 +176,48 @@ class StudyRepository:
                 UPDATE study_notes
                 SET body = ?, time_seconds = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND view_token = ?
+                  AND COALESCE(owner_user_id, '') = ?
+                  AND COALESCE(collection_id, '') = ?
+                  AND COALESCE(source_id, '') = ?
                 """,
-                ((body or "").strip(), time_seconds, note_id, view_token),
+                (
+                    (body or "").strip(),
+                    time_seconds,
+                    note_id,
+                    view_token,
+                    owner_user_id,
+                    collection_id,
+                    source_id,
+                ),
             )
             if cursor.rowcount == 0:
                 return None
-        return self.get_note(note_id, view_token)
+        return self.get_note(
+            note_id,
+            view_token,
+            owner_user_id=owner_user_id,
+            collection_id=collection_id,
+            source_id=source_id,
+        )
 
-    def delete_note(self, note_id: str, view_token: str) -> bool:
+    def delete_note(
+        self,
+        note_id: str,
+        view_token: str,
+        *,
+        owner_user_id: str = "",
+        collection_id: str = "",
+        source_id: str = "",
+    ) -> bool:
         with self._get_cursor() as cursor:
             cursor.execute(
-                "DELETE FROM study_notes WHERE id = ? AND view_token = ?",
-                (note_id, view_token),
+                """
+                DELETE FROM study_notes
+                WHERE id = ? AND view_token = ?
+                  AND COALESCE(owner_user_id, '') = ?
+                  AND COALESCE(collection_id, '') = ?
+                  AND COALESCE(source_id, '') = ?
+                """,
+                (note_id, view_token, owner_user_id, collection_id, source_id),
             )
             return cursor.rowcount > 0

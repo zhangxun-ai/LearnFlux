@@ -172,6 +172,34 @@ def test_study_service_reports_source_missing_without_failing(tmp_path):
     assert session["transcript"]["lines"]
 
 
+def test_study_service_uses_retained_safe_task_source_path(tmp_path):
+    from video_transcript_api.study.repository import StudyRepository
+    from video_transcript_api.study.service import StudyService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = _create_successful_local_task(
+        cache_manager,
+        url="local://retained/lesson.mp4",
+        title="lesson.mp4",
+    )
+    retained = tmp_path / "sources" / "retained" / "lesson.mp4"
+    retained.parent.mkdir(parents=True)
+    retained.write_bytes(b"video")
+    cache_manager.update_task_status(
+        task["task_id"],
+        "success",
+        force=True,
+        source_file_path=str(retained),
+    )
+    service = StudyService(
+        cache_manager=cache_manager,
+        repository=StudyRepository(db_path=str(tmp_path / "study.db")),
+        source_root=tmp_path / "sources",
+    )
+
+    assert service.get_source_file(task["view_token"]) == retained.resolve()
+
+
 def test_study_service_maps_non_terminal_states_for_ui(tmp_path):
     from video_transcript_api.study.repository import StudyRepository
     from video_transcript_api.study.service import StudyService

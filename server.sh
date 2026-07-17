@@ -23,6 +23,7 @@ CONFIG_FILE="config/config.jsonc"
 PID_FILE="data/server.pid"
 LOG_FILE="data/logs/server.out.log"
 LAUNCHD_LABEL="com.codex.vta.devserver"
+STOP_TIMEOUT_SECONDS="${STOP_TIMEOUT_SECONDS:-10}"
 
 # 从配置读取端口（取第一个 "port": NNNN，即 api.port），读取失败回退 8000
 PORT="$(grep -oE '"port"[[:space:]]*:[[:space:]]*[0-9]+' "$CONFIG_FILE" 2>/dev/null | grep -oE '[0-9]+' | head -1)"
@@ -44,6 +45,14 @@ listening_pids() { lsof -ti tcp:"$PORT" -sTCP:LISTEN 2>/dev/null; }
 
 # 是否正在运行（以端口是否被监听为准）
 is_running() { [ -n "$(listening_pids)" ]; }
+
+# 返回仍存活的指定进程。旧服务关闭监听端口后，后台任务线程可能仍在退出。
+alive_pids() {
+    local pid
+    for pid in "$@"; do
+        kill -0 "$pid" 2>/dev/null && printf '%s\n' "$pid"
+    done
+}
 
 # 移除 Codex 调试时可能留下的 launchctl 临时服务，避免 kill 后被 launchd 拉起
 remove_launchd_job() {
@@ -121,18 +130,22 @@ $(cat "$PID_FILE" 2>/dev/null)"
     # 1) 先发 SIGTERM 让 uvicorn 优雅退出（执行 shutdown 清理）
     printf '%s\n' "$pids" | xargs kill 2>/dev/null
 
-    # 2) 等待最多 10 秒退出
+    # 2) 等待旧进程完全退出；仅等待端口释放会让新旧实例短暂重叠，
+    #    导致新实例跳过中断任务恢复。
     local i=0
-    while [ "$i" -lt 10 ]; do
-        is_running || break
+    local alive
+    while [ "$i" -lt "$STOP_TIMEOUT_SECONDS" ]; do
+        alive="$(alive_pids $pids)"
+        [ -n "$alive" ] || break
         sleep 1
         i=$((i + 1))
     done
 
-    # 3) 仍未退出则强制结束（按端口兜底，杀掉残留子进程）
-    if is_running; then
+    # 3) 仍未退出则强制结束已跟踪的父子进程
+    alive="$(alive_pids $pids)"
+    if [ -n "$alive" ]; then
         warn "优雅停止超时，强制结束 ..."
-        listening_pids | xargs kill -9 2>/dev/null
+        printf '%s\n' "$alive" | xargs kill -9 2>/dev/null
         sleep 1
     fi
 

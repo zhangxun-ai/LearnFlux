@@ -1,6 +1,7 @@
 (function () {
     const STORAGE_KEY = 'vta_bearer_token';
     const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
+    const PLAYBACK_RATE_KEY = 'vta_study_playback_rate';
     let viewToken = window.STUDY_VIEW_TOKEN || '';
     let collectionId = window.STUDY_COLLECTION_ID || '';
     let sourceId = window.STUDY_SOURCE_ID || '';
@@ -27,6 +28,7 @@
         progressSavedAt: 0,
         transcriptFollow: true,
         isSeeking: false,
+        playbackRate: 1,
     };
 
     const els = {
@@ -47,6 +49,7 @@
         playToggle: document.getElementById('play-toggle'),
         progress: document.getElementById('video-progress'),
         videoTime: document.getElementById('video-time'),
+        playbackRate: document.getElementById('playback-rate'),
         playStrip: document.getElementById('study-play-strip'),
         sourceCard: document.getElementById('study-source-card'),
         sourceName: document.getElementById('study-source-name'),
@@ -58,6 +61,11 @@
         progressFill: document.getElementById('study-progress-fill'),
         retry: document.getElementById('study-retry'),
         aiOverview: document.getElementById('ai-overview'),
+        aiOverviewMeta: document.getElementById('ai-overview-meta'),
+        aiOverviewExpand: document.getElementById('ai-overview-expand'),
+        aiReadingDialog: document.getElementById('ai-reading-dialog'),
+        aiReadingContent: document.getElementById('ai-reading-content'),
+        aiReadingClose: document.getElementById('ai-reading-close'),
         visualOverview: document.getElementById('visual-learning-overview'),
         visualStatus: document.getElementById('visual-learning-status'),
         visualStatusText: document.getElementById('visual-learning-status-text'),
@@ -221,7 +229,15 @@
         els.state.textContent = stateLabel(session.state);
         els.transcriptCount.textContent = `${transcript.lines.length} 段`;
         els.aiModel.textContent = modelLabel(session.ai && session.ai.chat_model);
-        els.aiOverview.innerHTML = renderMarkdown(aiOverviewText(session));
+        const overviewText = aiOverviewText(session);
+        const overviewHtml = renderMarkdown(overviewText);
+        els.aiOverview.innerHTML = overviewHtml;
+        els.aiReadingContent.innerHTML = overviewHtml;
+        const hasOverview = Boolean(session.ai && session.ai.overview);
+        els.aiOverviewExpand.disabled = !hasOverview;
+        els.aiOverviewMeta.textContent = hasOverview
+            ? `${String(session.ai.overview).replace(/\s/g, '').length} 字 · 完整内容`
+            : '内容生成中';
         els.exportMarkdown.disabled = isPendingState(session.state) && !transcript.lines.length;
 
         els.library.hidden = true;
@@ -859,9 +875,15 @@
         els.video.addEventListener('pause', () => setPlaybackButtonState(false));
         els.video.addEventListener('timeupdate', updateVideoProgress);
         els.video.addEventListener('loadedmetadata', () => {
+            playerRuntime.setPlaybackRate(els.video, state.playbackRate);
             updateVideoProgress();
             applyEstimatedTranscriptTimes();
             restorePlaybackProgress();
+        });
+        els.playbackRate.addEventListener('change', () => {
+            state.playbackRate = playerRuntime.setPlaybackRate(els.video, els.playbackRate.value);
+            localStorage.setItem(PLAYBACK_RATE_KEY, String(state.playbackRate));
+            els.playbackRate.value = String(state.playbackRate);
         });
         els.progress.addEventListener('input', () => {
             const duration = Number(els.video.duration || 0);
@@ -889,6 +911,9 @@
         els.progress.addEventListener('pointercancel', cancelProgressPreview);
         els.video.addEventListener('pause', savePlaybackProgress);
         window.addEventListener('beforeunload', savePlaybackProgress);
+        const storedRate = Number(localStorage.getItem(PLAYBACK_RATE_KEY) || 1);
+        state.playbackRate = playerRuntime.setPlaybackRate(els.video, storedRate);
+        els.playbackRate.value = String(state.playbackRate);
     }
 
     function cancelProgressPreview() {
@@ -1042,6 +1067,15 @@
         els.copyCurrentLine.addEventListener('click', copyCurrentLine);
         els.exportMarkdown.addEventListener('click', exportMarkdown);
         els.retry.addEventListener('click', retryStudy);
+        els.aiOverviewExpand.addEventListener('click', () => {
+            if (!els.aiOverviewExpand.disabled && !els.aiReadingDialog.open) {
+                els.aiReadingDialog.showModal();
+            }
+        });
+        els.aiReadingClose.addEventListener('click', () => els.aiReadingDialog.close());
+        els.aiReadingDialog.addEventListener('click', (event) => {
+            if (event.target === els.aiReadingDialog) els.aiReadingDialog.close();
+        });
     }
 
     async function retryStudy() {
@@ -1494,6 +1528,9 @@
             els.state.textContent = '不可用';
             els.title.textContent = '学习内容加载失败';
             els.aiOverview.textContent = error.message || '请稍后重试';
+            els.aiReadingContent.textContent = error.message || '请稍后重试';
+            els.aiOverviewExpand.disabled = true;
+            els.aiOverviewMeta.textContent = '内容加载失败';
             setVisualStatus(error.message || '视觉速览加载失败', true);
             els.transcriptList.innerHTML = `<div class="empty-panel"><strong>文稿加载失败</strong><span>${message}</span></div>`;
             els.chatList.innerHTML = `<div class="empty-panel"><strong>问答加载失败</strong><span>${message}</span></div>`;

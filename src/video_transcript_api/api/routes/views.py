@@ -1091,13 +1091,13 @@ async def add_task_by_web(request: Request):
         raise HTTPException(status_code=500, detail="访问页面失败，请稍后重试")
 
 
-@router.get("/study/{view_token}", response_class=HTMLResponse, include_in_schema=False)
-async def study_page(view_token: str):
-    """本地视频学习页面。"""
-    view_data = cache_manager.get_view_data_by_token(view_token)
-    if not view_data:
-        raise HTTPException(status_code=404, detail="study page not found")
-
+def _render_study_page(
+    *,
+    page_mode: str,
+    view_token: str = "",
+    collection_id: str = "",
+    source_id: str = "",
+) -> HTMLResponse:
     page = static_dir / "study.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="study page not found")
@@ -1107,22 +1107,51 @@ async def study_page(view_token: str):
         static_dir / "css" / "study.css",
         static_dir / "css" / "visual-learning.css",
         static_dir / "js" / "study.js",
+        static_dir / "js" / "study-player-runtime.js",
         static_dir / "js" / "visual-learning.js",
         static_dir / "css" / "editorial.css",
         static_dir / "css" / "app-shell.css",
         static_dir / "js" / "app-shell.js",
         static_dir / "js" / "pwa-register.js",
     ]
-    version = str(int(max(
-        (f.stat().st_mtime for f in asset_files if f.exists()),
+    version = str(max(
+        (f.stat().st_mtime_ns for f in asset_files if f.exists()),
         default=0,
-    )))
+    ))
     content = (
         page.read_text(encoding="utf-8")
         .replace("__VIEW_TOKEN__", view_token)
+        .replace("__COLLECTION_ID__", collection_id)
+        .replace("__SOURCE_ID__", source_id)
+        .replace("__PAGE_MODE__", page_mode)
         .replace("__ASSET_VERSION__", version)
     )
     return HTMLResponse(content=content, headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/study", response_class=HTMLResponse, include_in_schema=False)
+async def study_library_page():
+    """统一音视频学习内容选择页。"""
+    return _render_study_page(page_mode="library")
+
+
+@router.get("/study/collections/{collection_id}/sources/{source_id}", response_class=HTMLResponse, include_in_schema=False)
+async def study_collection_page(collection_id: str, source_id: str):
+    """带明确合集与分集上下文的统一学习播放器。"""
+    return _render_study_page(
+        page_mode="collection",
+        collection_id=collection_id,
+        source_id=source_id,
+    )
+
+
+@router.get("/study/{view_token}", response_class=HTMLResponse, include_in_schema=False)
+async def study_page(view_token: str):
+    """单篇音视频学习页面。"""
+    view_data = cache_manager.get_view_data_by_token(view_token)
+    if not view_data:
+        raise HTTPException(status_code=404, detail="study page not found")
+    return _render_study_page(page_mode="single", view_token=view_token)
 
 
 @router.get("/export/{view_token}/{export_type}")

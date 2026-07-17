@@ -132,6 +132,7 @@
         regenerateSourceSummary: document.getElementById('regenerate-source-summary'),
         sourceTranscript: document.getElementById('source-transcript'),
         openSource: document.getElementById('open-source'),
+        openStudyPlayer: document.getElementById('open-study-player'),
         openSourceFile: document.getElementById('open-source-file'),
         retrySource: document.getElementById('retry-source'),
         markdownRendered: document.getElementById('markdown-rendered'),
@@ -2353,6 +2354,7 @@
             renderSourceSummary('', '解析完成后显示。');
             els.sourceTranscript.textContent = '解析完成后显示。';
             els.openSource.classList.add('hidden');
+            renderStudyPlayerAction(null);
             renderSourceSummaryAction(null, null);
             renderSourceRetryAction(null);
             if (els.openSourceFile) {
@@ -2370,6 +2372,7 @@
             : (source.progress && source.progress.percent !== undefined ? `当前进度 ${source.progress.percent}%` : '');
         els.openSource.href = source.view_token ? `/view/${source.view_token}` : '#';
         els.openSource.classList.toggle('hidden', !source.view_token);
+        renderStudyPlayerAction(source);
 
         const detail = sourceDetails[source.id];
         if (['failed', 'canceled'].includes(source.task_status) && !detail) {
@@ -2410,6 +2413,13 @@
         els.sourceTranscript.textContent = detail && detail.transcript
             ? previewText(detail.transcript, 12000)
             : (source.task_status === 'success' ? '未读取到逐字稿内容，请点击“查看解读页”查看完整页。' : '解析完成后显示。');
+    }
+
+    function renderStudyPlayerAction(source) {
+        if (!els.openStudyPlayer) return;
+        const canStudy = Boolean(source && source.study_available && source.study_url);
+        els.openStudyPlayer.href = canStudy ? source.study_url : '/study';
+        els.openStudyPlayer.classList.toggle('hidden', !canStudy);
     }
 
     function renderSourceSummaryAction(source, detail) {

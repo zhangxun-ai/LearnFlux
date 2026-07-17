@@ -735,6 +735,30 @@ button {
     font-variant-numeric: tabular-nums;
 }
 
+.play-options {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.playback-rate-control {
+    display: inline-flex;
+}
+
+.playback-rate-control select {
+    min-height: 34px;
+    padding: 0 28px 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--card);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
 .panel {
     padding: 14px;
     position: sticky;
@@ -857,6 +881,24 @@ button {
     font-size: 15px;
 }
 
+.overview-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.overview-card-head h3 {
+    margin: 0 0 3px;
+}
+
+.overview-card-head span {
+    color: var(--ink-soft);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
 .markdown-content p,
 .empty-panel span,
 .chat-message p {
@@ -902,6 +944,87 @@ button {
     color: var(--ink);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 12px;
+}
+
+.ai-reading-dialog {
+    width: min(900px, calc(100vw - 32px));
+    height: min(86vh, 900px);
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: 0 24px 80px rgba(27, 26, 23, .22);
+}
+
+.ai-reading-dialog::backdrop {
+    background: rgba(27, 26, 23, .48);
+    backdrop-filter: blur(4px);
+}
+
+.ai-reading-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.ai-reading-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--line);
+}
+
+.ai-reading-head span {
+    color: var(--accent-ink);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .08em;
+}
+
+.ai-reading-head h2 {
+    margin: 3px 0 0;
+    font-size: 22px;
+}
+
+.ai-reading-content {
+    display: block;
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 28px clamp(24px, 6vw, 72px) 48px;
+}
+
+.ai-reading-content > * {
+    max-width: 760px;
+    margin-right: auto;
+    margin-left: auto;
+}
+
+.ai-reading-content p,
+.ai-reading-content li {
+    color: var(--ink-soft);
+    font-size: 16px;
+    line-height: 1.85;
+}
+
+.ai-reading-content h3,
+.ai-reading-content h4,
+.ai-reading-content h5 {
+    margin-top: 26px;
+    color: var(--ink);
+    font-size: 21px;
+    line-height: 1.45;
+}
+
+.ai-reading-content ul,
+.ai-reading-content ol {
+    gap: 10px;
+    margin-top: 12px;
+    margin-bottom: 18px;
+    padding-left: 26px;
 }
 
 .empty-panel strong,

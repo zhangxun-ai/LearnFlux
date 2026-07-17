@@ -91,12 +91,33 @@ class StudyService:
         view_data = self.cache_manager.get_view_data_by_token(view_token)
         if not view_data:
             return None
+        task_info = self.cache_manager.get_task_by_view_token(view_token) or {}
         return find_study_source_file(
             source_root=self.source_root,
             media_id=view_data.get("media_id") or "",
             title=view_data.get("title") or "",
             url=view_data.get("url") or "",
+            source_file_path=task_info.get("source_file_path") or "",
         )
+
+    def get_collection_session(
+        self,
+        view_token: str,
+        *,
+        owner_user_id: str,
+        collection_id: str,
+        source_id: str,
+    ) -> Optional[dict]:
+        session = self.get_session(view_token)
+        if not session:
+            return None
+        session["notes"] = self.repository.list_notes(
+            view_token,
+            owner_user_id=owner_user_id,
+            collection_id=collection_id,
+            source_id=source_id,
+        )
+        return session
 
     def create_note(self, view_token: str, time_seconds, body: str) -> dict:
         return self.repository.create_note(view_token, time_seconds, body)
@@ -106,6 +127,63 @@ class StudyService:
 
     def delete_note(self, view_token: str, note_id: str) -> bool:
         return self.repository.delete_note(note_id, view_token)
+
+    def create_collection_note(
+        self,
+        view_token: str,
+        time_seconds,
+        body: str,
+        *,
+        owner_user_id: str,
+        collection_id: str,
+        source_id: str,
+    ) -> dict:
+        return self.repository.create_note(
+            view_token,
+            time_seconds,
+            body,
+            owner_user_id=owner_user_id,
+            collection_id=collection_id,
+            source_id=source_id,
+        )
+
+    def update_collection_note(
+        self,
+        view_token: str,
+        note_id: str,
+        time_seconds,
+        body: str,
+        *,
+        owner_user_id: str,
+        collection_id: str,
+        source_id: str,
+    ):
+        return self.repository.update_note(
+            note_id,
+            view_token,
+            body,
+            time_seconds,
+            owner_user_id=owner_user_id,
+            collection_id=collection_id,
+            source_id=source_id,
+        )
+
+    def delete_collection_note(
+        self,
+        view_token: str,
+        note_id: str,
+        *,
+        owner_user_id: str,
+        collection_id: str,
+        source_id: str,
+    ) -> bool:
+        return self.repository.delete_note(
+            note_id,
+            view_token,
+            owner_user_id=owner_user_id,
+            collection_id=collection_id,
+            source_id=source_id,
+        )
 
     def ask_ai(
         self,
@@ -153,6 +231,28 @@ class StudyService:
         session = self.get_session(view_token)
         if not session:
             return None
+
+        return self._export_session_markdown(session)
+
+    def export_collection_markdown(
+        self,
+        view_token: str,
+        *,
+        owner_user_id: str,
+        collection_id: str,
+        source_id: str,
+    ) -> Optional[str]:
+        session = self.get_collection_session(
+            view_token,
+            owner_user_id=owner_user_id,
+            collection_id=collection_id,
+            source_id=source_id,
+        )
+        if not session:
+            return None
+        return self._export_session_markdown(session)
+
+    def _export_session_markdown(self, session: dict) -> str:
 
         metadata = session.get("metadata") or {}
         ai = session.get("ai") or {}

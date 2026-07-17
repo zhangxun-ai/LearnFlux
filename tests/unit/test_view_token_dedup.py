@@ -244,3 +244,19 @@ class TestCreateTaskMediaDedup:
         )
         assert "task_id" in task_info
         assert "view_token" in task_info
+
+    def test_force_new_view_token_skips_all_deduplication(self, cm):
+        first = cm.create_task(
+            url="local://study-source/media/lesson.mp4",
+            platform="generic",
+            media_id="media",
+        )
+        retry = cm.create_task(
+            url="local://study-source/media/lesson.mp4",
+            platform="generic",
+            media_id="media",
+            force_new_view_token=True,
+        )
+
+        assert retry["task_id"] != first["task_id"]
+        assert retry["view_token"] != first["view_token"]

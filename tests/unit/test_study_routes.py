@@ -31,6 +31,9 @@ def test_get_study_session_returns_read_model(monkeypatch):
         "notes": [],
     }
     monkeypatch.setattr(study, "get_study_service", lambda: service)
+    media_access = MagicMock()
+    media_access.issue_single.return_value = "signed-media-token"
+    monkeypatch.setattr(study, "get_study_media_access", lambda: media_access)
 
     client = TestClient(_build_app())
     response = client.get("/api/study/view-123")
@@ -39,7 +42,59 @@ def test_get_study_session_returns_read_model(monkeypatch):
     body = response.json()
     assert body["code"] == 200
     assert body["data"]["metadata"]["title"] == "lesson.mp4"
+    assert body["data"]["playback"]["source_url"] == (
+        "/api/study/view-123/source-file?media_token=signed-media-token"
+    )
+    assert "sk-test" not in body["data"]["playback"]["source_url"]
     service.get_session.assert_called_once_with("view-123")
+
+
+def test_study_source_file_requires_valid_signed_media_token(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import study
+
+    source = tmp_path / "lesson.mp4"
+    source.write_bytes(b"video")
+    service = MagicMock()
+    service.get_source_file.return_value = source
+    media_access = MagicMock()
+    monkeypatch.setattr(study, "get_study_service", lambda: service)
+    monkeypatch.setattr(study, "get_study_media_access", lambda: media_access)
+    client = TestClient(_build_app())
+
+    missing = client.get("/api/study/view-123/source-file")
+    media_access.verify_single.side_effect = ValueError("invalid media token")
+    invalid = client.get("/api/study/view-123/source-file?media_token=bad")
+    media_access.verify_single.side_effect = None
+    valid = client.get("/api/study/view-123/source-file?media_token=good")
+
+    assert missing.status_code == 422
+    assert invalid.status_code == 404
+    assert valid.status_code == 200
+    assert valid.headers["cache-control"] == "private, no-store"
+    media_access.verify_single.assert_called_with("good", view_token="view-123")
+
+
+def test_study_library_static_route_is_not_consumed_as_view_token(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    library = MagicMock()
+    library.list.return_value = {"items": [], "total": 0}
+    session_service = MagicMock()
+    monkeypatch.setattr(study, "get_study_library_service", lambda: library)
+    monkeypatch.setattr(study, "get_study_service", lambda: session_service)
+
+    response = TestClient(_build_app()).get("/api/study/library?kind=single")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"items": [], "total": 0}
+    library.list.assert_called_once_with(
+        kind="single",
+        user_id="test-user",
+        q="",
+        limit=20,
+        offset=0,
+    )
+    session_service.get_session.assert_not_called()
 
 
 def test_get_study_session_returns_404_for_missing_token(monkeypatch):
@@ -51,6 +106,24 @@ def test_get_study_session_returns_404_for_missing_token(monkeypatch):
 
     client = TestClient(_build_app())
     response = client.get("/api/study/missing")
+
+    assert response.status_code == 404
+
+
+def test_multi_user_study_session_hides_other_users_task(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    user_manager = MagicMock()
+    user_manager.is_multi_user_mode.return_value = True
+    cache = MagicMock()
+    cache.get_task_by_view_token.return_value = {"task_id": "task-other"}
+    audit = MagicMock()
+    audit.get_recent_calls.return_value = [{"task_id": "task-owned"}]
+    monkeypatch.setattr(study, "user_manager", user_manager)
+    monkeypatch.setattr(study, "cache_manager", cache)
+    monkeypatch.setattr(study, "audit_logger", audit)
+
+    response = TestClient(_build_app()).get("/api/study/view-other")
 
     assert response.status_code == 404
 
@@ -137,6 +210,8 @@ def test_study_upload_preserves_source_file(monkeypatch, tmp_path):
     monkeypatch.setattr(study, "cache_manager", cache_manager)
     monkeypatch.setattr(study, "process_local_upload", fake_process_local_upload)
     monkeypatch.setattr(study, "get_source_root", lambda: tmp_path / "sources")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(study, "audit_logger", audit_logger)
 
     client = TestClient(_build_app())
     response = client.post(
@@ -150,6 +225,40 @@ def test_study_upload_preserves_source_file(monkeypatch, tmp_path):
     assert background_calls
     assert background_calls[0][-3:-1] == (True, True)
     assert background_calls[0][-1] is False
+    assert audit_logger.log_api_call.call_args.kwargs["task_id"] == "task-1"
+    assert audit_logger.log_api_call.call_args.kwargs["user_id"] == "test-user"
+
+
+def test_retry_failed_single_study_creates_new_task_and_audits(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import study
+
+    source = tmp_path / "lesson.mp4"
+    source.write_bytes(b"video")
+    cache = MagicMock()
+    cache.get_task_by_view_token.return_value = {
+        "task_id": "old-task",
+        "view_token": "old-view",
+        "status": "failed",
+        "url": "local://study-source/media/lesson.mp4",
+        "media_id": "media",
+        "use_speaker_recognition": False,
+        "title": "lesson.mp4",
+    }
+    cache.create_task.return_value = {"task_id": "new-task", "view_token": "new-view"}
+    service = MagicMock()
+    service.get_source_file.return_value = source
+    audit = MagicMock()
+    audit.get_recent_calls.return_value = [{"task_id": "old-task"}]
+    monkeypatch.setattr(study, "cache_manager", cache)
+    monkeypatch.setattr(study, "audit_logger", audit)
+    monkeypatch.setattr(study, "get_study_service", lambda: service)
+
+    response = TestClient(_build_app()).post("/api/study/old-view/retry")
+
+    assert response.status_code == 202
+    assert response.json()["data"]["view_token"] == "new-view"
+    assert cache.create_task.call_args.kwargs["force_new_view_token"] is True
+    assert audit.log_api_call.call_args.kwargs["task_id"] == "new-task"
 
 
 def test_study_upload_only_enables_fast_path_when_explicit(monkeypatch, tmp_path):

@@ -6,6 +6,7 @@
 
 import sqlite3
 import time
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ..context import get_audit_logger, get_cache_manager, get_logger
 from ..services.transcription import TranscribeResponse, verify_token
 from ...marks import ContentMarkRepository
+from ...study.source_files import media_type_for_filename
 from ...utils.timeutil import format_datetime_with_timezone
 
 logger = get_logger()
@@ -157,6 +159,7 @@ async def get_history(
                 t.author,
                 t.platform,
                 t.status,
+                t.source_file_path,
                 CASE WHEN m.id IS NULL THEN 0 ELSE 1 END AS is_marked,
                 COALESCE(t.view_token, a.task_id, t.task_id) AS dedupe_key,
                 ROW_NUMBER() OVER (
@@ -196,6 +199,7 @@ async def get_history(
             author,
             platform,
             status,
+            source_file_path,
             is_marked
         FROM filtered
         WHERE rn = 1
@@ -226,6 +230,15 @@ async def get_history(
             items = []
             for row in rows:
                 request_time = row[3]
+                source_path = Path(row[10]) if row[10] else None
+                source_name = row[6] or (source_path.name if source_path else "")
+                source_media_type = media_type_for_filename(source_name)
+                study_available = bool(
+                    row[5]
+                    and source_path
+                    and source_path.is_file()
+                    and source_media_type.startswith(("audio/", "video/"))
+                )
                 items.append({
                     "task_id": row[0],
                     "video_url": row[1],
@@ -240,7 +253,9 @@ async def get_history(
                     "author": row[7],
                     "platform": row[8],
                     "status": row[9] or "unknown",
-                    "is_marked": bool(row[10]),
+                    "is_marked": bool(row[11]),
+                    "study_available": study_available,
+                    "study_url": f"/study/{row[5]}" if study_available else "",
                 })
             return total, items
         finally:

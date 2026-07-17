@@ -133,7 +133,15 @@ def find_study_source_file(
     media_id: str,
     title: str,
     url: str,
+    source_file_path: str = "",
+    allowed_roots: tuple[str | Path, ...] = (),
 ) -> Path | None:
+    roots = (Path(source_root), *[Path(root) for root in allowed_roots])
+    if source_file_path:
+        retained = _safe_existing_file(Path(source_file_path), roots)
+        if retained is not None:
+            return retained
+
     parsed = parse_study_local_url(url)
     lookup_media_id = media_id
     lookup_title = title
@@ -144,4 +152,20 @@ def find_study_source_file(
         return None
 
     path = build_study_source_path(source_root, lookup_media_id, lookup_title or title or "")
-    return path if path.exists() else None
+    return _safe_existing_file(path, roots)
+
+
+def _safe_existing_file(path: Path, allowed_roots: tuple[Path, ...]) -> Path | None:
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    if not resolved.is_file():
+        return None
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root.resolve())
+            return resolved
+        except (OSError, ValueError):
+            continue
+    return None

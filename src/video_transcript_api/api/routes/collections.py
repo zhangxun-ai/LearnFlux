@@ -13,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
-from ..context import get_cache_manager, get_config, get_logger, get_static_dir
+from ..context import get_cache_manager, get_config, get_logger, get_static_dir, get_user_manager
 from ..services.transcription import TranscribeResponse, process_local_upload, verify_token
 from ...collections.repository import LearningCollectionRepository
 from ...collections.service import LearningCollectionService
@@ -23,6 +23,7 @@ logger = get_logger()
 config = get_config()
 cache_manager = get_cache_manager()
 static_dir = get_static_dir()
+user_manager = get_user_manager()
 
 router = APIRouter(tags=["collections"])
 
@@ -51,12 +52,37 @@ def get_collection_service() -> LearningCollectionService:
     cache_db_path = str(cache_manager.db_path)
     repository = LearningCollectionRepository(db_path=cache_db_path)
     llm_cfg = (config.get("llm") or {}).copy()
-    return LearningCollectionService(
+    service = LearningCollectionService(
         repository=repository,
         cache_manager=cache_manager,
         llm_config=llm_cfg,
         source_file_dir=str(_source_files_dir()),
     )
+    if not user_manager.is_multi_user_mode():
+        repository.assign_unowned_collections("legacy_user")
+    return service
+
+
+def _require_collection_owner(service, collection_id: str, user_info: dict) -> None:
+    repository = getattr(service, "repository", None)
+    if repository is None:
+        return
+    collection = repository.get_collection(collection_id)
+    if not isinstance(collection, dict):
+        return
+    owner_user_id = (collection.get("owner_user_id") or "").strip()
+    if not owner_user_id and not user_manager.is_multi_user_mode():
+        return
+    if not owner_user_id or owner_user_id != (user_info.get("user_id") or ""):
+        raise HTTPException(status_code=404, detail="collection not found")
+
+
+def _backfill_testable_single_user_owner(service, user_info: dict) -> None:
+    """Claim ownerless rows when a caller supplies an uncached service in single-user mode."""
+    repository = getattr(service, "repository", None)
+    if repository is None or user_manager.is_multi_user_mode():
+        return
+    repository.assign_unowned_collections(user_info.get("user_id") or "legacy_user")
 
 
 @router.get("/collections", response_class=HTMLResponse, include_in_schema=False)
@@ -89,6 +115,7 @@ async def list_collections(
     user_info: dict = Depends(verify_token),
 ):
     service = get_collection_service()
+    _backfill_testable_single_user_owner(service, user_info)
     return TranscribeResponse(
         code=200,
         message="学习集合列表",
@@ -100,6 +127,7 @@ async def list_collections(
                 date_to=date_to,
                 collection_type=collection_type,
                 status=status,
+                owner_user_id=user_info.get("user_id") or "",
             )
         },
     )
@@ -108,10 +136,11 @@ async def list_collections(
 @router.get("/api/collections/filter-options", response_model=TranscribeResponse)
 async def get_collection_filter_options(user_info: dict = Depends(verify_token)):
     service = get_collection_service()
+    _backfill_testable_single_user_owner(service, user_info)
     return TranscribeResponse(
         code=200,
         message="学习集合筛选选项",
-        data=service.get_filter_options(),
+        data=service.get_filter_options(owner_user_id=user_info.get("user_id") or ""),
     )
 
 
@@ -130,6 +159,7 @@ async def create_collection(
             description=body.description,
             import_method=body.import_method,
             tags=body.tags,
+            owner_user_id=user_info.get("user_id") or "",
         )
         return TranscribeResponse(code=200, message="学习集合已创建", data=collection)
     except ValueError as exc:
@@ -140,6 +170,7 @@ async def create_collection(
 async def get_collection(collection_id: str, user_info: dict = Depends(verify_token)):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         return TranscribeResponse(
             code=200,
             message="学习集合详情",
@@ -157,6 +188,7 @@ async def get_collection_source(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         return TranscribeResponse(
             code=200,
             message="学习集合 source 详情",
@@ -179,6 +211,7 @@ async def retry_collection_source(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         result = service.retry_source(collection_id, source_id)
         background_tasks.add_task(
             process_local_upload,
@@ -220,6 +253,7 @@ async def upload_collection_sources(
         raise HTTPException(status_code=400, detail="请至少选择一个文件")
 
     service = get_collection_service()
+    _require_collection_owner(service, collection_id, user_info)
     uploaded = []
     try:
         detail = service.get_collection_detail(collection_id)
@@ -296,6 +330,7 @@ async def cancel_collection_processing(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         result = service.cancel_collection_processing(collection_id)
         return TranscribeResponse(
             code=200,
@@ -314,6 +349,7 @@ async def generate_collection_summary(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         detail = await run_in_threadpool(service.generate_summary, collection_id)
         return TranscribeResponse(code=200, message="全系列解读已生成", data=detail)
     except ValueError as exc:
@@ -329,6 +365,7 @@ async def get_collection_knowledge_map(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         knowledge_map = service.get_knowledge_map(
             collection_id=collection_id,
             scope=scope,
@@ -354,6 +391,7 @@ async def generate_collection_knowledge_map(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         knowledge_map = await run_in_threadpool(
             service.generate_knowledge_map,
             collection_id=collection_id,
@@ -374,6 +412,7 @@ async def export_collection_markdown(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         markdown = service.get_export_markdown(collection_id)
         service.mark_exported(collection_id)
         return Response(
@@ -396,6 +435,7 @@ async def open_collection_source_file(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         file_path = service.get_source_file_path(collection_id, source_id)
         if not file_path:
             raise HTTPException(status_code=404, detail="源文件未保存或已被清理")
@@ -415,6 +455,7 @@ async def reveal_collection_source_file(
 ):
     try:
         service = get_collection_service()
+        _require_collection_owner(service, collection_id, user_info)
         file_path = service.get_source_file_path(collection_id, source_id)
         if not file_path:
             raise HTTPException(status_code=404, detail="源文件未保存或已被清理")

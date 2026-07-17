@@ -321,6 +321,4 @@ class Transcriber:
             number = float(value)
         except (TypeError, ValueError):
             return None
-        if number > 1000:
-            number = number / 1000
         return round(number, 3)

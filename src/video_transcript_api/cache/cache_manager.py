@@ -827,7 +827,8 @@ class CacheManager:
 
     def create_task(self, url: str, use_speaker_recognition: bool = False,
                     download_url: str = None, platform: str = None,
-                    media_id: str = None) -> Dict[str, str]:
+                    media_id: str = None,
+                    force_new_view_token: bool = False) -> Dict[str, str]:
         """
         创建新任务，相同URL或相同(platform, media_id)会复用view_token
 
@@ -851,14 +852,18 @@ class CacheManager:
         if download_url is not None and not download_url.strip():
             download_url = None
 
-        # 策略1: 精确 URL 匹配（现有行为）
-        existing_task = self.get_existing_task_by_url(url, use_speaker_recognition)
+        # 显式重试必须获得全新查看地址；默认路径仍保持历史去重行为。
+        existing_task = None if force_new_view_token else self.get_existing_task_by_url(
+            url, use_speaker_recognition
+        )
         if existing_task:
             view_token = existing_task['view_token']
             logger.debug(f"通过URL精确匹配复用view_token: {view_token} (状态: {existing_task['status']}) for URL: {url}")
         else:
             # 策略2: (platform, media_id) 语义匹配（解决同源视频不同URL格式的问题）
-            media_task = self.get_existing_task_by_media(platform, media_id, use_speaker_recognition)
+            media_task = None if force_new_view_token else self.get_existing_task_by_media(
+                platform, media_id, use_speaker_recognition
+            )
             if media_task:
                 view_token = media_task['view_token']
                 logger.info(

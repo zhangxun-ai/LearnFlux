@@ -69,20 +69,21 @@ def db_pair(tmp_path):
             completed_at TIMESTAMP,
             cache_id   TEXT,
             llm_config TEXT,
-            download_url TEXT
+            download_url TEXT,
+            source_file_path TEXT
         )
     ''')
     conn.commit()
     conn.close()
 
     def insert_task(task_id, view_token, platform="youtube", title="Test Title",
-                    author="Test Author", status="success"):
+                    author="Test Author", status="success", source_file_path=None):
         c = sqlite3.connect(cache_db_path)
         c.execute(
             "INSERT OR IGNORE INTO task_status "
-            "(task_id, view_token, platform, title, author, status) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (task_id, view_token, platform, title, author, status),
+            "(task_id, view_token, platform, title, author, status, source_file_path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (task_id, view_token, platform, title, author, status, source_file_path),
         )
         c.commit()
         c.close()
@@ -366,6 +367,29 @@ class TestHistoryEndpoint:
         item = next(i for i in resp.json()["data"]["items"] if i["task_id"] == "task-vt")
         assert item["view_token"] == "my-view-token-abc"
         assert item["title"] == "My Video Title"
+
+    def test_history_marks_retained_media_as_available_for_study(self, history_client, tmp_path):
+        client, setup = history_client
+        source = tmp_path / "lesson.mp4"
+        source.write_bytes(b"video")
+        _log(setup["audit_logger"], "task-study")
+        setup["insert_task"](
+            "task-study",
+            "view-study",
+            title="Lesson.mp4",
+            source_file_path=str(source),
+        )
+
+        response = client.get("/api/audit/history")
+
+        assert response.status_code == 200
+        item = next(
+            value
+            for value in response.json()["data"]["items"]
+            if value["task_id"] == "task-study"
+        )
+        assert item["study_available"] is True
+        assert item["study_url"] == "/study/view-study"
 
     def test_history_deduplicates_task_audit_rows_and_formats_local_time(self, history_client):
         """Multiple audit rows for one task should display as one local-time history item."""

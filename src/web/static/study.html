@@ -15,6 +15,9 @@
             }
         } catch(e) {}
     window.STUDY_VIEW_TOKEN = '__VIEW_TOKEN__';
+    window.STUDY_COLLECTION_ID = '__COLLECTION_ID__';
+    window.STUDY_SOURCE_ID = '__SOURCE_ID__';
+    window.STUDY_PAGE_MODE = '__PAGE_MODE__';
     window.STUDY_ASSET_VERSION = '__ASSET_VERSION__';
     </script>
     <meta charset="UTF-8">
@@ -62,7 +65,61 @@
         </header>
         <section class="page-stage">
 
-    <section class="study-page">
+    <section class="study-library" id="study-library" aria-labelledby="study-library-title">
+        <header class="study-library-head">
+            <div>
+                <p class="study-kicker">边播边学</p>
+                <h2 id="study-library-title">选择要学习的音视频</h2>
+                <p>已解析内容可以直接开始；本地音视频选中后立即播放，解析在后台继续。</p>
+            </div>
+            <div class="study-library-tabs" role="tablist" aria-label="内容类型">
+                <button class="is-active" type="button" data-library-kind="single" aria-selected="true">单个内容</button>
+                <button type="button" data-library-kind="collection" aria-selected="false">合集内容</button>
+            </div>
+        </header>
+        <div class="study-library-tools">
+            <label class="study-library-search">
+                <span aria-hidden="true">⌕</span>
+                <input id="study-library-search" type="search" placeholder="搜索标题、作者或合集名称" autocomplete="off">
+            </label>
+        </div>
+        <section class="study-import-panel" id="study-single-import" aria-label="导入单个音视频">
+            <div class="study-import-icon" aria-hidden="true">＋</div>
+            <div>
+                <strong>选择本地音视频</strong>
+                <span>支持 MP3、M4A、WAV、AAC、FLAC、MP4、MOV、MKV、WebM；选中后立即进入播放器。</span>
+            </div>
+            <label class="btn primary study-file-button">
+                选择文件
+                <input id="study-single-file" type="file" accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.mov,.mkv,.webm" hidden>
+            </label>
+        </section>
+        <section class="study-import-panel" id="study-collection-import" aria-label="导入本地音视频合集" hidden>
+            <div class="study-import-icon" aria-hidden="true">▥</div>
+            <div>
+                <strong>选择文件夹或多个音视频</strong>
+                <span>系统按文件名自然排序创建合集，进入播放器后用紧凑下拉框随意切换。</span>
+            </div>
+            <div class="study-import-actions">
+                <label class="btn primary study-file-button">
+                    选择文件夹
+                    <input id="study-collection-folder" type="file" webkitdirectory directory multiple hidden>
+                </label>
+                <label class="btn ghost study-file-button">
+                    选择多个文件
+                    <input id="study-collection-files" type="file" accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.mov,.mkv,.webm" multiple hidden>
+                </label>
+            </div>
+        </section>
+        <div class="study-library-section-head">
+            <h2 id="study-library-list-title">最近学习</h2>
+            <span id="study-library-count"></span>
+        </div>
+        <div class="study-library-state" id="study-library-state" role="status">正在读取真实内容…</div>
+        <div class="study-library-list" id="study-library-list" aria-live="polite"></div>
+    </section>
+
+    <section class="study-page" id="study-player" hidden>
         <header class="study-head">
             <div>
                 <p class="study-kicker" id="study-page-context">本地学习</p>
@@ -79,7 +136,17 @@
         <section class="study-shell" aria-label="本地视频学习工作台">
             <div class="study-toolbar">
                 <div class="breadcrumbs" id="study-breadcrumbs">本地视频 / 学习模式</div>
+                <div class="study-collection-nav" id="study-collection-nav" hidden>
+                    <button class="collection-step" id="study-collection-prev" type="button" aria-label="上一集">‹</button>
+                    <label>
+                        <span class="sr-only">选择合集内容</span>
+                        <select id="study-collection-select" aria-label="选择合集内容"></select>
+                    </label>
+                    <button class="collection-step" id="study-collection-next" type="button" aria-label="下一集">›</button>
+                    <span id="study-collection-position"></span>
+                </div>
                 <div class="toolbar-actions">
+                    <a class="btn ghost" href="/study">选择其他内容</a>
                     <button class="btn ghost" id="copy-current-line" type="button">复制当前段</button>
                     <button class="btn primary" id="export-markdown" type="button" disabled>导出 Markdown</button>
                 </div>
@@ -96,13 +163,44 @@
                             <button class="btn blue" id="ask-ai-entry" type="button">问 AI</button>
                         </div>
                     </div>
+                    <div class="play-strip" id="study-play-strip">
+                        <div class="time-row">
+                            <button class="play-btn" id="play-toggle" type="button" aria-label="播放" title="播放">▶</button>
+                            <input class="progress" id="video-progress" type="range" min="0" max="100" step="0.1" value="0" aria-label="播放进度" style="--value: 0%">
+                            <div class="play-options">
+                                <span id="video-time">00:00 / 00:00</span>
+                                <label class="playback-rate-control" for="playback-rate">
+                                    <span class="sr-only">播放速度</span>
+                                    <select id="playback-rate" aria-label="播放速度">
+                                        <option value="0.5">0.5×</option>
+                                        <option value="0.75">0.75×</option>
+                                        <option value="1" selected>1×</option>
+                                        <option value="1.25">1.25×</option>
+                                        <option value="1.5">1.5×</option>
+                                        <option value="2">2×</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                     <div class="video-frame" id="video-frame">
                         <video id="study-video" controls playsinline preload="metadata"></video>
+                        <div class="audio-visual" id="study-audio-visual" aria-hidden="true">
+                            <div class="audio-cover">♪</div>
+                            <strong id="study-audio-title">音频学习</strong>
+                            <span>播放时，右侧逐字稿会同步高亮</span>
+                            <div class="audio-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                        </div>
                         <div class="video-empty" id="video-empty">
                             <strong>视频暂不可播放</strong>
                             <span>如果这是旧任务，源视频可能没有被保留；逐字稿和 AI 解读仍可学习。</span>
                         </div>
                     </div>
+                    <section class="current-caption" id="current-caption" aria-label="当前播放字幕">
+                        <time id="current-caption-time">--:--</time>
+                        <p id="current-caption-text">播放后，这里会持续显示当前对应文稿。</p>
+                        <button id="ask-current-caption" type="button">问这句话</button>
+                    </section>
                     <div class="study-source-card" id="study-source-card" hidden>
                         <div>
                             <strong id="study-source-name">原始文档</strong>
@@ -110,31 +208,31 @@
                         </div>
                         <a class="btn ghost" id="study-source-open" href="#" target="_blank" rel="noopener" hidden>打开源文件</a>
                     </div>
-                    <div class="play-strip" id="study-play-strip">
-                        <div class="time-row">
-                            <button class="play-btn" id="play-toggle" type="button" aria-label="播放">▶</button>
-                            <div class="progress" id="video-progress" style="--value: 0%"></div>
-                            <span id="video-time">00:00 / 00:00</span>
-                        </div>
-                    </div>
                 </section>
 
                 <aside class="panel" aria-label="右侧学习面板">
                     <div class="right-tabs" role="tablist" aria-label="学习内容视图">
-                        <button class="is-active" type="button" data-tab="ai">AI 看</button>
+                        <button class="is-active" type="button" data-tab="transcript">同步逐字稿</button>
+                        <button type="button" data-tab="ai">AI 解读</button>
                         <button type="button" data-tab="visual">图解</button>
-                        <button type="button" data-tab="transcript">文稿</button>
                         <button type="button" data-tab="chat">问 AI</button>
                     </div>
 
-                    <div class="study-panel-view is-active" id="tab-ai">
+                    <div class="study-panel-view" id="tab-ai">
                         <div class="status-card" id="study-progress-card" hidden>
                             <strong id="study-progress-title">正在处理</strong>
                             <span id="study-progress-detail">学习内容正在生成，页面会自动刷新。</span>
                             <div class="status-progress"><i id="study-progress-fill"></i></div>
+                            <button class="btn primary" id="study-retry" type="button" hidden>重新解析</button>
                         </div>
                         <div class="overview-card">
-                            <h3>总览总结</h3>
+                            <div class="overview-card-head">
+                                <div>
+                                    <h3>完整 AI 解读</h3>
+                                    <span id="ai-overview-meta">正在读取完整内容</span>
+                                </div>
+                                <button class="btn ghost" id="ai-overview-expand" type="button" disabled>展开阅读</button>
+                            </div>
                             <div class="markdown-content" id="ai-overview">加载中...</div>
                         </div>
                     </div>
@@ -166,12 +264,13 @@
                         </div>
                     </div>
 
-                    <div class="study-panel-view" id="tab-transcript">
+                    <div class="study-panel-view is-active" id="tab-transcript">
                         <div class="panel-head">
                             <div>
                                 <h3>文稿</h3>
                                 <span>正文可点击跳转，当前播放句会高亮</span>
                             </div>
+                            <button class="transcript-follow" id="transcript-follow" type="button" aria-pressed="true">● 跟随中</button>
                         </div>
                         <div class="transcript-panel" id="transcript-list">
                             <div class="empty-panel"><strong>正在加载</strong><span>学习内容加载完成后会显示文稿。</span></div>
@@ -203,6 +302,19 @@
         </section>
     </main>
 
+    <dialog class="ai-reading-dialog" id="ai-reading-dialog">
+        <div class="ai-reading-shell">
+            <header class="ai-reading-head">
+                <div>
+                    <span>AI 解读</span>
+                    <h2>完整解读</h2>
+                </div>
+                <button class="study-visual-close" id="ai-reading-close" type="button" aria-label="关闭">×</button>
+            </header>
+            <div class="markdown-content ai-reading-content" id="ai-reading-content">加载中...</div>
+        </div>
+    </dialog>
+
     <dialog class="study-visual-dialog" id="visual-learning-dialog">
         <div class="study-visual-dialog-shell">
             <header class="study-visual-dialog-head">
@@ -222,6 +334,7 @@
 
     <div class="toast" id="study-toast" role="status" aria-live="polite"></div>
     <script src="/static/js/visual-learning.js?v=__ASSET_VERSION__"></script>
+    <script src="/static/js/study-player-runtime.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/study.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

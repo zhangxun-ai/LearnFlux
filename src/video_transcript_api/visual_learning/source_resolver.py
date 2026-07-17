@@ -104,6 +104,13 @@ class StudySourceResolver:
                 else f"study:{view_token}:paragraph:{paragraph_index}"
             )
             start_seconds = self._seconds(line.get("start_seconds"))
+            end_seconds = next_seekable_starts[paragraph_index]
+            if (
+                start_seconds is not None
+                and end_seconds is not None
+                and end_seconds < start_seconds
+            ):
+                end_seconds = None
             chunks = [
                 cleaned_text[offset : offset + 4000]
                 for offset in range(0, len(cleaned_text), 4000)
@@ -122,11 +129,7 @@ class StudySourceResolver:
                     line_id=line_id or None,
                     paragraph_index=paragraph_index,
                     start_seconds=start_seconds,
-                    end_seconds=(
-                        next_seekable_starts[paragraph_index]
-                        if start_seconds is not None
-                        else None
-                    ),
+                    end_seconds=end_seconds if start_seconds is not None else None,
                 )
                 refs.append(ref)
                 rows.append((ref_id, text))

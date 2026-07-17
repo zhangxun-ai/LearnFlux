@@ -141,6 +141,22 @@ class TestTranscriber(unittest.TestCase):
         self.assertEqual(result["funasr_json_data"]["segments"][0]["start_time"], 0.0)
         self.assertEqual(result["funasr_json_data"]["segments"][1]["end_time"], 3.0)
 
+    def test_local_whisper_keeps_timestamps_beyond_one_thousand_seconds(self):
+        """Whisper timestamps are seconds even for long media."""
+        payload = {
+            "duration": 2010.8,
+            "segments": [
+                {"start": 999.36, "end": 1001.0, "text": "Before boundary"},
+                {"start": 1002.0, "end": 1005.0, "text": "After boundary"},
+            ],
+        }
+
+        result = Transcriber._whisper_json_to_funasr(payload, "lesson.mp3")
+
+        self.assertEqual(result["duration"], 2010.8)
+        self.assertEqual(result["segments"][0]["end_time"], 1001.0)
+        self.assertEqual(result["segments"][1]["start_time"], 1002.0)
+
 
 if __name__ == '__main__':
     unittest.main()

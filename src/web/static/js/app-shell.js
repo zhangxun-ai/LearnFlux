@@ -35,6 +35,28 @@
         }
     }
 
+    const studyPlayerHref = '/study';
+    if (!sidebar.querySelector('a[href="/study"]')) {
+        const insertAfter = sidebar.querySelector('a[href="/visual-learning"]')
+            || sidebar.querySelector('a[href="/collections"]');
+        if (insertAfter) {
+            const link = document.createElement('a');
+            const icon = document.createElement('span');
+            const label = document.createElement('span');
+            link.className = 'nav-item';
+            link.href = studyPlayerHref;
+            icon.className = 'nav-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = '▶';
+            label.textContent = '边播边学';
+            link.append(icon, label);
+            if (window.location.pathname === '/study' || window.location.pathname.startsWith('/study/')) {
+                link.classList.add('is-active');
+            }
+            insertAfter.insertAdjacentElement('afterend', link);
+        }
+    }
+
     if (!sidebar.id) {
         sidebar.id = 'app-sidebar';
     }

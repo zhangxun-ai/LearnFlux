@@ -507,6 +507,31 @@ def test_resolver_preserves_transcript_line_refs():
     assert f"[{_ref_id()}] LLM 提供推理和语言能力。" in source.content
 
 
+def test_resolver_omits_end_time_when_next_transcript_time_moves_backward():
+    from video_transcript_api.visual_learning.source_resolver import StudySourceResolver
+
+    session = _session()
+    session["transcript"]["lines"] = [
+        {
+            "id": "line-before-reset",
+            "text": "边界前内容",
+            "seekable": True,
+            "start_seconds": 999.36,
+        },
+        {
+            "id": "line-after-reset",
+            "text": "边界后内容",
+            "seekable": True,
+            "start_seconds": 1.002,
+        },
+    ]
+
+    source = StudySourceResolver(FakeStudyService(session)).resolve("view-1")
+
+    assert source.source_refs[0].start_seconds == 999.36
+    assert source.source_refs[0].end_seconds is None
+
+
 def test_study_source_exposes_existing_interpretation_sections():
     from video_transcript_api.visual_learning.source_resolver import StudySourceResolver
 

@@ -8,6 +8,33 @@ def test_normalize_plain_transcript_returns_untimed_lines():
     assert all(line["seekable"] is False for line in lines)
 
 
+def test_normalize_long_plain_transcript_splits_into_readable_sentences():
+    from video_transcript_api.study.transcript import normalize_transcript
+
+    transcript = (
+        "第一句话介绍课程背景，帮助听众进入状态。"
+        "第二句话继续解释核心概念，并给出具体例子。"
+        "第三句话总结这一部分，提醒听众继续思考。"
+    )
+
+    lines = normalize_transcript(transcript)
+
+    assert [line["text"] for line in lines] == [
+        "第一句话介绍课程背景，帮助听众进入状态。",
+        "第二句话继续解释核心概念，并给出具体例子。",
+        "第三句话总结这一部分，提醒听众继续思考。",
+    ]
+    assert all(line["seekable"] is False for line in lines)
+
+
+def test_normalize_short_plain_transcript_keeps_existing_line_boundaries():
+    from video_transcript_api.study.transcript import normalize_transcript
+
+    lines = normalize_transcript("短句一。\n短句二。")
+
+    assert [line["text"] for line in lines] == ["短句一。", "短句二。"]
+
+
 def test_normalize_funasr_segments_returns_seekable_lines():
     from video_transcript_api.study.transcript import normalize_transcript
 
@@ -38,6 +65,23 @@ def test_normalize_nested_funasr_payload():
     assert lines[0]["text"] == "嵌套句子"
     assert lines[0]["start_seconds"] == 0
     assert lines[0]["end_seconds"] == 1.5
+
+
+def test_normalize_repairs_legacy_long_whisper_timestamp_reset():
+    from video_transcript_api.study.transcript import normalize_transcript
+
+    payload = {
+        "segments": [
+            {"text": "边界前", "start_time": 997.3, "end_time": 999.12},
+            {"text": "跨越边界", "start_time": 999.36, "end_time": 1.001},
+            {"text": "边界后", "start_time": 1.002, "end_time": 1.005},
+        ]
+    }
+
+    lines = normalize_transcript(payload)
+
+    assert [line["start_seconds"] for line in lines] == [997.3, 999.36, 1002.0]
+    assert [line["end_seconds"] for line in lines] == [999.12, 1001.0, 1005.0]
 
 
 def test_local_upload_preserves_structured_transcript_cache(monkeypatch, tmp_path):

@@ -376,6 +376,7 @@
             container.classList.remove('collapsed');
             pinBtn.classList.add('pinned');
             pinBtn.title = '取消固定目录（已固定）';
+            document.body.classList.add('toc-pinned');
         } else {
             // 取消固定动画
             pinBtn.classList.add('animating-unpin');
@@ -387,6 +388,7 @@
             container.classList.add('collapsed');
             pinBtn.classList.remove('pinned');
             pinBtn.title = '固定目录（点击保持展开）';
+            document.body.classList.remove('toc-pinned');
         }
 
         savePinState(isPinned);
@@ -567,6 +569,7 @@
                 container.classList.remove('collapsed');
                 pinBtn.classList.add('pinned');
                 pinBtn.title = '取消固定目录（已固定）';
+                document.body.classList.add('toc-pinned');
             }
         } else {
             // 确保初始状态的 tooltip 正确
@@ -574,6 +577,7 @@
             if (pinBtn) {
                 pinBtn.title = '固定目录（点击保持展开）';
             }
+            document.body.classList.remove('toc-pinned');
         }
 
         // 设置滚动监听

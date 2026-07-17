@@ -1232,7 +1232,10 @@ class VisualLearningService:
             raise VisualLearningGenerationError(
                 "full_note pages do not match interpretation sections"
             )
-        for page, section in zip(pages, sections):
+        all_section_refs = {
+            ref_id for section in sections for ref_id in section.source_ref_ids
+        }
+        for page_index, (page, section) in enumerate(zip(pages, sections)):
             blocks = page.get("blocks") or []
             if not any(
                 block.get("type") != "review_questions"
@@ -1245,7 +1248,13 @@ class VisualLearningService:
             allowed_refs = set(section.source_ref_ids)
             for block in blocks:
                 refs = set(block.get("source_ref_ids") or [])
-                if not refs.issubset(allowed_refs):
+                block_allowed_refs = (
+                    all_section_refs
+                    if page_index == len(pages) - 1
+                    and block.get("type") == "review_questions"
+                    else allowed_refs
+                )
+                if not refs.issubset(block_allowed_refs):
                     raise VisualLearningGenerationError(
                         "full_note block references outside its section"
                     )

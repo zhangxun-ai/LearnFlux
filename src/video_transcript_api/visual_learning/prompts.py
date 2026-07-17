@@ -295,8 +295,9 @@ Visual Brief：
     elif document_type == "full_note":
         interpretation_rules = (
             "\n9. full_note 必须每个 section 恰好生成一页，page.id 与 section.id 完全一致且"
-            "顺序不变；每页所有块（包括 review_questions）只能使用该 section 的 "
-            "allowed_source_ref_ids。\n"
+            "顺序不变；每页非 review_questions 块只能使用该 section 的 "
+            "allowed_source_ref_ids。最后一页的 review_questions 可以引用任意 section 的 "
+            "allowed_source_ref_ids，用于复习整篇笔记。\n"
             "10. original_markdown 只作为视觉块设计依据，不要重写一份平行解读；最后一页"
             "必须同时包含至少一个非 review_questions 视觉块和 review_questions。"
         )

@@ -381,6 +381,7 @@ def test_full_note_prompt_contains_complete_sections_and_allowed_refs(tmp_path):
             assert ref_id in prompt
     assert "每个 section 恰好生成一页" in prompt
     assert "不要重写一份平行解读" in prompt
+    assert "最后一页的 review_questions 可以引用任意 section" in prompt
 
 
 @pytest.mark.parametrize("document_type", ["overview", "full_note"])
@@ -886,6 +887,22 @@ def test_initial_full_note_retries_once_when_final_review_is_missing(tmp_path):
     assert "review_questions" in llm.calls[1]["prompt"]
 
 
+def test_full_note_final_review_can_reference_the_whole_note(tmp_path):
+    document = _full_note_document(title="全篇复习")
+    document["pages"][-1]["blocks"][-1]["source_ref_ids"] = [
+        _section_ref(1),
+        _section_ref(2),
+        _section_ref(3),
+    ]
+    llm = FakeLLM(document)
+    service, _, _ = _service(tmp_path, llm)
+
+    result = service.generate_study("view-1", document_type="full_note")
+
+    assert result["status"] == "success"
+    assert result["document_json"]["title"] == "全篇复习"
+
+
 def test_initial_full_note_retries_once_when_page_ids_do_not_align(tmp_path):
     invalid = _full_note_document(title="页顺序错误")
     invalid["pages"] = list(reversed(invalid["pages"]))
@@ -917,8 +934,8 @@ def test_initial_full_note_retries_once_when_page_ids_do_not_align(tmp_path):
             "full_note page requires a visual block",
         ),
         (
-            lambda payload: payload["pages"][-1]["blocks"][-1].__setitem__(
-                "source_ref_ids", [_section_ref(1)]
+            lambda payload: payload["pages"][0]["blocks"][0].__setitem__(
+                "source_ref_ids", [_section_ref(2)]
             ),
             "full_note block references outside its section",
         ),

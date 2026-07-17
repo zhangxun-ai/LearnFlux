@@ -698,7 +698,7 @@ body.has-app-shell .draft-panel,
 body.has-app-shell .box {
     border-radius: var(--radius-card);
     background: var(--card);
-    border-color: rgba(27, 26, 23, 0.08);
+    border: 1px solid rgba(27, 26, 23, 0.08);
     box-shadow: var(--shadow-sm);
 }
 

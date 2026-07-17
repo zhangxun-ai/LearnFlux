@@ -8,10 +8,9 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif);
     line-height: 1.6;
     color: var(--text-primary);
-    background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
     min-height: 100vh;
     transition: color 0.3s ease, background 0.3s ease;
 }
@@ -76,11 +75,10 @@ body {
 /* 主要内容区域 */
 .main-content {
     flex: 1;
-    background: var(--bg-primary);
-    border-radius: 16px;
-    padding: 2rem;
-    box-shadow: 0 8px 32px var(--shadow-light);
-    backdrop-filter: blur(10px);
+    background: transparent;
+    border-radius: var(--radius-card);
+    padding: 0;
+    box-shadow: none;
     margin-bottom: 2rem;
     transition: background 0.3s ease, box-shadow 0.3s ease;
 }
@@ -121,14 +119,15 @@ body {
 /* 文本输入框样式 */
 .form-textarea, .form-input {
     width: 100%;
-    padding: 0.75rem;
-    border: 2px solid var(--border-primary);
-    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-control);
     font-size: 1rem;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
     font-family: inherit;
-    background: var(--bg-primary);
+    background: var(--card-translucent-light);
     color: var(--text-primary);
+    box-shadow: inset 0 1px 2px rgba(27, 26, 23, 0.02);
 }
 
 .form-textarea {
@@ -138,8 +137,9 @@ body {
 
 .form-textarea:focus, .form-input:focus {
     outline: none;
-    border-color: var(--border-focus);
-    box-shadow: 0 0 0 3px rgba(228, 80, 58, 0.1);
+    border-color: var(--accent);
+    background: var(--card);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 @keyframes shake {
@@ -211,8 +211,8 @@ body {
 }
 
 .url-option:hover {
-    border-color: var(--accent-primary);
-    box-shadow: 0 2px 4px rgba(228, 80, 58, 0.1);
+    border-color: var(--border-primary);
+    background-color: var(--card-translucent-light);
 }
 
 .url-option.selected {
@@ -304,12 +304,19 @@ body {
 }
 
 .form-select {
-    padding: 0.45rem 0.65rem;
-    border: 1px solid var(--border-secondary);
-    border-radius: 6px;
-    background: var(--bg-primary);
+    padding: 0.55rem 0.85rem;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-control);
+    background: var(--card-translucent-light);
     color: var(--text-primary);
     font: inherit;
+    transition: all 0.2s ease;
+}
+.form-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--card);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .form-select:disabled {
@@ -374,10 +381,10 @@ body {
 }
 
 .input-btn {
-    padding: 0.75rem;
-    border: 2px solid var(--border-primary);
-    border-radius: 8px;
-    background-color: var(--bg-secondary);
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-control);
+    background-color: var(--card-translucent-light);
     cursor: pointer;
     font-size: 1rem;
     transition: all 0.2s ease;
@@ -398,38 +405,17 @@ body {
 }
 
 /* 提交按钮样式 */
+/* .submit-btn falls back to editorial.css */
 .submit-btn {
     width: 100%;
     padding: 1rem 1.5rem;
-    background: linear-gradient(135deg, #E4503A 0%, #C23A26 100%);
-    color: white;
-    border: none;
-    border-radius: 12px;
     font-size: 1.1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.75rem;
-    box-shadow: 0 4px 12px rgba(228, 80, 58, 0.4);
-}
-
-.submit-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(228, 80, 58, 0.5);
-}
-
-.submit-btn:active:not(:disabled) {
-    transform: translateY(0);
-}
-
-.submit-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: 0 2px 6px rgba(228, 80, 58, 0.2);
 }
 
 .submit-hint {
@@ -483,10 +469,11 @@ body {
 /* 历史记录样式 */
 .history-container {
     margin-top: 2rem;
-    padding: 1.5rem;
-    background-color: var(--bg-secondary);
-    border-radius: 12px;
-    border: 1px solid var(--border-primary);
+    padding: 1.5rem 0;
+    background-color: transparent;
+    border-radius: 0;
+    border: none;
+    border-top: 1px solid var(--border-primary);
 }
 
 .history-container h3 {
@@ -503,16 +490,17 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem;
-    background-color: var(--bg-primary);
-    border-radius: 8px;
-    border: 1px solid var(--border-primary);
+    padding: 1rem;
+    background-color: transparent;
+    border-radius: var(--radius-card);
+    border: 1px solid transparent;
+    border-bottom: 1px solid var(--border-primary);
     transition: all 0.2s ease;
 }
 
 .history-item:hover {
-    border-color: var(--accent-primary);
-    box-shadow: 0 2px 4px rgba(228, 80, 58, 0.1);
+    border-color: var(--border-primary);
+    background: var(--card-translucent-light);
 }
 
 .history-info {
@@ -533,11 +521,11 @@ body {
 }
 
 .history-original-text {
-    margin-top: 0.5rem;
-    padding: 0.5rem;
-    background-color: var(--bg-secondary);
-    border-radius: 6px;
-    border-left: 3px solid var(--accent-primary);
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background-color: var(--card-translucent-light);
+    border-radius: var(--radius-card);
+    border-left: 2px solid var(--border-secondary);
 }
 
 .original-text-label {

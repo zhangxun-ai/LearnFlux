@@ -126,7 +126,7 @@
                 <h1 id="study-title">正在加载学习内容...</h1>
                 <p id="study-subtitle">视频、逐字稿、AI 解读和问答会围绕同一条时间轴组织。</p>
             </div>
-            <div class="study-status" aria-label="学习状态">
+            <div class="study-status" aria-label="学习状态" style="display: none !important;">
                 <div class="study-stat"><span>状态</span><strong id="study-state">加载中</strong></div>
                 <div class="study-stat"><span>文稿</span><strong id="study-transcript-count">0 段</strong></div>
                 <div class="study-stat"><span>AI</span><strong id="study-ai-model">DeepSeek</strong></div>
@@ -135,7 +135,7 @@
 
         <section class="study-shell" aria-label="本地视频学习工作台">
             <div class="study-toolbar">
-                <div class="breadcrumbs" id="study-breadcrumbs">本地视频 / 学习模式</div>
+                <div class="breadcrumbs" id="study-breadcrumbs" style="display: none !important;">本地视频 / 学习模式</div>
                 <div class="study-collection-nav" id="study-collection-nav" hidden>
                     <button class="collection-step" id="study-collection-prev" type="button" aria-label="上一集">‹</button>
                     <label>
@@ -146,22 +146,18 @@
                     <span id="study-collection-position"></span>
                 </div>
                 <div class="toolbar-actions">
-                    <a class="btn ghost" href="/study">选择其他内容</a>
-                    <button class="btn ghost" id="copy-current-line" type="button">复制当前段</button>
-                    <button class="btn primary" id="export-markdown" type="button" disabled>导出 Markdown</button>
+                    <button class="btn blue" id="ask-ai-entry" type="button" style="display: none !important;">问 AI</button>
+                    <a class="btn ghost" href="/study" style="display: none !important;">选择其他内容</a>
+                    <button class="btn ghost" id="copy-current-line" type="button" style="display: none !important;">复制当前段</button>
+                    <button class="btn ghost" id="export-markdown" type="button" disabled><span aria-hidden="true" style="margin-right: 4px; font-size: 1.1em; line-height: 1;">↓</span> 导出 Markdown</button>
                 </div>
             </div>
 
             <div class="layout-focus">
                 <section class="surface" aria-label="视频播放区">
-                    <div class="surface-head">
-                        <div>
-                            <h2 id="video-title">正在加载...</h2>
-                            <span id="video-meta">等待学习数据</span>
-                        </div>
-                        <div class="mini-actions">
-                            <button class="btn blue" id="ask-ai-entry" type="button">问 AI</button>
-                        </div>
+                    <div hidden>
+                        <h2 id="video-title">正在加载...</h2>
+                        <span id="video-meta">等待学习数据</span>
                     </div>
                     <div class="play-strip" id="study-play-strip">
                         <div class="time-row">
@@ -199,7 +195,7 @@
                     <section class="current-caption" id="current-caption" aria-label="当前播放字幕">
                         <time id="current-caption-time">--:--</time>
                         <p id="current-caption-text">播放后，这里会持续显示当前对应文稿。</p>
-                        <button id="ask-current-caption" type="button">问这句话</button>
+                        <button id="ask-current-caption" type="button" style="display: none !important;">问这句话</button>
                     </section>
                     <div class="study-source-card" id="study-source-card" hidden>
                         <div>

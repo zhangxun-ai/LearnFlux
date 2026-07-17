@@ -54,27 +54,7 @@
 .input-panel { padding: 0; }
 .input-panel[hidden], .input-panel:not(.active) { display: none; }
 
-/* ---------- 极致沉浸式输入框 ---------- */
-.form-textarea {
-    width: 100%;
-    border: none !important;
-    background: var(--card-translucent) !important;
-    border-radius: 16px !important;
-    padding: 24px !important;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.4) !important;
-    backdrop-filter: blur(24px) saturate(1.8) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
-    font-size: 1rem !important;
-    line-height: 1.6;
-    color: var(--ink);
-    transition: all 0.3s ease !important;
-}
-
-.form-textarea:focus {
-    background: var(--card-translucent) !important;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255,255,255,0.8) !important;
-    outline: none !important;
-}
+/* Removed heavy form-textarea overrides. Let styles.css and editorial.css handle it cleanly. */
 
 /* ---------- 识别结果横幅 ---------- */
 .detect-banner {

@@ -47,9 +47,7 @@
   /* ===== Global Setup ===== */
   * { box-sizing: border-box; }
   body { 
-      margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-      background-color: var(--fw-bg); color: var(--fw-ink); -webkit-font-smoothing: antialiased; 
-      transition: background-color 0.3s ease, color 0.3s ease;
+      min-height: 100vh; color: var(--ink); transition: background-color 0.3s ease, color 0.3s ease;
   }
   a { text-decoration: none; color: inherit; }
   
@@ -175,9 +173,9 @@
 
   /* ===== Settings View ===== */
   .field { display: flex; gap: 12px; margin-top: 24px; }
-  .field input { flex: 1; border: 1px solid var(--fw-border); border-radius: 8px; padding: 14px 18px; font-size: 1rem; outline: none; font-family: inherit; background: var(--fw-card); color: var(--fw-ink); transition: 0.2s; }
+  .field input { flex: 1; border: 1px solid var(--line); border-radius: var(--radius-control); padding: 14px 18px; font-size: 1rem; outline: none; font-family: inherit; background: var(--card-translucent-light); color: var(--ink); box-shadow: inset 0 1px 2px rgba(27, 26, 23, 0.02); transition: 0.2s; }
   .field input.secret-input { -webkit-text-security: disc; }
-  .field input:focus { border-color: var(--fw-accent); box-shadow: 0 0 0 3px var(--fw-accent-soft); }
+  .field input:focus { border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px var(--accent-soft); }
   .saved { color: #2F8F6B; font-size: 0.9rem; margin-top: 12px; font-weight: 500; }
   [data-theme="dark"] .saved { color: #34d399; }
   
@@ -205,15 +203,15 @@
   /* Shell Hero Override */
   body.has-app-shell .hero { 
       display: grid; grid-template-columns: minmax(0,1fr); gap: 1.25rem; align-items: start; text-align: left; 
-      padding: 2rem 2.5rem; border: 1px solid var(--fw-border); border-radius: var(--fw-radius-lg); 
-      background: var(--fw-card); box-shadow: var(--fw-shadow); margin-bottom: 32px;
+      padding: 2rem 2.5rem; border: 1px solid rgba(27, 26, 23, 0.08); border-radius: var(--radius-card); 
+      background: var(--card); box-shadow: var(--shadow-sm); margin-bottom: 32px;
   }
   body.has-app-shell .hero h1 { font-size: 2.2rem; line-height: 1.25; white-space: nowrap; }
   body.has-app-shell .hero .sub { max-width: 600px; margin: 0; font-size: 1.05rem; }
   
   /* Shell Box Override */
-  body.has-app-shell .box { margin: 16px 0 0 0; border-radius: 12px; background: var(--fw-bg); box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); border: 1px solid var(--fw-border); max-width: 100%; }
-  body.has-app-shell .box:focus-within { border-color: var(--fw-accent); box-shadow: 0 0 0 4px var(--fw-accent-soft); }
+  body.has-app-shell .box { margin: 16px 0 0 0; border-radius: var(--radius-control); background: var(--card-translucent-light); box-shadow: inset 0 1px 2px rgba(27, 26, 23, 0.02); border: 1px solid var(--line); max-width: 100%; }
+  body.has-app-shell .box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--card); }
   body.has-app-shell .box input { min-height: 52px; }
   
   body.has-app-shell .result-layout { grid-template-columns: 240px minmax(0,1fr); gap: 40px; }

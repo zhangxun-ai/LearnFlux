@@ -42,18 +42,7 @@
     box-sizing: border-box;
 }
 
-html {
-    background: var(--radar-page);
-    color: var(--radar-ink);
-    font-family: var(--radar-font);
-    font-size: 100%;
-    line-height: 1.5;
-}
-
-body {
-    margin: 0;
-    background: var(--radar-page);
-}
+/* html, body overrides removed to inherit from editorial.css app shell */
 
 button,
 input,
@@ -188,28 +177,42 @@ p {
 .run-panel input,
 .search-field input,
 .select-field select {
-    background: var(--card);
-    border: 1px solid var(--radar-line-strong);
-    border-radius: var(--radar-radius);
-    color: var(--radar-ink);
+    background: var(--card-translucent-light);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    color: var(--ink);
     padding: 0.62rem 0.72rem;
     width: 100%;
+    box-shadow: inset 0 1px 2px rgba(27, 26, 23, 0.02);
+    transition: all 0.2s ease;
+}
+
+.run-panel input:focus,
+.search-field input:focus,
+.select-field select:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--card);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .primary-action {
-    background: var(--radar-accent);
-    border: 1px solid var(--radar-accent);
-    border-radius: var(--radar-radius);
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-control);
     color: #fff;
     cursor: pointer;
     font-weight: 800;
     padding: 0.7rem 1rem;
-    transition: background 0.16s ease, border-color 0.16s ease;
+    transition: all 0.2s ease;
+    box-shadow: 0 10px 18px -16px rgba(228, 80, 58, 0.8);
 }
 
 .primary-action:hover {
-    background: var(--radar-accent-strong);
-    border-color: var(--radar-accent-strong);
+    background: var(--accent-ink);
+    border-color: var(--accent-ink);
+    box-shadow: 0 14px 22px -18px rgba(194, 58, 38, 0.9);
+    transform: translateY(-1px);
 }
 
 #run-status,
@@ -588,21 +591,28 @@ button.trend-card {
 }
 
 .stage-filter button {
-    background: var(--card);
-    border: 1px solid var(--radar-line-strong);
-    border-radius: var(--radar-radius);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
     color: var(--radar-muted);
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 700;
     min-width: auto;
     padding: 0.48rem 0.68rem;
+    transition: all 0.2s ease;
+}
+
+.stage-filter button:hover {
+    background: var(--card-translucent-light);
+    border-color: var(--line);
 }
 
 .stage-filter button.is-active {
-    background: var(--radar-ink);
-    border-color: var(--radar-ink);
-    color: #fff;
+    background: var(--card);
+    border-color: var(--line);
+    color: var(--ink);
+    box-shadow: var(--shadow-sm);
 }
 
 .radar-layout {

@@ -1,14 +1,6 @@
 * { box-sizing: border-box; }
 
-body {
-    margin: 0;
-    color: var(--ink);
-    background:
-        radial-gradient(80% 38% at 50% -12%, rgba(228, 80, 58, 0.08), transparent 62%),
-        linear-gradient(180deg, var(--bg-secondary) 0%, var(--paper) 44%, var(--bg-tertiary) 100%);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
-    letter-spacing: 0;
-}
+
 
 button,
 textarea {
@@ -303,12 +295,11 @@ button {
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 12px;
     align-items: center;
-    margin: 10px 14px 0;
-    padding: 12px 14px;
+    margin: 14px;
+    padding: 12px 16px;
     border: 1px solid var(--line);
-    border-left: 3px solid var(--accent);
-    border-radius: 12px;
-    background: var(--accent-soft);
+    border-radius: var(--radius-control);
+    background: var(--card);
 }
 
 .current-caption time {
@@ -339,19 +330,16 @@ button {
 
 .study-head,
 .study-shell {
-    border: 1px solid var(--line);
-    background: var(--card-translucent) ;
-    box-shadow: var(--shadow);
+    background: transparent;
 }
 
 .study-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 18px;
-    align-items: end;
-    margin-bottom: 16px;
-    padding: 14px 18px;
-    border-radius: 18px;
+    margin-bottom: 8px;
+    padding: 0 16px;
 }
 
 .study-kicker {
@@ -362,12 +350,11 @@ button {
 }
 
 .study-head h1 {
-    margin: 0 0 5px;
-    font-size: 23px;
-    line-height: 1.18;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.25;
+    font-weight: 850;
+    color: var(--ink);
 }
 
 .study-head > div:first-child {
@@ -375,24 +362,19 @@ button {
 }
 
 .study-head p {
-    max-width: 72ch;
-    margin: 0;
-    color: var(--ink-soft);
+    margin: 4px 0 0;
+    color: var(--muted);
     font-size: 14px;
 }
 
 .study-status {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(82px, 1fr));
-    gap: 8px;
-    min-width: 340px;
+    display: flex;
+    gap: 16px;
 }
 
 .study-stat {
-    padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: var(--card);
+    display: flex;
+    flex-direction: column;
 }
 
 .study-stat span {
@@ -411,8 +393,7 @@ button {
 }
 
 .study-shell {
-    padding: 16px;
-    border-radius: 22px;
+    padding: 0;
 }
 
 .study-toolbar,
@@ -446,6 +427,8 @@ button {
     flex-wrap: wrap;
 }
 
+
+
 .btn {
     display: inline-flex;
     align-items: center;
@@ -453,29 +436,29 @@ button {
     min-height: 36px;
     padding: 0 12px;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-control);
     background: var(--card);
     color: var(--ink-soft);
     font-size: 13px;
     font-weight: 800;
     text-decoration: none;
     white-space: nowrap;
+    transition: all 0.2s ease;
 }
 
-.btn.primary {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: #fff;
+.btn:hover {
+    color: var(--ink);
+    border-color: var(--ink-soft);
 }
 
 .btn.ghost {
-    background: var(--paper-warm);
+    background: transparent;
+    border-color: transparent;
 }
 
-.btn.blue {
-    border-color: rgba(36, 99, 235, 0.22);
-    background: rgba(36, 99, 235, 0.08);
-    color: #1d4ed8;
+.btn.ghost:hover {
+    background: var(--paper-warm);
+    border-color: transparent;
 }
 
 .btn:disabled {
@@ -494,8 +477,9 @@ button {
 .surface,
 .panel {
     border: 1px solid var(--line);
-    border-radius: 18px;
-    background: var(--card-translucent) ;
+    border-radius: var(--radius-card);
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
 }
 
 .surface {
@@ -541,7 +525,7 @@ button {
 }
 
 .surface-head {
-    padding: 14px 16px 10px;
+    display: none !important;
 }
 
 .surface-head h2,
@@ -559,9 +543,9 @@ button {
 
 .video-frame {
     position: relative;
-    margin: 0 14px;
+    margin: 14px;
     overflow: hidden;
-    border-radius: 16px;
+    border-radius: var(--radius-card);
     background: #111;
     aspect-ratio: 16 / 9;
 }
@@ -670,11 +654,10 @@ button {
 }
 
 .play-strip {
-    margin: 0 14px 10px;
-    padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--paper-warm);
+    margin: 0;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
 }
 
 .time-row {
@@ -772,29 +755,28 @@ button {
 
 .right-tabs {
     display: flex;
-    flex: 0 0 auto;
-    gap: 8px;
+    gap: 20px;
     margin-bottom: 12px;
-    padding: 0 0 8px 0;
-    border: none;
+    padding: 0;
     border-bottom: 1px solid var(--line);
-    border-radius: 0;
-    background: transparent;
 }
 
 .right-tabs button {
-    min-height: 32px;
-    padding: 0 16px;
-    border-radius: 16px;
+    padding: 0 0 12px;
+    border: none;
+    border-bottom: 2px solid transparent;
     background: transparent;
     color: var(--ink-soft);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
 .right-tabs button.is-active {
-    background: var(--accent-soft);
-    color: var(--accent-ink);
+    border-bottom-color: var(--ink);
+    color: var(--ink);
+    background: transparent;
     box-shadow: none;
 }
 

@@ -130,6 +130,7 @@ body.app-shell.sidebar-collapsed {
     display: flex;
     align-items: center;
     gap: 12px;
+    font-size: 1.02rem;
     font-weight: 800;
 }
 
@@ -225,6 +226,7 @@ body.app-shell.sidebar-collapsed {
     gap: 12px;
     padding: 0 12px;
     border-radius: var(--shell-radius);
+    font-size: 0.94rem;
     font-weight: 750;
     position: relative;
     transition: background 160ms ease, color 160ms ease, transform 160ms ease;

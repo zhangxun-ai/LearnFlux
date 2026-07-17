@@ -52,10 +52,8 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
-            background: var(--bg-secondary);
             min-height: 100vh;
-            color: var(--text-primary);
+            color: var(--ink);
         }
 
         .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
@@ -80,12 +78,9 @@
 
         /* API Key / Webhook 输入区 (Toolbar blocks) */
         .auth-bar, .alias-panel, .filter-bar {
-            background: var(--hist-card);
-            border: 1px solid var(--hist-border);
-            border-radius: var(--hist-radius-lg);
             padding: 20px 24px;
             margin-bottom: 24px;
-            box-shadow: var(--hist-shadow);
+            /* background/border inherited from editorial.css */
         }
         
         .auth-bar {
@@ -98,16 +93,17 @@
         .auth-bar input {
             flex: 1;
             min-width: 240px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--hist-border);
-            border-radius: var(--hist-radius);
+            background: var(--card-translucent-light);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-control);
             padding: 10px 14px;
-            color: var(--text-primary);
+            color: var(--ink);
             font-size: 0.95rem;
             font-family: monospace;
             transition: all 0.2s;
+            box-shadow: inset 0 1px 2px rgba(27, 26, 23, 0.02);
         }
-        .auth-bar input:focus { outline: none; border-color: var(--hist-accent); box-shadow: 0 0 0 3px var(--hist-accent-soft); }
+        .auth-bar input:focus { outline: none; border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px var(--accent-soft); }
         
         /* 按钮样式 */
         .btn {
@@ -120,11 +116,11 @@
             transition: all 0.2s;
         }
         .btn-primary { 
-            background: linear-gradient(135deg, var(--hist-accent) 0%, #F56551 100%); 
+            background: var(--accent); 
             color: #fff; 
-            box-shadow: 0 4px 12px rgba(228,80,58,0.25);
+            box-shadow: 0 10px 18px -16px rgba(228, 80, 58, 0.8);
         }
-        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(228,80,58,0.4); }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 14px 22px -18px rgba(194, 58, 38, 0.9); background: var(--accent-ink); }
         .btn-primary:active { transform: scale(0.97); }
         
         .btn-ghost {
@@ -197,16 +193,16 @@
         .filter-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
         .filter-group select,
         .filter-group input[type="date"] {
-            background: var(--bg-primary);
-            border: 1.5px solid var(--hist-border);
-            border-radius: var(--hist-radius);
+            background: var(--card-translucent-light);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-control);
             padding: 10px 14px;
-            color: var(--text-primary);
+            color: var(--ink);
             font-size: 0.95rem;
             transition: all 0.2s;
         }
         .filter-group select:focus,
-        .filter-group input[type="date"]:focus { outline: none; border-color: var(--hist-accent); box-shadow: 0 0 0 3px var(--hist-accent-soft); }
+        .filter-group input[type="date"]:focus { outline: none; border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px var(--accent-soft); }
         .filter-group select option { background: var(--bg-primary); }
         .filter-actions { display: flex; gap: 12px; align-items: flex-end; margin-left: auto; }
 
@@ -275,38 +271,43 @@
         }
 
         /* 任务列表 */
-        .task-list { display: flex; flex-direction: column; gap: 16px; }
+        .task-list { display: flex; flex-direction: column; gap: 0; }
         .task-card {
-            background: var(--hist-card);
-            border: 1px solid var(--hist-border);
-            border-radius: var(--hist-radius-lg);
-            padding: 24px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-bottom: 1px solid var(--line);
+            border-radius: var(--radius-card);
+            padding: 20px 16px;
             display: flex;
             flex-direction: column;
             gap: 16px;
-            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-            box-shadow: var(--hist-shadow);
+            transition: all 0.2s ease;
+            box-shadow: none;
             position: relative;
         }
-        .task-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--hist-shadow-hover);
-            border-color: rgba(228,80,58,0.2);
+        .task-card:last-child {
+            border-bottom-color: transparent;
         }
-        .task-card.unread { border-left: 4px solid var(--hist-accent); }
+        .task-card:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: var(--line);
+            background: var(--card-translucent-light);
+        }
+        .task-card.unread { border-left: 4px solid var(--accent); }
         .task-card.unread::after {
             content: '';
             position: absolute;
             top: 24px;
             right: 24px;
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background: var(--hist-accent);
+            background: var(--accent);
         }
         .task-card.selected {
-            border-color: var(--hist-accent);
-            background: var(--hist-accent-soft);
+            border-color: var(--accent);
+            background: var(--accent-soft);
         }
         .row-checkbox {
             width: 16px;

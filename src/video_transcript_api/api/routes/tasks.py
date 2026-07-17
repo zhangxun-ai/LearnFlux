@@ -440,6 +440,41 @@ async def get_task_status(
         raise HTTPException(status_code=500, detail=f"获取任务状态失败: {exc}")
 
 
+@router.delete("/task/{task_id}", response_model=TranscribeResponse)
+async def delete_task(
+    task_id: str,
+    request: Request,
+    user_info: dict = Depends(verify_token),
+):
+    """Delete a completed task and invalidate its reusable media cache."""
+    start_time = datetime.datetime.now()
+    try:
+        deleted = cache_manager.delete_task_and_cache(task_id)
+        if deleted is None:
+            raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+
+        audit_logger.log_api_call(
+            api_key=user_info.get("api_key"),
+            user_id=user_info.get("user_id"),
+            endpoint=f"/api/task/{task_id}",
+            processing_time_ms=int(
+                (datetime.datetime.now() - start_time).total_seconds() * 1000
+            ),
+            status_code=200,
+            task_id=task_id,
+            user_agent=request.headers.get("User-Agent"),
+            remote_ip=request.client.host if request.client else None,
+        )
+        return TranscribeResponse(code=200, message="任务和缓存已删除", data=deleted)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        logger.exception("删除任务及缓存失败: %s", exc)
+        raise HTTPException(status_code=500, detail=f"删除任务及缓存失败: {exc}")
+
+
 @router.get("/webhook-stats")
 async def get_webhook_stats(user_info: dict = Depends(verify_token)):
     return TranscribeResponse(

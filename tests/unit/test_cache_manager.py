@@ -6,6 +6,7 @@ with tmp_path fixtures and no side effects.
 """
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -205,6 +206,42 @@ class TestGetCache:
         assert result["title"] == "Test Video"
         assert result["author"] == "Author"
         assert result["platform"] == "youtube"
+
+
+class TestDeleteTaskAndCache:
+    """Tests for invalidating a completed task's shared media cache."""
+
+    def test_removes_media_cache_and_all_associated_tasks(self, cm):
+        media_id = "douyin-video"
+        cache_result = _save_sample_capswriter(
+            cm, media_id=media_id, platform="douyin"
+        )
+        first = cm.create_task(
+            url="https://v.douyin.com/example/",
+            platform="douyin",
+            media_id=media_id,
+        )
+        second = cm.create_task(
+            url="https://www.douyin.com/video/example",
+            platform="douyin",
+            media_id=media_id,
+        )
+        for task in (first, second):
+            cm.update_task_status(
+                task["task_id"],
+                "success",
+                platform="douyin",
+                media_id=media_id,
+            )
+        cache_path = Path(cache_result["transcript_file"]).parent
+
+        deleted = cm.delete_task_and_cache(first["task_id"])
+
+        assert deleted == {"deleted_caches": 1, "deleted_tasks": 2}
+        assert not cache_path.exists()
+        assert cm.get_cache(platform="douyin", media_id=media_id) is None
+        assert cm.get_task_by_id(first["task_id"]) is None
+        assert cm.get_task_by_id(second["task_id"]) is None
 
 
 # ---------------------------------------------------------------------------

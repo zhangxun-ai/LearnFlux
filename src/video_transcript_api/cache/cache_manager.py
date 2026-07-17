@@ -4,6 +4,7 @@ import sqlite3
 import datetime
 import uuid
 import secrets
+import shutil
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 from contextlib import contextmanager
@@ -522,6 +523,71 @@ class CacheManager:
         except Exception as e:
             logger.error(f"获取缓存失败: {e}")
             return None
+
+    def delete_task_and_cache(self, task_id: str) -> Optional[Dict[str, int]]:
+        """Delete a terminal task and invalidate every cache variant for its media.
+
+        Cache files are shared by platform and media ID, so clearing only one
+        database row would leave stale LLM files available to a later run.
+        """
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                "SELECT platform, media_id, status FROM task_status WHERE task_id = ?",
+                (task_id,),
+            )
+            task = cursor.fetchone()
+            if not task:
+                return None
+
+            if task["status"] not in TERMINAL_STATUSES:
+                raise ValueError("只能删除已完成、失败或已取消的任务")
+
+            platform = task["platform"]
+            media_id = task["media_id"]
+            cache_rows = []
+            if platform and media_id:
+                cursor.execute(
+                    "SELECT id, files_loc FROM video_cache WHERE platform = ? AND media_id = ?",
+                    (platform, media_id),
+                )
+                cache_rows = cursor.fetchall()
+
+        cache_root = self.cache_dir.resolve()
+        cache_paths = set()
+        for row in cache_rows:
+            cache_path = (cache_root / row["files_loc"]).resolve()
+            if cache_path == cache_root or cache_root not in cache_path.parents:
+                raise RuntimeError(f"缓存路径不安全，拒绝删除: {row['files_loc']}")
+            cache_paths.add(cache_path)
+
+        for cache_path in cache_paths:
+            if cache_path.exists():
+                shutil.rmtree(cache_path)
+
+        with self._get_cursor() as cursor:
+            if platform and media_id:
+                cursor.execute(
+                    "DELETE FROM video_cache WHERE platform = ? AND media_id = ?",
+                    (platform, media_id),
+                )
+                deleted_caches = cursor.rowcount
+                cursor.execute(
+                    "DELETE FROM task_status WHERE platform = ? AND media_id = ?",
+                    (platform, media_id),
+                )
+                deleted_tasks = cursor.rowcount
+            else:
+                deleted_caches = 0
+                cursor.execute("DELETE FROM task_status WHERE task_id = ?", (task_id,))
+                deleted_tasks = cursor.rowcount
+
+        logger.info(
+            "已删除任务及缓存: task=%s, caches=%s, tasks=%s",
+            task_id,
+            deleted_caches,
+            deleted_tasks,
+        )
+        return {"deleted_caches": deleted_caches, "deleted_tasks": deleted_tasks}
 
     def save_llm_result(self,
                         platform: str,

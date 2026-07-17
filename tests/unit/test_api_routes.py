@@ -471,6 +471,25 @@ class TestGetTaskStatus:
         assert body["data"]["error"] == "ASR timeout"
 
 
+class TestDeleteTask:
+    """Tests for DELETE /api/task/{task_id}."""
+
+    def test_deletes_task_and_its_cached_media(self, client, mock_cache_manager):
+        mock_cache_manager.delete_task_and_cache.return_value = {
+            "deleted_caches": 1,
+            "deleted_tasks": 2,
+        }
+
+        response = client.delete("/api/task/task-1")
+
+        assert response.status_code == 200
+        assert response.json()["data"] == {
+            "deleted_caches": 1,
+            "deleted_tasks": 2,
+        }
+        mock_cache_manager.delete_task_and_cache.assert_called_once_with("task-1")
+
+
 class TestRecalibrateEndpoint:
     """Tests for POST /api/recalibrate."""
 

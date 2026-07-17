@@ -381,6 +381,23 @@ class APIManager {
 
         return await response.json();
     }
+
+    static async deleteTask(taskId) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        if (!token) {
+            throw new Error('请先设置API访问令牌');
+        }
+
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.message || data.detail || `HTTP ${response.status}`);
+        }
+        return data;
+    }
 }
 
 /**
@@ -459,19 +476,20 @@ class TaskHistoryManager {
     /**
      * 删除指定任务
      */
-    static deleteTask(taskId) {
+    static async deleteTask(taskId) {
         try {
-            if (!confirm('确定要删除这个任务记录吗？')) {
+            if (!confirm('确定要删除这个任务记录及服务器缓存吗？删除后同一视频会重新转写。')) {
                 return;
             }
 
+            await APIManager.deleteTask(taskId);
             const history = this.getHistory();
             const updatedHistory = history.filter(task => task.id !== taskId);
 
             StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, updatedHistory);
             this.renderHistory();
 
-            UIManager.showStatus('success', '任务记录已删除');
+            UIManager.showStatus('success', '任务记录及服务器缓存已删除');
             setTimeout(UIManager.hideStatus, 2000);
         } catch (e) {
             console.error('删除任务记录失败:', e);

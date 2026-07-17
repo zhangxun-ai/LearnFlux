@@ -674,8 +674,10 @@ body.has-app-shell .study-head h1,
 body.has-app-shell .hero h1 {
     font-family: var(--font-display);
     letter-spacing: 0;
-    word-break: keep-all;
-    white-space: nowrap;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    text-wrap: balance;
 }
 
 body.has-app-shell .main-content,

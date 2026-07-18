@@ -15,9 +15,13 @@ class _FakeAnalyzer:
         self.out = out
         self.last = None
 
-    def analyze(self, title, author, summary_text, comments):
+    def analyze(self, title, author, summary_text, comments, demand_signals=None):
         self.last = dict(
-            title=title, author=author, summary_text=summary_text, comments=comments
+            title=title,
+            author=author,
+            summary_text=summary_text,
+            comments=comments,
+            demand_signals=demand_signals,
         )
         return self.out
 
@@ -63,10 +67,28 @@ def test_generates_result_with_comments():
     assert result.insight_markdown == "## 正文核心主张\n要点"
     assert result.fetched_comment_count == 2
     assert len(result.comment_samples) == 2
+    assert result.demand_signals["questions"] == []
     # fetcher received the parsed tweet id
     assert fetcher.called_with[1] == "1002103360646823936"
     # analyzer received the author thread as content
     assert analyzer.last["summary_text"] == "Seek wealth, not money or status."
+    assert analyzer.last["demand_signals"] == result.demand_signals
+
+
+def test_generates_demand_signals_from_selected_comments():
+    post = _post(
+        [
+            CommentItem(text="这个方法太麻烦了，有没有自动化工具？", like_count=99, platform_rank=0),
+            CommentItem(text="怎么做？求一份可复制的模板", like_count=50, platform_rank=1),
+        ]
+    )
+    analyzer = _FakeAnalyzer()
+
+    result = generate_post_insight(_TWEET_URL, analyzer=analyzer, post_fetcher=_FakeFetcher(post))
+
+    assert result.demand_signals["pain_points"][0]["text"] == "这个方法太麻烦了，有没有自动化工具？"
+    assert result.demand_signals["tool_requests"][0]["text"] == "这个方法太麻烦了，有没有自动化工具？"
+    assert result.demand_signals["tutorial_requests"][0]["text"] == "怎么做？求一份可复制的模板"
 
 
 def test_generates_result_without_comments():

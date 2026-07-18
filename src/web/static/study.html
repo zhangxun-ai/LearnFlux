@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <script>
+            try {
+            var theme = localStorage.getItem('vta_theme_preference');
+            if (theme) {
+                var parsedTheme = theme;
+                try { parsedTheme = JSON.parse(theme); } catch(e) {}
+                document.documentElement.setAttribute('data-theme', parsedTheme);
+            } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            } else {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        } catch(e) {}
+    window.STUDY_VIEW_TOKEN = '__VIEW_TOKEN__';
+    window.STUDY_COLLECTION_ID = '__COLLECTION_ID__';
+    window.STUDY_SOURCE_ID = '__SOURCE_ID__';
+    window.STUDY_PAGE_MODE = '__PAGE_MODE__';
+    window.STUDY_ASSET_VERSION = '__ASSET_VERSION__';
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#FBF8F3">
+    <title>本地视频学习 - 内容解析工作台</title>
+    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/visual-learning.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/study.css?v=__ASSET_VERSION__">
+    <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
+    <script src="/static/js/app-shell.js?v=20260712" defer></script>
+</head>
+<body class="app-shell has-app-shell">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item is-active" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title" id="study-workbench-title">本地学习</span></div>
+        </header>
+        <section class="page-stage">
+
+    <section class="study-library" id="study-library" aria-labelledby="study-library-title">
+        <header class="study-library-head">
+            <div>
+                <p class="study-kicker">边播边学</p>
+                <h2 id="study-library-title">选择要学习的音视频</h2>
+                <p>已解析内容可以直接开始；本地音视频选中后立即播放，解析在后台继续。</p>
+            </div>
+            <div class="study-library-tabs" role="tablist" aria-label="内容类型">
+                <button class="is-active" type="button" data-library-kind="single" aria-selected="true">单个内容</button>
+                <button type="button" data-library-kind="collection" aria-selected="false">合集内容</button>
+            </div>
+        </header>
+        <div class="study-library-tools">
+            <label class="study-library-search">
+                <span aria-hidden="true">⌕</span>
+                <input id="study-library-search" type="search" placeholder="搜索标题、作者或合集名称" autocomplete="off">
+            </label>
+        </div>
+        <section class="study-import-panel" id="study-single-import" aria-label="导入单个音视频">
+            <div class="study-import-icon" aria-hidden="true">＋</div>
+            <div>
+                <strong>选择本地音视频</strong>
+                <span>支持 MP3、M4A、WAV、AAC、FLAC、MP4、MOV、MKV、WebM；选中后立即进入播放器。</span>
+            </div>
+            <label class="btn primary study-file-button">
+                选择文件
+                <input id="study-single-file" type="file" accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.mov,.mkv,.webm" hidden>
+            </label>
+        </section>
+        <section class="study-import-panel" id="study-collection-import" aria-label="导入本地音视频合集" hidden>
+            <div class="study-import-icon" aria-hidden="true">▥</div>
+            <div>
+                <strong>选择文件夹或多个音视频</strong>
+                <span>系统按文件名自然排序创建合集，进入播放器后用紧凑下拉框随意切换。</span>
+            </div>
+            <div class="study-import-actions">
+                <label class="btn primary study-file-button">
+                    选择文件夹
+                    <input id="study-collection-folder" type="file" webkitdirectory directory multiple hidden>
+                </label>
+                <label class="btn ghost study-file-button">
+                    选择多个文件
+                    <input id="study-collection-files" type="file" accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.mov,.mkv,.webm" multiple hidden>
+                </label>
+            </div>
+        </section>
+        <div class="study-library-section-head">
+            <h2 id="study-library-list-title">最近学习</h2>
+            <span id="study-library-count"></span>
+        </div>
+        <div class="study-library-state" id="study-library-state" role="status">正在读取真实内容…</div>
+        <div class="study-library-list" id="study-library-list" aria-live="polite"></div>
+    </section>
+
+    <section class="study-page" id="study-player" hidden>
+        <header class="study-head">
+            <div>
+                <p class="study-kicker" id="study-page-context">本地学习</p>
+                <h1 id="study-title">正在加载学习内容...</h1>
+                <p id="study-subtitle">视频、逐字稿、AI 解读和问答会围绕同一条时间轴组织。</p>
+            </div>
+            <div class="study-status" aria-label="学习状态" style="display: none !important;">
+                <div class="study-stat"><span>状态</span><strong id="study-state">加载中</strong></div>
+                <div class="study-stat"><span>文稿</span><strong id="study-transcript-count">0 段</strong></div>
+                <div class="study-stat"><span>AI</span><strong id="study-ai-model">DeepSeek</strong></div>
+            </div>
+        </header>
+
+        <section class="study-shell" aria-label="本地视频学习工作台">
+            <div class="study-toolbar">
+                <div class="breadcrumbs" id="study-breadcrumbs" style="display: none !important;">本地视频 / 学习模式</div>
+                <div class="study-collection-nav" id="study-collection-nav" hidden>
+                    <button class="collection-step" id="study-collection-prev" type="button" aria-label="上一集">‹</button>
+                    <label>
+                        <span class="sr-only">选择合集内容</span>
+                        <select id="study-collection-select" aria-label="选择合集内容"></select>
+                    </label>
+                    <button class="collection-step" id="study-collection-next" type="button" aria-label="下一集">›</button>
+                    <span id="study-collection-position"></span>
+                </div>
+                <div class="toolbar-actions">
+                    <button class="btn blue" id="ask-ai-entry" type="button" style="display: none !important;">问 AI</button>
+                    <a class="btn ghost" href="/study" style="display: none !important;">选择其他内容</a>
+                    <button class="btn ghost" id="copy-current-line" type="button" style="display: none !important;">复制当前段</button>
+                    <button class="btn ghost" id="export-markdown" type="button" disabled><span aria-hidden="true" style="margin-right: 4px; font-size: 1.1em; line-height: 1;">↓</span> 导出 Markdown</button>
+                </div>
+            </div>
+
+            <div class="layout-focus">
+                <section class="surface" aria-label="视频播放区">
+                    <div hidden>
+                        <h2 id="video-title">正在加载...</h2>
+                        <span id="video-meta">等待学习数据</span>
+                    </div>
+                    <div class="play-strip" id="study-play-strip">
+                        <div class="time-row">
+                            <button class="play-btn" id="play-toggle" type="button" aria-label="播放" title="播放">▶</button>
+                            <input class="progress" id="video-progress" type="range" min="0" max="100" step="0.1" value="0" aria-label="播放进度" style="--value: 0%">
+                            <div class="play-options">
+                                <span id="video-time">00:00 / 00:00</span>
+                                <label class="playback-rate-control" for="playback-rate">
+                                    <span class="sr-only">播放速度</span>
+                                    <select id="playback-rate" aria-label="播放速度">
+                                        <option value="0.5">0.5×</option>
+                                        <option value="0.75">0.75×</option>
+                                        <option value="1" selected>1×</option>
+                                        <option value="1.25">1.25×</option>
+                                        <option value="1.5">1.5×</option>
+                                        <option value="2">2×</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="video-frame" id="video-frame">
+                        <video id="study-video" controls playsinline preload="metadata"></video>
+                        <div class="audio-visual" id="study-audio-visual" aria-hidden="true">
+                            <div class="audio-cover">♪</div>
+                            <strong id="study-audio-title">音频学习</strong>
+                            <span>播放时，右侧逐字稿会同步高亮</span>
+                            <div class="audio-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                        </div>
+                        <div class="video-empty" id="video-empty">
+                            <strong>视频暂不可播放</strong>
+                            <span>如果这是旧任务，源视频可能没有被保留；逐字稿和 AI 解读仍可学习。</span>
+                        </div>
+                    </div>
+                    <section class="current-caption" id="current-caption" aria-label="当前播放字幕">
+                        <time id="current-caption-time">--:--</time>
+                        <p id="current-caption-text">播放后，这里会持续显示当前对应文稿。</p>
+                        <button id="ask-current-caption" type="button" style="display: none !important;">问这句话</button>
+                    </section>
+                    <div class="study-source-card" id="study-source-card" hidden>
+                        <div>
+                            <strong id="study-source-name">原始文档</strong>
+                            <span id="study-source-meta">可在右侧文稿中阅读并定位引用</span>
+                        </div>
+                        <a class="btn ghost" id="study-source-open" href="#" target="_blank" rel="noopener" hidden>打开源文件</a>
+                    </div>
+                </section>
+
+                <aside class="panel" aria-label="右侧学习面板">
+                    <div class="right-tabs" role="tablist" aria-label="学习内容视图">
+                        <button class="is-active" type="button" data-tab="transcript">同步逐字稿</button>
+                        <button type="button" data-tab="notes">我的笔记</button>
+                        <button type="button" data-tab="ai">AI 解读</button>
+                        <button type="button" data-tab="visual">图解</button>
+                        <button type="button" data-tab="chat">问 AI</button>
+                    </div>
+
+                    <div class="study-panel-view" id="tab-ai">
+                        <div class="status-card" id="study-progress-card" hidden>
+                            <strong id="study-progress-title">正在处理</strong>
+                            <span id="study-progress-detail">学习内容正在生成，页面会自动刷新。</span>
+                            <div class="status-progress"><i id="study-progress-fill"></i></div>
+                            <button class="btn primary" id="study-retry" type="button" hidden>重新解析</button>
+                        </div>
+                        <div class="overview-card">
+                            <div class="overview-card-head">
+                                <div>
+                                    <h3>完整 AI 解读</h3>
+                                    <span id="ai-overview-meta">正在读取完整内容</span>
+                                </div>
+                                <button class="btn ghost" id="ai-overview-expand" type="button" disabled>展开阅读</button>
+                            </div>
+                            <div class="markdown-content" id="ai-overview">加载中...</div>
+                        </div>
+                    </div>
+
+                    <div class="study-panel-view" id="tab-visual">
+                        <div class="study-visual-toolbar" aria-label="视觉学习工具栏">
+                            <label class="sr-only" for="visual-theme">视觉主题</label>
+                            <select id="visual-theme" class="study-visual-theme">
+                                <option value="study-notes">学霸笔记</option>
+                                <option value="clean-lecture">清晰讲义</option>
+                                <option value="chalkboard">黑板手记</option>
+                                <option value="technical-blueprint">技术蓝图</option>
+                            </select>
+                            <button class="btn ghost" id="visual-expand" type="button" disabled>展开</button>
+                            <button class="btn primary" id="visual-full-note" type="button">完整笔记</button>
+                            <button class="btn ghost" id="visual-export-svg" type="button">导出 SVG</button>
+                            <button class="btn ghost" id="visual-print" type="button">打印</button>
+                        </div>
+                        <div class="study-visual-state" id="visual-learning-status" hidden>
+                            <span id="visual-learning-status-text"></span>
+                            <button type="button" id="visual-retry" hidden>重新生成</button>
+                        </div>
+                        <div class="study-visual-layer-state" id="visual-full-note-status" hidden>
+                            <span id="visual-full-note-status-text"></span>
+                            <button type="button" id="visual-full-note-retry" hidden>重试完整笔记</button>
+                        </div>
+                        <div class="study-visual-preview study-visual-continuous study-visual-two-layer" id="visual-learning-overview">
+                            <div class="empty-panel"><strong>正在准备视觉速览</strong><span>原文就绪后会自动生成。</span></div>
+                        </div>
+                    </div>
+
+                    <div class="study-panel-view is-active" id="tab-transcript">
+                        <div class="panel-head">
+                            <div>
+                                <h3>文稿</h3>
+                                <span>正文可点击跳转，当前播放句会高亮</span>
+                            </div>
+                            <button class="transcript-follow" id="transcript-follow" type="button" aria-pressed="true">● 跟随中</button>
+                        </div>
+                        <div class="transcript-panel" id="transcript-list">
+                            <div class="empty-panel"><strong>正在加载</strong><span>学习内容加载完成后会显示文稿。</span></div>
+                        </div>
+                    </div>
+
+                    <div class="study-panel-view" id="tab-notes">
+                        <div class="panel-head study-note-head">
+                            <div>
+                                <h3>我的笔记</h3>
+                                <span>每节课一篇自由 Markdown，自动保存到学习页</span>
+                            </div>
+                            <span class="study-note-status" id="study-note-status" role="status" aria-live="polite">正在加载</span>
+                        </div>
+                        <label class="sr-only" for="study-note-editor">课程笔记 Markdown</label>
+                        <textarea class="study-note-editor" id="study-note-editor" placeholder="在这里记录本节课的想法、要点和行动……" disabled></textarea>
+                        <div class="study-note-actions">
+                            <button class="btn ghost" id="study-note-binding" type="button">目录绑定</button>
+                            <button class="btn primary" id="study-note-sync" type="button" disabled>同步到 Obsidian</button>
+                        </div>
+                    </div>
+
+                    <div class="study-panel-view" id="tab-chat">
+                        <div class="panel-head chat-head">
+                            <div>
+                                <h3>问 AI</h3>
+                                <span>基于全文上下文回答，可补充专业背景</span>
+                            </div>
+                        </div>
+                        <div class="chat-list" id="chat-list" aria-live="polite">
+                            <div class="chat-empty"><strong>问任何看不懂的地方</strong><span>AI 会先读视频全文和总结，再结合专业知识回答。</span></div>
+                        </div>
+                        <div class="chat-composer" aria-label="AI 提问区">
+                            <div class="chat-input-row">
+                                <label class="sr-only" for="chat-question">输入你想问的问题</label>
+                                <textarea id="chat-question" class="chat-compose" rows="1" placeholder="Ask another question..."></textarea>
+                                <button class="chat-send" id="send-chat" type="button" aria-label="发送问题">↑</button>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+    </section>
+        </section>
+    </main>
+
+    <dialog class="ai-reading-dialog" id="ai-reading-dialog">
+        <div class="ai-reading-shell">
+            <header class="ai-reading-head">
+                <div>
+                    <span>AI 解读</span>
+                    <h2>完整解读</h2>
+                </div>
+                <button class="study-visual-close" id="ai-reading-close" type="button" aria-label="关闭">×</button>
+            </header>
+            <div class="markdown-content ai-reading-content" id="ai-reading-content">加载中...</div>
+        </div>
+    </dialog>
+
+    <dialog class="study-visual-dialog" id="visual-learning-dialog">
+        <div class="study-visual-dialog-shell">
+            <header class="study-visual-dialog-head">
+                <div>
+                    <span>视觉学习</span>
+                    <h2 id="visual-modal-title">图文笔记</h2>
+                </div>
+                <div class="study-visual-dialog-actions">
+                    <span class="study-visual-modal-status" id="visual-modal-status"></span>
+                    <button class="btn primary" id="visual-regenerate" type="button" hidden>重新生成</button>
+                    <button class="study-visual-close" id="visual-modal-close" type="button" aria-label="关闭">×</button>
+                </div>
+            </header>
+            <div class="study-visual-modal-content" id="visual-learning-modal-content"></div>
+        </div>
+    </dialog>
+
+    <dialog class="obsidian-dialog" id="obsidian-binding-dialog" aria-labelledby="obsidian-binding-title">
+        <div class="obsidian-dialog-shell">
+            <header class="obsidian-dialog-head">
+                <div>
+                    <span>本地 Obsidian</span>
+                    <h2 id="obsidian-binding-title">绑定课程目录</h2>
+                </div>
+                <button class="study-visual-close" id="obsidian-binding-close" type="button" aria-label="关闭目录绑定">×</button>
+            </header>
+            <p class="obsidian-dialog-copy" id="obsidian-binding-scope">合集只需绑定一次，后续分集会自动沿用。</p>
+            <div class="obsidian-binding-fields">
+                <label for="obsidian-transcript-directory">
+                    <span>文字稿目录（raw 下）</span>
+                    <select id="obsidian-transcript-directory"></select>
+                </label>
+                <label for="obsidian-note-directory">
+                    <span>课程笔记目录</span>
+                    <select id="obsidian-note-directory"></select>
+                </label>
+            </div>
+            <div class="obsidian-dialog-status" id="obsidian-binding-status" role="status" aria-live="polite"></div>
+            <footer class="obsidian-dialog-actions">
+                <button class="btn ghost" id="obsidian-binding-cancel" type="button">取消</button>
+                <button class="btn primary" id="obsidian-binding-save" type="button">保存绑定</button>
+            </footer>
+        </div>
+    </dialog>
+
+    <dialog class="obsidian-dialog" id="obsidian-conflict-dialog" aria-labelledby="obsidian-conflict-title">
+        <div class="obsidian-dialog-shell obsidian-conflict-shell">
+            <header class="obsidian-dialog-head">
+                <div>
+                    <span>需要你确认</span>
+                    <h2 id="obsidian-conflict-title">笔记存在双边修改</h2>
+                </div>
+                <button class="study-visual-close" id="obsidian-conflict-close" type="button" aria-label="关闭冲突处理">×</button>
+            </header>
+            <p class="obsidian-dialog-copy" id="obsidian-conflict-message">请选择要保留的版本，系统不会自动覆盖。</p>
+            <div class="obsidian-conflict-grid">
+                <label for="obsidian-conflict-app"><span>学习页版本</span><textarea id="obsidian-conflict-app" readonly></textarea></label>
+                <label for="obsidian-conflict-file"><span>Obsidian 版本</span><textarea id="obsidian-conflict-file" readonly></textarea></label>
+            </div>
+            <footer class="obsidian-dialog-actions obsidian-conflict-actions">
+                <button class="btn primary" type="button" data-choice="app">采用学习页版本</button>
+                <button class="btn ghost" type="button" data-choice="obsidian">采用 Obsidian 版本</button>
+                <button class="btn primary" type="button" data-choice="recreate_from_app" hidden>用学习页笔记重建文件</button>
+                <button class="btn danger" type="button" data-choice="accept_external_deletion" hidden>接受 Obsidian 删除</button>
+            </footer>
+        </div>
+    </dialog>
+
+    <div class="toast" id="study-toast" role="status" aria-live="polite"></div>
+    <script src="/static/js/visual-learning.js?v=__ASSET_VERSION__"></script>
+    <script src="/static/js/study-player-runtime.js?v=__ASSET_VERSION__"></script>
+    <script src="/static/js/study.js?v=__ASSET_VERSION__"></script>
+</body>
+</html>

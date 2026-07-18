@@ -27,15 +27,15 @@
 {% block content %}
     <div class="section">
         <div class="status-cleaned">
-            <h2 style="margin-top: 0;">⚠️ 内容已清理</h2>
+            <h2 style="margin-top: 0;">内容已清理</h2>
             <p>该转录任务的底层文件已被系统清理，无法显示详细转录内容。</p>
             
             <h3>您可以：</h3>
             <ul class="action-list">
                 {% if url %}
-                <li>📎 <a href="{{ url }}" target="_blank" rel="noopener">查看原始视频链接</a></li>
+                <li><a href="{{ url }}" target="_blank" rel="noopener">查看原始视频链接</a></li>
                 {% endif %}
-                <li>🔄 重新提交转录任务（将原始链接发送到API重新处理）</li>
+                <li>重新提交转录任务（将原始链接发送到 API 重新处理）</li>
                 <li><a class="focus-open-link" href="/static/focus-studio.html" target="_blank" rel="noopener">打开空白心流写作</a></li>
             </ul>
             
@@ -54,7 +54,7 @@
     </div>
     
     <div class="section">
-        <h2>💡 如何重新获取转录</h2>
+        <h2>如何重新获取转录</h2>
         <div class="content">
             <p>如果您需要重新获取这个视频的转录内容，请：</p>
             <ol>

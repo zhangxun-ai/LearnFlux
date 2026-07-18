@@ -78,6 +78,7 @@ async def transcribe_video(
     logger.info(
         f"收到转录API请求 - URL: {url}, 说话人识别: {request_body.use_speaker_recognition}, "
         f"评论洞察: {request_body.include_comments}, 评论上限: {request_body.comment_limit}, "
+        f"保存源内容: {request_body.preserve_source_file}, "
         f"自定义企微webhook: {request_body.wechat_webhook is not None}, "
         f"download_url: {normalized_download_url}, metadata_override: {normalized_metadata_override}"
     )
@@ -158,6 +159,7 @@ async def transcribe_video(
                 "metadata_override": normalized_metadata_override,
                 "include_comments": request_body.include_comments,
                 "comment_limit": request_body.comment_limit,
+                "preserve_source_file": request_body.preserve_source_file,
             }
 
             try:
@@ -259,6 +261,7 @@ async def upload_transcribe(
     user_info: dict = Depends(verify_token),
 ):
     """接收本地音视频文件，转录后复用 LLM 后处理与结果页（不走下载）。"""
+    start_time = datetime.datetime.now()
     filename = (file.filename or "upload").strip() or "upload"
     media_id = uuid.uuid4().hex
 
@@ -306,12 +309,24 @@ async def upload_transcribe(
     )
     task_id = task_info["task_id"]
     view_token = task_info["view_token"]
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.QUEUED,
+        platform="generic",
+        media_id=media_id,
+        title=filename,
+    )
 
     audit_logger.log_api_call(
         api_key=user_info.get("api_key"),
         user_id=user_info.get("user_id"),
         endpoint="/api/upload-transcribe",
         video_url=display_url,
+        processing_time_ms=int(
+            (datetime.datetime.now() - start_time).total_seconds() * 1000
+        ),
+        status_code=202,
+        task_id=task_id,
         user_agent=request.headers.get("User-Agent"),
         remote_ip=request.client.host if request.client else None,
     )
@@ -386,6 +401,7 @@ async def get_task_status(
             TaskStatus.CALIBRATING: "转录完成，校对/总结生成中",
             TaskStatus.SUCCESS: "任务已完成",
             TaskStatus.FAILED: "任务处理失败",
+            TaskStatus.CANCELED: "任务已取消",
         }
         message = message_map.get(status, "获取任务状态成功")
 
@@ -422,6 +438,41 @@ async def get_task_status(
         )
         logger.exception("获取任务状态异常: %s", exc)
         raise HTTPException(status_code=500, detail=f"获取任务状态失败: {exc}")
+
+
+@router.delete("/task/{task_id}", response_model=TranscribeResponse)
+async def delete_task(
+    task_id: str,
+    request: Request,
+    user_info: dict = Depends(verify_token),
+):
+    """Delete a completed task and invalidate its reusable media cache."""
+    start_time = datetime.datetime.now()
+    try:
+        deleted = cache_manager.delete_task_and_cache(task_id)
+        if deleted is None:
+            raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+
+        audit_logger.log_api_call(
+            api_key=user_info.get("api_key"),
+            user_id=user_info.get("user_id"),
+            endpoint=f"/api/task/{task_id}",
+            processing_time_ms=int(
+                (datetime.datetime.now() - start_time).total_seconds() * 1000
+            ),
+            status_code=200,
+            task_id=task_id,
+            user_agent=request.headers.get("User-Agent"),
+            remote_ip=request.client.host if request.client else None,
+        )
+        return TranscribeResponse(code=200, message="任务和缓存已删除", data=deleted)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        logger.exception("删除任务及缓存失败: %s", exc)
+        raise HTTPException(status_code=500, detail=f"删除任务及缓存失败: {exc}")
 
 
 @router.get("/webhook-stats")
@@ -575,6 +626,7 @@ async def recalibrate(
         "wechat_webhook": recal_webhooks.get("wechat"),
         "notification_webhooks": recal_webhooks,
         "calibrate_only": True,
+        "regenerate_summary": request_body.regenerate_summary,
     }
 
     try:

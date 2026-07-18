@@ -14,10 +14,12 @@ from typing import Optional
 from ...flywheel.analyzer import ContentAnalyzer
 from ...flywheel.analysis_service import run_analysis
 from ...flywheel.db import FlywheelDB
+from ...flywheel.draft_generator import DraftGenerator
 from ...flywheel.ingest import ingest_blogger
 from ...flywheel.models import (
     AnalysisStatus, Blogger, Content, ContentSource, MediaType,
 )
+from ...flywheel.opportunities import build_opportunity
 from ...flywheel.prompts import DEFAULT_PROMPTS, LEGACY_DEFAULT_PROMPTS, default_prompt
 from ...flywheel.repositories import (
     ContentQuery, SqliteAnalysisCostRepository, SqliteAnalysisRepository,
@@ -215,6 +217,40 @@ def list_contents(*, subscribe=None, blogger_ids=(), statuses=(), media_type=Non
     }
 
 
+def list_opportunities(*, subscribe=None, media_type=None, date_preset=None,
+                       limit=20, now: Optional[datetime] = None) -> dict:
+    """Rank already-analyzed content by immediate opportunity signal."""
+    r = repos()
+    now = now or datetime.now()
+    cap = max(1, min(int(limit or 20), 50))
+    q = ContentQuery(
+        subscribed={"subscribed": True, "adhoc": False}.get(subscribe),
+        statuses=(AnalysisStatus.SUCCESS,),
+        media_type=MediaType(media_type) if media_type else None,
+        date_from=_date_from(date_preset, now),
+        sort="like_count",
+        page=1,
+        page_size=max(cap * 3, cap),
+    )
+    pg = r["content"].list(q)
+    items = []
+    for content in pg.items:
+        analysis = r["analysis"].get_by_content(content.id)
+        if not analysis or analysis.status is not AnalysisStatus.SUCCESS:
+            continue
+        blogger = r["blogger"].get(content.blogger_id)
+        items.append(
+            build_opportunity(
+                content,
+                analysis.result_json or {},
+                blogger_handle=blogger.handle if blogger else "",
+                now=now,
+            )
+        )
+    items.sort(key=lambda item: item["score"], reverse=True)
+    return {"items": items[:cap], "total": len(items), "limit": cap}
+
+
 def list_bloggers() -> list[dict]:
     r = repos()
     return [
@@ -273,4 +309,41 @@ def get_analysis(content_id: int) -> dict:
             "source_label",
             "视频转写文字" if content.media_type is MediaType.VIDEO else "图文正文",
         ),
+    }
+
+
+def generate_draft(content_id: int, generator: DraftGenerator) -> dict:
+    """Generate a new Xiaohongshu draft from a successful saved teardown."""
+    r = repos()
+    content = r["content"].get(content_id)
+    if not content:
+        raise ValueError("内容不存在")
+    analysis = r["analysis"].get_by_content(content_id)
+    if (
+        content.analysis_status is not AnalysisStatus.SUCCESS
+        or not analysis
+        or analysis.status is not AnalysisStatus.SUCCESS
+    ):
+        raise ValueError("请先完成解析成功的内容拆解")
+
+    blogger = r["blogger"].get(content.blogger_id)
+    result = analysis.result_json or {}
+    draft = generator.generate(
+        title=content.title,
+        author=blogger.handle if blogger else "",
+        media_type=content.media_type,
+        stats={
+            "like_count": content.like_count,
+            "collect_count": content.collect_count,
+            "comment_count": content.comment_count,
+        },
+        source_text=result.get("source_text", ""),
+        analysis_result=result,
+    )
+    return {
+        "ok": True,
+        "content_id": content.id,
+        "source_title": content.title,
+        "source_author": blogger.handle if blogger else "",
+        **draft,
     }

@@ -1,10 +1,14 @@
 import os
+import subprocess
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import unquote
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 from ..services.longcut import (
@@ -22,11 +26,13 @@ from ..context import (
 )
 from ...utils.rendering import (
     get_base_url,
+    normalize_markdown_text,
     render_calibrated_content_smart,
     render_markdown_to_html,
     render_transcript_content,
 )
 from ...utils.timeutil import format_datetime_for_display, get_configured_timezone
+from ...collections.titles import source_display_title
 
 logger = get_logger()
 cache_manager = get_cache_manager()
@@ -35,6 +41,67 @@ static_dir = get_static_dir()
 
 
 router = APIRouter()
+
+_EXPORT_TYPE_LABELS = {
+    "calibrated": "校对文本",
+    "summary": "总结文本",
+    "comment_insight": "高赞评论洞察",
+    "transcript": "原始转录",
+}
+
+_EXPORT_SECTION_LABELS = {
+    "calibrated": "校对文本",
+    "summary": "内容总结",
+    "comment_insight": "高赞评论洞察",
+    "transcript": "原始转录",
+}
+
+_EXPORT_SCOPE_LABELS = {
+    "analysis": "AI解析",
+    "calibrated": "校对文本",
+    "full": "全内容",
+}
+
+_EXPORT_SCOPE_SECTIONS = {
+    "analysis": ("summary", "comment_insight"),
+    "calibrated": ("calibrated",),
+    "full": ("summary", "comment_insight", "calibrated", "transcript"),
+}
+
+_LOCAL_DOCUMENT_EXTS = {
+    ".txt",
+    ".md",
+    ".markdown",
+    ".csv",
+    ".log",
+    ".html",
+    ".htm",
+    ".pdf",
+    ".docx",
+}
+
+
+def _no_store(response: Response) -> Response:
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _is_local_document_view(view_data: Dict[str, Any]) -> bool:
+    url = str(view_data.get("url") or "")
+    if not url.startswith("local://"):
+        return False
+    ext = os.path.splitext(url.split("?", 1)[0])[1].lower()
+    return ext in _LOCAL_DOCUMENT_EXTS
+
+
+def _local_url_filename(view_data: Dict[str, Any]) -> str:
+    url = str(view_data.get("url") or "")
+    if not url.startswith("local://"):
+        return ""
+    path = url.split("?", 1)[0].rstrip("/")
+    filename = path.rsplit("/", 1)[-1]
+    return unquote(filename) if filename else ""
+
 
 # robots.txt：允许首页和分享页面被收录，禁止 API 和静态资源
 _ROBOTS_TXT_TEMPLATE = """\
@@ -78,6 +145,12 @@ def _media_id_from_local_url(url: str) -> str:
 
 
 def _local_source_file_path(view_data: Dict[str, Any]) -> Optional[Path]:
+    explicit_path = str(view_data.get("source_file_path") or "").strip()
+    if explicit_path:
+        path = Path(explicit_path)
+        if path.exists() and path.is_file():
+            return path
+
     url = str(view_data.get("url") or "")
     if not url.startswith("local://"):
         return None
@@ -92,17 +165,39 @@ def _local_source_file_path(view_data: Dict[str, Any]) -> Optional[Path]:
 
 def _decorate_source_link(view_data: Dict[str, Any]) -> None:
     url = str(view_data.get("url") or "").strip()
+    if _local_source_file_path(view_data) and view_data.get("view_token"):
+        view_data["source_link_url"] = f"/view/{view_data['view_token']}/source-file"
+        view_data["source_link_label"] = "下载源文件"
+        view_data["source_reveal_url"] = f"/view/{view_data['view_token']}/source-file/reveal"
+        view_data["source_reveal_label"] = "在本机显示"
+        return
     if _is_browser_source_url(url):
         view_data["source_link_url"] = url
         view_data["source_link_label"] = "查看原视频"
         return
     if not url.startswith("local://"):
         return
-    if _local_source_file_path(view_data) and view_data.get("view_token"):
-        view_data["source_link_url"] = f"/view/{view_data['view_token']}/source-file"
-        view_data["source_link_label"] = "查看原视频"
+
+
+def _build_collection_navigation(view_token: str) -> Optional[Dict[str, Any]]:
+    try:
+        from .collections import get_collection_service
+
+        return get_collection_service().get_source_navigation_by_view_token(view_token)
+    except Exception as exc:
+        logger.debug(f"collection navigation unavailable: {exc}")
+        return None
+
+
+def _decorate_collection_display_title(view_data: Dict[str, Any]) -> None:
+    url = str(view_data.get("url") or "")
+    if not url.startswith("local://collection-source/"):
         return
-    view_data["source_unavailable_message"] = "源视频未保存或已清理"
+    display_title = source_display_title(
+        view_data.get("title") or _local_url_filename(view_data)
+    )
+    if display_title:
+        view_data["title"] = display_title
 
 
 def _parse_task_datetime(value) -> Optional[datetime]:
@@ -152,6 +247,21 @@ def _format_local_datetime(value, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
     return parsed.astimezone(get_configured_timezone()).strftime(fmt)
 
 
+def _decorate_title_and_tags(view_data: Dict[str, Any]):
+    """Extract hashtags from title and clean it up."""
+    import re
+    title = view_data.get("title", "")
+    if not title or not isinstance(title, str):
+        return
+    
+    tags = re.findall(r'#([^\s#]+)', title)
+    if tags:
+        clean_title = re.sub(r'#([^\s#]+)', '', title).strip()
+        clean_title = re.sub(r'[\s\-]+$', '', clean_title)
+        view_data["title"] = clean_title
+        existing_tags = view_data.get("tags") or []
+        view_data["tags"] = list(dict.fromkeys(existing_tags + tags))
+
 def _decorate_view_timing(view_data: Dict[str, Any], now: Optional[datetime] = None):
     """Add user-facing elapsed/duration/progress time fields in-place."""
     current_time = now or datetime.now(timezone.utc)
@@ -200,6 +310,35 @@ async def sitemap_xml():
     return Response(content=content, media_type="application/xml")
 
 
+@router.get("/manifest.webmanifest", include_in_schema=False)
+async def web_manifest():
+    """返回 PWA manifest，供手机端添加到主屏幕。"""
+    manifest_path = static_dir / "manifest.webmanifest"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="manifest not found")
+    return FileResponse(
+        path=str(manifest_path),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/service-worker.js", include_in_schema=False)
+async def service_worker():
+    """从根路径提供 service worker，保证 scope 覆盖整个站点。"""
+    sw_path = static_dir / "service-worker.js"
+    if not sw_path.exists():
+        raise HTTPException(status_code=404, detail="service worker not found")
+    return FileResponse(
+        path=str(sw_path),
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "no-cache",
+            "Service-Worker-Allowed": "/",
+        },
+    )
+
+
 # 首页 HTML：简洁的服务介绍页，供搜索引擎收录以建立域名信任
 _HOME_HTML = """\
 <!DOCTYPE html>
@@ -208,8 +347,14 @@ _HOME_HTML = """\
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>内容解析工作台 · 深度学习 / 系列学习 / IP 对标</title>
-    <meta name="description" content="一站式内容解析：视频/文档深度学习、系列深度学习、帖子/文章洞察、IP 对标拆解。">
+    <meta name="description" content="一站式内容解析：视频/文档深度学习、系列深度学习、帖子/文章洞察和 IP 对标拆解。">
     <meta name="theme-color" content="#0f172a">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
     <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
@@ -219,6 +364,7 @@ _HOME_HTML = """\
     <meta property="og:image" content="/static/icon/og.png">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="stylesheet" href="/static/css/editorial.css?v=1">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=1">
     <style>
         /* 配色 token / 字体 / 导航 来自 editorial.css（单一来源） */
         *{margin:0;padding:0;box-sizing:border-box}
@@ -270,46 +416,83 @@ _HOME_HTML = """\
         @media(max-width:560px){.hero h1{font-size:2.2rem}.nav{padding:18px}.links a:not(.cta):not(.hot){display:none}}
     </style>
 </head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js"></script>
+<body class="app-shell has-app-shell">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item is-active" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">内容解析工作台</span></div>
+        </header>
+        <section class="page-stage">
+    <script src="/static/js/pwa-register.js" defer></script>
+    <script src="/static/js/app-shell.js?v=1" defer></script>
 
     <header class="hero">
         <div class="eyebrow">一站式内容解析</div>
         <h1 class="serif">把任意内容，<br>秒变<em>可读的精华</em></h1>
-        <p class="sub">视频/文档深度学习、系列深度学习、帖子/文章洞察、IP 对标拆解，各模块独立使用。</p>
+        <p class="sub">视频/文档深度学习、系列深度学习、帖子/文章洞察和 IP 对标拆解，各模块独立使用。</p>
         <div class="cta-row">
-            <a class="btn" href="/add_task_by_web">开始深度学习 →</a>
+            <a class="btn" href="/add_task_by_web#local-video-study">本地视频学习 →</a>
+            <a class="btn ghost" href="/add_task_by_web">链接/文档解析</a>
             <a class="btn ghost" href="/flywheel">IP 对标工作台</a>
         </div>
     </header>
 
     <section class="section">
-        <a class="flagship" href="/add_task_by_web">
-            <div class="k">主入口 · 深度学习</div>
-            <h3 class="serif">视频/文档深度学习</h3>
-            <p>贴视频链接或上传文档，先拿到原文稿/转录稿，再让 AI 提炼高价值内容，方便复习和沉淀到知识库。</p>
+        <a class="flagship" href="/add_task_by_web#local-video-study">
+            <div class="k">主入口 · 本地视频学习</div>
+            <h3 class="serif">本地视频播放学习</h3>
+            <p>上传本地长视频，进入播放器 + 逐字稿 + AI 解读 + 时间点笔记的一体化学习界面，边看边沉淀重点。</p>
             <span class="arrow">→</span>
         </a>
         <div class="grid">
+            <a class="card" href="/add_task_by_web">
+                <div class="ic">文</div><h3>链接/文档解析</h3>
+                <p>贴视频链接或上传文档，先拿到原文稿/转录稿，再让 AI 提炼高价值内容。</p>
+            </a>
             <a class="card" href="/collections">
-                <div class="ic">📚</div><h3>系列深度学习</h3>
+                <div class="ic">系</div><h3>系列深度学习</h3>
                 <p>连续课程、专题视频或文档合集，按顺序解析并生成集合级方法论。</p>
             </a>
             <a class="card" href="/post">
-                <div class="ic">📝</div><h3>帖子/文章洞察</h3>
+                <div class="ic">帖</div><h3>帖子/文章洞察</h3>
                 <p>X / 小红书 / 公众号，抓正文 + 高赞评论，提炼精华并标注可信度。</p>
             </a>
             <a class="card" href="/flywheel">
-                <div class="ic">🎯</div><h3>IP 对标工作台</h3>
-                <p>学习对标账号的选题、开头、留人、引导和迭代方法，当前先支持小红书。</p>
+                <div class="ic">IP</div><h3>IP 对标工作台</h3>
+                <p>学习对标账号的选题、开头、留人、引导和迭代方法，并从已拆解内容里挑选题机会。</p>
             </a>
         </div>
     </section>
 
     <footer class="foot">
-        Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source
+        Powered by <a href="https://github.com/zhangxun-ai/LearnFlux" target="_blank" rel="noopener">LearnFlux</a> · Open Source
     </footer>
+        </section>
+    </main>
 </body>
 </html>
 """
@@ -349,6 +532,11 @@ def resolve_export_file_path(cache_dir: str, export_type: str) -> Optional[Path]
     return None
 
 
+def get_export_scope_sections(scope: str) -> tuple[str, ...]:
+    """Return export section types for a user-facing export scope."""
+    return _EXPORT_SCOPE_SECTIONS.get(scope, _EXPORT_SCOPE_SECTIONS["full"])
+
+
 def _build_text_metadata_header(view_data: Dict[str, Any], export_type: str) -> str:
     """生成纯文本导出的 YAML front matter 风格元数据头.
 
@@ -359,17 +547,12 @@ def _build_text_metadata_header(view_data: Dict[str, Any], export_type: str) -> 
     Returns:
         包含元数据的字符串，以 '---' 分隔
     """
-    type_map = {
-        "calibrated": "校对文本",
-        "summary": "总结文本",
-        "comment_insight": "高赞评论洞察",
-        "transcript": "原始转录",
-    }
-
     title = view_data.get("title", "未命名")
     platform = view_data.get("platform", "unknown")
     source_url = view_data.get("url", "")
-    content_type_cn = type_map.get(export_type, export_type)
+    content_type_cn = _EXPORT_TYPE_LABELS.get(
+        export_type, _EXPORT_SCOPE_LABELS.get(export_type, export_type)
+    )
     from ...utils.timeutil.timezone_helper import get_configured_timezone
     export_date = datetime.now(get_configured_timezone()).strftime("%Y-%m-%d")
 
@@ -452,16 +635,9 @@ def _build_page_html(
     """
     import html as html_module
 
-    type_map = {
-        "calibrated": "校对文本",
-        "summary": "内容总结",
-        "comment_insight": "高赞评论洞察",
-        "transcript": "原始转录",
-    }
-
     title = view_data.get("title", "未命名")
     platform = view_data.get("platform", "unknown")
-    content_type_cn = type_map.get(export_type, export_type)
+    content_type_cn = _EXPORT_SECTION_LABELS.get(export_type, export_type)
     source_url = view_data.get("url", "")
 
     # HTML 转义防止 XSS
@@ -487,7 +663,7 @@ def _build_page_html(
     <meta property="og:description" content="{og_desc}">
     <meta property="og:type" content="article">
     <meta property="og:locale" content="zh_CN">
-    <meta property="og:site_name" content="Video Transcript API">
+    <meta property="og:site_name" content="LearnFlux">
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -693,14 +869,17 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
-def generate_download_filename(title: str, platform: str, content_type: str) -> str:
+def generate_download_filename(
+    title: str, platform: str, content_type: str, extension: str = "txt"
+) -> str:
     """
     生成下载文件名：视频标题-校对文本-平台.txt
 
     Args:
         title: 视频标题
         platform: 平台名称（youtube/bilibili/douyin等）
-        content_type: 内容类型（calibrated/summary/transcript）
+        content_type: 内容类型（calibrated/summary/transcript/analysis/full）
+        extension: 文件扩展名，不带点
 
     Returns:
         str: 格式化的文件名
@@ -710,10 +889,8 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
 
     # 内容类型映射
     type_map = {
-        "calibrated": "校对文本",
-        "summary": "总结文本",
-        "comment_insight": "高赞评论洞察",
-        "transcript": "原始转录",
+        **_EXPORT_TYPE_LABELS,
+        **_EXPORT_SCOPE_LABELS,
     }
 
     # 平台名称映射
@@ -734,7 +911,49 @@ def generate_download_filename(title: str, platform: str, content_type: str) -> 
     if len(safe_title) > max_title_length:
         safe_title = safe_title[:max_title_length] + "..."
 
-    return f"{safe_title}-{content_name}-{platform_name}.txt"
+    safe_extension = sanitize_filename(extension).lstrip(".") or "txt"
+    return f"{safe_title}-{content_name}-{platform_name}.{safe_extension}"
+
+
+def _normalize_export_content(export_type: str, content: str) -> str:
+    if export_type in {"summary", "comment_insight"}:
+        return normalize_markdown_text(content)
+    return content
+
+
+def build_export_bundle_markdown(view_data: Dict[str, Any], scope: str) -> str:
+    """Build a scoped Markdown export from cached section files."""
+    cache_dir = view_data.get("cache_dir")
+    if not cache_dir or not os.path.exists(cache_dir):
+        return ""
+
+    sections = []
+    for export_type in get_export_scope_sections(scope):
+        file_path = resolve_export_file_path(cache_dir, export_type)
+        if not file_path or not file_path.exists():
+            continue
+
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            logger.error("读取导出分段失败: %s, 错误: %s", file_path, exc)
+            continue
+
+        content = _normalize_export_content(export_type, content).strip()
+        if not content:
+            continue
+
+        label = _EXPORT_SECTION_LABELS.get(export_type, export_type)
+        sections.append((label, content))
+
+    if not sections:
+        return ""
+
+    title = str(view_data.get("title") or "未命名").strip() or "未命名"
+    lines = [f"# {title}", ""]
+    for label, content in sections:
+        lines.extend([f"## {label}", "", content, ""])
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
@@ -815,6 +1034,7 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
     # 5. 读取文件内容
     try:
         content = file_path.read_text(encoding="utf-8")
+        content = _normalize_export_content(export_type, content)
     except Exception as exc:
         logger.error("读取文件失败: %s, 错误: %s", file_path, exc)
         return Response(
@@ -863,7 +1083,10 @@ async def add_task_by_web(request: Request):
                 static_dir / "js" / "app.js",
                 static_dir / "css" / "styles.css",
                 static_dir / "css" / "workbench.css",
-                static_dir / "css" / "nav.css",
+                static_dir / "css" / "app-shell.css",
+                static_dir / "css" / "editorial.css",
+                static_dir / "js" / "app-shell.js",
+                static_dir / "js" / "pwa-register.js",
             ]
             version = str(int(max(
                 (f.stat().st_mtime for f in asset_files if f.exists()),
@@ -881,6 +1104,69 @@ async def add_task_by_web(request: Request):
     except Exception as exc:
         logger.exception("访问Web任务添加页面异常: %s", exc)
         raise HTTPException(status_code=500, detail="访问页面失败，请稍后重试")
+
+
+def _render_study_page(
+    *,
+    page_mode: str,
+    view_token: str = "",
+    collection_id: str = "",
+    source_id: str = "",
+) -> HTMLResponse:
+    page = static_dir / "study.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="study page not found")
+
+    asset_files = [
+        page,
+        static_dir / "css" / "study.css",
+        static_dir / "css" / "visual-learning.css",
+        static_dir / "js" / "study.js",
+        static_dir / "js" / "study-player-runtime.js",
+        static_dir / "js" / "visual-learning.js",
+        static_dir / "css" / "editorial.css",
+        static_dir / "css" / "app-shell.css",
+        static_dir / "js" / "app-shell.js",
+        static_dir / "js" / "pwa-register.js",
+    ]
+    version = str(max(
+        (f.stat().st_mtime_ns for f in asset_files if f.exists()),
+        default=0,
+    ))
+    content = (
+        page.read_text(encoding="utf-8")
+        .replace("__VIEW_TOKEN__", view_token)
+        .replace("__COLLECTION_ID__", collection_id)
+        .replace("__SOURCE_ID__", source_id)
+        .replace("__PAGE_MODE__", page_mode)
+        .replace("__ASSET_VERSION__", version)
+    )
+    return HTMLResponse(content=content, headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/study", response_class=HTMLResponse, include_in_schema=False)
+async def study_library_page():
+    """统一音视频学习内容选择页。"""
+    return _render_study_page(page_mode="library")
+
+
+@router.get("/study/collections/{collection_id}/sources/{source_id}", response_class=HTMLResponse, include_in_schema=False)
+async def study_collection_page(collection_id: str, source_id: str):
+    """带明确合集与分集上下文的统一学习播放器。"""
+    return _render_study_page(
+        page_mode="collection",
+        collection_id=collection_id,
+        source_id=source_id,
+    )
+
+
+@router.get("/study/{view_token}", response_class=HTMLResponse, include_in_schema=False)
+async def study_page(view_token: str):
+    """单篇音视频学习页面。"""
+    view_data = cache_manager.get_view_data_by_token(view_token)
+    if not view_data:
+        raise HTTPException(status_code=404, detail="study page not found")
+    return _render_study_page(page_mode="single", view_token=view_token)
 
 
 @router.get("/export/{view_token}/{export_type}")
@@ -913,6 +1199,41 @@ async def export_content(view_token: str, export_type: str, request: Request):
                 status_code=404,
             )
 
+        if export_type == "bundle":
+            scope = request.query_params.get("scope", "full")
+            content = build_export_bundle_markdown(view_data, scope)
+            if not content:
+                return Response(
+                    content="❌ 没有可导出的内容\n\n该任务可能未生成所选内容。",
+                    media_type="text/plain; charset=utf-8",
+                    status_code=404,
+                )
+
+            title = view_data.get("title", "未命名")
+            platform = view_data.get("platform", "unknown")
+            content_type = scope if scope in _EXPORT_SCOPE_LABELS else "full"
+            filename = generate_download_filename(title, platform, content_type, "md")
+            from urllib.parse import quote
+
+            encoded_filename = quote(filename)
+            custom_headers = _build_metadata_headers(view_data, content_type)
+            logger.info(
+                "导出组合文件: scope=%s, 文件名: %s, view_token: %s",
+                content_type,
+                filename,
+                view_data.get("view_token", "unknown")[:20],
+            )
+
+            return Response(
+                content=content,
+                media_type="text/markdown; charset=utf-8",
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                    "X-Content-Type-Options": "nosniff",
+                    **custom_headers,
+                },
+            )
+
         file_path = resolve_export_file_path(cache_dir, export_type)
         if file_path is None:
             return Response(
@@ -936,6 +1257,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
 
         try:
             content = file_path.read_text(encoding="utf-8")
+            content = _normalize_export_content(export_type, content)
         except Exception as exc:
             logger.error("读取文件失败: %s, 错误: %s", file_path, exc)
             return Response(
@@ -996,7 +1318,51 @@ async def view_source_file(view_token: str):
     if not file_path:
         raise HTTPException(status_code=404, detail="源视频未保存或已清理")
     filename = os.path.basename(str(view_data.get("title") or file_path.name))
+    if not os.path.splitext(filename)[1]:
+        filename = file_path.name
     return FileResponse(path=str(file_path), filename=filename or file_path.name)
+
+
+@router.post("/view/{view_token}/source-file/reveal")
+async def reveal_view_source_file(view_token: str, request: Request):
+    if not _is_local_reveal_request(request):
+        raise HTTPException(status_code=403, detail="仅允许从本机打开本地源文件")
+    view_data = cache_manager.get_view_data_by_token(view_token)
+    if not view_data:
+        raise HTTPException(status_code=404, detail="view_token 无效或已过期")
+    file_path = _local_source_file_path(view_data)
+    if not file_path:
+        raise HTTPException(status_code=404, detail="源视频未保存或已清理")
+    try:
+        await run_in_threadpool(_reveal_path_in_file_manager, str(file_path))
+    except OSError as exc:
+        logger.warning(f"reveal view source failed: {exc}")
+        raise HTTPException(status_code=500, detail="打开本地目录失败")
+    return {
+        "code": 200,
+        "message": "已打开源文件所在目录",
+        "data": {"filename": file_path.name},
+    }
+
+
+def _is_local_reveal_request(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
+def _reveal_path_in_file_manager(file_path: str) -> None:
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(file_path)
+
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)])
+        return
+    if os.name == "nt":
+        subprocess.Popen(["explorer", f"/select,{path}"])
+        return
+    target = path.parent if path.is_file() else path
+    subprocess.Popen(["xdg-open", str(target)])
 
 
 @router.get("/view/{view_token}", response_class=HTMLResponse)
@@ -1021,12 +1387,14 @@ async def view_transcript(
                     status_code=404,
                 )
             else:
-                return templates.TemplateResponse(
-                    "error.html",
-                    {
-                        "request": request,
-                        "message": "view_token 无效或已过期",
-                    },
+                return _no_store(
+                    templates.TemplateResponse(
+                        "error.html",
+                        {
+                            "request": request,
+                            "message": "view_token 无效或已过期",
+                        },
+                    )
                 )
 
         # 如果请求导出原始文件（GitHub Raw 模式）
@@ -1039,29 +1407,50 @@ async def view_transcript(
 
         _decorate_view_timing(view_data)
         _decorate_source_link(view_data)
+        _decorate_collection_display_title(view_data)
+        _decorate_title_and_tags(view_data)
 
         if view_data["status"] == "processing":
-            return templates.TemplateResponse(
-                "processing.html",
-                {
-                    "request": request,
-                    **view_data,
-                    "page_title": f"正在处理 - {view_data.get('title', '转录任务')}",
-                },
+            is_document = _is_local_document_view(view_data)
+            if is_document and not view_data.get("title"):
+                view_data["title"] = _local_url_filename(view_data) or "本地文档"
+            return _no_store(
+                templates.TemplateResponse(
+                    "processing.html",
+                    {
+                        "request": request,
+                        **view_data,
+                        "page_title": view_data.get("title") or (
+                            "文档解析处理中" if is_document else "转录处理中"
+                        ),
+                        "processing_heading": (
+                            "文档解析处理中" if is_document else "转录处理中"
+                        ),
+                        "processing_subtitle": (
+                            "完成后会自动打开文档解读结果页，无需手动刷新。"
+                            if is_document
+                            else "完成后会自动打开结果页，无需手动刷新。"
+                        ),
+                    },
+                )
             )
         if view_data["status"] == "failed":
-            return templates.TemplateResponse(
-                "error.html",
-                {
-                    "request": request,
-                    "message": view_data.get("error_message", "任务处理失败"),
-                    **view_data,
-                },
+            return _no_store(
+                templates.TemplateResponse(
+                    "error.html",
+                    {
+                        "request": request,
+                        "message": view_data.get("error_message", "任务处理失败"),
+                        **view_data,
+                    },
+                )
             )
         if view_data["status"] == "file_cleaned":
-            return templates.TemplateResponse(
-                "cleaned.html",
-                {"request": request, **view_data},
+            return _no_store(
+                templates.TemplateResponse(
+                    "cleaned.html",
+                    {"request": request, **view_data},
+                )
             )
         if view_data["status"] == "success":
             if view_data.get("summary"):
@@ -1166,20 +1555,32 @@ async def view_transcript(
                 view_data,
                 longcut_settings,
             )
+            view_data["collection_navigation"] = _build_collection_navigation(
+                view_token
+            )
 
-        return templates.TemplateResponse(
-            "transcript.html",
-            {"request": request, **view_data, "view_token": view_token, "stats": stats},
+        return _no_store(
+            templates.TemplateResponse(
+                "transcript.html",
+                {
+                    "request": request,
+                    **view_data,
+                    "view_token": view_token,
+                    "stats": stats,
+                },
+            )
         )
 
     except Exception as exc:
         logger.exception("查看转录页面异常: %s", exc)
-        return templates.TemplateResponse(
-            "error.html",
-            {
-                "request": request,
-                "message": "查看页面失败，请稍后重试",
-            },
+        return _no_store(
+            templates.TemplateResponse(
+                "error.html",
+                {
+                    "request": request,
+                    "message": "查看页面失败，请稍后重试",
+                },
+            )
         )
 
 

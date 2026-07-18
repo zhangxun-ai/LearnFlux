@@ -1,16 +1,33 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
-    <script>
-    (function() {
-        document.documentElement.setAttribute('data-theme', 'light');
-    })();
+        <script>
+        (function() {
+            try {
+                var theme = localStorage.getItem('vta_theme_preference');
+                if (theme) {
+                    var parsedTheme = theme;
+                    try { parsedTheme = JSON.parse(theme); } catch(e) {}
+                    document.documentElement.setAttribute('data-theme', parsedTheme);
+                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch(e) {}
+        })();
     </script>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
-    <meta name="description" content="{% block meta_description %}Video Transcript API - 多平台视频转录与 AI 校对服务{% endblock %}">
+    <meta name="description" content="{% block meta_description %}LearnFlux - AI 驱动的内容学习工作台{% endblock %}">
     <meta name="theme-color" content="#E4503A">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
@@ -23,6 +40,8 @@
     <meta property="og:site_name" content="内容解析工作台">
     <meta property="og:image" content="/static/icon/og.png">
     <title>{% block title %}视频转录查看器{% endblock %}</title>
+    <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
+    <script src="/static/js/app-shell.js?v={{ asset_ver }}" defer></script>
     <style>
         /* 配色 token 统一来自 editorial.css（单一来源） */
 
@@ -37,11 +56,13 @@
         }
 
         .container {
-            max-width: 900px;
+            width: min(100%, 72rem);
+            max-width: none;
             margin: 24px auto 40px;
             background: var(--bg-primary);
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid rgba(27, 26, 23, 0.08);
+            box-shadow: var(--shadow-sm);
             overflow: hidden;
             transition: background 0.3s ease;
         }
@@ -49,37 +70,75 @@
         .header {
             background: var(--bg-primary);
             color: var(--text-primary);
-            padding: 38px 30px 24px;
-            text-align: center;
+            padding: 28px 30px 22px;
+            text-align: left;
             position: relative;
             border-bottom: 1px solid var(--border-primary);
         }
 
         .header h1 {
             margin: 0;
-            font-size: 1.9rem;
-            font-weight: 500;
-            font-family: 'Fraunces', Georgia, 'Songti SC', serif;
-            letter-spacing: -0.01em;
+            font-size: 1.8rem;
+            font-weight: 650;
+            font-family: var(--font-display);
+            letter-spacing: 0;
+            word-break: keep-all;
+            white-space: nowrap;
         }
 
         .header .meta {
-            margin-top: 10px;
-            opacity: 0.9;
-            font-size: 0.9rem;
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .header .meta > span {
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .header .meta > span:not(:last-child)::after {
+            content: "·";
+            margin-left: 12px;
+            opacity: 0.5;
         }
 
         .header .meta a {
-            color: #C2533F;
+            color: var(--text-secondary);
             text-decoration: none;
+            transition: color 0.15s ease;
         }
 
         .header .meta a:hover {
-            text-decoration: underline;
+            color: var(--accent-ink);
+        }
+
+        .header .tags {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .header .tag {
+            background: rgba(0, 0, 0, 0.04);
+            color: var(--text-secondary);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        [data-theme="dark"] .header .tag {
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .section {
-            padding: 30px;
+            padding: 24px 30px;
             border-bottom: 1px solid var(--border-primary);
         }
 
@@ -537,11 +596,6 @@
             gap: 10px;
         }
 
-        .stats-icon {
-            font-size: 1rem;
-            opacity: 0.8;
-        }
-
         .stats-label {
             font-weight: 600;
             opacity: 0.9;
@@ -650,7 +704,7 @@
             font-size: 0.75rem;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0;
         }
 
         .config-value {
@@ -752,7 +806,7 @@
 
         .quick-copy-desc {
             grid-column: 1;
-            font-size: 0.72rem;
+            font-size: 0.78rem; /* Increased for readability */
             color: var(--text-secondary);
             opacity: 0.7;
             font-weight: 400;
@@ -791,11 +845,13 @@
 
         /* ========== 开源脚注样式 ========== */
         .powered-footer {
-            padding: 12px 30px;
+            padding: 16px 30px 12px;
             text-align: center;
-            font-size: 0.78rem;
-            color: var(--text-secondary);
-            opacity: 0.5;
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            opacity: 0.7;
+            margin-top: 32px;
+            border-top: 1px solid var(--border-primary);
             transition: opacity 0.2s ease;
         }
 
@@ -938,41 +994,165 @@
                 font-size: 0.8rem;
             }
         }
+
+        .source-reveal-button {
+            appearance: none;
+            border: 0;
+            background: transparent;
+            color: #E4503A;
+            cursor: pointer;
+            font: inherit;
+            padding: 0;
+            text-decoration: underline;
+        }
+
+        .source-reveal-button:disabled {
+            cursor: wait;
+            opacity: 0.65;
+        }
     </style>
     <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v={{ asset_ver }}">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js?v={{ asset_ver }}"></script>
-    <div class="container">
-        <div class="header">
-            <h1>{{ title or "视频转录查看器" }}</h1>
-            {% if author or url %}
-            <div class="meta">
-                {% if author %}👤 {{ author }}{% endif %}
-                {% if source_link_url %}
-                    <br>🔗 <a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }}</a>
-                {% elif source_unavailable_message %}
-                    <br>🔗 <span>{{ source_unavailable_message }}</span>
-                {% endif %}
-                {% if created_at_display %}
-                    <br>⏰ {{ created_at_display }}
-                {% elif created_at %}
-                    <br>⏰ {{ created_at }}
-                {% endif %}
+<body class="app-shell has-app-shell">
+    {% set shell_path = request.url.path if request is defined else '' %}
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <div class="sidebar-overlay" aria-hidden="true" onclick="document.body.classList.remove('sidebar-drawer-open')"></div>
+
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true">
+                    <img src="/static/icon/logo.svg" alt="">
+                </span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core">
+                <h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item {% if shell_path == '/' or shell_path.startswith('/add_task_by_web') or shell_path.startswith('/view/') %}is-active{% endif %}" href="/add_task_by_web">
+                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-2 9h9l-9 11 2-9H4l9-11z"/></svg></span>
+                    <span>单篇深度学习</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/collections') %}is-active{% endif %}" href="/collections">
+                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg></span>
+                    <span>系列深度学习</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/static/focus-studio') %}is-active{% endif %}" href="/static/focus-studio.html">
+                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></span>
+                    <span>心流写作</span>
+                </a>
+            </section>
+
+            <section class="nav-group" aria-labelledby="nav-insight">
+                <h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item {% if shell_path.startswith('/post') %}is-active{% endif %}" href="/post">
+                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h10"/></svg></span>
+                    <span>帖子洞察</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/trend-radar') %}is-active{% endif %}" href="/trend-radar">
+                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+                    <span>趋势雷达</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/flywheel') %}is-active{% endif %}" href="/flywheel">
+                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg></span>
+                    <span>IP 对标</span>
+                </a>
+            </section>
+
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system">
+                <h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item {% if shell_path.startswith('/static/history') %}is-active{% endif %}" href="/static/history.html">
+                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                    <span>历史记录</span>
+                </a>
+                <a class="nav-item {% if shell_path.startswith('/settings') %}is-active{% endif %}" href="/settings">
+                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+                    <span>系统设置</span>
+                </a>
+            </section>
+        </nav>
+    </aside>
+
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <button class="mobile-menu-btn" aria-label="打开导航菜单" onclick="document.body.classList.add('sidebar-drawer-open')">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="topbar-title">
+                <span class="topbar-page-title">{% block shell_title %}{{ title or page_title or "视频转录查看器" }}{% endblock %}</span>
             </div>
-            {% endif %}
-        </div>
+        </header>
 
-        {% block content %}{% endblock %}
+        <section class="page-stage">
+            <div class="container">
+                <div class="header">
+                    <h1>{{ title or "视频转录查看器" }}</h1>
+            {% if author or url or created_at_display or created_at %}
+                <div class="meta">
+                    {% if author %}<span>作者：{{ author }}</span>{% endif %}
+                    {% if source_link_url %}
+                        <span><a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }} ↗</a></span>
+                    {% endif %}
+                    {% if source_reveal_url %}
+                        <span><button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button></span>
+                    {% endif %}
+                    {% if created_at_display %}
+                        <span>创建：{{ created_at_display }}</span>
+                    {% elif created_at %}
+                        <span>创建：{{ created_at }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                </div>
 
-        <div class="powered-footer">
-            Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source · <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">☆ Star on GitHub</a>
-        </div>
-    </div>
+                {% block content %}{% endblock %}
+            </div>
+        </section>
+    </main>
 
     {% block extra_js %}{% endblock %}
+
+    <!-- 本机源文件定位脚本 -->
+    <script>
+        document.addEventListener('click', async function(event) {
+            const button = event.target.closest('[data-source-reveal-url]');
+            if (!button) return;
+            event.preventDefault();
+
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.textContent = '正在打开...';
+
+            try {
+                const response = await fetch(button.dataset.sourceRevealUrl, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(function() { return {}; });
+                    throw new Error(data.detail || '打开本地位置失败');
+                }
+                button.textContent = '已打开';
+                setTimeout(function() {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }, 1600);
+            } catch (error) {
+                button.textContent = originalText;
+                button.disabled = false;
+                alert(error.message || '打开本地位置失败');
+            }
+        });
+    </script>
 
     <!-- 主题切换脚本 -->
     <script>
@@ -1013,12 +1193,12 @@
 
                 if (theme === 'dark') {
                     if (themeToggle) {
-                        themeToggle.textContent = '☀️';
+                        themeToggle.textContent = '浅色';
                         themeToggle.title = '切换到浅色模式';
                     }
                 } else {
                     if (themeToggle) {
-                        themeToggle.textContent = '🌙';
+                        themeToggle.textContent = '深色';
                         themeToggle.title = '切换到深色模式';
                     }
                 }
@@ -1070,32 +1250,82 @@
     <!-- 一键复制脚本 -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            function copyText(text) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    return navigator.clipboard.writeText(text);
+                }
+
+                var tmp = document.createElement('textarea');
+                tmp.value = text;
+                tmp.setAttribute('readonly', '');
+                tmp.style.position = 'fixed';
+                tmp.style.left = '-9999px';
+                document.body.appendChild(tmp);
+                tmp.select();
+                try {
+                    document.execCommand('copy');
+                    return Promise.resolve();
+                } catch (err) {
+                    return Promise.reject(err);
+                } finally {
+                    document.body.removeChild(tmp);
+                }
+            }
+
+            function stripMetadataHeader(text) {
+                if (typeof text !== 'string' || text.indexOf('---\n') !== 0) {
+                    return text;
+                }
+                var end = text.indexOf('\n---\n', 4);
+                if (end === -1) {
+                    return text;
+                }
+                return text.slice(end + 5).replace(/^\n/, '');
+            }
+
+            function setCopyState(btn, actionEl, text, className) {
+                if (className) btn.classList.add(className);
+                actionEl.textContent = text;
+            }
+
             document.querySelectorAll('.quick-copy-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var path = btn.getAttribute('data-path');
-                    var fullUrl = window.location.origin + path;
-                    var actionEl = btn.querySelector('.quick-copy-action');
-                    var originalText = actionEl.textContent;
+                    var copyPath = btn.getAttribute('data-copy-path');
+                    var stripMetadata = btn.getAttribute('data-copy-strip-metadata') === 'true';
+                    var targetPath = copyPath || path;
+                    if (!targetPath) return;
 
-                    navigator.clipboard.writeText(fullUrl).then(function() {
-                        btn.classList.add('copied');
-                        actionEl.textContent = 'Copied!';
+                    var fullUrl = window.location.origin + targetPath;
+                    var actionEl = btn.querySelector('.quick-copy-action');
+                    if (!actionEl) return;
+
+                    var originalText = actionEl.textContent;
+                    var copyPromise;
+
+                    if (copyPath) {
+                        copyPromise = fetch(fullUrl, { headers: { 'Accept': 'text/plain' } })
+                            .then(function(resp) {
+                                if (!resp.ok) throw new Error('Fetch failed: ' + resp.status);
+                                return resp.text();
+                            })
+                            .then(function(text) {
+                                return stripMetadata ? stripMetadataHeader(text) : text;
+                            })
+                            .then(copyText);
+                    } else {
+                        copyPromise = copyText(fullUrl);
+                    }
+
+                    copyPromise.then(function() {
+                        setCopyState(btn, actionEl, '已复制', 'copied');
                         setTimeout(function() {
                             btn.classList.remove('copied');
                             actionEl.textContent = originalText;
                         }, 1500);
                     }).catch(function() {
-                        // Fallback: select from temp input
-                        var tmp = document.createElement('input');
-                        tmp.value = fullUrl;
-                        document.body.appendChild(tmp);
-                        tmp.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(tmp);
-                        btn.classList.add('copied');
-                        actionEl.textContent = 'Copied!';
+                        setCopyState(btn, actionEl, '复制失败');
                         setTimeout(function() {
-                            btn.classList.remove('copied');
                             actionEl.textContent = originalText;
                         }, 1500);
                     });

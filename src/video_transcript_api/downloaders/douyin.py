@@ -182,8 +182,9 @@ class DouyinDownloader(BaseDownloader):
 
                 raise ValueError("获取视频详情失败，API返回数据结构不符合预期")
 
-            # 视频标题
-            video_title = data.get("desc", "")
+            # 抖音将标题、描述和话题标签都放在 desc；标题不展示话题标签。
+            description = str(data.get("desc") or "")
+            video_title = re.split(r"\s*#[^\s#]+", description, maxsplit=1)[0].strip()
             if not video_title or video_title.strip() == "":
                 video_title = f"douyin_{aweme_id}"
                 logger.warning(f"未找到视频标题，使用ID作为标题: {video_title}")
@@ -191,20 +192,13 @@ class DouyinDownloader(BaseDownloader):
             # 视频作者
             author = data.get("author", {}).get("nickname", "未知作者")
 
-            # 视频描述 - 抖音的视频标题和描述是同一个字段(desc)
-            description = data.get("desc", "")
+            # 视频描述保留原始 desc（包括话题标签），用于后续上下文。
 
             logger.info(f"获取到视频信息: 标题='{video_title}', 作者='{author}', 描述长度={len(description)}")
 
-            # 构建候选下载 URL 列表（音频优先；逐个做可达性预检，自动跳过被 CDN/网络拒绝的地址）
-            # 背景：music.play_url 在某些网络下 CDN(douyinstatic) 直接 TLS 断连，需回退到 video CDN(zjcdn)
+            # 构建候选下载 URL 列表。music.play_url 是挂载的配乐，
+            # 不包含创作者在视频轨中的口播，不能作为转录输入。
             candidates = []  # [(url, ext), ...]
-            try:
-                audio_url = data.get("music", {}).get("play_url", {}).get("uri")
-                if audio_url:
-                    candidates.append((audio_url, "mp3"))
-            except Exception as audio_error:
-                logger.warning(f"获取音频URL时出现异常: {str(audio_error)}")
 
             for path in (
                 ("video", "play_addr", "url_list"),
@@ -224,7 +218,7 @@ class DouyinDownloader(BaseDownloader):
                 except Exception:
                     continue
 
-            # 逐个预检，选第一个可达的（music 不可达时自动回退到 video CDN）
+            # 逐个预检，选第一个可达的视频 CDN 地址。
             download_url = None
             file_ext = "mp4"
             reachable = self._first_reachable_url([u for u, _ in candidates])

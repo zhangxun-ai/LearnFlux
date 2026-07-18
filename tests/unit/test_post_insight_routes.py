@@ -11,8 +11,12 @@ _SAMPLE = """## 正文核心主张
 [需外部核实] "道德财富可能"需更多论证。
 [回复区有反驳] 有人指出反例。
 
-## 评论区：共识 vs 争议
-多数赞同，少数质疑绝对化表述。
+## 评论需求矿场
+- 痛点：执行成本高。
+- 工具需求：需要模板和自动化工具。
+
+## 机会判断
+可以围绕低门槛资产积累清单做选题。
 
 ## 代表性高赞回复
 @someone 很受启发。
@@ -25,7 +29,14 @@ _SAMPLE = """## 正文核心主张
 def test_splits_into_known_sections():
     sections = build_insight_sections(_SAMPLE)
     keys = [s["key"] for s in sections]
-    assert keys == ["claims", "credibility", "comments", "representative", "actions"]
+    assert keys == [
+        "claims",
+        "credibility",
+        "demand_mine",
+        "opportunity",
+        "representative",
+        "actions",
+    ]
     for s in sections:
         assert s["title"]
         assert isinstance(s["html"], str) and s["html"]

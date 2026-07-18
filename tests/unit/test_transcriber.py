@@ -13,6 +13,7 @@ import os
 import sys
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -87,6 +88,74 @@ class TestTranscriber(unittest.TestCase):
 
         with self.assertRaises(FileNotFoundError):
             transcriber.transcribe("/nonexistent/audio.mp3", "test_output")
+
+    @patch("subprocess.run")
+    @patch("video_transcript_api.transcriber.transcriber.CapsWriterClient")
+    def test_local_whisper_returns_segment_timestamps(self, mock_client_cls, mock_run):
+        """Local Whisper JSON output should be converted into seekable segments."""
+        binary_path = os.path.join(self.temp_dir, "mlx_whisper")
+        with open(binary_path, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(binary_path, 0o755)
+
+        config = {
+            **self.test_config,
+            "local_whisper": {
+                "enabled": True,
+                "binary": binary_path,
+                "model": "test-model",
+                "timeout": 10,
+            },
+        }
+
+        def fake_run(cmd, **kwargs):
+            json_path = os.path.join(self.temp_dir, "local_output.json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "text": "First sentence. Second sentence.",
+                        "segments": [
+                            {"start": 0.0, "end": 1.5, "text": "First sentence."},
+                            {"start": 1.5, "end": 3.0, "text": "Second sentence."},
+                        ],
+                    },
+                    f,
+                )
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        mock_client_cls.return_value = MagicMock()
+        mock_run.side_effect = fake_run
+        transcriber = Transcriber(config=config)
+        transcriber.output_dir = self.temp_dir
+
+        result = transcriber.transcribe(self.test_audio_file, "local_output")
+
+        command = mock_run.call_args.args[0]
+        self.assertIn("--output-format", command)
+        self.assertIn("json", command)
+        self.assertEqual(result["transcript"], "First sentence. Second sentence.")
+        self.assertEqual(result["funasr_json_data"]["segments"][0]["start_time"], 0.0)
+        self.assertEqual(result["funasr_json_data"]["segments"][1]["end_time"], 3.0)
+
+    def test_local_whisper_keeps_timestamps_beyond_one_thousand_seconds(self):
+        """Whisper timestamps are seconds even for long media."""
+        payload = {
+            "duration": 2010.8,
+            "segments": [
+                {"start": 999.36, "end": 1001.0, "text": "Before boundary"},
+                {"start": 1002.0, "end": 1005.0, "text": "After boundary"},
+            ],
+        }
+
+        result = Transcriber._whisper_json_to_funasr(payload, "lesson.mp3")
+
+        self.assertEqual(result["duration"], 2010.8)
+        self.assertEqual(result["segments"][0]["end_time"], 1001.0)
+        self.assertEqual(result["segments"][1]["start_time"], 1002.0)
 
 
 if __name__ == '__main__':

@@ -92,3 +92,49 @@ def test_flywheel_prompt_api_rejects_empty_body(tmp_path, monkeypatch):
     assert "不能为空" in response.json()["detail"]
 
     db.close()
+
+
+def test_flywheel_draft_route_uses_deepseek_v4_pro(monkeypatch):
+    from src.video_transcript_api.api.routes import flywheel
+    from src.video_transcript_api.api.services.transcription import verify_token
+
+    coordinator = type(
+        "Coordinator",
+        (),
+        {
+            "llm_client": object(),
+            "config": type("Config", (), {})(),
+        },
+    )()
+    monkeypatch.setattr(flywheel, "get_llm_coordinator", lambda: coordinator)
+
+    captured = {}
+
+    def fake_generate_draft(content_id, generator):
+        captured["content_id"] = content_id
+        captured["model"] = generator.model
+        captured["reasoning_effort"] = generator.reasoning_effort
+        return {
+            "ok": True,
+            "content_id": content_id,
+            "markdown": "## 标题候选\n1. 新标题",
+            "model": generator.model,
+            "reasoning_effort": generator.reasoning_effort,
+        }
+
+    monkeypatch.setattr(flywheel.svc, "generate_draft", fake_generate_draft)
+
+    app = FastAPI()
+    app.include_router(flywheel.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "u1", "api_key": "test"}
+    client = TestClient(app)
+
+    response = client.post("/api/flywheel/content/42/draft")
+
+    assert response.status_code == 200
+    assert captured == {
+        "content_id": 42,
+        "model": "deepseek-v4-pro",
+        "reasoning_effort": "high",
+    }
+    assert response.json()["model"] == "deepseek-v4-pro"

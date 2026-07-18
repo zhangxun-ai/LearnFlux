@@ -1,31 +1,22 @@
 {% extends "base.html" %}
 
-{% block title %}处理中 - 视频转录查看器{% endblock %}
+{% block title %}{{ page_title or title or "处理中" }}{% endblock %}
 
 {% block extra_css %}
 <style>
-    .spinner {
-        border: 4px solid var(--line);
-        border-top: 4px solid var(--accent);
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s linear infinite;
-        margin: 20px auto;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+    .processing-shell {
+        max-width: 640px;
+        margin: 0 auto;
+        text-align: center;
     }
 
     .progress-panel {
-        max-width: 560px;
         margin: 24px auto 0;
-        padding: 16px;
+        padding: 20px;
         border: 1px solid var(--line);
         border-radius: 8px;
         background: var(--card);
+        text-align: left;
     }
 
     .progress-header {
@@ -47,6 +38,35 @@
         font-weight: 600;
     }
 
+    .processing-title {
+        margin: 8px 0 8px;
+        color: var(--text-primary);
+    }
+
+    .processing-subtitle {
+        margin: 0;
+        color: var(--text-secondary);
+        line-height: 1.6;
+    }
+
+    .processing-pulse {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin-right: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 rgba(228, 80, 58, 0.35);
+        animation: pulse 1.8s ease-out infinite;
+        vertical-align: 1px;
+    }
+
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(228, 80, 58, 0.35); }
+        70% { box-shadow: 0 0 0 10px rgba(228, 80, 58, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(228, 80, 58, 0); }
+    }
+
     .progress-track {
         width: 100%;
         height: 10px;
@@ -63,9 +83,8 @@
     }
 
     .progress-meta {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px 16px;
+        display: flex;
+        gap: 8px;
         margin-top: 12px;
         color: var(--text-secondary);
         font-size: 0.92rem;
@@ -94,31 +113,6 @@
         line-height: 1.5;
     }
 
-    .progress-hint {
-        margin-top: 10px;
-        color: var(--text-tertiary);
-        font-size: 0.88rem;
-        line-height: 1.5;
-    }
-
-    .progress-details {
-        margin-top: 12px;
-        color: var(--text-tertiary);
-        font-size: 0.84rem;
-    }
-
-    .progress-details summary {
-        cursor: pointer;
-        user-select: none;
-    }
-
-    .progress-details-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 6px 14px;
-        margin-top: 8px;
-    }
-
     @media (max-width: 640px) {
         .progress-header,
         .progress-meta {
@@ -126,8 +120,7 @@
         }
 
         .progress-percent,
-        .progress-meta-item + .progress-meta-item,
-        .progress-details-grid div + div {
+        .progress-meta-item + .progress-meta-item {
             margin-top: 6px;
         }
     }
@@ -137,107 +130,40 @@
 {% block content %}
     <div class="section">
         <div class="status-processing">
-            <div class="spinner"></div>
-            <h2 style="text-align: center; margin: 20px 0;">⏳ 转录处理中...</h2>
-            <p style="text-align: center; color: #666;">
-                视频转录任务正在进行中，页面会自动更新进度。
-            </p>
-            <div class="progress-panel" aria-live="polite">
-                <div class="progress-header">
-                    <div id="progress-stage" class="progress-stage">
-                        {{ progress.stage_label if progress else "任务排队中" }}
+            <div class="processing-shell" aria-live="polite">
+                <h2 id="progress-title" class="processing-title">
+                    <span class="processing-pulse" aria-hidden="true"></span>{{ processing_heading or "处理中" }}
+                </h2>
+                <p class="processing-subtitle">{{ processing_subtitle or "完成后会自动打开结果页，无需手动刷新。" }}</p>
+
+                <div class="progress-panel">
+                    <div class="progress-header">
+                        <div id="progress-stage" class="progress-stage">
+                            {{ progress.stage_label if progress else "任务排队中" }}
+                        </div>
+                        <div id="progress-percent" class="progress-percent">
+                            {{ progress.percent if progress and progress.percent is not none else 0 }}%
+                        </div>
                     </div>
-                    <div id="progress-percent" class="progress-percent">
-                        {{ progress.percent if progress and progress.percent is not none else 0 }}%
+                    <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress.percent if progress and progress.percent is not none else 0 }}">
+                        <div id="progress-fill" class="progress-fill"></div>
                     </div>
-                </div>
-                <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress.percent if progress and progress.percent is not none else 0 }}">
-                    <div id="progress-fill" class="progress-fill"></div>
-                </div>
-                <div class="progress-meta">
-                    <div class="progress-meta-item">
+                    <div class="progress-meta">
                         <span class="progress-meta-label">已处理</span>
                         <span id="progress-elapsed" class="progress-meta-value">{{ elapsed_display or "-" }}</span>
                     </div>
-                    <div class="progress-meta-item">
-                        <span class="progress-meta-label">预计剩余</span>
-                        <span id="progress-eta" class="progress-meta-value">{% if progress and progress.eta_seconds is not none %}{{ progress.eta_seconds }} 秒{% else %}暂无法准确估计{% endif %}</span>
+                    <div id="progress-message" class="progress-message" {% if not progress or not progress.message %}style="display: none;"{% endif %}>
+                        {{ progress.message if progress and progress.message else "" }}
                     </div>
                 </div>
-                <div id="progress-hint" class="progress-hint" {% if not progress or progress.stage not in ["calibrating", "comment_insight"] or progress.eta_seconds is not none %}style="display: none;"{% endif %}>
-                    该阶段耗时取决于文本长度和模型响应。
-                </div>
-                <div id="progress-message" class="progress-message" {% if not progress or not progress.message %}style="display: none;"{% endif %}>
-                    {{ progress.message if progress and progress.message else "" }}
-                </div>
-                <details class="progress-details">
-                    <summary>技术细节</summary>
-                    <div class="progress-details-grid">
-                        <div>更新时间：<span id="progress-updated">{{ progress.updated_at_display if progress and progress.updated_at_display else "-" }}</span></div>
-                        <div>依据：<span id="progress-basis">{{ progress.basis if progress else "task_created" }}</span></div>
-                        <div>置信度：<span id="progress-confidence">{{ progress.confidence if progress else "high" }}</span></div>
-                    </div>
-                </details>
             </div>
-            <p style="text-align: center; margin-top: 20px;">
-                <button onclick="window.location.reload()" style="
-                    background: var(--accent);
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 1rem;
-                ">🔄 刷新页面</button>
-            </p>
         </div>
-
-        {% if created_at_display %}
-        <p style="color: #666; text-align: center; margin-top: 20px;">
-            提交时间：{{ created_at_display }}
-        </p>
-        {% elif created_at %}
-        <p style="color: #666; text-align: center; margin-top: 20px;">
-            提交时间：{{ created_at }}
-        </p>
-        {% endif %}
     </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     const progressUrl = "/view/{{ view_token }}/progress";
-    const basisLabels = {
-        task_created: "任务已创建",
-        task_started: "任务已开始",
-        stage_transition: "阶段切换",
-        url_parse_result: "链接解析结果",
-        cache_lookup: "缓存检查结果",
-        metadata_result: "元数据获取结果",
-        download_bytes: "下载字节数",
-        funasr_upload_progress: "FunASR 上传进度",
-        funasr_server_progress: "FunASR 服务进度",
-        capswriter_audio_sent: "CapsWriter 音频发送进度",
-        platform_subtitle: "平台字幕命中",
-        llm_started: "LLM 阶段开始",
-        task_completed: "产物已保存",
-        task_failed: "任务失败"
-    };
-    const confidenceLabels = {
-        high: "高",
-        medium: "中",
-        low: "低"
-    };
-
-    function formatSeconds(seconds) {
-        if (seconds === null || seconds === undefined) return "暂无法准确估计";
-        const value = Number(seconds);
-        if (!Number.isFinite(value) || value < 0) return "暂无法准确估计";
-        if (value < 60) return `${Math.round(value)} 秒`;
-        const minutes = Math.floor(value / 60);
-        const rest = Math.round(value % 60);
-        return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分`;
-    }
 
     function updateProgress(progress, data) {
         if (!progress) return;
@@ -247,16 +173,6 @@
         document.getElementById("progress-fill").style.width = `${percent}%`;
         document.querySelector(".progress-track").setAttribute("aria-valuenow", String(percent));
         document.getElementById("progress-elapsed").textContent = data && data.elapsed_display ? data.elapsed_display : "-";
-        document.getElementById("progress-basis").textContent = basisLabels[progress.basis] || progress.basis || "阶段切换";
-        document.getElementById("progress-confidence").textContent = confidenceLabels[progress.confidence] || progress.confidence || "低";
-        document.getElementById("progress-eta").textContent = formatSeconds(progress.eta_seconds);
-        document.getElementById("progress-updated").textContent = progress.updated_at_display || progress.updated_at || "-";
-        const hintNode = document.getElementById("progress-hint");
-        if ((progress.stage === "calibrating" || progress.stage === "comment_insight") && progress.eta_seconds === undefined) {
-            hintNode.style.display = "";
-        } else {
-            hintNode.style.display = "none";
-        }
         const messageNode = document.getElementById("progress-message");
         if (progress.message) {
             messageNode.textContent = progress.message;

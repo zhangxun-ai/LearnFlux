@@ -15,6 +15,7 @@ from ..context import get_llm_coordinator, get_logger, get_templates
 from ..services import flywheel_service as svc
 from ..services.transcription import verify_token
 from ...flywheel.analyzer import ContentAnalyzer
+from ...flywheel.draft_generator import DraftGenerator
 
 logger = get_logger()
 templates = get_templates()
@@ -27,6 +28,15 @@ def _build_analyzer() -> ContentAnalyzer:
         llm_client=coord.llm_client,
         model=coord.config.summary_model,
         reasoning_effort=getattr(coord.config, "flywheel_reasoning_effort", None),
+    )
+
+
+def _build_draft_generator() -> DraftGenerator:
+    coord = get_llm_coordinator()
+    return DraftGenerator(
+        llm_client=coord.llm_client,
+        model="deepseek-v4-pro",
+        reasoning_effort="high",
     )
 
 
@@ -91,12 +101,40 @@ async def contents(request: Request, user_info: dict = Depends(verify_token)):
     return result
 
 
+@router.get("/api/flywheel/opportunities")
+async def opportunities(request: Request, user_info: dict = Depends(verify_token)):
+    q = request.query_params
+    try:
+        return await run_in_threadpool(
+            svc.list_opportunities,
+            subscribe=q.get("subscribe") or None,
+            media_type=q.get("media_type") or None,
+            date_preset=q.get("date") or None,
+            limit=int(q.get("limit", 20)),
+        )
+    except Exception:
+        logger.exception("flywheel opportunities list failed")
+        return JSONResponse(status_code=500, content={"error": "选题机会查询失败"})
+
+
 @router.get("/api/flywheel/content/{content_id}")
 async def get_content(content_id: int, user_info: dict = Depends(verify_token)):
     try:
         return await run_in_threadpool(svc.get_analysis, content_id)
     except ValueError as exc:
         return JSONResponse(status_code=404, content={"ok": False, "error": str(exc)})
+
+
+@router.post("/api/flywheel/content/{content_id}/draft")
+async def generate_draft(content_id: int, user_info: dict = Depends(verify_token)):
+    try:
+        generator = _build_draft_generator()
+        return await run_in_threadpool(svc.generate_draft, content_id, generator)
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"ok": False, "error": str(exc)})
+    except Exception:
+        logger.exception(f"flywheel draft generation failed: content_id={content_id}")
+        return JSONResponse(status_code=502, content={"ok": False, "error": "新帖生成失败，请稍后重试"})
 
 
 @router.get("/api/flywheel/prompts")

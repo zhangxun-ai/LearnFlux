@@ -1,0 +1,63 @@
+{
+  "name": "内容解析工作台",
+  "short_name": "解析工作台",
+  "description": "视频/文档深度学习、系列学习、帖子/文章洞察与心流写作复盘。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "id": "/",
+  "start_url": "/add_task_by_web",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "background_color": "#FBF8F3",
+  "theme_color": "#E4503A",
+  "categories": ["productivity", "education", "utilities"],
+  "icons": [
+    {
+      "src": "/static/icon/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon/favicon.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "开始解析",
+      "short_name": "解析",
+      "description": "提交链接或文件进行深度学习。",
+      "url": "/add_task_by_web",
+      "icons": [{ "src": "/static/icon/favicon.png", "sizes": "256x256" }]
+    },
+    {
+      "name": "任务历史",
+      "short_name": "历史",
+      "description": "查看以前解析过的内容。",
+      "url": "/static/history.html",
+      "icons": [{ "src": "/static/icon/favicon.png", "sizes": "256x256" }]
+    },
+    {
+      "name": "心流写作",
+      "short_name": "写作",
+      "description": "打开沉浸式写作与复盘记录空间。",
+      "url": "/static/focus-studio.html",
+      "icons": [{ "src": "/static/icon/favicon.png", "sizes": "256x256" }]
+    }
+  ]
+}

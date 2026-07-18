@@ -474,11 +474,11 @@ class TestEndpointConfigs:
             assert callable(cfg["params_builder"])
 
     def test_params_builders_return_dicts(self):
-        test_url = "https://example.com/test"
+        test_url = "https://example.com/test?xsec_token=tok123"
         for cfg in _ENDPOINT_CONFIGS:
-            params = cfg["params_builder"](test_url)
+            params = cfg["params_builder"](test_url, "note123")
             assert isinstance(params, dict)
-            assert "share_text" in params
+            assert "share_text" in params or "note_id" in params
 
 
 # ===========================================================================
@@ -637,6 +637,58 @@ class TestRealWorldResponseFormats:
         # All candidate URLs collected for download fallback
         assert "http://sns-v10.good/video.mp4" in result["_candidate_urls"]
         assert len(result["_candidate_urls"]) >= 2
+
+    def test_web_v3_detail_note_card_format(self, downloader):
+        """Simulate web_v3/fetch_note_detail: data.data.items[0].note_card."""
+        note_card = {
+            "title": "人生怎么作弊",
+            "desc": "",
+            "user": {"nickname": "苏越越"},
+            "type": "video",
+            "video": {
+                "media": {
+                    "stream": {
+                        "h264": [{
+                            "backup_urls": [
+                                "http://sns-v8.rednotecdn.com/video.mp4",
+                                "http://sns-v10.rednotecdn.com/video.mp4",
+                            ],
+                            "master_url": "http://sns-v11.rednotecdn.com/video.mp4",
+                        }]
+                    }
+                }
+            },
+        }
+        api_response = _make_api_response({
+            "code": 0,
+            "success": True,
+            "data": {
+                "items": [
+                    {"id": "6a4468d0000000001101d673", "note_card": note_card}
+                ],
+            },
+        })
+
+        with patch.object(
+            downloader, "make_api_request", return_value=api_response
+        ) as mock_api:
+            result = downloader.get_video_info(
+                "https://www.xiaohongshu.com/discovery/item/6a4468d0000000001101d673"
+                "?xsec_token=tok123"
+            )
+
+        assert (
+            mock_api.call_args_list[0][0][0]
+            == "/api/v1/xiaohongshu/web_v3/fetch_note_detail"
+        )
+        assert mock_api.call_args_list[0][0][1] == {
+            "note_id": "6a4468d0000000001101d673",
+            "xsec_token": "tok123",
+        }
+        assert result["video_title"] == "人生怎么作弊"
+        assert result["author"] == "苏越越"
+        assert result["download_url"] == "http://sns-v8.rednotecdn.com/video.mp4"
+        assert "http://sns-v10.rednotecdn.com/video.mp4" in result["_candidate_urls"]
 
     def test_app_note_widgets_context_fallback(self, downloader):
         """Simulate app_note: no video_info_v2, fallback to widgets_context audio."""

@@ -2,7 +2,7 @@
 
 
 class TranscriptAPIError(Exception):
-    """VideoTranscriptAPI 项目级错误基类
+    """LearnFlux 项目级错误基类
 
     所有自定义异常都应继承此类，便于统一捕获和分类。
 

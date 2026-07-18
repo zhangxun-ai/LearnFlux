@@ -108,3 +108,31 @@ class TestPlainTextFormatting:
 
         # Should have some paragraph breaks
         assert '\n\n' in formatted
+
+    def test_calibration_reports_each_completed_segment_in_order(self, processor):
+        processor.config.calibrate_model = "test-model"
+        processor.config.calibrate_reasoning_effort = None
+        processor.config.segmentation_pass_ratio = 0.8
+        processor.config.segmentation_force_retry_ratio = 0.5
+        processor.config.segmentation_fallback_strategy = "formatted_original"
+        processor.config.concurrent_workers = 2
+        processor.config.chunk_time_budget = 30
+        processor.llm_client.call.return_value = Mock(text="calibrated segment content")
+        key_info = Mock()
+        key_info.format_for_prompt.return_value = ""
+        progress = []
+
+        result = processor._calibrate_segments(
+            segments=["first segment content", "second segment content"],
+            key_info=key_info,
+            title="title",
+            description="",
+            selected_models={
+                "calibrate_model": "test-model",
+                "calibrate_reasoning_effort": None,
+            },
+            progress_callback=lambda completed, total: progress.append((completed, total)),
+        )
+
+        assert len(result) == 2
+        assert progress == [(1, 2), (2, 2)]

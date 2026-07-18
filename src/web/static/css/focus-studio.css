@@ -25,6 +25,34 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
 }
 
+.focus-body.has-app-shell {
+    background: var(--paper);
+}
+
+.focus-body.has-app-shell .page-stage {
+    max-width: none;
+    padding: 0;
+}
+
+.focus-body[data-embedded="true"] {
+    display: block;
+    padding: 0 !important;
+}
+
+.focus-body[data-embedded="true"] .sidebar,
+.focus-body[data-embedded="true"] .topbar,
+.focus-body[data-embedded="true"] .skip-link {
+    display: none;
+}
+
+.focus-body[data-embedded="true"] .main-area,
+.focus-body[data-embedded="true"] .page-stage {
+    display: block;
+    height: 100vh;
+    max-width: none;
+    padding: 0;
+}
+
 button,
 textarea,
 input {
@@ -44,6 +72,22 @@ button {
     isolation: isolate;
 }
 
+.focus-body.has-app-shell .focus-stage {
+    width: 100%;
+    height: calc(100vh - var(--shell-topbar));
+    min-height: 0;
+}
+
+.focus-body[data-embedded="true"] .focus-stage {
+    height: 100vh;
+    min-height: 0;
+    border: 0;
+}
+
+.focus-body.has-app-shell:not([data-embedded="true"]) .focus-stage {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .focus-canvas {
     position: absolute;
     inset: 0;
@@ -59,9 +103,10 @@ button {
     inset: 0;
     z-index: -2;
     pointer-events: none;
+    /* 着色器已自带暗角，这里只做极轻的边缘收束，避免与底图叠加后过暗 */
     background:
-        radial-gradient(ellipse at center, transparent 0%, transparent 42%, rgba(0,0,0,0.42) 72%, rgba(0,0,0,0.86) 100%),
-        linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.28));
+        radial-gradient(ellipse at center, transparent 0%, transparent 58%, rgba(0,0,0,0.22) 84%, rgba(0,0,0,0.52) 100%),
+        linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.14));
 }
 
 .deck-wrap {
@@ -113,7 +158,7 @@ button {
     background: transparent;
     font-weight: 400;
     line-height: 2;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     caret-color: rgba(255, 255, 240, 0.82);
     scrollbar-width: none;
 }
@@ -124,6 +169,47 @@ button {
 
 .focus-editor::placeholder {
     color: rgba(255, 255, 255, 0.20);
+}
+
+.journal-meta {
+    position: absolute;
+    z-index: 3;
+    top: 2.35rem;
+    left: 3.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    opacity: 0.34;
+    transition: opacity 0.24s ease;
+}
+
+.focus-deck:hover .journal-meta,
+.focus-deck:focus-within .journal-meta {
+    opacity: 0.72;
+}
+
+.journal-meta span {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.journal-meta select {
+    min-height: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    padding: 0 1.9rem 0 0.8rem;
+    color: rgba(255, 255, 255, 0.72);
+    background: rgba(0, 0, 0, 0.18);
+    outline: 0;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.journal-meta select:focus-visible {
+    border-color: rgba(255, 255, 255, 0.32);
 }
 
 [data-font="handwriting"] .focus-editor,
@@ -146,15 +232,15 @@ button {
 }
 
 [data-size="small"] .focus-editor {
-    font-size: clamp(1.125rem, 1rem + 0.25vw, 1.25rem);
+    font-size: 1.125rem;
 }
 
 [data-size="medium"] .focus-editor {
-    font-size: clamp(1.25rem, 1.1rem + 0.35vw, 1.5rem);
+    font-size: 1.375rem;
 }
 
 [data-size="large"] .focus-editor {
-    font-size: clamp(1.5rem, 1.25rem + 0.45vw, 1.875rem);
+    font-size: 1.625rem;
 }
 
 .deck-glow {
@@ -186,7 +272,7 @@ button {
     min-width: 5.5rem;
     color: rgba(255, 255, 255, 0.28);
     text-transform: uppercase;
-    letter-spacing: 0.18em;
+    letter-spacing: 0;
     font-size: 0.68rem;
     white-space: nowrap;
     transition: color 0.25s ease;
@@ -231,7 +317,7 @@ button {
     padding: 0.55rem 0.65rem;
     border-radius: 0.6rem;
     text-align: left;
-    letter-spacing: 0.12em;
+    letter-spacing: 0;
 }
 
 .export-menu button:hover {
@@ -239,26 +325,24 @@ button {
 }
 
 .deck-actions button,
-.focus-exit,
-.sound-start {
+.focus-exit {
     border: 0;
     background: transparent;
     color: rgba(255, 255, 255, 0.36);
     cursor: pointer;
     text-transform: uppercase;
-    letter-spacing: 0.18em;
+    letter-spacing: 0;
     font-size: 0.75rem;
     transition: color 0.25s ease, opacity 0.25s ease;
 }
 
 .deck-actions button:hover,
-.focus-exit:hover,
-.sound-start:hover {
+.focus-exit:hover {
     color: rgba(255, 255, 255, 0.78);
 }
 
 .mode-zone {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     right: 0;
@@ -331,7 +415,7 @@ button {
 }
 
 .type-zone {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 2rem;
     z-index: 12;
@@ -393,7 +477,7 @@ button {
     padding: 0 0.5rem;
     color: rgba(255,255,255,0.20);
     font-size: 0.625rem;
-    letter-spacing: 0.18em;
+    letter-spacing: 0;
     text-transform: uppercase;
 }
 
@@ -450,7 +534,7 @@ button {
 }
 
 .mixer-zone {
-    position: fixed;
+    position: absolute;
     left: 50%;
     bottom: 0;
     z-index: 12;
@@ -511,7 +595,7 @@ button {
     margin-bottom: 0.75rem;
     color: rgba(255,255,255,0.40);
     font-size: 0.625rem;
-    letter-spacing: 0.18em;
+    letter-spacing: 0;
     text-transform: uppercase;
 }
 
@@ -525,7 +609,7 @@ button {
     padding: 0;
     background: transparent;
     cursor: pointer;
-    letter-spacing: 0.18em;
+    letter-spacing: 0;
     text-transform: uppercase;
 }
 
@@ -598,53 +682,431 @@ input[type="range"] {
     background: rgba(255,255,255,0.10);
 }
 
-.sound-start {
-    position: fixed;
+/* 番茄钟：进度环包裹底部中央的氛围 orb（参考 flow-space，环随时间顺时针填满，起始仅顶部一个发光圆点） */
+.mixer-orb .timer-ring {
+    position: absolute;
+    top: 50%;
     left: 50%;
-    bottom: 1.1rem;
+    width: 64px;
+    height: 64px;
+    transform: translate(-50%, -50%);
+    overflow: visible;
+    pointer-events: none;
+}
+
+.timer-ring-track {
+    fill: none;
+    stroke: rgba(255, 255, 240, 0.06);
+    stroke-width: 1;
+}
+
+.timer-ring-progress {
+    fill: none;
+    stroke: rgba(255, 255, 240, 0.42);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: center;
+    /* 空环基线：周长 2π·24≈150.8，dashoffset=周长 → 静默时只剩顶部一个圆点 */
+    stroke-dasharray: 150.8;
+    stroke-dashoffset: 150.8;
+    transition: stroke-dashoffset 1s linear;
+    filter: drop-shadow(0 0 3px rgba(255, 255, 240, 0.45));
+}
+
+.mixer-zone.is-running .timer-ring-progress {
+    stroke: rgba(255, 255, 240, 0.78);
+}
+
+.mixer-zone.is-break .timer-ring-progress {
+    stroke: rgba(150, 200, 255, 0.8);
+}
+
+/* 时间读数：静默隐藏，hover 或运行中淡入（保持 orb 极简） */
+.timer-readout {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.7rem;
+    opacity: 0;
+    transform: translateY(0.35rem);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.mixer-zone:hover .timer-readout,
+.mixer-zone.is-running .timer-readout {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.timer-phase {
+    font-size: 0.62rem;
+    letter-spacing: 0;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.timer-time {
+    font-size: 0.95rem;
+    letter-spacing: 0;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.timer-hint {
+    font-size: 0.58rem;
+    letter-spacing: 0;
+    color: rgba(255, 255, 255, 0.26);
+}
+
+.journal-shell {
+    position: absolute;
     z-index: 14;
-    transform: translateX(-50%);
-    opacity: 0.36;
+    inset-block: 0;
+    right: 0;
+    pointer-events: none;
 }
 
-.sound-start.is-playing {
-    opacity: 0.10;
+.journal-dock {
+    position: absolute;
+    top: 50%;
+    right: max(1rem, env(safe-area-inset-right));
+    display: grid;
+    gap: 0.75rem;
+    transform: translate(2.35rem, -50%);
+    opacity: 0;
+    pointer-events: auto;
+    transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
-.focus-brand {
-    position: fixed;
-    right: 2rem;
-    bottom: 2rem;
-    z-index: 11;
+.journal-shell:hover .journal-dock,
+.journal-shell:focus-within .journal-dock,
+[data-journal-sidecar] .journal-dock {
+    opacity: 1;
+    transform: translate(0, -50%);
+}
+
+.journal-dock-button {
+    box-sizing: border-box;
+    width: 3.35rem;
+    height: 6.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(10, 13, 12, 0.44);
+    color: rgba(255, 255, 255, 0.66);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    letter-spacing: 0;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.05;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.journal-dock-button:hover,
+.journal-dock-button:focus-visible,
+.journal-dock-button.active {
+    border-color: rgba(255, 255, 255, 0.24);
+    background: rgba(255, 255, 255, 0.075);
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.journal-sidecar {
+    position: absolute;
+    top: 50%;
+    right: clamp(1rem, 3vw, 3.5rem);
+    width: min(39rem, 38vw);
+    height: min(35rem, calc(100vh - 8.5rem));
+    min-height: 28rem;
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: 0.5rem;
-    color: rgba(255,255,255,0.20);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-    font-size: 0.625rem;
-    letter-spacing: 0.30em;
-    text-transform: uppercase;
-    opacity: 0.75;
-    transition: opacity 0.35s ease;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 1rem;
+    background: rgba(10, 13, 12, 0.68);
+    box-shadow:
+        inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
+        0 35px 80px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(58px) saturate(0.88);
+    -webkit-backdrop-filter: blur(58px) saturate(0.88);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(2rem, -50%) scale(0.985);
+    transition: opacity 0.24s ease, transform 0.24s ease;
 }
 
-.focus-brand:hover {
+[data-journal-sidecar] .journal-sidecar {
     opacity: 1;
+    pointer-events: auto;
+    transform: translate(0, -50%) scale(1);
+}
+
+[data-journal-sidecar] .journal-dock {
+    right: max(1rem, env(safe-area-inset-right));
+}
+
+[data-journal-sidecar] .deck-wrap {
+    justify-content: flex-start;
+    padding-left: clamp(1rem, 4vw, 5rem);
+    padding-right: min(45vw, 44rem);
+}
+
+[data-journal-sidecar] .focus-deck {
+    width: min(47.25rem, calc(62vw - 4rem));
+    height: min(35rem, calc(100vh - 8.5rem));
+}
+
+.journal-sidecar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.25rem 0;
+}
+
+.journal-tabs {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.journal-tab {
+    min-width: 5.25rem;
+    min-height: 2.35rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.48);
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.journal-tab:hover,
+.journal-tab:focus-visible,
+.journal-tab.active {
+    background: rgba(255, 255, 255, 0.09);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.journal-sidecar-close {
+    width: 2.35rem;
+    height: 2.35rem;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.48);
+    cursor: pointer;
+    font-size: 1.45rem;
+    line-height: 1;
+}
+
+.journal-sidecar-close:hover,
+.journal-sidecar-close:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.86);
+}
+
+.journal-panel {
+    flex: 1;
+    overflow: auto;
+    padding: 1.35rem 1.5rem 1.5rem;
+}
+
+.journal-panel h2 {
+    margin: 0 0 0.75rem;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+
+.journal-panel p,
+.journal-empty {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+.journal-history-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.journal-history-card {
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 10px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(255, 255, 255, 0.8);
+    text-align: left;
+    cursor: pointer;
+}
+
+.journal-history-card:hover,
+.journal-history-card:focus-visible {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.065);
+}
+
+.journal-history-card span {
+    display: block;
+    margin-bottom: 5px;
+    color: rgba(255, 255, 255, 0.36);
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.journal-history-card strong {
+    display: block;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.92rem;
+    line-height: 1.4;
+}
+
+.journal-history-card small {
+    display: block;
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.journal-review-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.journal-review-actions button,
+.journal-review-question,
+.journal-review-result {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(255, 255, 255, 0.76);
+}
+
+.journal-review-actions button {
+    min-height: 40px;
+    cursor: pointer;
+}
+
+.journal-review-actions button:hover,
+.journal-review-actions button:focus-visible {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.065);
+}
+
+.journal-question-label {
+    display: block;
+    margin-bottom: 8px;
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 0.82rem;
+}
+
+.journal-review-question {
+    width: 100%;
+    min-height: 116px;
+    resize: vertical;
+    padding: 12px;
+    line-height: 1.6;
+    outline: 0;
+}
+
+.journal-review-question:focus {
+    border-color: rgba(255, 255, 255, 0.24);
+}
+
+.journal-review-result {
+    min-height: 0;
+    margin-top: 12px;
+    padding: 12px;
+    white-space: pre-wrap;
+    line-height: 1.65;
+}
+
+.journal-review-result:empty {
+    display: none;
 }
 
 .focus-exit {
-    position: fixed;
+    position: absolute;
     left: 2rem;
     bottom: 2rem;
-    z-index: 11;
+    z-index: 16;
+    width: 2.75rem;
+    height: 2.75rem;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--focus-line);
+    border-radius: 999px;
+    background: var(--focus-glass);
+    box-shadow: 0 16px 34px rgba(0,0,0,0.28);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     text-decoration: none;
-    opacity: 0.16;
+    opacity: 0.42;
+}
+
+.focus-body[data-embedded="true"] .focus-exit {
+    display: none;
+}
+
+.focus-exit svg {
+    width: 1.125rem;
+    height: 1.125rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.focus-exit span {
+    position: absolute;
+    left: calc(100% + 0.75rem);
+    top: 50%;
+    transform: translateY(-50%) translateX(-0.25rem);
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--focus-line);
+    border-radius: 999px;
+    background: rgba(10, 13, 12, 0.62);
+    color: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 12px 26px rgba(0,0,0,0.28);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
 .focus-exit:hover,
-.focus-exit:focus {
+.focus-exit:focus-visible {
     opacity: 1;
+    background: rgba(255, 255, 255, 0.065);
+}
+
+.focus-exit:hover span,
+.focus-exit:focus-visible span {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
 }
 
 @media (max-width: 760px) {
@@ -662,6 +1124,11 @@ input[type="range"] {
         padding: 3rem 2rem;
     }
 
+    .journal-meta {
+        top: 1.8rem;
+        left: 2rem;
+    }
+
     .type-zone {
         left: 1rem;
     }
@@ -676,9 +1143,60 @@ input[type="range"] {
         padding-inline: 1rem;
     }
 
-    .focus-brand,
     .focus-exit {
-        display: none;
+        left: 1rem;
+        bottom: 1rem;
+    }
+
+    .journal-dock {
+        position: absolute;
+        top: auto;
+        bottom: 1rem;
+        right: auto;
+        left: 50%;
+        grid-template-columns: repeat(2, 1fr);
+        transform: translate(-50%, 16px);
+    }
+
+    .journal-shell:hover .journal-dock,
+    .journal-shell:focus-within .journal-dock,
+    [data-journal-sidecar] .journal-dock {
+        right: auto;
+        left: 50%;
+        transform: translate(-50%, 0);
+    }
+
+    .journal-dock-button {
+        width: 64px;
+        height: 44px;
+        writing-mode: horizontal-tb;
+        letter-spacing: 0;
+    }
+
+    [data-journal-sidecar] .deck-wrap {
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    [data-journal-sidecar] .focus-deck {
+        width: calc(100vw - 2rem);
+        height: calc(100vh - 11rem);
+    }
+
+    .journal-sidecar {
+        left: 16px;
+        right: 16px;
+        top: auto;
+        bottom: 74px;
+        width: auto;
+        height: min(62vh, 560px);
+        min-height: 22rem;
+        max-height: min(72vh, 620px);
+        transform: translateY(1rem);
+    }
+
+    [data-journal-sidecar] .journal-sidecar {
+        transform: translateY(0);
     }
 }
 

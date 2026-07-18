@@ -8,6 +8,7 @@ Tests PlainTextProcessor fallback behavior under different failure modes:
 """
 
 import pytest
+import time
 from unittest.mock import Mock
 from src.video_transcript_api.llm.processors.plain_text_processor import PlainTextProcessor
 from src.video_transcript_api.llm.core.config import LLMConfig
@@ -132,6 +133,37 @@ class TestPlainTextFallbackFormatting:
         assert len(calibrated) > 0
         # For text wall (1 line, long), should be split into paragraphs
         assert '\n\n' in calibrated
+
+    def test_hung_segment_call_times_out_to_formatted_original(self, processor, mock_config):
+        """A hung segment call should not keep the whole task in calibrating forever."""
+        mock_config.chunk_time_budget = 0.01
+        original_text = (
+            "First sentence about capacity expansion and strategic timing."
+            "Second sentence about industry structure and competitive position."
+            "Third sentence about investment cycles and operational pressure!"
+            "Fourth sentence about demand signals and risk control?"
+            "Fifth sentence with more context and background information."
+        )
+        self._setup_mocks(processor, llm_text="late result")
+
+        def slow_call(*args, **kwargs):
+            time.sleep(0.2)
+            return Mock(text="late result")
+
+        processor.llm_client.call.side_effect = slow_call
+
+        start = time.monotonic()
+        result = processor.process(
+            text=original_text,
+            title="Test",
+            author="Author",
+        )
+        elapsed = time.monotonic() - start
+
+        calibrated = result["calibrated_text"]
+        assert elapsed < 0.15
+        assert calibrated != "late result"
+        assert "capacity expansion" in calibrated
 
     def test_format_plain_text_splits_text_wall(self, processor):
         """_format_plain_text splits text wall into 2-3 sentence paragraphs"""

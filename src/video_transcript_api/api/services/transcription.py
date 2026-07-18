@@ -34,6 +34,13 @@ from ...utils.rendering import get_base_url
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
 from ...utils.task_progress import estimate_eta_seconds
+from ...study.document_quality import assess_document_text
+from .source_preservation import (
+    DOC_EXTS as _DOC_EXTS,
+    extract_document_text as _extract_document_text,
+    preserve_source_file as _preserve_source_file_to_root,
+    source_kind_for_path as _source_kind_for_path,
+)
 
 logger = get_logger()
 config = get_config()
@@ -52,6 +59,11 @@ def _safe_update_progress(task_id: str, **kwargs):
     except Exception as exc:
         logger.debug(f"task progress update failed: {task_id}, error={exc}")
         return None
+
+
+def _is_task_canceled(task_id: str) -> bool:
+    task_info = cache_manager.get_task_by_id(task_id) or {}
+    return task_info.get("status") == TaskStatus.CANCELED
 
 
 def _extract_audio_to_file(src_path: str, out_dir: str, media_id: str) -> Optional[str]:
@@ -78,34 +90,58 @@ def _extract_audio_to_file(src_path: str, out_dir: str, media_id: str) -> Option
     return None
 
 
-# 文档类扩展名：走文本提取（而非音视频转写）
-_DOC_EXTS = {".txt", ".md", ".markdown", ".csv", ".log", ".pdf", ".docx"}
+def _preserve_source_file(
+    source_path: Optional[str] = None,
+    *,
+    platform: str,
+    media_id: str,
+    title: str,
+    source_kind: str = "media",
+    source_text: Optional[str] = None,
+) -> Optional[str]:
+    storage_cfg = get_config().get("storage", {}) or {}
+    source_root = storage_cfg.get("source_files_dir") or "./data/source_files"
+    return _preserve_source_file_to_root(
+        source_path=source_path,
+        source_root=source_root,
+        platform=platform,
+        media_id=media_id,
+        title=title,
+        source_kind=source_kind,
+        source_text=source_text,
+    )
 
 
-def _extract_document_text(path: str, ext: str) -> str:
-    """从本地文档提取纯文本：txt/md/csv/log 直接读，pdf 用 pypdf，docx 用 python-docx。"""
-    ext = (ext or "").lower()
-    if ext in (".txt", ".md", ".markdown", ".csv", ".log"):
-        with open(path, "rb") as f:
-            raw = f.read()
-        for enc in ("utf-8", "gb18030", "latin-1"):
-            try:
-                return raw.decode(enc).strip()
-            except UnicodeDecodeError:
-                continue
-        return raw.decode("utf-8", errors="ignore").strip()
-    if ext == ".pdf":
-        from pypdf import PdfReader
-
-        reader = PdfReader(path)
-        parts = [(page.extract_text() or "") for page in reader.pages]
-        return "\n".join(parts).strip()
-    if ext == ".docx":
-        import docx
-
-        document = docx.Document(path)
-        return "\n".join(p.text for p in document.paragraphs).strip()
-    raise ValueError(f"不支持的文档格式: {ext}")
+def _persist_downloaded_source_if_requested(
+    *,
+    preserve_source_file: bool,
+    task_id: str,
+    local_file: str,
+    platform: str,
+    media_id: str,
+    title: str,
+) -> Optional[str]:
+    if not preserve_source_file:
+        return None
+    try:
+        saved_path = _preserve_source_file(
+            source_path=local_file,
+            platform=platform,
+            media_id=media_id,
+            title=title,
+            source_kind=_source_kind_for_path(local_file),
+        )
+        if saved_path:
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.PROCESSING,
+                source_file_path=saved_path,
+            )
+            logger.info(f"已保存源内容文件: {saved_path}")
+        return saved_path
+    except Exception as exc:
+        logger.warning(f"保存源内容文件失败，继续转录: {exc}")
+        return None
 
 
 def _queue_xiaohongshu_article_deep_learning(
@@ -121,6 +157,7 @@ def _queue_xiaohongshu_article_deep_learning(
     comment_limit: int,
     tracker: PerfTracker,
     task_notifier,
+    preserve_source_file: bool = False,
     note_fetcher=None,
 ) -> Optional[Dict[str, Any]]:
     """Queue Xiaohongshu image/article notes as text deep-learning tasks.
@@ -185,6 +222,16 @@ def _queue_xiaohongshu_article_deep_learning(
     if not cache_result:
         raise ValueError("保存小红书图文正文缓存失败")
 
+    source_file_path = None
+    if preserve_source_file:
+        source_file_path = _preserve_source_file(
+            platform=platform,
+            media_id=media_id,
+            title=title,
+            source_kind="document",
+            source_text=article_text,
+        )
+
     llm_task_queue.put(
         {
             "task_id": task_id,
@@ -214,6 +261,7 @@ def _queue_xiaohongshu_article_deep_learning(
         media_id=media_id,
         title=title,
         author=author,
+        source_file_path=source_file_path,
     )
 
     return {
@@ -236,16 +284,24 @@ def process_local_upload(
     media_id: str,
     use_speaker_recognition: bool = False,
     preserve_source_file: bool = False,
+    preserve_transcript_timestamps: bool = False,
+    document_fast_path: bool = False,
 ) -> Dict[str, Any]:
     """处理本地上传的音视频或文档，复用 LLM 后处理与结果页。
 
-    音视频：本地 mlx-whisper 转写（先抽小音频省空间）。文档(txt/md/pdf/docx)：直接提取文本。
+    音视频：本地 mlx-whisper 转写（先抽小音频省空间）。文档(txt/md/html/pdf/docx)：直接提取文本。
     两者都与平台字幕路径同构地 save_cache + 入 LLM 队列；/view/<view_token> 查看；临时文件用后即删。
     """
     tracker = PerfTracker(task_id=task_id)
     audio_path = None
+    structured_transcript = None
+    document_quality = None
     try:
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
         cache_manager.update_task_status(task_id, TaskStatus.PROCESSING)
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
 
         if not os.path.exists(file_path):
             cache_manager.update_task_status(
@@ -261,8 +317,33 @@ def process_local_upload(
                 task_id, stage="transcribing", stage_label="正在解析文档",
                 basis="local_upload", confidence="high",
             )
-            transcript = _extract_document_text(file_path, ext).strip()
+            transcript = _extract_document_text(file_path, ext)
             empty_msg = "未能从文档中提取到文本（可能是扫描件/图片型 PDF）"
+            if document_fast_path and ext in {".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm"}:
+                try:
+                    document_quality = assess_document_text(transcript).to_evidence()
+                except Exception as exc:
+                    logger.warning(
+                        "document quality assessment failed; using legacy flow: %s",
+                        type(exc).__name__,
+                    )
+                    document_quality = {
+                        "mode": "fallback",
+                        "reasons": ["assessment_error"],
+                        "metrics": {},
+                    }
+                _safe_update_progress(
+                    task_id,
+                    stage="document_quality",
+                    stage_label=(
+                        "文档质量检查完成"
+                        if document_quality["mode"] == "fast"
+                        else "检测到提取质量问题，准备完整校对"
+                    ),
+                    basis="document_quality_metrics",
+                    confidence="high",
+                    evidence={"document_quality": document_quality},
+                )
         else:
             # 音视频：默认省空间，先抽 16kHz 单声道小音频并删除原视频。
             # 学习集合需要后续打开源文件时，会传 preserve_source_file=True。
@@ -301,28 +382,64 @@ def process_local_upload(
             )
             result = transcriber.transcribe(transcribe_target, output_base)
             transcript = (result.get("transcript") or "").strip()
+            structured_transcript = result.get("funasr_json_data")
             empty_msg = "转录结果为空"
 
-        if not transcript:
+        if not transcript or not transcript.strip():
             cache_manager.update_task_status(
                 task_id, TaskStatus.FAILED, error_message=empty_msg
             )
             return {"status": "failed", "message": empty_msg}
+
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
+
+        transcript_payload = (
+            structured_transcript
+            if preserve_transcript_timestamps and structured_transcript
+            else transcript
+        )
+        transcript_type = (
+            "funasr"
+            if preserve_transcript_timestamps and structured_transcript
+            else "capswriter"
+        )
 
         cache_manager.save_cache(
             platform="generic",
             url=display_url,
             media_id=media_id,
             use_speaker_recognition=False,
-            transcript_data=transcript,
-            transcript_type="capswriter",
+            transcript_data=transcript_payload,
+            transcript_type=transcript_type,
             title=original_name,
             author="本地上传",
             description="",
         )
 
-        llm_task_queue.put(
-            {
+        if document_quality and document_quality["mode"] == "fast":
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.SUCCESS,
+                platform="generic",
+                media_id=media_id,
+                title=original_name,
+                author="本地上传",
+                terminal_evidence={
+                    "analysis_mode": "document_fast",
+                    "visual_ready": True,
+                    "quality": document_quality,
+                },
+            )
+            logger.info(
+                "document fast path ready: task=%s, file=%s, chars=%s",
+                task_id,
+                original_name,
+                len(transcript),
+            )
+            return {"status": "success", "message": "文档解析完成，可生成图解"}
+
+        llm_payload = {
                 "task_id": task_id,
                 "url": display_url,
                 "display_url": original_name,
@@ -341,7 +458,9 @@ def process_local_upload(
                 "comment_limit": 100,
                 "perf_tracker": tracker,
             }
-        )
+        if document_quality:
+            llm_payload["document_quality"] = document_quality
+        llm_task_queue.put(llm_payload)
         cache_manager.update_task_status(
             task_id, TaskStatus.CALIBRATING, platform="generic", media_id=media_id
         )
@@ -351,9 +470,10 @@ def process_local_upload(
         return {"status": "success", "message": "本地转录成功"}
     except Exception as exc:
         logger.exception(f"本地上传转录失败: {task_id}, error={exc}")
-        cache_manager.update_task_status(
-            task_id, TaskStatus.FAILED, error_message=f"本地转录失败: {exc}"
-        )
+        if not _is_task_canceled(task_id):
+            cache_manager.update_task_status(
+                task_id, TaskStatus.FAILED, error_message=f"本地转录失败: {exc}"
+            )
         return {"status": "failed", "message": str(exc)}
     finally:
         # 默认清理全部临时文件；学习集合会保留原 source 文件用于后续打开。
@@ -523,6 +643,9 @@ class TranscribeRequest(BaseModel):
     comment_limit: int = Field(
         100, ge=1, le=200, description="热评拉取上限，仅在 include_comments=true 时生效"
     )
+    preserve_source_file: bool = Field(
+        False, description="是否保存解析过程中下载到的源内容文件"
+    )
 
     @field_validator("wechat_webhook", "feishu_webhook")
     @classmethod
@@ -542,6 +665,9 @@ class RecalibrateRequest(BaseModel):
     """重新校对请求数据模型"""
 
     view_token: str = Field(..., description="查看页面的 view_token")
+    regenerate_summary: bool = Field(
+        False, description="是否强制重新生成内容总结/AI 解读"
+    )
     wechat_webhook: Optional[str] = Field(
         None, description="企业微信webhook地址，用于发送通知"
     )
@@ -715,9 +841,16 @@ async def process_task_queue():
             metadata_override = task.get("metadata_override")
             include_comments = task.get("include_comments", False)
             comment_limit = task.get("comment_limit", 100)
+            preserve_source_file = task.get("preserve_source_file", False)
 
             try:
+                if _is_task_canceled(task_id):
+                    logger.info(f"任务已取消，跳过处理: {task_id}")
+                    continue
                 cache_manager.update_task_status(task_id, TaskStatus.PROCESSING, download_url=download_url)
+                if _is_task_canceled(task_id):
+                    logger.info(f"任务已取消，跳过线程池提交: {task_id}")
+                    continue
                 _safe_update_progress(
                     task_id,
                     stage="url_parsing",
@@ -738,6 +871,7 @@ async def process_task_queue():
                     notification_webhooks=notification_webhooks,
                     include_comments=include_comments,
                     comment_limit=comment_limit,
+                    preserve_source_file=preserve_source_file,
                 )
 
                 def task_completed(future_result):
@@ -791,6 +925,7 @@ def process_transcription(
     task_id, url, use_speaker_recognition=False, wechat_webhook=None,
     download_url=None, metadata_override=None, notification_channel=None,
     notification_webhooks=None, include_comments=False, comment_limit=100,
+    preserve_source_file=False,
 ):
     """
     处理视频转录
@@ -806,6 +941,7 @@ def process_transcription(
         notification_webhooks: per-channel webhook dict {"wechat": "...", "feishu": "..."}
         include_comments: 是否在 LLM 阶段生成高赞评论洞察
         comment_limit: 热评拉取上限
+        preserve_source_file: 是否把解析过程中下载到的源内容保存到本地
     """
     if notification_webhooks is None:
         notification_webhooks = {}
@@ -813,6 +949,8 @@ def process_transcription(
     tracker = PerfTracker(task_id=task_id)
 
     try:
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
         # 规范化 download_url：将空字符串转换为 None
         if download_url is not None and isinstance(download_url, str) and not download_url.strip():
             download_url = None
@@ -1157,6 +1295,7 @@ def process_transcription(
                     notification_webhooks=notification_webhooks,
                     include_comments=include_comments,
                     comment_limit=comment_limit,
+                    preserve_source_file=preserve_source_file,
                     tracker=tracker,
                     task_notifier=task_notifier,
                 )
@@ -1408,6 +1547,14 @@ def process_transcription(
                         local_file = api_result["audio_path"]
                         logger.info(
                             f"[youtube-api] Audio downloaded, need transcription: {local_file}"
+                        )
+                        _persist_downloaded_source_if_requested(
+                            preserve_source_file=preserve_source_file,
+                            task_id=task_id,
+                            local_file=local_file,
+                            platform=platform,
+                            media_id=media_id,
+                            title=video_title,
                         )
 
                         task_notifier.notify_task_status(
@@ -1795,6 +1942,15 @@ def process_transcription(
                         display_url, "下载失败", error_msg, title=video_title, author=author
                     )
                     return {"status": "failed", "message": error_msg}
+
+                _persist_downloaded_source_if_requested(
+                    preserve_source_file=preserve_source_file,
+                    task_id=task_id,
+                    local_file=local_file,
+                    platform=platform,
+                    media_id=media_id,
+                    title=video_title,
+                )
 
                 try:
                     # 开始转录

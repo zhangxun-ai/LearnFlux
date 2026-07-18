@@ -213,13 +213,14 @@ class Transcriber:
             )
 
         txt_path = os.path.join(self.output_dir, f"{output_base}.txt")
+        json_path = os.path.join(self.output_dir, f"{output_base}.json")
         cmd = [
             binary,
             audio_path,
             "--model", model,
             "--output-dir", self.output_dir,
             "--output-name", output_base,
-            "--output-format", "txt",
+            "--output-format", "json",
             "--verbose", "False",
         ]
         if language:
@@ -240,11 +241,27 @@ class Transcriber:
                 f"本地 mlx-whisper 转录失败 (exit {proc.returncode}): {tail}"
             )
 
-        if not os.path.exists(txt_path):
-            raise RuntimeError(f"本地 mlx-whisper 未生成文本文件: {txt_path}")
+        if not os.path.exists(json_path):
+            raise RuntimeError(f"本地 mlx-whisper 未生成 JSON 文件: {json_path}")
 
-        with open(txt_path, "r", encoding="utf-8") as f:
-            transcript = f.read().strip()
+        with open(json_path, "r", encoding="utf-8") as f:
+            whisper_data = json.load(f)
+
+        transcript = (whisper_data.get("text") or "").strip()
+        if not transcript:
+            transcript = "\n".join(
+                (segment.get("text") or "").strip()
+                for segment in whisper_data.get("segments", [])
+                if isinstance(segment, dict) and (segment.get("text") or "").strip()
+            ).strip()
+
+        if not transcript:
+            raise RuntimeError(f"本地 mlx-whisper 转录结果为空: {json_path}")
+
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(transcript)
+
+        funasr_json_data = self._whisper_json_to_funasr(whisper_data, audio_path)
 
         logger.info(
             f"本地 mlx-whisper 转录完成，用时 {time.time() - start:.1f}s，文本长度 {len(transcript)}"
@@ -253,6 +270,55 @@ class Transcriber:
         return {
             "transcript": transcript,
             "txt_path": txt_path,
-            "funasr_json_data": None,
-            "generated_files": [Path(txt_path)],
+            "funasr_json_data": funasr_json_data,
+            "generated_files": [Path(txt_path), Path(json_path)],
         }
+
+    @staticmethod
+    def _whisper_json_to_funasr(payload, audio_path):
+        segments = []
+        for segment in payload.get("segments", []):
+            if not isinstance(segment, dict):
+                continue
+            text = (segment.get("text") or "").strip()
+            if not text:
+                continue
+            start_time = Transcriber._as_seconds(segment.get("start"))
+            end_time = Transcriber._as_seconds(segment.get("end"))
+            segments.append(
+                {
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "text": text,
+                }
+            )
+
+        duration = Transcriber._as_seconds(payload.get("duration"))
+        if duration is None and segments:
+            end_times = [
+                segment["end_time"]
+                for segment in segments
+                if segment.get("end_time") is not None
+            ]
+            if end_times:
+                duration = max(end_times)
+
+        return {
+            "task_id": "",
+            "file_name": os.path.basename(audio_path),
+            "duration": duration or 0,
+            "segments": segments,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "processing_time": 0,
+            "error": None,
+        }
+
+    @staticmethod
+    def _as_seconds(value):
+        if value is None or value == "":
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return round(number, 3)

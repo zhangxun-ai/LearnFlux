@@ -13,9 +13,50 @@
     // ============================================================
     "tikhub": {
         "api_key": "your-tikhub-api-key-here",  // TikHub API 密钥
+        "base_url": "https://api.tikhub.io",    // API 基础地址，国内网络可尝试 https://api.tikhub.dev
+        "cache_enabled": true,           // 是否缓存成功的 TikHub JSON 响应，降低重复请求成本
+        "cache_ttl_seconds": 21600,      // TikHub 响应缓存时长（秒），默认 6 小时
+        "cache_dir": "./data/cache/tikhub", // TikHub 响应缓存目录
         "max_retries": 2,                // 最大重试次数
         "retry_delay": 5,                // 重试间隔（秒）
         "timeout": 30                    // 请求超时时间（秒）
+    },
+
+    // ============================================================
+    // 趋势机会雷达配置（手动触发，默认单次预算不超过 $5）
+    // ============================================================
+    "trend_radar": {
+        "max_run_budget_usd": 5.0,       // 单次报告最高预算，路由也会强制限制到 $5
+        "request_cost_usd": 0.01,        // TikHub 单请求保守估算；知道实际价格后可下调
+        "llm_reserved_usd": 0.2,         // DeepSeek 终审预留估算；实际还会按预算比例收敛
+        "llm_reserved_max_ratio": 0.1,   // 小预算时最多把 10% 留给 LLM，其余给 TikHub 采集
+        "report_dir": "./data/trend_radar/reports",
+        "llm_model": null,               // 为空时复用 summary_model
+        "llm_reasoning_effort": null,    // 为空时复用 summary_reasoning_effort
+        "collector": {
+            "sources": ["x", "xiaohongshu", "douyin"],
+            "x_country": "UnitedStates",
+            "max_keywords_per_topic": 3,
+            "max_items_per_call": 25,
+            "x_elite_accounts": []       // 可放英文 X 高质量账号 screen_name，作为精英信号源
+        }
+    },
+
+    // ============================================================
+    // 微信视频号配置（可选）
+    // ============================================================
+    "wechat_channels": {
+        // 视频号 MP4 通常需要 decode_key 解密；默认按需启动本地解密服务
+        // 参考: https://github.com/Evil0ctal/WeChat-Channels-Video-File-Decryption/tree/main/api-service
+        "decrypt_service_url": "http://localhost:10000",
+        "decrypt_service_port": 10000,
+        "decrypt_service_dir": "./data/services/wechat-decrypt-api/api-service",
+        "decrypt_service_pool_size": 1,
+        "decrypt_service_startup_timeout": 90,
+        "decrypt_service_install_timeout": 600,
+        "auto_start_decrypt_service": true,
+        "auto_install_decrypt_service": true,
+        "stop_decrypt_service_after_request": true
     },
 
     // ============================================================
@@ -27,6 +68,19 @@
         "max_retries": 5,                // 连接最大重试次数
         "retry_delay": 3,                // 重试间隔（秒）
         "connection_timeout": 10         // 连接超时时间（秒）
+    },
+
+    // ============================================================
+    // Apple Silicon macOS 本地转录（可选）
+    // 通过 `bash scripts/bootstrap.sh --with-local-whisper` 安装后启用。
+    // 启用时普通转录优先走本地 mlx-whisper，不再连接 CapsWriter。
+    // ============================================================
+    "local_whisper": {
+        "enabled": false,
+        "binary": "~/.venvs/mlx-whisper/bin/mlx_whisper",
+        "model": "mlx-community/whisper-large-v3-turbo",
+        "language": "",
+        "timeout": 1800
     },
 
     // ============================================================
@@ -45,7 +99,10 @@
         "temp_dir": "./data/temp",            // 临时文件目录（自动清理）
         "workspace_dir": "./data/workspace",   // 转录工作目录
         "cache_dir": "./data/cache",          // 缓存目录（持久化存储）
-        "cache_retention_days": 360            // 缓存保留天数
+        "source_files_dir": "./data/source_files", // 勾选保存源内容时的本地持久目录
+        "cache_retention_days": 360,           // 缓存保留天数
+        "source_file_cleanup_enabled": true,   // 启动时清理未被任务引用的过期源文件
+        "source_file_retention_days": 30       // 本地源文件保留天数；<=0 表示不清理
     },
 
     // ============================================================
@@ -90,7 +147,8 @@
     "task_progress": {
         "feishu_reminders_enabled": true,        // 长任务飞书提醒开关
         "reminder_threshold_minutes": [10, 30, 60], // 任务运行超过这些分钟数时提醒
-        "reminder_poll_interval_seconds": 60     // 后台扫描间隔
+        "reminder_poll_interval_seconds": 60,    // 后台扫描间隔
+        "stale_task_timeout_minutes": 120        // 超过该分钟数无进度心跳则自动标记失败；<=0 表示关闭
     },
 
     // ============================================================
@@ -164,6 +222,19 @@
         //         延迟和 token 成本会上升（思考模式），请按任务重要性选择级别。
         "summary_model": "deepseek-v4-flash",   // 总结使用的模型
         "summary_reasoning_effort": "high",     // 总结推理强度（v4-flash 下触发思考模式）
+        "collection_summary_model": "deepseek-v4-pro",  // 全系列解读优先使用长上下文强模型
+        "collection_summary_reasoning_effort": "high",  // 全系列解读推理强度
+        "visual_learning_outline_model": "deepseek-v4-pro", // 图解提纲：保留强模型与高推理保证全文结构质量
+        "visual_learning_outline_reasoning_effort": "high",
+        "visual_learning_render_model": "deepseek-v4-pro",  // 最终出图：同一强模型负责结构化表达
+        "visual_learning_render_reasoning_effort": "disabled", // 提纲已有依据，关闭重复深思以降低延迟
+        "visual_learning_long_section_min_chars": 8000, // 多章节短内容仍用紧凑图解；正文达到该字数才因章节数进入长图解
+        "collection_summary_context_tokens": 1000000,   // DeepSeek V4 Pro/Flash 官方 1M 上下文
+        "collection_summary_reserved_output_tokens": 100000,  // 为最终长文和思考预留 token
+        "collection_summary_context_safety_ratio": 0.85, // 超过可用上下文才进入分层处理
+        "collection_summary_chars_per_token": 1.2,       // 中文源内容的保守字符/token 估算
+        "study_chat_model": "deepseek-v4-pro",  // 本地视频学习页“问 AI”使用的模型
+        "study_chat_reasoning_effort": "high",  // “问 AI”推理强度
 
         // ------------------------------------------------------
         // 通用配置
@@ -291,6 +362,16 @@
         "max_retries": 3,                // 最大重试次数
         "retry_delay": 5,                // 重试间隔（秒）
         "connection_timeout": 30         // 连接超时时间（秒）
+    },
+
+    // ============================================================
+    // 本地 Obsidian Vault 同步（仅适用于同机运行）
+    // Vault ID 和绝对路径只填写在被 Git 忽略的 config/config.jsonc
+    // ============================================================
+    "obsidian": {
+        "enabled": false,
+        "vault_id": "",
+        "vault_path": ""
     },
 
     // ============================================================

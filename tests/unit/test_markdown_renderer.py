@@ -206,6 +206,16 @@ Summary after 8 years of experience:
     print("[PASSED]\n")
 
 
+def test_duplicate_heading_markers_are_normalized_before_rendering():
+    """LLM output can duplicate Markdown heading markers inside a heading."""
+    input_text = "#### ##### 2.1 睡前一小时：记忆巩固的黄金窗口\n\n正文"
+
+    html = render_markdown_to_html(input_text)
+
+    assert "#####" not in html
+    assert ">2.1 睡前一小时：记忆巩固的黄金窗口</h4>" in html
+
+
 def run_all_tests():
     """Run all tests"""
     print("=" * 60)

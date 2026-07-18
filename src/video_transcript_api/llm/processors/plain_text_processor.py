@@ -1,9 +1,11 @@
 """无说话人文本处理器"""
 
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
+import math
 import re
+import threading
 
 from ...utils.logging import setup_logger
 from ..core.config import LLMConfig
@@ -54,6 +56,7 @@ class PlainTextProcessor:
         platform: str = "",
         media_id: str = "",
         selected_models: Optional[Dict] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Dict:
         """处理无说话人文本
 
@@ -102,6 +105,7 @@ class PlainTextProcessor:
             description=description,
             selected_models=selected_models,
             language=detected_language,
+            progress_callback=progress_callback,
         )
 
         # 合并校对结果（分段级检查已完成，无需全局检查）
@@ -130,6 +134,7 @@ class PlainTextProcessor:
         description: str,
         selected_models: Optional[Dict],
         language: str = "zh",
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> List[str]:
         """校对分段文本（并发处理）
 
@@ -167,10 +172,29 @@ class PlainTextProcessor:
         system_prompt = CALIBRATE_SYSTEM_PROMPT_EN if language == "en" else CALIBRATE_SYSTEM_PROMPT
 
         calibrated_segments = [None] * len(segments)
+        cancel_events = [threading.Event() for _ in segments]
+        progress_lock = threading.Lock()
+        reported_indices = set()
+
+        def report_completed(index: int) -> None:
+            if progress_callback is None:
+                return
+            with progress_lock:
+                if index in reported_indices:
+                    return
+                reported_indices.add(index)
+                try:
+                    progress_callback(len(reported_indices), len(segments))
+                except Exception as exc:
+                    logger.debug(
+                        "Calibration progress callback failed: %s",
+                        type(exc).__name__,
+                    )
 
         def calibrate_single_segment(index: int, segment: str):
             """校对单个分段（含长度检查 + 质量验证 + 二次校对）"""
             try:
+                cancel_event = cancel_events[index]
                 original_length = len(segment)
                 logger.debug(f"Calibrating segment {index + 1}/{len(segments)}, length: {original_length}")
 
@@ -190,6 +214,8 @@ class PlainTextProcessor:
                     reasoning_effort=reasoning_effort,
                     task_type="calibrate_segment",
                 )
+                if cancel_event.is_set():
+                    return
 
                 calibrated_text = response.text
                 calibrated_length = len(calibrated_text)
@@ -244,6 +270,8 @@ class PlainTextProcessor:
                         reasoning_effort=reasoning_effort,
                         task_type="calibrate_segment_retry",
                     )
+                    if cancel_event.is_set():
+                        return
 
                     calibrated_text_retry = response_retry.text
                     calibrated_length_retry = len(calibrated_text_retry)
@@ -324,17 +352,55 @@ class PlainTextProcessor:
                 # 降级到原文（格式化处理）
                 formatted_segment = self._format_plain_text(segment)
                 calibrated_segments[index] = formatted_segment
+            finally:
+                report_completed(index)
 
         # 并发处理
         max_workers = min(len(segments), self.config.concurrent_workers)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(calibrate_single_segment, i, seg)
-                for i, seg in enumerate(segments)
-            ]
+        raw_budget = getattr(self.config, "chunk_time_budget", 300)
+        try:
+            chunk_time_budget = float(raw_budget)
+        except (TypeError, ValueError):
+            chunk_time_budget = 300.0
+        if chunk_time_budget <= 0:
+            chunk_time_budget = 300.0
+        timeout = chunk_time_budget * math.ceil(len(segments) / max_workers)
 
-            for future in concurrent.futures.as_completed(futures):
-                future.result()  # 等待完成
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        timed_out = set()
+        try:
+            futures = {
+                executor.submit(calibrate_single_segment, i, seg): i
+                for i, seg in enumerate(segments)
+            }
+            done, not_done = concurrent.futures.wait(
+                futures,
+                timeout=timeout,
+                return_when=concurrent.futures.ALL_COMPLETED,
+            )
+
+            for future in done:
+                future.result()  # 等待完成并暴露意外异常
+
+            timed_out = set(not_done)
+            for future in timed_out:
+                index = futures[future]
+                cancel_events[index].set()
+                future.cancel()
+                if calibrated_segments[index] is None:
+                    calibrated_segments[index] = self._format_plain_text(segments[index])
+                report_completed(index)
+
+            if timed_out:
+                timed_out_indices = ", ".join(
+                    str(futures[future] + 1) for future in sorted(timed_out, key=futures.get)
+                )
+                logger.error(
+                    f"Segment calibration timed out after {timeout:.1f}s; "
+                    f"fallback to formatted original for segments: {timed_out_indices}"
+                )
+        finally:
+            executor.shutdown(wait=not timed_out, cancel_futures=bool(timed_out))
 
         return calibrated_segments
 

@@ -129,6 +129,25 @@ class TestXiaoyuzhouRouting:
 
 
 # ---------------------------------------------------------------------------
+# WeChat Channels
+# ---------------------------------------------------------------------------
+
+class TestWeChatChannelsRouting:
+    """Factory should return WeChatChannelsDownloader for WeChat Channels URLs."""
+
+    @pytest.mark.parametrize("url", [
+        "https://weixin.qq.com/sph/AUqdQVIvFa",
+        "http://weixin.qq.com/sph/AUqdQVIvFa",
+        "https://weixin.qq.com/sph/AUqdQVIvFa/",
+    ])
+    def test_wechat_channels_urls(self, url):
+        downloader = create_downloader(url)
+        assert type(downloader).__name__ == "WeChatChannelsDownloader", (
+            f"Expected WeChatChannelsDownloader for {url}, got {type(downloader).__name__}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Unknown / Generic fallback
 # ---------------------------------------------------------------------------
 

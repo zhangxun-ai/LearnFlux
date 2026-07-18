@@ -27,6 +27,7 @@ data/logs/
 
 # 本地 Agent / 设计运行产物
 .superpowers/
+.playwright-cli/
 data/xianyu_listing_assets/
 
 # 数据目录
@@ -38,6 +39,9 @@ data/*.db-wal
 data/output
 data/risk_control/
 data/flywheel/
+data/trend_radar/
+data/services/
+data/source_files/
 data/server.pid
 tests/llm/output
 
@@ -49,6 +53,11 @@ tests/llm/output
 *.m4s
 *.wav
 *.flac
+
+# 例外：心流写作内置环境音需随应用一起发布
+!src/web/static/audio/rain.mp3
+!src/web/static/audio/snow.mp3
+!src/web/static/audio/stream.mp3
 
 # 模型文件
 models/

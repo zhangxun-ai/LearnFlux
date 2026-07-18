@@ -101,6 +101,20 @@ def test_route_plain_text_to_plain_processor(coordinator):
     coordinator.speaker_aware_processor.process.assert_not_called()
 
 
+def test_plain_text_progress_callback_is_forwarded(coordinator):
+    callback = Mock()
+
+    coordinator.process(
+        content="plain transcript",
+        title="Test Video",
+        progress_callback=callback,
+    )
+
+    assert coordinator.plain_text_processor.process.call_args.kwargs[
+        "progress_callback"
+    ] is callback
+
+
 def test_route_dialog_list_to_speaker_processor(coordinator):
     """Test routing dialog list to SpeakerAwareProcessor"""
     content = [

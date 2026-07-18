@@ -1,18 +1,84 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
+        <script>
+        (function() {
+            try {
+                var theme = localStorage.getItem('vta_theme_preference');
+                if (theme) {
+                    var parsedTheme = theme;
+                    try { parsedTheme = JSON.parse(theme); } catch(e) {}
+                    document.documentElement.setAttribute('data-theme', parsedTheme);
+                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch(e) {}
+        })();
+    </script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Focus Studio - 心流写作</title>
     <meta name="description" content="沉浸式空白写作与学习笔记空间">
     <meta name="theme-color" content="#000000">
     <meta name="robots" content="noindex">
+    <meta name="application-name" content="内容解析工作台">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="心流写作">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
+    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=20260709-1">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=20260709-1">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css">
-    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260617-3">
+    <link rel="stylesheet" href="/static/css/focus-studio.css?v=20260709-1">
+    <script src="/static/js/pwa-register.js?v=20260630-1" defer></script>
+    <script src="/static/js/app-shell.js?v=20260712" defer></script>
 </head>
-<body class="focus-body" data-mode="rainy" data-font="handwriting" data-size="small">
-    <main class="focus-stage" aria-label="心流写作空间">
+<body class="app-shell has-app-shell focus-body" data-mode="rainy" data-font="handwriting" data-size="small">
+    <script>
+    (function () {
+        if (new URLSearchParams(window.location.search).has('embedded')) {
+            document.body.dataset.embedded = 'true';
+        }
+    })();
+    </script>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
+                <span class="brand-text">内容变现工作台</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
+                <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
+                <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
+                <a class="nav-item is-active" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
+            </section>
+            <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
+                <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
+                <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
+                <a class="nav-item" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
+            </section>
+            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
+                <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
+                <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
+            </section>
+        </nav>
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">心流写作</span></div>
+        </header>
+        <section class="page-stage">
+    <h1 class="sr-only">心流写作</h1>
+    <section class="focus-stage" aria-label="心流写作空间">
         <canvas id="focus-canvas" class="focus-canvas" aria-hidden="true"></canvas>
         <div class="focus-vignette" aria-hidden="true"></div>
 
@@ -52,6 +118,17 @@
 
         <section class="deck-wrap" aria-label="写作区">
             <div class="focus-deck">
+                <div class="journal-meta" aria-label="记录信息">
+                    <span id="journal-date-label">今天</span>
+                    <select id="journal-type-select" aria-label="记录类型">
+                        <option value="daily">日记</option>
+                        <option value="note">随笔</option>
+                        <option value="weekly_plan">周计划</option>
+                        <option value="weekly_review">周复盘</option>
+                        <option value="monthly_plan">月计划</option>
+                        <option value="monthly_review">月复盘</option>
+                    </select>
+                </div>
                 <textarea id="focus-editor" class="focus-editor" spellcheck="false" autocomplete="off" placeholder="开始你的心流写作..."></textarea>
                 <div class="deck-actions">
                     <span class="save-status" id="save-status" aria-live="polite">Saved</span>
@@ -68,9 +145,18 @@
             </div>
         </section>
 
-        <section class="mixer-zone" aria-label="氛围控制台">
-            <button type="button" class="mixer-orb" aria-label="氛围设置">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H3M21 5h-7M14 3v4M8 12H3M21 12h-9M8 10v4M12 19H3M21 19h-5M16 17v4"/></svg>
+        <section class="mixer-zone" id="mixer-zone" aria-label="氛围控制台">
+            <div class="timer-readout" id="timer-readout" aria-hidden="true">
+                <span class="timer-phase" id="timer-phase">专注</span>
+                <span class="timer-time" id="timer-time">25:00</span>
+                <span class="timer-hint">长按重置</span>
+            </div>
+            <button type="button" class="mixer-orb" id="timer-toggle" aria-pressed="false" aria-label="开始或暂停番茄钟，长按重置">
+                <svg class="mixer-orb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H3M21 5h-7M14 3v4M8 12H3M21 12h-9M8 10v4M12 19H3M21 19h-5M16 17v4"/></svg>
+                <svg class="timer-ring" viewBox="0 0 64 64" aria-hidden="true">
+                    <circle class="timer-ring-track" cx="32" cy="32" r="24"></circle>
+                    <circle class="timer-ring-progress" id="timer-ring-progress" cx="32" cy="32" r="24"></circle>
+                </svg>
             </button>
             <aside class="mixer-panel">
                 <div class="mix-group">
@@ -90,12 +176,7 @@
                     </div>
                     <input id="volume-slider" type="range" min="0" max="100" value="40" aria-label="背景音量">
                     <div class="sound-menu" id="sound-menu" role="menu">
-                        <button type="button" data-sound="rain" class="active">雨声</button>
-                        <button type="button" data-sound="snow">雪夜</button>
-                        <button type="button" data-sound="ocean">海洋</button>
-                        <button type="button" data-sound="stream">溪流</button>
-                        <button type="button" data-sound="night">夜晚</button>
-                        <button type="button" data-sound="noise">平衡噪声</button>
+                        <!-- 背景音按钮由 JS 依据 SOUNDS 配置生成 -->
                         <button type="button" id="audio-import">导入录音</button>
                     </div>
                     <input id="audio-file" type="file" accept="audio/*" hidden>
@@ -103,16 +184,54 @@
             </aside>
         </section>
 
-        <button type="button" class="sound-start" id="sound-start">Start Sound</button>
+        <aside class="journal-shell" aria-label="历史和复盘">
+            <div class="journal-dock" aria-label="打开侧边栏">
+                <button class="journal-dock-button" type="button" data-journal-open="history" aria-controls="journal-sidecar" aria-expanded="false">历史</button>
+                <button class="journal-dock-button" type="button" data-journal-open="review" aria-controls="journal-sidecar" aria-expanded="false">复盘</button>
+            </div>
 
-        <aside class="focus-brand" aria-label="当前模式">
-            <span>Focus Studio v1.0</span>
-            <span id="brand-mode">Rainy Mode</span>
+            <section class="journal-sidecar" id="journal-sidecar" aria-label="记录侧边栏" aria-hidden="true">
+                <div class="journal-sidecar-head">
+                    <div class="journal-tabs" role="tablist" aria-label="记录侧边栏">
+                        <button class="journal-tab active" type="button" data-journal-tab="history" role="tab" aria-selected="true">历史</button>
+                        <button class="journal-tab" type="button" data-journal-tab="review" role="tab" aria-selected="false">复盘</button>
+                    </div>
+                    <button class="journal-sidecar-close" id="journal-sidecar-close" type="button" aria-label="关闭侧边栏">×</button>
+                </div>
+
+                <div class="journal-panel active" data-journal-panel="history" role="tabpanel">
+                    <h2>历史记录</h2>
+                    <p id="journal-history-note">按日期回看记录，选中后回到对应正文。</p>
+                    <div class="journal-history-list" id="journal-history-list">
+                        <div class="journal-empty">正在读取本月记录...</div>
+                    </div>
+                </div>
+
+                <div class="journal-panel" data-journal-panel="review" role="tabpanel" hidden>
+                    <h2>AI 复盘</h2>
+                    <p>需要整理时，把这段时间的记录和问题交给 AI。</p>
+                    <div class="journal-review-actions">
+                        <button type="button" data-review-range="week">本周复盘</button>
+                        <button type="button" data-review-range="month">本月复盘</button>
+                    </div>
+                    <label class="journal-question-label" for="journal-review-question">这次想问 AI 的问题</label>
+                    <textarea id="journal-review-question" class="journal-review-question" rows="5">我最近真正推进了什么？哪些地方反复卡住？下周最应该保留的动作是什么？</textarea>
+                    <div class="journal-review-result" id="journal-review-result" aria-live="polite"></div>
+                </div>
+            </section>
         </aside>
 
-        <a class="focus-exit" href="/" aria-label="返回工作台">Back</a>
+        <a class="focus-exit" href="/" aria-label="返回落地页" title="返回落地页">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 18 9 12l6-6M9 12h11M5 12h.01"></path>
+            </svg>
+            <span>返回落地页</span>
+        </a>
+    </section>
+        </section>
     </main>
 
-    <script src="/static/js/focus-studio.js?v=20260617-3"></script>
+    <script src="/static/js/focus-studio.js?v=20260709-2"></script>
+    <script src="/static/js/focus-journal.js?v=20260709-2"></script>
 </body>
 </html>

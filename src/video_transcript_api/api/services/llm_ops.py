@@ -29,7 +29,7 @@ from ...utils.notifications import (
     get_notification_router,
 )
 from ...utils.notifications.channel import _clean_url, _apply_risk_control_safe
-from ...utils.rendering import get_base_url
+from ...utils.rendering import get_base_url, normalize_markdown_text
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
 
@@ -48,6 +48,53 @@ def _safe_update_progress(task_id: str, **kwargs):
     except Exception as exc:
         logger.debug(f"task progress update failed: {task_id}, error={exc}")
         return None
+
+
+def _document_quality_payload(llm_task: dict) -> dict | None:
+    """Whitelist bounded document-quality fields before persistence."""
+    raw = llm_task.get("document_quality")
+    if not isinstance(raw, dict):
+        return None
+    metrics = raw.get("metrics")
+    reasons = raw.get("reasons")
+    return {
+        "mode": str(raw.get("mode") or "fallback"),
+        "reasons": [str(reason) for reason in reasons] if isinstance(reasons, list) else [],
+        "metrics": dict(metrics) if isinstance(metrics, dict) else {},
+    }
+
+
+def _progress_evidence(llm_task: dict, **extra) -> dict:
+    evidence = {}
+    quality = _document_quality_payload(llm_task)
+    if quality is not None:
+        evidence["document_quality"] = quality
+    evidence.update(extra)
+    return evidence
+
+
+def _fallback_stage_label(llm_task: dict, default: str) -> str:
+    return (
+        "检测到提取质量问题，正在进行完整校对"
+        if _document_quality_payload(llm_task) is not None
+        else default
+    )
+
+
+def _terminal_evidence(llm_task: dict) -> dict | None:
+    quality = _document_quality_payload(llm_task)
+    if quality is None:
+        return None
+    return {
+        "analysis_mode": "document_fallback",
+        "visual_ready": False,
+        "quality": quality,
+    }
+
+
+def _is_task_canceled(task_id: str) -> bool:
+    task_info = cache_manager.get_task_by_id(task_id) or {}
+    return task_info.get("status") == TaskStatus.CANCELED
 
 
 def process_llm_queue():
@@ -83,7 +130,13 @@ def _handle_llm_task(llm_task: dict):
     tracker: PerfTracker = llm_task.pop("perf_tracker", None) or PerfTracker(task_id=task_id)
 
     try:
+        if _is_task_canceled(task_id):
+            logger.info(f"LLM任务已取消，跳过处理: {task_id}")
+            return
         with task_lock(task_id):
+            if _is_task_canceled(task_id):
+                logger.info(f"LLM任务已取消，跳过处理: {task_id}")
+                return
             url = llm_task["url"]
             display_url = llm_task.get("display_url", url)
             platform = llm_task.get("platform")
@@ -165,10 +218,12 @@ def _handle_llm_task(llm_task: dict):
                 _safe_update_progress(
                     task_id,
                     stage="calibrating",
-                    stage_label="正在校对和总结",
+                    stage_label=_fallback_stage_label(llm_task, "正在校对和总结"),
                     basis="llm_started",
                     confidence="low",
-                    evidence={"transcript_chars": len(transcript)},
+                    evidence=_progress_evidence(
+                        llm_task, transcript_chars=len(transcript)
+                    ),
                 )
 
                 # 准备内容参数
@@ -177,13 +232,19 @@ def _handle_llm_task(llm_task: dict):
                 # 是否为仅校对模式（重新校对场景）
                 # 仅校对模式下，若缓存里 llm_summary.txt 缺失/为空，顺手补跑一次 summary
                 # 避免老任务卡在 view 页的 "总结处理中..." 状态
-                summary_backfill = False
+                force_summary_regeneration = bool(llm_task.get("regenerate_summary"))
+                summary_backfill = force_summary_regeneration
+                if force_summary_regeneration:
+                    logger.info(f"recalibrate: forced summary regeneration enabled for {task_id}")
                 if calibrate_only and platform and media_id:
                     cache_snapshot = cache_manager.get_cache(
                         platform, media_id,
                         use_speaker_recognition=use_speaker_recognition,
                     )
-                    if _should_backfill_summary(cache_snapshot or {}, calibrate_only=True):
+                    if (
+                        not summary_backfill
+                        and _should_backfill_summary(cache_snapshot or {}, calibrate_only=True)
+                    ):
                         summary_backfill = True
                         logger.info(
                             f"recalibrate: llm_summary missing for {task_id}, "
@@ -194,6 +255,23 @@ def _handle_llm_task(llm_task: dict):
                 skip_summary_for_coordinator = calibrate_only and not summary_backfill
 
                 # 调用新架构（包含校对和总结）
+                def _calibration_progress(completed: int, total: int) -> None:
+                    _safe_update_progress(
+                        task_id,
+                        stage="calibrating",
+                        stage_label=_fallback_stage_label(
+                            llm_task, "正在校对和总结"
+                        ),
+                        fraction=(completed / total) if total else None,
+                        basis="completed_segments",
+                        confidence="high",
+                        evidence=_progress_evidence(
+                            llm_task,
+                            completed_segments=completed,
+                            total_segments=total,
+                        ),
+                    )
+
                 with tracker.track("llm_processing"):
                     coordinator_result = llm_coordinator.process(
                         content=content,
@@ -203,13 +281,36 @@ def _handle_llm_task(llm_task: dict):
                         platform=platform or "",
                         media_id=media_id or "",
                         skip_summary=skip_summary_for_coordinator,
+                        progress_callback=_calibration_progress,
                     )
 
                 # 适配返回格式
                 result_dict = _build_result_dict(coordinator_result)
 
+                summary_error_message = None
+                summary_expected = (not calibrate_only) or summary_backfill
+                if summary_expected and result_dict.get("内容总结") is None:
+                    calibrated_text = result_dict.get("校对文本") or ""
+                    min_summary_threshold = getattr(
+                        llm_coordinator.config, "min_summary_threshold", 500
+                    )
+                    try:
+                        min_summary_threshold = int(min_summary_threshold)
+                    except (TypeError, ValueError):
+                        min_summary_threshold = 500
+                    if len(calibrated_text) < min_summary_threshold:
+                        result_dict["skip_summary"] = True
+                        result_dict["summary_success"] = True
+                        result_dict.setdefault("stats", {})["summary_length"] = len(
+                            calibrated_text
+                        )
+                    else:
+                        summary_error_message = (
+                            "summary generation returned empty for required summary"
+                        )
+
                 # 可选评论洞察：失败不影响主转录/总结链路
-                if not calibrate_only:
+                if not calibrate_only and not summary_error_message:
                     models_used = result_dict.get("models_used", {})
                     if llm_task.get("include_comments"):
                         _safe_update_progress(
@@ -239,6 +340,7 @@ def _handle_llm_task(llm_task: dict):
                     stage_label="正在保存结果和发送通知",
                     basis="stage_transition",
                     confidence="medium",
+                    evidence=_progress_evidence(llm_task),
                 )
 
                 # 保存结果到缓存
@@ -251,6 +353,8 @@ def _handle_llm_task(llm_task: dict):
                     calibrate_only=calibrate_only,
                     summary_backfill=summary_backfill,
                 )
+                if summary_error_message:
+                    raise RuntimeError(summary_error_message)
 
                 # 发送通知（多渠道）
                 if not calibrate_only:
@@ -279,6 +383,7 @@ def _handle_llm_task(llm_task: dict):
                     media_id=media_id,
                     title=video_title,
                     author=llm_task.get("author", ""),
+                    terminal_evidence=_terminal_evidence(llm_task),
                 )
                 logger.info(f"任务状态已更新为 success: {task_id} ({done_message})")
 
@@ -296,6 +401,7 @@ def _handle_llm_task(llm_task: dict):
                 try:
                     cache_manager.update_task_status(
                         task_id, TaskStatus.FAILED, error_message=fail_message,
+                        terminal_evidence=_terminal_evidence(llm_task),
                     )
                     logger.info(f"任务状态已更新为 failed: {task_id} ({fail_message})")
                 except Exception:
@@ -601,7 +707,7 @@ def _save_llm_results(
                     media_id=media_id,
                     use_speaker_recognition=use_speaker_recognition,
                     llm_type="summary",
-                    content=summary_text,
+                    content=normalize_markdown_text(summary_text),
                 )
             else:
                 logger.warning(f"总结生成失败，跳过保存: {task_id}")

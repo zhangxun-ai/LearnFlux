@@ -2,7 +2,9 @@
 # @skill-version 1
 services:
   video-transcript-api:
-    image: ghcr.io/zj1123581321/video-transcript-api:latest
+    # Keep the service/container identifiers stable for existing deployments.
+    image: ghcr.io/zhangxun-ai/learnflux:latest
+    pull_policy: build
     build:
       context: ..
       dockerfile: docker/Dockerfile

@@ -489,7 +489,7 @@ _HOME_HTML = """\
     </section>
 
     <footer class="foot">
-        Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source
+        Powered by <a href="https://github.com/zhangxun-ai/LearnFlux" target="_blank" rel="noopener">LearnFlux</a> · Open Source
     </footer>
         </section>
     </main>
@@ -663,7 +663,7 @@ def _build_page_html(
     <meta property="og:description" content="{og_desc}">
     <meta property="og:type" content="article">
     <meta property="og:locale" content="zh_CN">
-    <meta property="og:site_name" content="Video Transcript API">
+    <meta property="og:site_name" content="LearnFlux">
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",

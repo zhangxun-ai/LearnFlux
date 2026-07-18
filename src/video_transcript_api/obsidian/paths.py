@@ -19,6 +19,7 @@ class ManagedFileConflict(ValueError):
 
 _RESERVED_PATH_CHARS = set('<>:"|?*\\')
 _RESERVED_FILENAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_LEGACY_MANAGED_SOURCES = {"LearnFlux": frozenset({"VideoTranscriptAPI"})}
 
 
 def _relative_parts(relative_path: str, *, allow_empty: bool = False) -> tuple[str, ...]:
@@ -162,7 +163,11 @@ def find_managed_markdown_files(
     directory_relative_path: str,
     identity: Mapping[str, str],
 ) -> list[str]:
-    """Find direct child Markdown files with an exact managed identity tuple."""
+    """Find direct child Markdown files with an exact managed identity tuple.
+
+    The renamed LearnFlux brand accepts its legacy source marker so existing
+    managed notes continue to resolve to their original files.
+    """
     directory = resolve_vault_path(vault_root, directory_relative_path)
     if not directory.is_dir():
         raise VaultPathError("managed directory does not exist")
@@ -174,7 +179,15 @@ def find_managed_markdown_files(
         except (OSError, ValueError):
             continue
         fields = _read_scalar_frontmatter(path)
-        if all(fields.get(key) == str(value) for key, value in identity.items()):
+        if all(
+            fields.get(key) == str(value)
+            or (
+                key == "source"
+                and fields.get(key)
+                in _LEGACY_MANAGED_SOURCES.get(str(value), frozenset())
+            )
+            for key, value in identity.items()
+        ):
             matches.append(path.relative_to(vault).as_posix())
     return matches
 

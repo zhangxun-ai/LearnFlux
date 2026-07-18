@@ -769,6 +769,94 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/34/b8/aa7d6cf2d5efdd2fcd85cf39b33584fe12a0f7086ed451176ceb7fb510eb/lark-parser-0.7.8.tar.gz", hash = "sha256:26215ebb157e6fb2ee74319aa4445b9f3b7e456e26be215ce19fdaaa901c20a4", size = 276204, upload-time = "2019-11-01T12:45:26.558Z" }
 
 [[package]]
+name = "learnflux"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "beautifulsoup4" },
+    { name = "commentjson" },
+    { name = "fastapi" },
+    { name = "ffmpeg-python" },
+    { name = "jinja2" },
+    { name = "keyboard" },
+    { name = "llm-compat" },
+    { name = "loguru" },
+    { name = "markdown" },
+    { name = "nh3" },
+    { name = "numpy" },
+    { name = "propcache" },
+    { name = "pyclip" },
+    { name = "pydantic" },
+    { name = "pydub" },
+    { name = "pymdown-extensions" },
+    { name = "pypdf", extra = ["crypto"] },
+    { name = "pypinyin" },
+    { name = "python-docx" },
+    { name = "python-multipart" },
+    { name = "requests" },
+    { name = "rich" },
+    { name = "sounddevice" },
+    { name = "srt" },
+    { name = "typer" },
+    { name = "uvicorn" },
+    { name = "watchdog" },
+    { name = "websocket-client" },
+    { name = "websockets" },
+    { name = "wecom-notifier" },
+    { name = "youtube-transcript-api" },
+    { name = "yt-dlp", extra = ["default"] },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = "==3.8.5" },
+    { name = "beautifulsoup4", specifier = ">=4.9.0" },
+    { name = "commentjson", specifier = ">=0.9.0" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "ffmpeg-python", specifier = ">=0.2.0" },
+    { name = "jinja2", specifier = ">=3.0.0" },
+    { name = "keyboard", specifier = "==0.13.5" },
+    { name = "llm-compat", git = "https://github.com/zj1123581321/llm-compat.git" },
+    { name = "loguru", specifier = "==0.7.0" },
+    { name = "markdown", specifier = ">=3.4.0" },
+    { name = "nh3", specifier = ">=0.2.0" },
+    { name = "numpy", specifier = "==1.24.3" },
+    { name = "propcache", specifier = "==0.3.1" },
+    { name = "pyclip", specifier = ">=0.7.0" },
+    { name = "pydantic", specifier = ">=2.1.1" },
+    { name = "pydub", specifier = "==0.25.1" },
+    { name = "pymdown-extensions", specifier = ">=10.0.0" },
+    { name = "pypdf", extras = ["crypto"], specifier = ">=6.13.1" },
+    { name = "pypinyin", specifier = ">=0.55.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
+    { name = "python-docx", specifier = ">=1.2.0" },
+    { name = "python-multipart", specifier = ">=0.0.6" },
+    { name = "requests", specifier = ">=2.32.2" },
+    { name = "rich", specifier = ">=10.0.0" },
+    { name = "sounddevice", specifier = ">=0.5.3" },
+    { name = "srt", specifier = ">=3.5.3" },
+    { name = "typer", specifier = "==0.9.0" },
+    { name = "uvicorn", specifier = ">=0.29.0" },
+    { name = "watchdog", specifier = ">=6.0.0" },
+    { name = "websocket-client", specifier = "==1.5.1" },
+    { name = "websockets", specifier = ">=13.0" },
+    { name = "wecom-notifier", specifier = ">=0.3.1" },
+    { name = "youtube-transcript-api", specifier = ">=1.2.3" },
+    { name = "yt-dlp", extras = ["default"], specifier = ">=2025.12.8" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "llm-compat"
 version = "0.2.0"
 source = { git = "https://github.com/zj1123581321/llm-compat.git#b93c52a8ebd4648add73163b94300799097646d6" }
@@ -4524,94 +4612,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/1f/93/041fca8274050e40e
 wheels = [
     { url = "https://files.pythonhosted.org/packages/31/a3/5b1562db76a5a488274b2332a97199b32d0442aca0ed193697fd47786316/uvicorn-0.46.0-py3-none-any.whl", hash = "sha256:bbebbcbed972d162afca128605223022bedd345b7bc7855ce66deb31487a9048", size = 70926, upload-time = "2026-04-23T07:15:58.355Z" },
 ]
-
-[[package]]
-name = "video-transcript-api"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "beautifulsoup4" },
-    { name = "commentjson" },
-    { name = "fastapi" },
-    { name = "ffmpeg-python" },
-    { name = "jinja2" },
-    { name = "keyboard" },
-    { name = "llm-compat" },
-    { name = "loguru" },
-    { name = "markdown" },
-    { name = "nh3" },
-    { name = "numpy" },
-    { name = "propcache" },
-    { name = "pyclip" },
-    { name = "pydantic" },
-    { name = "pydub" },
-    { name = "pymdown-extensions" },
-    { name = "pypdf", extra = ["crypto"] },
-    { name = "pypinyin" },
-    { name = "python-docx" },
-    { name = "python-multipart" },
-    { name = "requests" },
-    { name = "rich" },
-    { name = "sounddevice" },
-    { name = "srt" },
-    { name = "typer" },
-    { name = "uvicorn" },
-    { name = "watchdog" },
-    { name = "websocket-client" },
-    { name = "websockets" },
-    { name = "wecom-notifier" },
-    { name = "youtube-transcript-api" },
-    { name = "yt-dlp", extra = ["default"] },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = "==3.8.5" },
-    { name = "beautifulsoup4", specifier = ">=4.9.0" },
-    { name = "commentjson", specifier = ">=0.9.0" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "ffmpeg-python", specifier = ">=0.2.0" },
-    { name = "jinja2", specifier = ">=3.0.0" },
-    { name = "keyboard", specifier = "==0.13.5" },
-    { name = "llm-compat", git = "https://github.com/zj1123581321/llm-compat.git" },
-    { name = "loguru", specifier = "==0.7.0" },
-    { name = "markdown", specifier = ">=3.4.0" },
-    { name = "nh3", specifier = ">=0.2.0" },
-    { name = "numpy", specifier = "==1.24.3" },
-    { name = "propcache", specifier = "==0.3.1" },
-    { name = "pyclip", specifier = ">=0.7.0" },
-    { name = "pydantic", specifier = ">=2.1.1" },
-    { name = "pydub", specifier = "==0.25.1" },
-    { name = "pymdown-extensions", specifier = ">=10.0.0" },
-    { name = "pypdf", extras = ["crypto"], specifier = ">=6.13.1" },
-    { name = "pypinyin", specifier = ">=0.55.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
-    { name = "python-docx", specifier = ">=1.2.0" },
-    { name = "python-multipart", specifier = ">=0.0.6" },
-    { name = "requests", specifier = ">=2.32.2" },
-    { name = "rich", specifier = ">=10.0.0" },
-    { name = "sounddevice", specifier = ">=0.5.3" },
-    { name = "srt", specifier = ">=3.5.3" },
-    { name = "typer", specifier = "==0.9.0" },
-    { name = "uvicorn", specifier = ">=0.29.0" },
-    { name = "watchdog", specifier = ">=6.0.0" },
-    { name = "websocket-client", specifier = "==1.5.1" },
-    { name = "websockets", specifier = ">=13.0" },
-    { name = "wecom-notifier", specifier = ">=0.3.1" },
-    { name = "youtube-transcript-api", specifier = ">=1.2.3" },
-    { name = "yt-dlp", extras = ["default"], specifier = ">=2025.12.8" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "watchdog"

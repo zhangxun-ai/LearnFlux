@@ -83,7 +83,7 @@ def managed_identity(
     """Return the immutable identity tuple used to recover renamed files."""
     if bool(collection_id) != bool(source_id):
         raise ValueError("collection_id and source_id must be provided together")
-    identity = {"type": document_type, "source": "VideoTranscriptAPI"}
+    identity = {"type": document_type, "source": "LearnFlux"}
     if collection_id and source_id:
         identity["vta_collection_id"] = collection_id
         identity["vta_source_id"] = source_id
@@ -100,7 +100,7 @@ def _managed_frontmatter(document_type: str, metadata: Mapping[str, Any]) -> dic
         raise ValueError("collection_id and source_id must be provided together")
     fields: dict[str, Any] = {
         "type": document_type,
-        "source": "VideoTranscriptAPI",
+        "source": "LearnFlux",
         "vta_view_token": view_token,
     }
     if collection_id and source_id:

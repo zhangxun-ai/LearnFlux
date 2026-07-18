@@ -71,6 +71,19 @@
     },
 
     // ============================================================
+    // Apple Silicon macOS 本地转录（可选）
+    // 通过 `bash scripts/bootstrap.sh --with-local-whisper` 安装后启用。
+    // 启用时普通转录优先走本地 mlx-whisper，不再连接 CapsWriter。
+    // ============================================================
+    "local_whisper": {
+        "enabled": false,
+        "binary": "~/.venvs/mlx-whisper/bin/mlx_whisper",
+        "model": "mlx-community/whisper-large-v3-turbo",
+        "language": "",
+        "timeout": 1800
+    },
+
+    // ============================================================
     // 并发处理配置
     // ============================================================
     "concurrent": {

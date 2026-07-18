@@ -1,89 +1,147 @@
-# 视频转录 API (Video Transcript API)
+# LearnFlux
 
-> 基于 Python 3.11+ 的异步视频转录服务，支持多平台下载、双引擎转录、智能文本处理和企业级功能集成。
+> 把视频、音频和文档变成可理解、可追问、可沉淀的学习材料。
+
+LearnFlux 是面向个人学习和内容研究的 AI 工作台：导入链接或本地文件，获得逐字稿、AI 解读、视觉图解、系列知识地图和可同步到 Obsidian 的笔记。它不是一个只返回文本的“转录 API”，而是把内容输入推进到理解与复习的完整学习流程。
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.101+-green.svg)](https://fastapi.tiangolo.com/)
-[![License](https://img.shields.io/badge/License-MIT%2B%20Commons%20Clause-yellow.svg)](LICENSE)
+[![FastAPI](https://img.shields.io/badge/FastAPI-green.svg)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/License-MIT%20%2B%20Commons%20Clause-yellow.svg)](LICENSE)
 
-开发契机和玩法分享：[LLM 吞噬一切，我用 AI 长出来的那些工具](https://mp.weixin.qq.com/s/w8VnWJcUp5VkD5J-fYCUrg)
+## 它能做什么
 
-![转录结果页面](docs/images/overview.jpg)
+- 导入 YouTube、Bilibili、抖音、小红书、小宇宙，以及本地音视频和文档。
+- 将内容转录为带时间轴的文本，并用 AI 校对、总结、解释难点和追问全文。
+- 在同一时间轴中边播边学：当前字幕、逐字稿、AI 解读、图解和个人笔记互相联动。
+- 管理系列课程或专题资料：生成集合知识地图、全系列解读和 Obsidian Markdown 笔记。
+- 从帖子、评论和账号内容中提取洞察，辅助选题与内容研究。
 
----
+## 先选适合你的安装方式
 
-## 核心特性
+| 你的情况 | 推荐路径 | 需要额外的转录服务 |
+| --- | --- | --- |
+| Apple Silicon Mac，想在本机转录 | 本地 `mlx-whisper` | 不需要 CapsWriter；说话人识别仍可选 FunASR |
+| Linux、Windows 或独立服务器 | LearnFlux + CapsWriter | 需要一个可访问的 CapsWriter WebSocket 服务 |
+| 需要区分说话人 | 任意基础路径 + FunASR | 仅在提交时启用“说话人识别”才需要 |
+| 只处理已有字幕或文档 | LearnFlux 本体 | 通常不需要 ASR 服务 |
 
-- **多平台支持**：YouTube、Bilibili、抖音、小红书、小宇宙播客，工厂模式自动匹配下载器
-- **双引擎转录**：CapsWriter-Offline（通用转录）+ FunASR（说话人识别）
-- **智能文本处理**：LLM 自动校对 ASR 错误、专有名词纠错、说话人推断、内容总结
-- **内容工作台**：单篇深度学习、系列深度学习、帖子洞察、趋势雷达、IP 对标和心流写作统一导航
-- **系列学习**：支持本地文件/链接导入、知识地图、全系列解读、源内容回看和 Obsidian Markdown 导出
-- **社媒洞察**：基于 TikHub REST API 获取视频/帖子/评论等确定性数据，支持需求信号提取和趋势机会雷达
-- **企业级功能**：SQLite + 文件系统双层缓存、多用户管理、审计日志、多渠道通知（企业微信 + 飞书）、任务历史浏览器
-- **风控系统**：敏感词检测、多策略文本脱敏、风险模型自动切换
+`LLM` 和 `TikHub` 不是启动服务的硬前提，但分别决定 AI 解读/总结与部分社媒平台解析、洞察功能是否可用。
 
-## 外部依赖
+## 三分钟启动：本机基础环境
 
-- [Tikhub API key，用于音视频解析下载。有 aff](https://user.tikhub.io/register?referral_code=YArXsaWi)
-- [funasr_spk_server：funasr server 对应暴露 api，支持音视频转写，分角色，自动合并相同人物的话。](https://github.com/zj1123581321/funasr_spk_server)
-- [CapsWriter-Offline：CapsWriter 的离线版，一个好用的 PC 端的语音输入工具，支持热词、LLM处理。](https://github.com/HaujetZhao/CapsWriter-Offline)
-- [youtube_download_api：YouTube 视频下载服务，作为 yt-dlp 的可选替代后端。](https://github.com/zj1123581321/youtube_download_api)（可选）
-- OpenAI 兼容的 API，比如 Deepseek，量大管饱。
-
----
-
-## 快速开始
-
-### 环境要求
-
-- Python 3.11+
-- FFmpeg
-- 转录服务器（CapsWriter / FunASR 二选一或同时部署）
-
-### 本地安装
+需要 Git 和网络连接。以下命令会安装项目 Python 依赖、检查或安装 FFmpeg，并且只在配置文件不存在时从示例创建它；**不会覆盖已有 `config/config.jsonc`**。
 
 ```bash
-# 克隆仓库
-git clone <repository-url>
-cd video-transcript-api
-
-# 安装依赖（使用 uv）
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync --extra dev
-
-# 配置服务
-cp config/config.example.jsonc config/config.jsonc
-# 编辑 config.jsonc，填写 api.auth_token、tikhub.api_key 等
-
-# 启动
-uv run python main.py --start
+git clone https://github.com/zhangxun-ai/LearnFlux.git
+cd LearnFlux
+bash scripts/bootstrap.sh
 ```
 
-> 💡 除手改 `config.jsonc` 外，服务启动后也可在浏览器打开 **`/settings` 设置页**，用「管理口令」（即 `api.auth_token`）在线配置各 AI 服务商的密钥/模型、TikHub 等密钥与服务地址；配置写入 `data/config.db` 并在启动时深合并到 `config.jsonc` 之上，**保存后重启服务生效**。
-
-### Docker 部署
+脚本会在缺少 FFmpeg 时使用 Homebrew（macOS）或 `apt`（Debian/Ubuntu）安装它；没有对应包管理器时会给出明确的手动安装提示。它使用 `uv` 管理 Python 环境，等价的依赖同步命令是：
 
 ```bash
-# 准备配置
-cp config/config.example.jsonc config/config.jsonc
+uv sync --extra dev
+```
 
-# 启动
-cd docker/
+### Apple Silicon Mac：一键启用本地转录
+
+如果你使用 Apple Silicon Mac（M 系列芯片），可以在上一节的命令后运行：
+
+```bash
+bash scripts/bootstrap.sh --with-local-whisper
+```
+
+这会把官方 [`mlx-whisper`](https://github.com/ml-explore/mlx-examples/tree/main/whisper) 安装到 `~/.venvs/mlx-whisper`。首次真正转录时会下载所选模型。随后在 `config/config.jsonc` 中加入或更新以下配置：
+
+```jsonc
+"local_whisper": {
+  "enabled": true,
+  "binary": "~/.venvs/mlx-whisper/bin/mlx_whisper",
+  "model": "mlx-community/whisper-large-v3-turbo",
+  "language": "",
+  "timeout": 1800
+}
+```
+
+启用后，普通音视频转录优先使用本地引擎，不再依赖 CapsWriter。该模式不提供说话人识别；如需区分说话人，请继续配置 FunASR。
+
+## 配置一次，按需开启能力
+
+所有本机密钥都放在被 Git 忽略的 `config/config.jsonc`，请从模板生成，绝不要提交真实密钥。
+
+```bash
+cp config/config.example.jsonc config/config.jsonc
+```
+
+至少检查以下配置项：
+
+| 配置 | 何时需要 | 说明 |
+| --- | --- | --- |
+| `api.auth_token` | 建议始终设置 | Web/API 管理口令和 Bearer Token。 |
+| `llm.api_key`、`llm.base_url` | AI 校对、总结、问答、图解 | 使用任意 OpenAI 兼容服务。 |
+| `tikhub.api_key` | 抖音、小红书、部分社媒解析与洞察 | 在 [TikHub](https://user.tikhub.io/register?referral_code=YArXsaWi) 获取。 |
+| `capswriter.server_url` | 未启用本地 `mlx-whisper` 的音视频转录 | 默认 `ws://localhost:6016`。 |
+| `funasr_spk_server.server_url` | 说话人识别 | 默认 `ws://localhost:8767`；仅按需使用。 |
+
+### 远程或局域网转录服务
+
+非 Apple Silicon 环境可以部署或连接到现有的 [CapsWriter-Offline](https://github.com/HaujetZhao/CapsWriter-Offline) 服务，并填写：
+
+```jsonc
+"capswriter": {
+  "server_url": "ws://YOUR_ASR_HOST:6016"
+}
+```
+
+如果需要按说话人分段，另行部署 [funasr_spk_server](https://github.com/zj1123581321/funasr_spk_server)，并填写：
+
+```jsonc
+"funasr_spk_server": {
+  "server_url": "ws://YOUR_ASR_HOST:8767"
+}
+```
+
+CapsWriter 和 FunASR 是独立的计算服务，硬件、模型和部署方式取决于你的机器，因此 LearnFlux 不会在安装脚本中猜测性地自动部署它们。启动后访问 `GET /health` 可以检查当前启用的本地/远程服务状态。
+
+## 启动、检查与停止
+
+```bash
+./server.sh start
+curl -s http://localhost:8000/health
+```
+
+浏览器打开 [http://localhost:8000](http://localhost:8000) 后，先在 `/settings` 填写 AI 服务和 TikHub 等可选配置，再开始导入内容。
+
+```bash
+./server.sh status
+./server.sh log
+./server.sh restart
+./server.sh stop
+```
+
+## Docker 部署
+
+Docker 镜像已包含 FFmpeg、BBDown 和 yt-dlp；转录服务仍需独立提供。将 CapsWriter/FunASR 部署在容器外时，配置中不能使用容器内的 `localhost`，请填写宿主机 IP、局域网地址或 `host.docker.internal`。
+
+```bash
+cp config/config.example.jsonc config/config.jsonc
+cd docker
 docker compose up -d
 ```
 
-**Docker 镜像**：[`ghcr.io/zj1123581321/video-transcript-api`](https://ghcr.io/zj1123581321/video-transcript-api)
+Compose 会从当前源码构建并标记镜像为 `ghcr.io/zhangxun-ai/learnflux:latest`。
 
-镜像内置 ffmpeg、BBDown、yt-dlp，无需额外安装。
+## 常用入口
 
-> **注意**：CapsWriter / FunASR 需单独部署，配置中的服务地址不能用 `localhost`，需改为宿主机 IP 或 `host.docker.internal`。
+- 单篇内容学习：`/add_task_by_web`
+- 系列课程与知识地图：`/collections`
+- 边播边学：`/study`
+- 帖子/评论洞察：`/post`
+- 趋势雷达：`/trend-radar`
+- IP 对标工作台：`/flywheel`
+- 设置中心：`/settings`
 
----
-
-## 基本用法
-
-### 提交转录任务
+API 调用示例：
 
 ```bash
 curl -X POST "http://localhost:8000/api/transcribe" \
@@ -91,106 +149,39 @@ curl -X POST "http://localhost:8000/api/transcribe" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://www.youtube.com/watch?v=xxx",
-    "use_speaker_recognition": true
+    "use_speaker_recognition": false
   }'
 ```
 
-### 查询任务状态
-
-```bash
-curl -X GET "http://localhost:8000/api/task/{task_id}" \
-  -H "Authorization: Bearer your-auth-token"
-```
-
-### Web 界面
-
-- **提交任务**：`GET /add_task_by_web`
-- **系列深度学习**：`GET /collections` — 导入多份内容，生成知识地图、全系列解读和可导出的复习笔记
-- **帖子洞察**：`GET /post` — 分析 X / 小红书 / 微信公众号等帖子正文与高价值评论
-- **趋势雷达**：`GET /trend-radar` — 手动触发 TikHub 采集和趋势机会报告，单次预算默认不超过 $5
-- **IP 对标工作台**：`GET /flywheel` — 拆解对标账号内容，并从已解析内容中发现选题机会
-- **查看结果**：`GET /view/{view_token}`
-- **任务历史**：`GET /static/history.html` — 支持按日期、平台、频道、关键词搜索，已读追踪，摘要预览
-- **导出文件**：`GET /export/{view_token}/{type}`（支持 `calibrated`、`summary`、`transcript`）
-- **设置中心**：`GET /settings` — 在线配置 AI 服务商密钥/模型、TikHub 等密钥与服务地址（凭管理口令读写，模型支持从服务商实时拉取）
-
-### API 端点一览
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/transcribe` | POST | 提交转录任务 |
-| `/api/task/{task_id}` | GET | 查询任务状态 |
-| `/api/audit/stats` | GET | 调用统计 |
-| `/api/audit/calls` | GET | 调用记录 |
-| `/api/audit/history` | GET | 任务历史查询（支持多条件过滤、分页、关键词搜索） |
-| `/api/audit/filter-options` | GET | 获取过滤选项（webhook/平台/频道列表） |
-| `/api/audit/summary` | GET | 任务摘要预览（前 300 字） |
-| `/api/collections` | GET / POST | 系列学习合集列表与创建 |
-| `/api/collections/{collection_id}/summary` | POST | 生成合集级全系列解读 |
-| `/api/post-insight` | POST | 帖子正文与评论洞察 |
-| `/api/trend-radar/reports/run` | POST | 后台触发趋势雷达报告 |
-| `/api/trend-radar/jobs/{job_id}` | GET | 查询趋势雷达后台任务 |
-| `/api/trend-radar/reports/latest` | GET | 获取最新趋势雷达报告 |
-| `/api/users/profile` | GET | 当前用户信息 |
-| `/settings` | GET | 设置中心页面 |
-| `/api/settings/schema` | GET | 配置结构（无值、免鉴权，用于渲染表单） |
-| `/api/settings` | GET / POST | 读取（脱敏）/ 写入配置，需管理口令 |
-| `/api/settings/provider-models` | POST | 按当前 Key 实时拉取服务商可用模型 |
-| `/view/{view_token}` | GET | 结果查看页 |
-| `/view/{view_token}?raw=calibrated` | GET | 纯文本导出 |
-| `/view/{view_token}?page=calibrated` | GET | HTML 页面导出 |
-| `/export/{view_token}/{type}` | GET | 文件下载 |
-
-更多 API 细节请参考 [功能文档](docs/)。
-
----
-
 ## 项目结构
 
+```text
+LearnFlux/
+├── src/video_transcript_api/  # FastAPI、下载、转录、AI 与学习功能
+├── config/                    # 配置模板；真实配置被 Git 忽略
+├── docker/                    # Docker Compose 与镜像构建
+├── scripts/bootstrap.sh       # 新用户初始化命令
+├── server.sh                  # 本地服务启停管理
+├── tests/                     # pytest 测试套件
+└── docs/                      # 功能、配置和开发文档
 ```
-video-transcript-api/
-├── src/video_transcript_api/
-│   ├── api/              # FastAPI 服务、路由、依赖注入
-│   ├── collections/      # 系列深度学习、知识地图、全系列解读
-│   ├── comments/         # 评论筛选、帖子洞察、需求信号提取
-│   ├── downloaders/      # 多平台下载器（工厂模式）
-│   ├── flywheel/         # IP 对标与选题机会
-│   ├── trend_radar/      # TikHub 趋势采集、预算控制、报告生成
-│   ├── transcriber/      # 转录引擎（CapsWriter + FunASR）
-│   ├── llm/              # LLM 处理引擎（协调器-处理器-核心组件）
-│   ├── cache/            # 缓存系统（SQLite + 文件系统）
-│   └── utils/            # 工具模块（日志、通知、风控、用户管理等）
-├── tests/                # 测试套件
-├── docs/                 # 详细文档
-├── config/               # 配置文件
-├── docker/               # Docker 部署文件
-└── main.py               # 入口文件
-```
-
----
-
-## 文档
-
-详细文档位于 [docs/](docs/) 目录：
-
-- **架构设计**：[系统架构与模块详解](docs/architecture.md)
-- **使用指南**：[多渠道通知（企微+飞书）](docs/guides/notification.md) · [多用户系统](docs/guides/multi_user_setup.md)
-- **API 指南**：[FunASR](docs/guides/api/funasr_spk_server_client_api.md) · [YouTube](docs/guides/api/youtube_client_guide.md) · [BBDown](docs/guides/api/bbdown_guide.md)
-- **开发文档**：[LLM 工程指南](docs/development/llm/engineering_guide.md) · [并发处理](docs/development/concurrency.md) · [日志系统](docs/development/logging.md)
-- **功能特性**：[Raw/Page 导出](docs/features/raw_export.md) · [Download URL 与元数据覆盖](docs/features/source_url_and_metadata_override.md)
-
----
 
 ## 测试
 
-项目工作流以 [AGENTS.md](AGENTS.md) 为准，测试分类与外部依赖说明见 [tests/README.md](tests/README.md)。
-
 ```bash
-uv run --extra dev pytest tests/unit  # verify-fast
-uv run --extra dev pytest             # verify-full: 默认离线测试
+uv run --extra dev pytest tests/unit
+uv run --extra dev pytest
 ```
 
----
+功能、集成、LLM、平台、手动和性能测试可能需要网络、服务或真实凭据；请按 [tests/README.md](tests/README.md) 中的具体文件单独执行。
+
+## 更多文档
+
+- [文档中心](docs/README.md)
+- [系统架构](docs/architecture.md)
+- [通知配置](docs/guides/notification.md)
+- [多用户配置](docs/guides/multi_user_setup.md)
+- [FunASR 客户端 API](docs/guides/api/funasr_spk_server_client_api.md)
 
 ## 开源协议
 

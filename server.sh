@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Video Transcript API - 一键启停管理脚本
+# LearnFlux - 一键启停管理脚本
 #
 #   用法:  ./server.sh {start|stop|restart|status|log}
 #

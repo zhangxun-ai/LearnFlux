@@ -65,6 +65,16 @@ def test_audience_docs_show_relevant_canonical_commands(relative_path, commands)
     _assert_standalone_commands(relative_path, commands)
 
 
+def test_readme_documents_bootstrap_and_local_transcription_setup():
+    readme = _read("README.md")
+
+    assert "# LearnFlux" in readme
+    assert "bash scripts/bootstrap.sh" in readme
+    assert "bash scripts/bootstrap.sh --with-local-whisper" in readme
+    assert "CapsWriter" in readme
+    assert "FunASR" in readme
+
+
 def test_pytest_norecursedirs_lists_non_default_suites():
     with (PROJECT_ROOT / "pyproject.toml").open("rb") as pyproject_file:
         pyproject = tomllib.load(pyproject_file)

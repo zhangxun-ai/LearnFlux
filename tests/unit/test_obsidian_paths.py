@@ -78,7 +78,7 @@ def test_find_managed_files_uses_exact_stable_identity(tmp_path):
     target.mkdir(parents=True)
     identity = {
         "type": "transcript",
-        "source": "VideoTranscriptAPI",
+        "source": "LearnFlux",
         "vta_collection_id": "course-1",
         "vta_source_id": "lesson-1",
     }
@@ -96,6 +96,27 @@ def test_find_managed_files_uses_exact_stable_identity(tmp_path):
     assert len(find_managed_markdown_files(vault, "raw/课程", identity)) == 2
 
 
+def test_find_managed_files_recovers_legacy_brand_identity(tmp_path):
+    from video_transcript_api.obsidian.paths import find_managed_markdown_files
+
+    vault = tmp_path / "vault"
+    target = vault / "notes"
+    target.mkdir(parents=True)
+    current_identity = {
+        "type": "study-note",
+        "source": "LearnFlux",
+        "vta_view_token": "view-1",
+    }
+    legacy_identity = {**current_identity, "source": "VideoTranscriptAPI"}
+    (target / "existing.md").write_text(
+        _managed_markdown(legacy_identity), encoding="utf-8"
+    )
+
+    assert find_managed_markdown_files(vault, "notes", current_identity) == [
+        "notes/existing.md"
+    ]
+
+
 def test_allocate_path_recovers_identity_and_protects_unknown_same_name(tmp_path):
     from video_transcript_api.obsidian.paths import allocate_managed_markdown_path
 
@@ -104,7 +125,7 @@ def test_allocate_path_recovers_identity_and_protects_unknown_same_name(tmp_path
     directory.mkdir(parents=True)
     identity = {
         "type": "transcript",
-        "source": "VideoTranscriptAPI",
+        "source": "LearnFlux",
         "vta_view_token": "view-1",
     }
     (directory / "第1课.md").write_text("user file", encoding="utf-8")

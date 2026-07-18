@@ -19,7 +19,7 @@ def test_managed_identity_uses_collection_source_or_single_view_token():
 
     assert managed_identity("transcript", view_token="view-1") == {
         "type": "transcript",
-        "source": "VideoTranscriptAPI",
+        "source": "LearnFlux",
         "vta_view_token": "view-1",
     }
     assert managed_identity(
@@ -29,7 +29,7 @@ def test_managed_identity_uses_collection_source_or_single_view_token():
         source_id="lesson-1",
     ) == {
         "type": "study-note",
-        "source": "VideoTranscriptAPI",
+        "source": "LearnFlux",
         "vta_collection_id": "course-1",
         "vta_source_id": "lesson-1",
     }
@@ -186,7 +186,7 @@ def test_note_rendering_preserves_user_frontmatter_and_replaces_managed_fields()
 
     existing = """---
 type: study-note
-source: VideoTranscriptAPI
+source: LearnFlux
 vta_collection_id: course-1
 vta_source_id: lesson-1
 lesson: 旧标题
@@ -243,7 +243,7 @@ def test_managed_hash_excludes_synced_at_and_custom_frontmatter():
 
     first = """---
 type: study-note
-source: VideoTranscriptAPI
+source: LearnFlux
 vta_collection_id: course-1
 vta_source_id: lesson-1
 lesson: Lesson

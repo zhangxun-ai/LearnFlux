@@ -105,8 +105,8 @@ def create_app() -> FastAPI:
     logger = get_logger()
 
     app = FastAPI(
-        title="VideoTranscriptAPI",
-        description="视频转录API服务",
+        title="LearnFlux",
+        description="AI 驱动的内容学习工作台",
         version="1.0.0",
     )
 

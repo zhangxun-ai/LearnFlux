@@ -19,7 +19,7 @@ from video_transcript_api.api.server import start_server
 
 def main():
     """主程序入口函数"""
-    parser = argparse.ArgumentParser(description="视频转录API服务")
+    parser = argparse.ArgumentParser(description="LearnFlux AI 内容学习工作台")
 
     # 添加命令行参数
     parser.add_argument("--start", action="store_true", help="启动API服务")

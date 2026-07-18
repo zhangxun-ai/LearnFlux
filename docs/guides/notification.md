@@ -1,6 +1,6 @@
 # 多渠道通知配置指南
 
-VideoTranscriptAPI 支持同时向企业微信和飞书推送任务通知。基于 [wecom-notifier](https://github.com/zj1123581321/wecom-notifier) v0.3.1+。
+LearnFlux 支持同时向企业微信和飞书推送任务通知。基于 [wecom-notifier](https://github.com/zj1123581321/wecom-notifier) v0.3.1+。
 
 ## 架构
 

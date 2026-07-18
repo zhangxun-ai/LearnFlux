@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VideoTranscriptAPI CLI client — stdlib-only, cross-platform.
+"""LearnFlux CLI client — stdlib-only, cross-platform.
 
 Subcommands:
   submit         Submit a transcription task for a video/podcast URL.
@@ -541,7 +541,7 @@ def cmd_health(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="videotranscript",
-        description="VideoTranscriptAPI client for agents.",
+        description="LearnFlux client for agents.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 

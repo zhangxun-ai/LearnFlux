@@ -1,4 +1,4 @@
-# VideoTranscriptAPI 端点参考
+# LearnFlux 端点参考
 
 只有当 CLI 无法满足，或需要排查异常响应、使用未暴露的字段时才读这份文档。否则优先走 `scripts/videotranscript.py`。
 

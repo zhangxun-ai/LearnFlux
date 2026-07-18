@@ -85,6 +85,6 @@ print(json.dumps({
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout.strip().splitlines()[-1])
     assert payload == {
-        "app_title": "VideoTranscriptAPI",
+        "app_title": "LearnFlux",
         "start_server": "start_server",
     }

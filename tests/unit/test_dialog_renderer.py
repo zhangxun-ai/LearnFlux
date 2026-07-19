@@ -21,6 +21,19 @@ def test_calibrated_renderer_uses_only_calibrated_text(tmp_path):
     assert "校对后的文本" in html
 
 
+def test_calibrated_renderer_uses_only_structured_text(tmp_path):
+    """仅有结构化文本时仍应渲染内容。"""
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": [{"speaker": "甲", "text": "结构化文本"}]}),
+        encoding="utf-8",
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "结构化文本" in html
+
+
 def test_calibrated_renderer_uses_only_funasr_segments(tmp_path):
     """仅有 FunASR 分段文件时应渲染分段文本。"""
     (tmp_path / "transcript_funasr.json").write_text(
@@ -45,6 +58,39 @@ def test_calibrated_renderer_uses_only_capswriter_text(tmp_path):
 
     assert html is not None
     assert "CapsWriter 原始文本" in html
+
+
+def test_calibrated_renderer_prioritizes_structured_text_over_funasr(tmp_path):
+    """无校对文本时，结构化文本应优先于 FunASR 转录。"""
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": [{"speaker": "甲", "text": "结构化优先文本"}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 次级文本"}]}), encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "结构化优先文本" in html
+    assert "FunASR 次级文本" not in html
+
+
+def test_calibrated_renderer_prioritizes_funasr_text_over_capswriter(tmp_path):
+    """无校对和结构化文本时，FunASR 应优先于 CapsWriter 转录。"""
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 优先文本"}]}), encoding="utf-8"
+    )
+    (tmp_path / "transcript_capswriter.txt").write_text(
+        "CapsWriter 次级文本", encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "FunASR 优先文本" in html
+    assert "CapsWriter 次级文本" not in html
 
 
 def test_calibrated_renderer_prioritizes_calibrated_text(tmp_path):

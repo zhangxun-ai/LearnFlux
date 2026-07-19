@@ -586,6 +586,7 @@ class DialogRenderer:
         # 检查是否存在可渲染文本文件
         text_files = (
             "llm_calibrated.txt",
+            "llm_processed.json",
             "transcript_funasr.json",
             "transcript_capswriter.txt",
         )

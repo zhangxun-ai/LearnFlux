@@ -47,6 +47,16 @@ def test_calibrated_renderer_falls_back_to_funasr_for_invalid_structured_text(tm
     assert "FunASR 回退文本" in html
 
 
+def test_calibrated_renderer_uses_fallback_for_invalid_structured_text(tmp_path):
+    """无原始转录时，损坏的结构化数据应降级到传入文本。"""
+    (tmp_path / "llm_processed.json").write_text("{", encoding="utf-8")
+
+    html = render_calibrated_content_smart(str(tmp_path), "数据库回退文本")
+
+    assert html is not None
+    assert "数据库回退文本" in html
+
+
 def test_calibrated_renderer_uses_only_funasr_segments(tmp_path):
     """仅有 FunASR 分段文件时应渲染分段文本。"""
     (tmp_path / "transcript_funasr.json").write_text(
@@ -88,6 +98,18 @@ def test_calibrated_renderer_falls_back_to_capswriter_for_empty_structured_text(
 
     assert html is not None
     assert "CapsWriter 回退文本" in html
+
+
+def test_calibrated_renderer_uses_fallback_for_empty_structured_text(tmp_path):
+    """无原始转录时，空结构化数据应降级到传入文本。"""
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": []}), encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path), "数据库回退文本")
+
+    assert html is not None
+    assert "数据库回退文本" in html
 
 
 def test_calibrated_renderer_prioritizes_structured_text_over_funasr(tmp_path):

@@ -1652,18 +1652,16 @@ function initWorkbenchUI() {
                       return;
                   }
                   if (d && d.code === 202 && d.data && d.data.view_token) {
-                      if (hint) hint.textContent = mediaFile ? '上传成功，正在打开学习模式…' : '上传成功，正在转录…';
-                      if (!mediaFile) {
-                          TaskHistoryManager.addTask({
-                              task_id: d.data.task_id,
-                              view_token: d.data.view_token,
-                              url: 'local://' + fileObj.name,
-                              title: fileObj.name,
-                              type: 'file',
-                              status: 'submitted'
-                          });
-                      }
-                      window.location.href = (mediaFile ? '/study/' : '/view/') + d.data.view_token;
+                      if (hint) hint.textContent = mediaFile ? '上传成功，正在打开解析结果…' : '上传成功，正在转录…';
+                      TaskHistoryManager.addTask({
+                          task_id: d.data.task_id,
+                          view_token: d.data.view_token,
+                          url: 'local://' + fileObj.name,
+                          title: fileObj.name,
+                          type: mediaFile ? 'video' : 'file',
+                          status: 'submitted'
+                      });
+                      window.location.href = '/view/' + d.data.view_token;
                   } else if (hint) {
                       hint.textContent = (d && (d.detail || d.message)) || '上传失败，请重试';
                   }

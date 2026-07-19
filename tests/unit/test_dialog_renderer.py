@@ -34,6 +34,19 @@ def test_calibrated_renderer_uses_only_structured_text(tmp_path):
     assert "结构化文本" in html
 
 
+def test_calibrated_renderer_falls_back_to_funasr_for_invalid_structured_text(tmp_path):
+    """损坏的结构化数据不应遮蔽有效的 FunASR 转录。"""
+    (tmp_path / "llm_processed.json").write_text("{", encoding="utf-8")
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 回退文本"}]}), encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "FunASR 回退文本" in html
+
+
 def test_calibrated_renderer_uses_only_funasr_segments(tmp_path):
     """仅有 FunASR 分段文件时应渲染分段文本。"""
     (tmp_path / "transcript_funasr.json").write_text(
@@ -58,6 +71,23 @@ def test_calibrated_renderer_uses_only_capswriter_text(tmp_path):
 
     assert html is not None
     assert "CapsWriter 原始文本" in html
+
+
+def test_calibrated_renderer_falls_back_to_capswriter_for_empty_structured_text(
+    tmp_path,
+):
+    """空结构化对话不应遮蔽有效的 CapsWriter 转录。"""
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": []}), encoding="utf-8"
+    )
+    (tmp_path / "transcript_capswriter.txt").write_text(
+        "CapsWriter 回退文本", encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "CapsWriter 回退文本" in html
 
 
 def test_calibrated_renderer_prioritizes_structured_text_over_funasr(tmp_path):

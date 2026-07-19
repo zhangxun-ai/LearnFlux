@@ -737,6 +737,34 @@ class TestViewProgressEndpoint:
         assert 'href="/view/vt-1/source-file"' in resp.text
         assert "local://collection-source" not in resp.text
 
+    def test_success_view_passes_database_fallback_text_to_renderer(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "url": "https://example.com/video",
+            "platform": "youtube",
+            "media_id": "video-1",
+            "summary": "",
+            "transcript": "数据库回退文本",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-06-08T10:00:00",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>数据库回退文本</p>",
+        ) as render_content:
+            resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        render_content.assert_called_once_with(str(cache_dir), "数据库回退文本")
+
     def test_view_source_file_serves_preserved_local_file(
         self, client, mock_cache_manager, tmp_path
     ):

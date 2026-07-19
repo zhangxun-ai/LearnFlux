@@ -395,6 +395,8 @@ class DialogRenderer:
                 raise ValueError("结构化数据格式不正确")
 
             dialogs = structured_data["dialogs"]
+            if not dialogs:
+                raise ValueError("结构化数据不包含对话内容")
             speaker_mapping = structured_data.get("speaker_mapping", {})
 
             # 获取说话人列表
@@ -548,7 +550,11 @@ class DialogRenderer:
             logger.info(f"  选择策略: {strategy}")
 
             if strategy == "structured":
-                return self._render_from_structured_data(cache_dir)
+                try:
+                    return self._render_from_structured_data(cache_dir)
+                except Exception as exc:
+                    logger.warning(f"结构化数据不可用，降级到原始转录: {exc}")
+                    return self._render_capswriter_long_text(cache_dir, fallback_text)
             elif strategy == "capswriter_long_text":
                 return self._render_capswriter_long_text(cache_dir, fallback_text)
             else:  # normal
@@ -568,7 +574,9 @@ class DialogRenderer:
             else:
                 return '<p style="color: #666;">渲染失败，无法显示内容</p>'
 
-    def render_calibrated_content_smart(self, cache_dir: str) -> Optional[str]:
+    def render_calibrated_content_smart(
+        self, cache_dir: str, fallback_text: Optional[str] = None
+    ) -> Optional[str]:
         """
         智能渲染校对文本内容的便捷函数
         简化版本：直接使用 render_with_cache_analysis
@@ -581,7 +589,7 @@ class DialogRenderer:
         """
         if not cache_dir or not os.path.exists(cache_dir):
             logger.debug(f"校对文本渲染：缓存目录不存在: {cache_dir}")
-            return None
+            return self._render_normal_text(fallback_text) if fallback_text else None
 
         # 检查是否存在可渲染文本文件
         text_files = (
@@ -592,11 +600,11 @@ class DialogRenderer:
         )
         if not any(os.path.exists(os.path.join(cache_dir, filename)) for filename in text_files):
             logger.debug(f"校对文本渲染：无可用文本文件: {cache_dir}")
-            return None
+            return self._render_normal_text(fallback_text) if fallback_text else None
 
         try:
             logger.info(f"开始校对文本专用渲染: {cache_dir}")
-            return self.render_with_cache_analysis(cache_dir)
+            return self.render_with_cache_analysis(cache_dir, fallback_text)
 
         except Exception as e:
             logger.error(f"智能渲染校对文本失败 {cache_dir}: {e}", exc_info=True)
@@ -617,7 +625,9 @@ def render_transcript_content(text: str) -> str:
     return renderer.render_dialog_html(text)
 
 
-def render_calibrated_content_smart(cache_dir: str) -> Optional[str]:
+def render_calibrated_content_smart(
+    cache_dir: str, fallback_text: Optional[str] = None
+) -> Optional[str]:
     """
     智能渲染校对文本内容的便捷函数
 
@@ -628,7 +638,7 @@ def render_calibrated_content_smart(cache_dir: str) -> Optional[str]:
         str: 渲染后的HTML，如果没有校对文本则返回None
     """
     renderer = DialogRenderer()
-    return renderer.render_calibrated_content_smart(cache_dir)
+    return renderer.render_calibrated_content_smart(cache_dir, fallback_text)
 
 
 def render_transcript_content_smart(

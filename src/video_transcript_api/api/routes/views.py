@@ -1549,7 +1549,9 @@ async def view_transcript(
                 fallback_text = transcript_path.read_text(encoding="utf-8")
 
             # 简化渲染逻辑：直接调用 render_with_cache_analysis
-            view_data["calibrated_html"] = render_calibrated_content_smart(cache_dir)
+            view_data["calibrated_html"] = render_calibrated_content_smart(
+                cache_dir, fallback_text
+            )
             longcut_settings = get_longcut_settings(get_config())
             view_data["longcut_action"] = build_longcut_action(
                 view_data,

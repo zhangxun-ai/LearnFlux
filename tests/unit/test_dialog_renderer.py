@@ -46,6 +46,30 @@ def test_calibrated_renderer_uses_only_capswriter_text(tmp_path):
     assert html is not None
     assert "CapsWriter 原始文本" in html
 
+
+def test_calibrated_renderer_prioritizes_calibrated_text(tmp_path):
+    """校对文本应优先于结构化、FunASR 和 CapsWriter 转录。"""
+    (tmp_path / "llm_calibrated.txt").write_text("校对优先文本", encoding="utf-8")
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": [{"speaker": "甲", "text": "结构化文本"}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 文本"}]}), encoding="utf-8"
+    )
+    (tmp_path / "transcript_capswriter.txt").write_text(
+        "CapsWriter 文本", encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "校对优先文本" in html
+    assert "结构化文本" not in html
+    assert "FunASR 文本" not in html
+    assert "CapsWriter 文本" not in html
+
+
 def test_dialog_detection():
     """测试对话检测功能"""
     renderer = DialogRenderer()

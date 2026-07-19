@@ -351,16 +351,22 @@ class DialogRenderer:
         """
         logger.info(f"开始选择渲染策略，缓存目录: {cache_dir}")
 
-        # 策略1: structured - FunASR V2（最优）
+        # 策略1: 校对文本始终优先
+        if os.path.exists(os.path.join(cache_dir, "llm_calibrated.txt")):
+            logger.info(
+                "  [Strategy] 'capswriter_long_text' - Calibrated text rendering"
+            )
+            return "capswriter_long_text"
+
+        # 策略2: structured - FunASR V2
         if os.path.exists(os.path.join(cache_dir, "llm_processed.json")):
             logger.info(
                 "  [Strategy] 'structured' - Structured rendering based on llm_processed.json"
             )
             return "structured"
 
-        # 策略2: capswriter_long_text - 文本文件（按优先级使用可用文本）
+        # 策略3: capswriter_long_text - 原始文本文件（按优先级使用可用文本）
         text_files = (
-            "llm_calibrated.txt",
             "transcript_funasr.json",
             "transcript_capswriter.txt",
         )
@@ -370,7 +376,7 @@ class DialogRenderer:
             )
             return "capswriter_long_text"
 
-        # 策略3: normal - fallback
+        # 策略4: normal - fallback
         logger.warning(
             "  [Strategy] 'normal' - Normal text rendering (fallback - no cache found)"
         )

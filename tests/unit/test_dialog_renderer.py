@@ -1,9 +1,50 @@
+import json
 import sys
 import os
 
 # 添加项目根目录到路径
 
-from src.video_transcript_api.utils.rendering import DialogRenderer, render_transcript_content
+from src.video_transcript_api.utils.rendering import (
+    DialogRenderer,
+    render_calibrated_content_smart,
+    render_transcript_content,
+)
+
+
+def test_calibrated_renderer_uses_only_calibrated_text(tmp_path):
+    """仅有校对文本时仍应渲染内容。"""
+    (tmp_path / "llm_calibrated.txt").write_text("校对后的文本", encoding="utf-8")
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "校对后的文本" in html
+
+
+def test_calibrated_renderer_uses_only_funasr_segments(tmp_path):
+    """仅有 FunASR 分段文件时应渲染分段文本。"""
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 第一段"}, {"text": "FunASR 第二段"}]}),
+        encoding="utf-8",
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "FunASR 第一段" in html
+    assert "FunASR 第二段" in html
+
+
+def test_calibrated_renderer_uses_only_capswriter_text(tmp_path):
+    """仅有 CapsWriter 文本时应渲染原始文本。"""
+    (tmp_path / "transcript_capswriter.txt").write_text(
+        "CapsWriter 原始文本", encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "CapsWriter 原始文本" in html
 
 def test_dialog_detection():
     """测试对话检测功能"""

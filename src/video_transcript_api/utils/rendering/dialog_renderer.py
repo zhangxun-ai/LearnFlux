@@ -358,10 +358,15 @@ class DialogRenderer:
             )
             return "structured"
 
-        # 策略2: capswriter_long_text - CapsWriter（无版本，直接使用长文本分段）
-        if os.path.exists(os.path.join(cache_dir, "transcript_capswriter.txt")):
+        # 策略2: capswriter_long_text - 文本文件（按优先级使用可用文本）
+        text_files = (
+            "llm_calibrated.txt",
+            "transcript_funasr.json",
+            "transcript_capswriter.txt",
+        )
+        if any(os.path.exists(os.path.join(cache_dir, filename)) for filename in text_files):
             logger.info(
-                "  [Strategy] 'capswriter_long_text' - CapsWriter long text rendering"
+                "  [Strategy] 'capswriter_long_text' - Text file long text rendering"
             )
             return "capswriter_long_text"
 
@@ -455,7 +460,7 @@ class DialogRenderer:
         try:
             logger.info(f"开始CapsWriter长文本渲染: {cache_dir}")
 
-            # 文本优先级：校对文本 > 原始转录文本 > 降级文本
+            # 文本优先级：校对文本 > FunASR分段文本 > CapsWriter原始文本 > 降级文本
             text_content = None
             source_file = None
 
@@ -466,6 +471,22 @@ class DialogRenderer:
                     text_content = f.read().strip()
                 source_file = "llm_calibrated.txt"
                 logger.info(f"  使用校对文本作为源: {source_file}")
+
+            # 降级到FunASR原始转录分段文本
+            if not text_content:
+                funasr_file = os.path.join(cache_dir, "transcript_funasr.json")
+                if os.path.exists(funasr_file):
+                    with open(funasr_file, "r", encoding="utf-8") as f:
+                        funasr_data = json.load(f)
+                    segments = funasr_data.get("segments", [])
+                    text_content = "\n".join(
+                        segment.get("text", "").strip()
+                        for segment in segments
+                        if segment.get("text", "").strip()
+                    )
+                    if text_content:
+                        source_file = "transcript_funasr.json"
+                        logger.info(f"  使用FunASR原始转录: {source_file}")
 
             # 降级到原始CapsWriter转录文本
             if not text_content:
@@ -556,10 +577,14 @@ class DialogRenderer:
             logger.debug(f"校对文本渲染：缓存目录不存在: {cache_dir}")
             return None
 
-        # 检查是否存在校对文本文件
-        calibrated_file = os.path.join(cache_dir, "llm_calibrated.txt")
-        if not os.path.exists(calibrated_file):
-            logger.debug(f"校对文本渲染：校对文本不存在: {calibrated_file}")
+        # 检查是否存在可渲染文本文件
+        text_files = (
+            "llm_calibrated.txt",
+            "transcript_funasr.json",
+            "transcript_capswriter.txt",
+        )
+        if not any(os.path.exists(os.path.join(cache_dir, filename)) for filename in text_files):
+            logger.debug(f"校对文本渲染：无可用文本文件: {cache_dir}")
             return None
 
         try:

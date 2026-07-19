@@ -133,3 +133,6 @@ graphify-out/
 
 # Skill 测试工作区
 skill-workspace/
+
+# 项目内隔离工作区
+.worktrees/

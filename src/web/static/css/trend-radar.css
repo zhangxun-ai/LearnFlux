@@ -562,7 +562,8 @@ button.trend-card {
 }
 
 .curation-item {
-    border-left: 4px solid var(--radar-accent);
+    border: 1px solid var(--radar-accent);
+    background: var(--radar-accent-soft);
     min-height: 8rem;
     padding: 0.9rem;
 }

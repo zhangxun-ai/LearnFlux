@@ -404,6 +404,32 @@
 
     textButton.addEventListener('click', () => setActiveMode('text', false));
     visualButton.addEventListener('click', () => setActiveMode('visual', true));
+    [textButton, visualButton].forEach((button) => {
+        button.addEventListener('keydown', (event) => {
+            let nextButton = null;
+            switch (event.key) {
+                case 'ArrowRight':
+                case 'ArrowDown':
+                    nextButton = visualButton;
+                    break;
+                case 'ArrowLeft':
+                case 'ArrowUp':
+                    nextButton = textButton;
+                    break;
+                case 'Home':
+                    nextButton = textButton;
+                    break;
+                case 'End':
+                    nextButton = visualButton;
+                    break;
+                default:
+                    return;
+            }
+            event.preventDefault();
+            nextButton.focus();
+            setActiveMode(nextButton === visualButton ? 'visual' : 'text', nextButton === visualButton);
+        });
+    });
 
     if (window.location.hash === '#summary-visual') {
         setActiveMode('visual', true);

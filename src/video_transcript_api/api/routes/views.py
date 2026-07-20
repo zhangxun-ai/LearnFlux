@@ -1084,6 +1084,8 @@ async def add_task_by_web(request: Request):
                 static_dir / "css" / "styles.css",
                 static_dir / "css" / "workbench.css",
                 static_dir / "css" / "app-shell.css",
+                static_dir / "css" / "product-linear.css",
+                static_dir / "css" / "home-linear.css",
                 static_dir / "css" / "editorial.css",
                 static_dir / "js" / "app-shell.js",
                 static_dir / "js" / "pwa-register.js",
@@ -1126,6 +1128,8 @@ def _render_study_page(
         static_dir / "js" / "visual-learning.js",
         static_dir / "css" / "editorial.css",
         static_dir / "css" / "app-shell.css",
+        static_dir / "css" / "product-linear.css",
+        static_dir / "css" / "product-linear-core.css",
         static_dir / "js" / "app-shell.js",
         static_dir / "js" / "pwa-register.js",
     ]

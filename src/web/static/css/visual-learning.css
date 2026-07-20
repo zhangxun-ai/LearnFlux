@@ -209,7 +209,7 @@
     grid-template-columns: 30px minmax(0, 1fr);
     gap: 9px;
     padding: 12px;
-    border-left: 3px solid var(--vl-secondary);
+    border: 1px solid var(--vl-secondary);
     background: var(--vl-accent-soft);
 }
 
@@ -358,8 +358,8 @@
 }
 
 .vl-comparison-column {
-    padding-left: 12px;
-    border-left: 3px solid var(--vl-secondary);
+    padding: 12px;
+    border: 1px solid var(--vl-secondary);
 }
 
 .vl-comparison-item + .vl-comparison-item {
@@ -386,11 +386,11 @@
 }
 
 .vl-contrast-bad {
-    border-left: 4px solid var(--vl-highlight);
+    border-color: var(--vl-highlight);
 }
 
 .vl-contrast-better {
-    border-left: 4px solid var(--vl-secondary);
+    border-color: var(--vl-secondary);
 }
 
 .vl-contrast-side strong,
@@ -479,7 +479,7 @@
 .vl-signal-outcome {
     justify-self: end;
     padding: 8px 12px;
-    border-left: 4px solid var(--vl-accent);
+    border: 1px solid var(--vl-accent);
     color: var(--vl-ink);
     font-size: 13px;
     font-weight: 800;
@@ -589,7 +589,7 @@
 
 .vl-hierarchy-node {
     padding: 10px 12px;
-    border-left: 3px solid var(--vl-secondary);
+    border: 1px solid var(--vl-secondary);
     background: var(--vl-accent-soft);
 }
 
@@ -676,19 +676,19 @@
 
 .vl-mind-branch {
     padding: 12px;
-    border-left: 3px solid var(--vl-secondary);
+    border: 1px solid var(--vl-secondary);
     background: var(--vl-accent-soft);
 }
 
 .vl-callout {
     padding: 13px 15px;
-    border-left: 5px solid var(--vl-accent);
+    border: 1px solid var(--vl-accent);
     background: var(--vl-accent-soft);
 }
 
 .vl-callout-warning,
 .vl-callout-mistake {
-    border-left-color: var(--vl-highlight);
+    border-color: var(--vl-highlight);
 }
 
 .vl-callout p {
@@ -1651,7 +1651,7 @@
     max-width: 66ch;
     margin: 52px 0 0;
     padding: 20px 24px;
-    border-left: 4px solid #177b70;
+    border: 1px solid #177b70;
     background: rgba(214, 235, 227, .55);
     color: #30413b;
     font-family: Georgia, "Songti SC", serif;
@@ -1740,7 +1740,7 @@
 
 .vl-evidence-list article {
     padding: 18px;
-    border-left: 4px solid #177b70;
+    border: 1px solid #177b70;
     background: #fffdf9;
 }
 

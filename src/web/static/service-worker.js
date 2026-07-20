@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vta-pwa-20260712-shell-15';
+const CACHE_NAME = 'vta-pwa-20260720-product-linear-1';
 
 const PRECACHE_URLS = [
   '/',
@@ -22,6 +22,10 @@ const PRECACHE_URLS = [
   '/static/css/study.css',
   '/static/css/trend-radar.css',
   '/static/css/visual-learning.css',
+  '/static/css/product-linear.css',
+  '/static/css/product-linear-core.css',
+  '/static/css/product-linear-insights.css',
+  '/static/css/product-linear-system.css',
   '/static/js/app.js',
   '/static/js/app-shell.js',
   '/static/js/collections.js',

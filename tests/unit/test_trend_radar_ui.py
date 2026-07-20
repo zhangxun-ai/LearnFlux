@@ -42,7 +42,7 @@ def test_trend_radar_static_page_exposes_core_ui_contract():
     assert 'id="budget-hint"' in html
     assert 'id="report-history-list"' in html
     assert 'data-stage-filter="opportunity"' in html
-    assert 'href="/static/css/trend-radar.css?v=6"' in html
+    assert 'href="/static/css/trend-radar.css?v=7"' in html
     assert 'src="/static/js/trend-radar.js?v=6"' in html
 
 
@@ -125,7 +125,7 @@ def test_trend_radar_uses_static_app_shell():
     html = (STATIC_DIR / "trend-radar.html").read_text(encoding="utf-8")
     shell_css = (STATIC_DIR / "css/app-shell.css").read_text(encoding="utf-8")
 
-    assert 'class="app-shell has-app-shell"' in html
+    assert 'class="app-shell has-app-shell product-linear page-trend"' in html
     assert '<aside class="sidebar"' in html
     assert '<main class="main-area"' in html
     assert 'href="/trend-radar"' in html

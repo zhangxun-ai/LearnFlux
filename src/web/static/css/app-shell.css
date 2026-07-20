@@ -2,33 +2,19 @@
     --shell-sidebar: 280px;
     --shell-sidebar-collapsed: 72px;
     --shell-topbar: 0px;
-    --shell-bg: #f4f1eb;
-    --shell-surface: rgba(255, 255, 255, 0.94);
-    --shell-line: rgba(27, 26, 23, 0.1);
-    --shell-text: #1f1d1a;
-    --shell-muted: #8a8278;
-    --shell-accent: #e4503a;
-    --shell-accent-soft: rgba(228, 80, 58, 0.1);
-    --shell-ambient: rgba(228, 80, 58, 0.08);
+    --shell-bg: var(--paper-warm, #FBF8F3);
+    --shell-surface: var(--card, #FFFFFF);
+    --shell-line: var(--line, #EBE4D9);
+    --shell-text: var(--ink, #1B1A17);
+    --shell-muted: var(--muted, #736B62);
+    --shell-accent: var(--accent-ink, #C23A26);
+    --shell-accent-soft: var(--accent-soft, rgba(214, 65, 45, 0.07));
+    --shell-ambient: var(--accent-soft, rgba(214, 65, 45, 0.07));
     --shell-radius: 8px;
-    --shell-shadow-sm: 0 1px 1px rgba(27, 26, 23, 0.02), 0 6px 14px -8px rgba(27, 26, 23, 0.18), 0 20px 36px -20px rgba(27, 26, 23, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.72);
-    --shell-sidebar-shadow: 1px 0 0 rgba(255, 255, 255, 0.52), 18px 0 42px rgba(27, 26, 23, 0.06);
-    --shell-topbar-bg: rgba(255, 255, 255, 0.88);
+    --shell-shadow-sm: none;
+    --shell-sidebar-shadow: none;
+    --shell-topbar-bg: var(--card);
     --shell-font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
-}
-
-[data-theme="dark"] {
-    --shell-bg: #121110;
-    --shell-surface: #1a1815;
-    --shell-line: #2b2722;
-    --shell-text: #f4ede4;
-    --shell-muted: #a79e92;
-    --shell-accent: #ff765f;
-    --shell-accent-soft: rgba(255, 118, 95, 0.14);
-    --shell-ambient: rgba(255, 118, 95, 0.1);
-    --shell-shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.3), 0 14px 30px -18px rgba(0, 0, 0, 0.72), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    --shell-sidebar-shadow: 1px 0 0 rgba(255, 255, 255, 0.05), 18px 0 42px rgba(0, 0, 0, 0.6);
-    --shell-topbar-bg: rgba(26, 24, 21, 0.88);
 }
 
 * {
@@ -47,9 +33,7 @@ body.app-shell.has-app-shell {
     padding: 0 !important;
     display: flex;
     overflow-x: clip;
-    background:
-        radial-gradient(90% 46% at 50% -14%, var(--shell-ambient), transparent 68%),
-        var(--shell-bg);
+    background: var(--shell-bg);
     color: var(--shell-text);
     font-family: var(--shell-font-ui);
 }
@@ -102,10 +86,8 @@ body.app-shell.sidebar-collapsed {
     background: var(--shell-surface);
     border-right: 1px solid var(--shell-line);
     box-shadow: var(--shell-sidebar-shadow);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
     z-index: 20;
-    transition: width 180ms ease, flex-basis 180ms ease, transform 220ms ease;
+    transition: none;
 }
 
 .sidebar-brand {
@@ -141,7 +123,7 @@ body.app-shell.sidebar-collapsed {
     display: grid;
     place-items: center;
     border-radius: var(--shell-radius);
-    background: #1f1d1a;
+    background: var(--ink);
 }
 
 .brand-mark img {
@@ -157,9 +139,9 @@ body.app-shell.sidebar-collapsed {
 }
 
 .shell-icon-button {
-    width: 38px;
-    height: 38px;
-    flex: 0 0 38px;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
     display: inline-grid;
     place-items: center;
     border: 1px solid var(--shell-line);
@@ -233,22 +215,14 @@ body.app-shell.sidebar-collapsed {
 }
 
 .nav-item:hover {
-    background: rgba(27, 26, 23, 0.045);
+    background: var(--bg-tertiary, #F3EDE4);
     transform: translateY(-1px);
-}
-
-[data-theme="dark"] .nav-item:hover {
-    background: rgba(255, 255, 255, 0.05);
 }
 
 .nav-item.is-active {
     background: var(--shell-accent-soft);
     color: var(--shell-accent);
-    box-shadow: inset 0 0 0 1px rgba(228, 80, 58, 0.12);
-}
-
-[data-theme="dark"] .brand-mark {
-    background: #f4ede4;
+    box-shadow: inset 0 0 0 1px var(--shell-accent);
 }
 
 .nav-icon {
@@ -347,7 +321,6 @@ body.sidebar-collapsed .nav-item:focus-visible::after {
     padding: 0 32px;
     background: var(--shell-topbar-bg);
     border-bottom: 1px solid var(--shell-line);
-    backdrop-filter: blur(16px);
     z-index: 10;
 }
 
@@ -462,7 +435,6 @@ body.app-shell .page-stage > .container {
         flex-basis: auto;
         border-right: 1px solid var(--shell-line);
         border-bottom: 0;
-        box-shadow: 16px 0 42px rgba(31, 29, 26, 0.18);
         transform: translateX(-102%);
         transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         z-index: 30;
@@ -473,8 +445,6 @@ body.app-shell .page-stage > .container {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.4);
-        backdrop-filter: blur(3px); /* Apple style glass overlay */
-        -webkit-backdrop-filter: blur(3px);
         z-index: 20;
         opacity: 0;
         pointer-events: none;

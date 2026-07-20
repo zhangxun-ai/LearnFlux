@@ -68,7 +68,6 @@
     border: 1px solid var(--border-primary);
     background: var(--bg-secondary);
     color: var(--text-primary);
-    border-left-width: 4px;
 }
 .detect-banner[hidden] { display: none; }
 .detect-banner .db-chip {
@@ -81,13 +80,13 @@
 .detect-banner .db-text { color: var(--text-secondary); }
 .detect-banner .db-text strong { color: var(--text-primary); }
 
-.detect-banner.is-video   { border-left-color: var(--accent-primary); background: rgba(228,80,58,0.06); }
+.detect-banner.is-video   { border-color: var(--accent-primary); background: rgba(228,80,58,0.06); }
 .detect-banner.is-video   .db-chip { background: rgba(228,80,58,0.18); color: var(--accent-primary); }
-.detect-banner.is-post    { border-left-color: #1d9bf0; background: rgba(29,155,240,0.06); }
+.detect-banner.is-post    { border-color: #1d9bf0; background: rgba(29,155,240,0.06); }
 .detect-banner.is-post    .db-chip { background: rgba(29,155,240,0.18); color: #1d9bf0; }
-.detect-banner.is-soon    { border-left-color: #f59e0b; background: rgba(245,158,11,0.06); }
+.detect-banner.is-soon    { border-color: #f59e0b; background: rgba(245,158,11,0.06); }
 .detect-banner.is-soon    .db-chip { background: rgba(245,158,11,0.18); color: #d97706; }
-.detect-banner.is-unknown { border-left-color: var(--border-secondary); }
+.detect-banner.is-unknown { border-color: var(--border-secondary); }
 .detect-banner.is-unknown .db-chip { background: var(--bg-tertiary); color: var(--text-secondary); }
 
 /* ---------- 视频专属选项容器 ---------- */
@@ -113,6 +112,9 @@
     border-radius: 8px;
     background: var(--bg-secondary);
     text-align: center;
+    width: 100%;
+    color: var(--text-primary);
+    font: inherit;
     cursor: pointer;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -439,7 +441,7 @@
     font-weight: 500;
     border: none;
     background: transparent;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease, background 0.2s ease;
 }
 
 .app-home .input-tab:hover {
@@ -448,9 +450,9 @@
 }
 
 .app-home .input-tab.active {
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--card);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    box-shadow: inset 0 0 0 1px var(--line);
     font-weight: 700;
 }
 
@@ -469,21 +471,22 @@
 .app-home .form-textarea,
 .app-home .form-input,
 .app-home .form-select {
-    border: none !important;
-    background: var(--card-translucent) !important;
+    border: 1px solid var(--line) !important;
+    background: var(--card) !important;
     color: var(--ink);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.4) !important;
-    backdrop-filter: blur(24px) saturate(1.8) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
-    border-radius: 16px !important;
-    transition: all 0.3s ease;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-radius: var(--radius-card) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .app-home .form-textarea:focus,
 .app-home .form-input:focus,
 .app-home .form-select:focus {
-    background: var(--card-translucent) !important;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255,255,255,0.8) !important;
+    background: var(--card) !important;
+    border-color: var(--accent-ink) !important;
+    box-shadow: 0 0 0 3px var(--accent-soft) !important;
     outline: none !important;
 }
 
@@ -503,8 +506,8 @@
 .app-home .form-textarea:focus,
 .app-home .form-input:focus,
 .app-home .form-select:focus {
-    border-color: rgba(228, 80, 58, 0.7);
-    box-shadow: 0 0 0 4px rgba(228, 80, 58, 0.09);
+    border-color: var(--accent-ink);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .app-home .url-preview {
@@ -658,11 +661,11 @@
 }
 
 .app-home .submit-btn {
-    min-height: 3.5rem !important;
-    padding: 1rem 1.35rem !important;
-    border-radius: 999px !important;
-    background: rgba(0, 0, 0, 0.85) !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+    min-height: 3rem !important;
+    padding: 0.75rem 1.25rem !important;
+    border-radius: var(--radius-control) !important;
+    background: var(--accent-ink) !important;
+    box-shadow: none !important;
     font-size: 1.05rem !important;
     font-weight: 600 !important;
     color: white !important;
@@ -672,8 +675,8 @@
 
 .app-home .submit-btn:hover:not(:disabled) {
     transform: translateY(-2px) !important;
-    background: black !important;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18) !important;
+    background: var(--accent-pressed) !important;
+    box-shadow: none !important;
     border: none !important;
 }
 
@@ -682,7 +685,7 @@
     transform: none !important;
     box-shadow: none !important;
     background: var(--bg-tertiary) !important;
-    color: var(--muted);
+    color: var(--ink-soft) !important;
     border: none !important;
 }
 
@@ -695,16 +698,16 @@
 
 .app-home .file-dropzone {
     min-height: 13.5rem;
-    border: 2px dashed rgba(0,0,0,0.1);
-    border-radius: 16px;
-    background: var(--card-translucent) ;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    transition: all 0.3s ease;
+    border: 2px dashed var(--border-secondary);
+    border-radius: var(--radius-card);
+    background: var(--card);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: border-color 0.2s ease, background 0.2s ease;
 }
 .app-home .file-dropzone:hover {
-    background: var(--card-translucent) ;
-    border-color: var(--muted);
+    background: var(--accent-soft);
+    border-color: var(--accent-ink);
 }
 
 .app-home .status-container,

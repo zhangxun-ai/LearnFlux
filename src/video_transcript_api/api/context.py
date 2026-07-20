@@ -149,7 +149,12 @@ def get_templates() -> Jinja2Templates:
             version_files = [
                 static_dir / "css" / "editorial.css",
                 static_dir / "css" / "visual-learning.css",
+                static_dir / "css" / "product-linear.css",
+                static_dir / "css" / "product-linear-core.css",
+                static_dir / "css" / "product-linear-insights.css",
+                static_dir / "css" / "product-linear-system.css",
                 static_dir / "js" / "pwa-register.js",
+                static_dir / "js" / "floating-toc.js",
                 static_dir / "js" / "visual-learning.js",
                 static_dir / "js" / "transcript-visual-reader.js",
             ]

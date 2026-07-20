@@ -36,10 +36,12 @@
     <link rel="stylesheet" href="/static/css/workbench.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/home-linear.css?v=__ASSET_VERSION__">
     <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
 </head>
-<body class="app-shell has-app-shell">
+<body class="app-shell has-app-shell product-linear page-home home-linear">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
@@ -81,23 +83,27 @@
             <div class="input-card">
                 <div class="input-tabs" role="tablist">
                     <button type="button" class="input-tab active" id="tab-link"
-                            data-panel="panel-link" role="tab" aria-selected="true">
+                            data-panel="panel-link" role="tab" aria-controls="panel-link"
+                            aria-selected="true" tabindex="0">
                         粘贴链接
                     </button>
                     <button type="button" class="input-tab" id="tab-file"
-                            data-panel="panel-file" role="tab" aria-selected="false">
+                            data-panel="panel-file" role="tab" aria-controls="panel-file"
+                            aria-selected="false" tabindex="-1">
                         本地文件
                     </button>
                     <button type="button" class="input-tab" id="tab-text"
-                            data-panel="panel-text" role="tab" aria-selected="false">
+                            data-panel="panel-text" role="tab" aria-controls="panel-text"
+                            aria-selected="false" tabindex="-1">
                         粘贴文字
                     </button>
                 </div>
 
                 <!-- 链接面板 -->
-                <div class="input-panel active" id="panel-link" role="tabpanel">
+                <div class="input-panel active" id="panel-link" role="tabpanel" aria-labelledby="tab-link">
                     <form id="transcribe-form" class="form-container" autocomplete="off" data-form-type="other">
                         <div class="form-group">
+                            <label class="sr-only" for="share-content">链接或待解析内容</label>
                             <textarea
                                 id="share-content"
                                 name="deep-learning-source-content"
@@ -135,19 +141,19 @@
                 </div>
 
                 <!-- 本地文件面板：视频/音频上传转录 -->
-                <div class="input-panel" id="panel-file" role="tabpanel" hidden>
+                <div class="input-panel" id="panel-file" role="tabpanel" aria-labelledby="tab-file" hidden>
                     <input type="file" id="file-input"
                            accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.mov,.mkv,.webm,.txt,.md,.markdown,.csv,.log,.html,.htm,.pdf,.docx"
                            hidden>
-                    <div class="file-dropzone" id="file-dropzone" tabindex="0">
+                    <button type="button" class="file-dropzone" id="file-dropzone" aria-describedby="dropzone-hint">
                         <div class="dropzone-icon" aria-hidden="true">+</div>
                         <div class="dropzone-title">拖拽视频 / 音频 / 文档到此处，或点击选择</div>
                         <div class="dropzone-sub">音视频 → 本地学习模式　·　文档(pdf/docx/txt/md/html) → 提取分析</div>
                         <div class="dropzone-badge" id="dropzone-hint">支持 视频 / 音频 / 文档 · 本地长视频可边看边读文稿</div>
-                    </div>
+                    </button>
                 </div>
 
-                <div class="input-panel" id="panel-text" role="tabpanel" hidden>
+                <div class="input-panel" id="panel-text" role="tabpanel" aria-labelledby="tab-text" hidden>
                     <form id="study-text-form" class="form-container" autocomplete="off">
                         <div class="form-group">
                             <label class="form-label" for="study-text-title">标题</label>

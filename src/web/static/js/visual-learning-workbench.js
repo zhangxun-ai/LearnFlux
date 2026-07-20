@@ -545,10 +545,10 @@
         });
         els.generate.addEventListener('click', startGeneration);
         els.style.addEventListener('change', () => window.VisualLearning.setTheme(els.canvas, els.style.value));
-        els.exportButton.addEventListener('click', () => {
+        els.exportButton?.addEventListener('click', () => {
             if (state.document) window.VisualLearning.exportSvg(els.canvas, `${state.document.id}.svg`);
         });
-        els.printButton.addEventListener('click', () => window.print());
+        els.printButton?.addEventListener('click', () => window.print());
         els.historyRefresh.addEventListener('click', loadHistory);
         els.readerExit.addEventListener('click', exitReaderMode);
         els.evidenceClose.addEventListener('click', closeEvidenceDrawer);

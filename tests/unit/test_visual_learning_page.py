@@ -21,7 +21,7 @@ def test_visual_learning_page_exposes_text_file_and_diagram_controls():
     assert 'id="visual-history"' in html
     assert 'id="visual-recommendations"' in html
     assert "css/editorial.css" in html
-    assert "visual-learning.css?v=4" in html
+    assert "visual-learning.css?v=5" in html
     assert '<h1>图解生成</h1>' not in html
 
 

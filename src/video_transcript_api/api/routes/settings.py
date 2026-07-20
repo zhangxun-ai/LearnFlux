@@ -35,6 +35,8 @@ async def settings_page():
         page,
         static_dir / "css" / "editorial.css",
         static_dir / "css" / "app-shell.css",
+        static_dir / "css" / "product-linear.css",
+        static_dir / "css" / "product-linear-system.css",
         static_dir / "js" / "app-shell.js",
         static_dir / "js" / "pwa-register.js",
     ]

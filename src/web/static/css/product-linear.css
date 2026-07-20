@@ -1,0 +1,244 @@
+/* Production-only Linear visual foundation. */
+
+body.product-linear {
+    --product-bg: #f6f7f9;
+    --product-surface: #ffffff;
+    --product-surface-muted: #eef0f3;
+    --product-surface-raised: #ffffff;
+    --product-ink: #17181d;
+    --product-muted: #555a64;
+    --product-subtle: #626873;
+    --product-line: #d9dce2;
+    --product-line-strong: #858a94;
+    --product-accent: #4d5bd1;
+    --product-accent-hover: #3f4cb7;
+    --product-accent-soft: rgba(77, 91, 209, 0.1);
+    --product-focus: #4d5bd1;
+    --product-on-accent: #ffffff;
+    --product-success: #18794e;
+    --product-warning: #9a6700;
+    --product-danger: #c13232;
+    --product-radius-sm: 6px;
+    --product-radius-md: 8px;
+    --product-radius-lg: 12px;
+    --product-shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
+    --product-shadow-md: 0 8px 24px rgba(17, 24, 39, 0.08);
+
+    --paper: var(--product-bg);
+    --paper-warm: var(--product-bg);
+    --ink: var(--product-ink);
+    --ink-soft: var(--product-muted);
+    --muted: var(--product-muted);
+    --line: var(--product-line);
+    --card: var(--product-surface);
+    --card-translucent: var(--product-surface);
+    --card-translucent-light: var(--product-surface-muted);
+    --accent: var(--product-accent);
+    --accent-ink: var(--product-accent);
+    --accent-pressed: var(--product-accent-hover);
+    --accent-primary: var(--product-accent);
+    --accent-secondary: var(--product-accent-hover);
+    --accent-soft: var(--product-accent-soft);
+    --bg-primary: var(--product-surface);
+    --bg-secondary: var(--product-bg);
+    --bg-tertiary: var(--product-surface-muted);
+    --text-primary: var(--product-ink);
+    --text-secondary: var(--product-muted);
+    --text-tertiary: var(--product-subtle);
+    --border-primary: var(--product-line);
+    --border-secondary: var(--product-line-strong);
+    --border-focus: var(--product-focus);
+    --shadow-sm: var(--product-shadow-sm);
+    --shadow: var(--product-shadow-md);
+    --radius-card: var(--product-radius-lg);
+    --radius-control: var(--product-radius-md);
+    --shell-bg: var(--product-bg);
+    --shell-surface: var(--product-surface-muted);
+    --shell-line: var(--product-line);
+    --shell-text: var(--product-ink);
+    --shell-muted: var(--product-muted);
+    --shell-accent: var(--product-accent);
+    --shell-accent-soft: var(--product-accent-soft);
+    --shell-radius: var(--product-radius-md);
+    --shell-shadow-sm: var(--product-shadow-sm);
+    --shell-topbar-bg: color-mix(in srgb, var(--product-surface) 94%, transparent);
+
+    background: var(--product-bg);
+    color: var(--product-ink);
+    color-scheme: light;
+}
+[data-theme="dark"] body.product-linear {
+    --product-bg: #101115;
+    --product-surface: #191a1f;
+    --product-surface-muted: #222329;
+    --product-surface-raised: #25262c;
+    --product-ink: #f3f4f6;
+    --product-muted: #b4b8c2;
+    --product-subtle: #aab0ba;
+    --product-line: #353740;
+    --product-line-strong: #747a86;
+    --product-accent: #929cff;
+    --product-accent-hover: #aab2ff;
+    --product-accent-soft: rgba(146, 156, 255, 0.14);
+    --product-focus: #929cff;
+    --product-on-accent: #111217;
+    --product-success: #62c995;
+    --product-warning: #e3b341;
+    --product-danger: #ff7b72;
+    --product-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+    --product-shadow-md: 0 12px 30px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+}
+
+body.product-linear .sidebar {
+    background: var(--product-surface-muted);
+    border-color: var(--product-line);
+}
+
+body.product-linear .sidebar-brand {
+    padding: 18px 14px;
+    border-color: var(--product-line);
+}
+
+body.product-linear .brand-link {
+    gap: 10px;
+    font-size: 0.98rem;
+    font-weight: 680;
+    letter-spacing: -0.02em;
+}
+
+body.product-linear .brand-mark {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    border-radius: var(--product-radius-md);
+    background: var(--product-ink);
+}
+
+body.product-linear .brand-mark img {
+    width: 24px;
+    height: 24px;
+}
+
+body.product-linear .sidebar-nav {
+    padding: 16px 12px;
+}
+
+body.product-linear .nav-group {
+    gap: 4px;
+    margin-bottom: 24px;
+}
+
+body.product-linear .nav-group-title {
+    margin: 0 9px 7px;
+    color: var(--product-muted);
+    font-size: 0.75rem;
+    font-weight: 650;
+}
+
+body.product-linear .nav-item {
+    height: 40px;
+    gap: 10px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: var(--product-radius-sm);
+    color: var(--product-muted);
+    font-size: 0.9rem;
+    font-weight: 560;
+    transition: border-color 180ms cubic-bezier(0.16, 1, 0.3, 1), background 180ms cubic-bezier(0.16, 1, 0.3, 1), color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+body.product-linear .nav-item:hover {
+    background: color-mix(in srgb, var(--product-surface) 74%, transparent);
+    color: var(--product-ink);
+    transform: none;
+}
+
+body.product-linear .nav-item.is-active {
+    border-color: var(--product-line);
+    background: var(--product-surface);
+    color: var(--product-ink);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear .main-area {
+    background: var(--product-bg);
+}
+
+body.product-linear .topbar {
+    border-color: var(--product-line);
+    background: var(--shell-topbar-bg);
+}
+
+body.product-linear .page-stage {
+    width: 100%;
+    max-width: 1320px;
+    padding: 28px 32px;
+}
+
+body.product-linear .shell-icon-button {
+    border-color: var(--product-line);
+    background: var(--product-surface);
+    color: var(--product-muted);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear .shell-icon-button:hover {
+    border-color: var(--product-line-strong);
+    color: var(--product-ink);
+    transform: none;
+}
+
+body.product-linear :where(button, input, textarea, select, a, summary):focus-visible {
+    outline: 2px solid var(--product-focus);
+    outline-offset: 2px;
+}
+
+body.product-linear :where(input, textarea, select) {
+    accent-color: var(--product-accent);
+}
+
+body.product-linear :where(input, textarea)::placeholder {
+    color: var(--product-subtle);
+    opacity: 1;
+}
+
+body.product-linear :where(.btn, .lc-btn, .top-btn, .primary-btn, .page-btn, .error-btn) {
+    border-radius: var(--product-radius-md);
+}
+
+body.product-linear :where(.card, .panel, .surface, .section) {
+    border-color: var(--product-line);
+}
+
+@media (max-width: 900px) {
+    body.product-linear .page-stage {
+        padding: 20px 16px;
+    }
+
+    body.product-linear .sidebar {
+        background: var(--product-surface-muted);
+    }
+
+    body.product-linear .shell-mobile-toggle {
+        border-color: var(--product-line);
+        background: var(--product-surface);
+    }
+}
+
+@media (max-width: 560px) {
+    body.product-linear .page-stage {
+        padding: 16px 12px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.product-linear *,
+    body.product-linear *::before,
+    body.product-linear *::after {
+        scroll-behavior: auto;
+        transition-duration: 0.01ms;
+        animation-duration: 0.01ms;
+        animation-iteration-count: 1;
+    }
+}

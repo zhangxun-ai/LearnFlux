@@ -525,7 +525,7 @@ body {
     padding: 0.75rem;
     background-color: var(--card-translucent-light);
     border-radius: var(--radius-card);
-    border-left: 2px solid var(--border-secondary);
+    border: 1px solid var(--border-secondary);
 }
 
 .original-text-label {

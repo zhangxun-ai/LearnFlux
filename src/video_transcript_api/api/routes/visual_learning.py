@@ -111,7 +111,22 @@ async def visual_learning_page():
     page = get_static_dir() / "visual-learning.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="图解生成页面不存在")
-    html = page.read_text(encoding="utf-8")
+    static_dir = get_static_dir()
+    version_files = [
+        page,
+        static_dir / "css" / "editorial.css",
+        static_dir / "css" / "app-shell.css",
+        static_dir / "css" / "visual-learning.css",
+        static_dir / "css" / "product-linear.css",
+        static_dir / "css" / "product-linear-core.css",
+        static_dir / "js" / "visual-learning.js",
+        static_dir / "js" / "visual-learning-workbench.js",
+    ]
+    version = str(max(
+        (path.stat().st_mtime_ns for path in version_files if path.exists()),
+        default=0,
+    ))
+    html = page.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version)
     if "<base " not in html:
         html = html.replace("<head>", '<head>\n    <base href="/static/">', 1)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})

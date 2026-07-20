@@ -1013,9 +1013,11 @@
     </style>
     <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
     <link rel="stylesheet" href="/static/css/app-shell.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v={{ asset_ver }}">
     {% block extra_css %}{% endblock %}
+    {% block product_linear_adapter %}<link rel="stylesheet" href="/static/css/product-linear-system.css?v={{ asset_ver }}">{% endblock %}
 </head>
-<body class="app-shell has-app-shell">
+<body class="app-shell has-app-shell product-linear {% block body_class %}page-result{% endblock %}">
     {% set shell_path = request.url.path if request is defined else '' %}
     <a class="skip-link" href="#main-content">跳到主要内容</a>
 

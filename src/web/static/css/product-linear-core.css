@@ -1,0 +1,219 @@
+/* Core workspaces: collections, study, visual learning and focus studio. */
+
+body.product-linear.page-collections .lc-page {
+    max-width: 1120px;
+    margin: 0 auto;
+}
+body.product-linear.page-collections .lc-intro-strip {
+    margin-bottom: 20px;
+    padding: 0 2px;
+    background: transparent;
+    border: 0;
+}
+
+body.product-linear.page-collections .lc-intro-strip h1 {
+    color: var(--product-ink);
+    font-family: var(--shell-font-ui);
+    font-size: clamp(1.8rem, 4vw, 2.35rem);
+    font-weight: 720;
+    letter-spacing: -0.035em;
+}
+
+body.product-linear.page-collections .lc-import-card,
+body.product-linear.page-collections .lc-history,
+body.product-linear.page-collections .lc-workspace {
+    border: 1px solid var(--product-line);
+    border-radius: var(--product-radius-lg);
+    background: var(--product-surface);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear.page-collections .lc-input,
+body.product-linear.page-collections .lc-history-filters select,
+body.product-linear.page-collections .lc-type-tabs {
+    border-color: var(--product-line);
+    border-radius: var(--product-radius-md);
+    background: var(--product-surface-muted);
+    color: var(--product-ink);
+}
+
+body.product-linear.page-collections .lc-type.active,
+body.product-linear.page-collections .lc-btn.primary {
+    border-color: var(--product-accent);
+    background: var(--product-accent);
+    color: var(--product-on-accent);
+    box-shadow: none;
+}
+
+body.product-linear.page-collections .lc-drop {
+    border: 1px dashed var(--product-line-strong);
+    border-radius: var(--product-radius-lg);
+    background: var(--product-surface-muted);
+}
+
+body.product-linear.page-collections .lc-drop:hover {
+    border-color: var(--product-accent);
+    background: var(--product-accent-soft);
+    transform: none;
+}
+
+body.product-linear.page-collections .lc-history-summary,
+body.product-linear.page-collections .lc-workspace-head {
+    border-color: var(--product-line);
+}
+
+body.product-linear.page-collections .lc-progress-bar,
+body.product-linear.page-collections .lc-import-preview {
+    background: var(--product-surface-muted);
+}
+
+body.product-linear.page-study .study-library,
+body.product-linear.page-study .study-page {
+    max-width: 1240px;
+    margin: 0 auto;
+}
+
+body.product-linear.page-study .study-library-head h2,
+body.product-linear.page-study .study-head h1 {
+    font-family: var(--shell-font-ui);
+    font-weight: 720;
+    letter-spacing: -0.03em;
+}
+
+body.product-linear.page-study .study-library-tabs,
+body.product-linear.page-study .study-library-search,
+body.product-linear.page-study .study-import-panel,
+body.product-linear.page-study .study-library-card,
+body.product-linear.page-study .study-shell,
+body.product-linear.page-study .surface,
+body.product-linear.page-study .panel {
+    border-color: var(--product-line);
+    border-radius: var(--product-radius-lg);
+    background: var(--product-surface);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear.page-study .study-library-tabs {
+    padding: 4px;
+    background: var(--product-surface-muted);
+}
+
+body.product-linear.page-study .study-library-tabs .is-active,
+body.product-linear.page-study .panel-tabs .active {
+    border-color: var(--product-line);
+    background: var(--product-surface);
+    color: var(--product-ink);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear.page-study .study-import-panel:hover,
+body.product-linear.page-study .study-library-card:hover {
+    border-color: var(--product-line-strong);
+    transform: none;
+}
+
+body.product-linear.page-study .btn.primary,
+body.product-linear.page-study .play-btn {
+    border-color: var(--product-accent);
+    background: var(--product-accent);
+    color: var(--product-on-accent);
+}
+
+body.product-linear.page-study .study-toolbar,
+body.product-linear.page-study .panel-head,
+body.product-linear.page-study .play-strip,
+body.product-linear.page-study .current-caption {
+    border-color: var(--product-line);
+    background: var(--product-surface-muted);
+}
+
+body.product-linear.page-visual-learning .vl-workbench {
+    min-height: calc(100vh - var(--shell-topbar));
+    background: var(--product-bg);
+}
+
+body.product-linear.page-visual-learning .vl-control-pane {
+    background: var(--product-surface);
+    border-color: var(--product-line);
+}
+
+body.product-linear.page-visual-learning .vl-output-pane,
+body.product-linear.page-visual-learning .vl-output-toolbar,
+body.product-linear.page-visual-learning .vl-source-tabs,
+body.product-linear.page-visual-learning .vl-history-item,
+body.product-linear.page-visual-learning .vl-empty-state {
+    border-color: var(--product-line);
+    background: var(--product-surface);
+}
+
+body.product-linear.page-visual-learning .vl-source-tab.is-active,
+body.product-linear.page-visual-learning .vl-primary-button {
+    border-color: var(--product-accent);
+    background: var(--product-accent);
+    color: var(--product-on-accent);
+}
+
+body.product-linear.page-visual-learning .vl-canvas,
+body.product-linear.page-visual-learning .vl-output-body {
+    background: var(--product-surface-muted);
+}
+
+body.product-linear.page-visual-learning .vl-evidence-drawer {
+    border-color: var(--product-line);
+    background: var(--product-surface-raised);
+    box-shadow: var(--product-shadow-md);
+}
+
+body.product-linear.page-focus .sidebar,
+body.product-linear.page-focus .topbar {
+    background: color-mix(in srgb, var(--product-surface-muted) 90%, transparent);
+    backdrop-filter: blur(16px);
+}
+
+body.product-linear.page-focus .mode-panel,
+body.product-linear.page-focus .type-panel,
+body.product-linear.page-focus .mixer-panel,
+body.product-linear.page-focus .journal-sidecar {
+    border-color: color-mix(in srgb, var(--product-line) 72%, transparent);
+    border-radius: var(--product-radius-lg);
+    box-shadow: var(--product-shadow-md);
+}
+
+body.product-linear.page-focus .mode-choice,
+body.product-linear.page-focus .type-choice,
+body.product-linear.page-focus .journal-tab {
+    border-radius: var(--product-radius-sm);
+}
+
+body.product-linear.page-focus .mode-choice.is-active,
+body.product-linear.page-focus .type-choice.is-active,
+body.product-linear.page-focus .journal-tab.active {
+    outline: 2px solid var(--product-focus);
+    outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+    body.product-linear.page-collections .lc-import-fields {
+        grid-template-columns: 1fr;
+    }
+
+    body.product-linear.page-study .layout-focus {
+        grid-template-columns: 1fr;
+    }
+
+    body.product-linear.page-visual-learning .vl-workbench {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    body.product-linear.page-collections .lc-import-actions,
+    body.product-linear.page-study .study-import-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.product-linear.page-visual-learning .vl-control-pane {
+        padding: 16px;
+    }
+}

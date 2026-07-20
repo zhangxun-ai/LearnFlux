@@ -22,10 +22,24 @@ class RunReportBody(BaseModel):
 
 @router.get("/trend-radar", include_in_schema=False)
 async def trend_radar_page():
-    path = get_static_dir() / "trend-radar.html"
+    static_dir = get_static_dir()
+    path = static_dir / "trend-radar.html"
     if not path.exists():
         raise HTTPException(status_code=404, detail="趋势雷达页面不存在")
-    html = path.read_text(encoding="utf-8")
+    version_files = [
+        path,
+        static_dir / "css" / "editorial.css",
+        static_dir / "css" / "app-shell.css",
+        static_dir / "css" / "trend-radar.css",
+        static_dir / "css" / "product-linear.css",
+        static_dir / "css" / "product-linear-insights.css",
+        static_dir / "js" / "trend-radar.js",
+    ]
+    version = str(max(
+        (asset.stat().st_mtime_ns for asset in version_files if asset.exists()),
+        default=0,
+    ))
+    html = path.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version)
     if "<base " not in html:
         html = html.replace("<head>", '<head>\n    <base href="/static/">', 1)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})

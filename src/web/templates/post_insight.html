@@ -2,6 +2,7 @@
 
 {% block title %}帖子/文章洞察{% endblock %}
 {% block meta_description %}粘贴一条帖子或文章链接（X / 小红书 / 微信公众号），自动抓取正文与高赞回复，提炼精华并给出可信度判断{% endblock %}
+{% block body_class %}page-post{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -434,6 +435,8 @@
 
 </style>
 {% endblock %}
+
+{% block product_linear_adapter %}<link rel="stylesheet" href="/static/css/product-linear-insights.css?v={{ asset_ver }}">{% endblock %}
 
 {% block content %}
 <!-- 入口 -->

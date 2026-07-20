@@ -155,7 +155,6 @@
         });
 
         tocData.headingGroups = headingGroups;
-        console.log(`提取到 ${headings.length} 个标题`);
         return headings;
     }
 
@@ -295,7 +294,6 @@
 
         // 如果没有标题，不渲染
         if (tocData.headings.length === 0 && !tocData.calibratedSection) {
-            console.log('没有标题数据，跳过 TOC 渲染');
             return;
         }
 
@@ -307,7 +305,6 @@
         const mobileTocHTML = createMobileTocHTML();
         document.body.insertAdjacentHTML('beforeend', mobileTocHTML);
 
-        console.log('TOC 渲染完成');
     }
 
     // ========== 事件处理 ==========
@@ -464,7 +461,6 @@
             if (element) observer.observe(element);
         });
 
-        console.log('滚动监听已设置');
     }
 
     // ========== 响应式处理 ==========
@@ -526,15 +522,12 @@
         // 窗口大小变化
         window.addEventListener('resize', handleResize);
 
-        console.log('事件监听器已绑定');
     }
 
     /**
      * 初始化 TOC
      */
     function init() {
-        console.log('初始化浮动 TOC...');
-
         // 检测设备类型
         isMobile = checkMobile();
 
@@ -549,7 +542,6 @@
 
         // 如果没有任何内容，退出
         if (tocData.headings.length === 0 && !tocData.calibratedSection) {
-            console.log('页面没有可用的标题或区块，跳过 TOC 初始化');
             return;
         }
 
@@ -561,8 +553,8 @@
 
         // 恢复 Pin 状态
         isPinned = loadPinState();
+        const container = document.getElementById('floating-toc');
         if (isPinned && !isMobile) {
-            const container = document.getElementById('floating-toc');
             const pinBtn = document.getElementById('toc-pin-btn');
             if (container && pinBtn) {
                 container.classList.add('pinned');
@@ -592,7 +584,6 @@
         // 设置滚动监听
         setupScrollObserver();
 
-        console.log('浮动 TOC 初始化完成');
     }
 
     // ========== 启动 ==========

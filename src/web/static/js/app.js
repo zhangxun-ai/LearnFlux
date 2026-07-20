@@ -440,7 +440,6 @@ class TaskHistoryManager {
                 oldTask = history[existingUrlIndex];
                 history.splice(existingUrlIndex, 1);
                 isDuplicate = true;
-                console.log(`检测到重复URL，已移除旧记录: ${newTask.url}`);
             }
 
             // 将新任务添加到最前面
@@ -771,7 +770,7 @@ class UIManager {
         } else if (!selectedURL) {
             btnIcon.textContent = '↗';
             btnText.textContent = '开始解析';
-            if (hint) hint.textContent = '';
+            if (hint) hint.textContent = '粘贴或选择一个链接后即可开始解析。';
         } else {
             btnIcon.textContent = '↗';
             btnText.textContent = submitLabelForUrl(selectedURL);
@@ -1530,20 +1529,43 @@ function updateDetection() {
 /** 工作台新增交互的初始化 */
 function initWorkbenchUI() {
     // 输入 Tab 切换
-    document.querySelectorAll('.input-tab').forEach((tab) => {
+    const inputTabs = Array.from(document.querySelectorAll('.input-tab'));
+    const activateInputTab = (tab, shouldFocus = false) => {
+        if (!tab) return;
+        inputTabs.forEach((item) => {
+            item.classList.remove('active');
+            item.setAttribute('aria-selected', 'false');
+            item.tabIndex = -1;
+        });
+        document.querySelectorAll('.input-panel').forEach((panel) => {
+            panel.classList.remove('active');
+            panel.hidden = true;
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+        tab.tabIndex = 0;
+        const panel = document.getElementById(tab.getAttribute('data-panel'));
+        if (panel) {
+            panel.classList.add('active');
+            panel.hidden = false;
+        }
+        if (shouldFocus) tab.focus();
+    };
+
+    inputTabs.forEach((tab) => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.input-tab').forEach((t) => {
-                t.classList.remove('active');
-                t.setAttribute('aria-selected', 'false');
-            });
-            document.querySelectorAll('.input-panel').forEach((p) => {
-                p.classList.remove('active');
-                p.hidden = true;
-            });
-            tab.classList.add('active');
-            tab.setAttribute('aria-selected', 'true');
-            const panel = document.getElementById(tab.getAttribute('data-panel'));
-            if (panel) { panel.classList.add('active'); panel.hidden = false; }
+            activateInputTab(tab);
+        });
+        tab.addEventListener('keydown', (event) => {
+            const index = inputTabs.indexOf(tab);
+            let nextIndex = null;
+            if (event.key === 'ArrowRight') nextIndex = (index + 1) % inputTabs.length;
+            if (event.key === 'ArrowLeft') nextIndex = (index - 1 + inputTabs.length) % inputTabs.length;
+            if (event.key === 'Home') nextIndex = 0;
+            if (event.key === 'End') nextIndex = inputTabs.length - 1;
+            if (nextIndex === null) return;
+            event.preventDefault();
+            activateInputTab(inputTabs[nextIndex], true);
         });
     });
     if (window.location.hash === '#local-video-study') {
@@ -1562,9 +1584,12 @@ function initWorkbenchUI() {
     const textStatus = document.getElementById('study-text-status');
     if (textForm && textTitle && textContent && textSubmit && textStatus) {
         const updateTextSubmit = () => {
-            textSubmit.disabled = !textContent.value.trim();
+            const hasContent = Boolean(textContent.value.trim());
+            textSubmit.disabled = !hasContent;
+            textStatus.textContent = hasContent ? '' : '粘贴正文后即可开始学习。';
         };
         textContent.addEventListener('input', updateTextSubmit);
+        updateTextSubmit();
         textForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             const content = textContent.value.trim();
@@ -1629,7 +1654,7 @@ function initWorkbenchUI() {
                 return;
             }
             const mediaFile = isMediaFile(fileObj);
-            if (hint) hint.textContent = mediaFile ? '上传中… 将进入本地学习模式' : '上传中… ' + fileObj.name;
+            if (hint) hint.textContent = mediaFile ? '上传中… 正在解析视频内容' : '上传中… ' + fileObj.name;
             dz.classList.add('uploading');
             const fd = new FormData();
             fd.append('file', fileObj);
@@ -1672,9 +1697,6 @@ function initWorkbenchUI() {
         };
 
         dz.addEventListener('click', () => fileInput.click());
-        dz.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
-        });
         fileInput.addEventListener('change', () => {
             if (fileInput.files && fileInput.files[0]) uploadLocalFile(fileInput.files[0]);
         });
@@ -1891,8 +1913,6 @@ async function submitTranscription(event) {
  * 页面初始化
  */
 function initializePage() {
-    console.log('初始化视频转录Web应用...');
-
     // 加载保存的设置
     const savedToken = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
     const savedWebhook = StorageManager.get(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK);
@@ -2022,7 +2042,6 @@ function initializePage() {
     // 初始状态更新
     UIManager.updateSubmitButton();
 
-    console.log('视频转录Web应用初始化完成');
 }
 
 // 页面加载完成后初始化

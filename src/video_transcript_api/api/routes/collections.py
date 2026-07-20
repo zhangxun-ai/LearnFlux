@@ -93,6 +93,8 @@ async def collections_page():
     version_files = [
         page,
         static_dir / "css" / "collections.css",
+        static_dir / "css" / "product-linear.css",
+        static_dir / "css" / "product-linear-core.css",
         static_dir / "js" / "collections.js",
         static_dir / "css" / "app-shell.css",
         static_dir / "js" / "app-shell.js",

@@ -93,19 +93,6 @@ def test_production_visual_layer_preserves_primary_dom_and_script_contracts():
     assert "/static/focus-studio.html" in cleaned
 
 
-def test_preview_and_mockup_pages_do_not_load_production_visual_layer():
-    excluded = (
-        STATIC_DIR / "study-player-preview.html",
-        STATIC_DIR / "study-mode-mockups.html",
-    )
-    for path in excluded:
-        html = _source(path)
-        assert "product-linear.css" not in html
-        assert "product-linear-core.css" not in html
-        assert "product-linear-insights.css" not in html
-        assert "product-linear-system.css" not in html
-
-
 def test_visual_css_is_scoped_and_includes_accessibility_states():
     shared = _source(CSS_DIR / "product-linear.css")
     assert "body.product-linear" in shared
@@ -167,7 +154,7 @@ def test_versioned_routes_include_the_new_visual_assets():
 def test_service_worker_refreshes_and_precaches_the_visual_system():
     service_worker = _source(STATIC_DIR / "service-worker.js")
 
-    assert "vta-pwa-20260720-product-linear-1" in service_worker
+    assert "learnflux-pwa-20260720-brand-2" in service_worker
     for filename in (
         "product-linear.css",
         "product-linear-core.css",

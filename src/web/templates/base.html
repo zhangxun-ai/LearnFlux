@@ -21,25 +21,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
     <meta name="description" content="{% block meta_description %}LearnFlux - AI 驱动的内容学习工作台{% endblock %}">
-    <meta name="theme-color" content="#E4503A">
-    <meta name="application-name" content="内容解析工作台">
+    <meta name="theme-color" content="#14233F">
+    <meta name="application-name" content="LearnFlux">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-title" content="LearnFlux">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
-    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
-    <meta property="og:title" content="{% block og_title %}内容解析工作台{% endblock %}">
+    <link rel="icon" type="image/png" href="/static/icon/learnflux-logo.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <meta property="og:title" content="{% block og_title %}LearnFlux{% endblock %}">
     <meta property="og:description" content="{% block og_description %}视频转录 · 帖子精华提炼 · 文档解析，附可信度判断{% endblock %}">
     <meta property="og:type" content="article">
     <meta property="og:locale" content="zh_CN">
-    <meta property="og:site_name" content="内容解析工作台">
-    <meta property="og:image" content="/static/icon/og.png">
-    <title>{% block title %}视频转录查看器{% endblock %}</title>
+    <meta property="og:site_name" content="LearnFlux">
+    <meta property="og:image" content="/static/icon/learnflux-og.png">
+    <title>{% block title %}LearnFlux{% endblock %}</title>
     <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
     <script src="/static/js/app-shell.js?v={{ asset_ver }}" defer></script>
     <style>
@@ -1025,11 +1025,11 @@
 
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
-            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
+            <a class="brand-link" href="/add_task_by_web" aria-label="LearnFlux 首页">
                 <span class="brand-mark" aria-hidden="true">
-                    <img src="/static/icon/logo.svg" alt="">
+                    <img src="/static/icon/learnflux-logo.png" alt="">
                 </span>
-                <span class="brand-text">内容变现工作台</span>
+                <span class="brand-text">LearnFlux</span>
             </a>
         </div>
 
@@ -1090,14 +1090,14 @@
                 </svg>
             </button>
             <div class="topbar-title">
-                <span class="topbar-page-title">{% block shell_title %}{{ title or page_title or "视频转录查看器" }}{% endblock %}</span>
+                <span class="topbar-page-title">{% block shell_title %}{{ title or page_title or "LearnFlux" }}{% endblock %}</span>
             </div>
         </header>
 
         <section class="page-stage">
             <div class="container">
                 <div class="header">
-                    <h1>{{ title or "视频转录查看器" }}</h1>
+                    <h1>{{ title or "LearnFlux" }}</h1>
             {% if author or url or created_at_display or created_at %}
                 <div class="meta">
                     {% if author %}<span>作者：{{ author }}</span>{% endif %}

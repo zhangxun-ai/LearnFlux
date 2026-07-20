@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vta-pwa-20260720-product-linear-1';
+const CACHE_NAME = 'learnflux-pwa-20260720-brand-2';
 
 const PRECACHE_URLS = [
   '/',
@@ -40,10 +40,11 @@ const PRECACHE_URLS = [
   '/static/audio/rain.mp3',
   '/static/audio/snow.mp3',
   '/static/audio/stream.mp3',
-  '/static/icon/logo.svg',
-  '/static/icon/favicon-32.png',
-  '/static/icon/favicon.png',
-  '/static/icon/apple-touch-icon.png',
+  '/static/icon/learnflux-logo.png',
+  '/static/icon/learnflux-favicon-32.png',
+  '/static/icon/learnflux-icon-256.png',
+  '/static/icon/learnflux-apple-touch-icon.png',
+  '/static/icon/learnflux-og.png',
   '/static/img/focus/rain-bg.jpg',
   '/static/img/focus/snow-bg.jpg'
 ];

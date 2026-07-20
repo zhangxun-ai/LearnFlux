@@ -74,8 +74,6 @@ Deferred:
   - Focused production styles extracted from the mockup.
 - Create `src/web/static/js/study.js`
   - Fetch state, render panels, sync video/transcript, save notes.
-- Keep `src/web/static/study-mode-mockups.html`
-  - Version A-only visual reference.
 - Add tests:
   - `tests/unit/test_study_source_files.py`
   - `tests/unit/test_study_transcript.py`
@@ -94,7 +92,7 @@ Deferred:
 - Modify: `src/video_transcript_api/api/routes/views.py`
 
 - [ ] **Step 1: Extract the shell**
-  - Use only the version A layout from `src/web/static/study-mode-mockups.html`.
+  - Use the approved version A layout.
   - Remove mock data from the production shell and replace it with loading/empty containers.
 
 - [ ] **Step 2: Add the route**

@@ -346,22 +346,22 @@ _HOME_HTML = """\
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>内容解析工作台 · 深度学习 / 系列学习 / IP 对标</title>
+    <title>LearnFlux · 深度学习 / 系列学习 / IP 对标</title>
     <meta name="description" content="一站式内容解析：视频/文档深度学习、系列深度学习、帖子/文章洞察和 IP 对标拆解。">
-    <meta name="theme-color" content="#0f172a">
-    <meta name="application-name" content="内容解析工作台">
+    <meta name="theme-color" content="#14233F">
+    <meta name="application-name" content="LearnFlux">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="内容解析工作台">
+    <meta name="apple-mobile-web-app-title" content="LearnFlux">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
-    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
-    <meta property="og:title" content="内容解析工作台">
+    <link rel="icon" type="image/png" href="/static/icon/learnflux-logo.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <meta property="og:title" content="LearnFlux">
     <meta property="og:description" content="视频/文档深度学习 · 系列学习 · 帖子/文章洞察 · IP 对标拆解">
     <meta property="og:type" content="website">
-    <meta property="og:image" content="/static/icon/og.png">
+    <meta property="og:image" content="/static/icon/learnflux-og.png">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="stylesheet" href="/static/css/editorial.css?v=1">
     <link rel="stylesheet" href="/static/css/app-shell.css?v=1">
@@ -420,9 +420,9 @@ _HOME_HTML = """\
     <a class="skip-link" href="#main-content">跳到主要内容</a>
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
-            <a class="brand-link" href="/add_task_by_web" aria-label="内容变现工作台首页">
-                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/logo.svg" alt=""></span>
-                <span class="brand-text">内容变现工作台</span>
+            <a class="brand-link" href="/add_task_by_web" aria-label="LearnFlux 首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-logo.png" alt=""></span>
+                <span class="brand-text">LearnFlux</span>
             </a>
         </div>
         <nav class="sidebar-nav" aria-label="主导航">
@@ -444,7 +444,7 @@ _HOME_HTML = """\
     </aside>
     <main class="main-area" id="main-content">
         <header class="topbar" aria-label="页面导航栏">
-            <div class="topbar-title"><span class="topbar-page-title">内容解析工作台</span></div>
+            <div class="topbar-title"><span class="topbar-page-title">LearnFlux</span></div>
         </header>
         <section class="page-stage">
     <script src="/static/js/pwa-register.js" defer></script>

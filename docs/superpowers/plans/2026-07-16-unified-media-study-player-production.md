@@ -25,7 +25,7 @@
 
 - [ ] **Step 1: Write failing asset/route-contract tests**
 
-Assert that navigation uses `/study`, no production navigation points to `study-player-preview.html`, `study.html` contains picker and player roots, and the view router declares both `/study` and `/study/collections/{collection_id}/sources/{source_id}`.
+Assert that navigation uses `/study`, `study.html` contains picker and player roots, and the view router declares both `/study` and `/study/collections/{collection_id}/sources/{source_id}`.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
@@ -308,7 +308,6 @@ Confirm:
 
 ```text
 GET http://localhost:8000/study -> 200
-GET http://localhost:8000/static/study-player-preview.html -> may remain as isolated reference, but no production link points to it
 ```
 
 Verify authenticated library APIs return real or empty data, never samples.

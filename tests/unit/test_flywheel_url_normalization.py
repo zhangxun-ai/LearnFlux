@@ -171,7 +171,7 @@ def test_flywheel_page_exposes_prompt_editor():
     assert "恢复默认提示词" in html
     assert "result-toc" in html
     assert "source-text" in html
-    assert "基于拆解生成新帖" in html
+    assert "智能生成新帖" in html
     assert "/api/flywheel/content/'+contentId+'/draft" in html
     assert "复制全文" in html
     assert "选题机会" in html

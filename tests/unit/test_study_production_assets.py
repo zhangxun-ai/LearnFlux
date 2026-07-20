@@ -40,7 +40,6 @@ def test_production_navigation_targets_real_study_picker():
     collections_js = COLLECTIONS_JS.read_text(encoding="utf-8")
 
     assert "const studyPlayerHref = '/study';" in shell
-    assert "study-player-preview.html" not in shell
     assert "task.study_available" in history
     assert "task.study_url" in history
     assert 'id="open-study-player"' in collections_html
@@ -85,3 +84,28 @@ def test_study_picker_and_player_use_real_production_controls():
     assert "localeCompare" in javascript
     assert "els.aiOverview.innerHTML = overviewHtml" in javascript
     assert "els.aiReadingContent.innerHTML = overviewHtml" in javascript
+
+
+def test_entry_pages_cache_bust_the_shared_shell():
+    for page in (STATIC_ROOT / "index.html", COLLECTIONS_HTML):
+        html = page.read_text(encoding="utf-8")
+        assert '/static/js/app-shell.js?v=__ASSET_VERSION__' in html
+
+
+def test_completed_single_media_cards_expose_a_contextual_player_entry():
+    script = APP_JS.read_text(encoding="utf-8")
+
+    assert "task.study_available && task.study_url" in script
+    assert "escapeHtml(task.study_url)" in script
+    assert ">边播边学</a>" in script
+
+
+def test_completed_collection_media_sources_expose_a_contextual_player_entry():
+    html = COLLECTIONS_HTML.read_text(encoding="utf-8")
+    script = COLLECTIONS_JS.read_text(encoding="utf-8")
+
+    assert 'id="open-study-player"' in html
+    assert 'href="/study"' in html
+    assert "openStudyPlayer: document.getElementById('open-study-player')" in script
+    assert "source.study_available" in script
+    assert "source.study_url" in script

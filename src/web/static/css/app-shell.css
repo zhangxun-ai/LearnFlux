@@ -123,12 +123,13 @@ body.app-shell.sidebar-collapsed {
     display: grid;
     place-items: center;
     border-radius: var(--shell-radius);
-    background: var(--ink);
+    background: transparent;
 }
 
 .brand-mark img {
-    width: 28px;
-    height: 28px;
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
 }
 
 .brand-text {

@@ -564,7 +564,7 @@
 
         els.studyPageContext.textContent = sourceLabel;
         els.studyWorkbenchTitle.textContent = sourceLabel;
-        document.title = `${displayTitle} - 内容解析工作台`;
+        document.title = `${displayTitle} - LearnFlux`;
         els.title.textContent = displayTitle;
         els.videoTitle.textContent = displayTitle;
         els.breadcrumbs.textContent = sourceLabel;

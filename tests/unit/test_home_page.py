@@ -76,6 +76,43 @@ def test_workbench_history_exposes_marked_filter_and_badge():
     assert "typeFilter === 'marked' && task.is_marked" in app_js
 
 
+def test_marked_history_keeps_local_media_classified_as_video():
+    import json
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    node = shutil.which("node")
+    assert node, "Node.js is required to verify browser history classification"
+
+    project_root = Path(__file__).resolve().parents[2]
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+    classifier_start = app_js.index("const LOCAL_MEDIA_HISTORY_EXTENSIONS")
+    classifier_end = app_js.index("\nfunction buildHistoryCard", classifier_start)
+    audit_start = app_js.index("function historyTypeFromAuditItem(item)")
+    audit_end = app_js.index("\nfunction mergeMarkedHistoryItems", audit_start)
+    function_source = app_js[classifier_start:classifier_end] + app_js[audit_start:audit_end]
+    script = function_source + """
+const results = [
+    historyTypeFromAuditItem({video_url: 'local://lesson.mp4', title: 'lesson.mp4'}),
+    historyTypeFromAuditItem({video_url: 'local://notes.pdf', title: 'notes.pdf'}),
+    historyTypeFromAuditItem({video_url: 'https://x.com/example', platform: 'x'}),
+    historyTypeFromAuditItem({video_url: 'https://example.com/video'}),
+    histTypeOf({url: 'local://lesson.mp4', title: 'lesson.mp4', type: 'file'}),
+];
+process.stdout.write(JSON.stringify(results));
+"""
+
+    completed = subprocess.run(
+        [node, "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert json.loads(completed.stdout) == ["video", "file", "post", "video", "video"]
+
+
 def test_workbench_local_upload_adds_file_to_recent_history():
     from pathlib import Path
 
@@ -182,3 +219,22 @@ def test_workbench_submits_pasted_text_and_opens_study():
     assert "study-text-form" in app_js
     assert "study-text-content" in app_js
     assert "'/study/' + data.data.view_token" in app_js
+def test_transcription_strategy_and_cloud_quote_controls_are_public():
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    html = (project_root / "src/web/static/index.html").read_text(encoding="utf-8")
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+
+    assert "本地免费" in html
+    assert "云端付费" in html
+    assert html.count('value="cloud" checked') == 2
+    assert 'value="local" checked' not in html
+    assert "transcriptionStrategy = 'cloud'" in app_js
+    assert "fileStrategyEl ? fileStrategyEl.value : 'cloud'" in app_js
+    assert "strategyEl ? strategyEl.value : 'cloud'" in app_js
+    assert "transcription_strategy" in app_js
+    assert "confirmCloudQuote" in app_js
+    assert "useLocalForCloudQuote" in app_js
+    assert "refreshCloudQuote" in app_js
+    assert "自动推荐" not in html

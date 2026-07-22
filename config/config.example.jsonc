@@ -84,12 +84,36 @@
     },
 
     // ============================================================
+    // 百炼云端普通转录（默认关闭）
+    // 密钥只从环境变量读取：DASHSCOPE_API_KEY、
+    // DASHSCOPE_WORKSPACE_ID、DASHSCOPE_API_HOST；不要写入本文件。
+    // ============================================================
+    "cloud_asr": {
+        "enabled": false,
+        "provider": "aliyun",
+        "model": "fun-asr-2025-11-07",
+        "region": "cn-beijing",
+        "price_cny_per_second": "0.00022",
+        "price_verified_at": "2026-07-21",
+        "max_cny_per_task": "0",
+        "poll_interval_seconds": 5,
+        "poll_timeout_seconds": 3600
+    },
+
+    // 在线 MVP 的数据库与对象存储不在本文件保存凭据。
+    // 后端选择、DATABASE_URL 和 LEARNFLUX_S3_* 变量统一从 .env/进程环境读取；
+    // 默认 sqlite + local，未完整配置 postgres/s3 时服务会 fail closed。
+
+    // ============================================================
     // 并发处理配置
     // ============================================================
     "concurrent": {
         "max_workers": 3,                // 转录任务最大并发数
         "queue_size": 10,                // 任务队列大小
-        "llm_max_workers": 10            // LLM 处理最大并发数
+        "llm_max_workers": 10,           // LLM 处理最大并发数
+        "local_asr_workers": 1,          // 本地 ASR 并发：用户可选 1-2
+        "cloud_asr_workers": 3,          // 云端 ASR 并发：不超过服务端硬上限
+        "cloud_asr_hard_limit": 10       // 运维可信上限：1-10，不由浏览器写入
     },
 
     // ============================================================

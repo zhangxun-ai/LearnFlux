@@ -246,7 +246,8 @@ def setup_logger(name=None, config=None):
         sys.stdout,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
         level=log_level,
-        colorize=True
+        colorize=True,
+        diagnose=False,
     )
 
     # 添加文件处理程序
@@ -257,7 +258,8 @@ def setup_logger(name=None, config=None):
         rotation=max_size,
         retention=backup_count,
         encoding="utf-8",
-        enqueue=True  # 异步写入，提高性能
+        enqueue=True,  # 异步写入，提高性能
+        diagnose=False,
     )
 
     _logger_configured = True

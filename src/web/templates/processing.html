@@ -121,9 +121,112 @@
         line-height: 1.5;
     }
 
+    .cancel-task {
+        margin-top: 18px;
+    }
+
+    .cancel-confirm-dialog {
+        width: min(420px, calc(100vw - 32px));
+        margin: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 14px;
+        background: var(--card);
+        color: var(--text-primary);
+        box-shadow: 0 16px 40px rgba(20, 27, 42, 0.24);
+    }
+
+    .cancel-confirm-dialog::backdrop {
+        background: rgba(15, 23, 42, 0.44);
+        backdrop-filter: blur(2px);
+    }
+
+    .cancel-confirm-dialog[open] {
+        animation: cancel-dialog-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .cancel-confirm-content {
+        padding: 24px;
+    }
+
+    .cancel-confirm-icon {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        margin-bottom: 16px;
+        place-items: center;
+        border-radius: 10px;
+        background: #fff0ed;
+        color: #a53626;
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    .cancel-confirm-title {
+        margin: 0;
+        color: var(--text-primary);
+        font-size: 1.15rem;
+        line-height: 1.4;
+    }
+
+    .cancel-confirm-copy {
+        margin: 8px 0 0;
+        color: var(--text-secondary);
+        font-size: 0.94rem;
+        line-height: 1.6;
+    }
+
+    .cancel-confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 22px;
+    }
+
+    .cancel-confirm-button {
+        min-height: 40px;
+        padding: 0 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 600;
+    }
+
+    .cancel-confirm-button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+
+    .cancel-confirm-button-secondary {
+        background: var(--card);
+        color: var(--text-primary);
+    }
+
+    .cancel-confirm-button-secondary:hover {
+        background: var(--bg-tertiary);
+    }
+
+    .cancel-confirm-button-danger {
+        border-color: #b9382b;
+        background: #b9382b;
+        color: #fff;
+    }
+
+    .cancel-confirm-button-danger:hover {
+        border-color: #9d2e24;
+        background: #9d2e24;
+    }
+
+    @keyframes cancel-dialog-in {
+        from { opacity: 0; transform: translateY(8px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
         .processing-pulse { animation: none; }
         .progress-fill { transition: none; }
+        .cancel-confirm-dialog[open] { animation: none; }
     }
 
     @media (max-width: 640px) {
@@ -135,6 +238,14 @@
         .progress-percent,
         .progress-meta-item + .progress-meta-item {
             margin-top: 6px;
+        }
+
+        .cancel-confirm-actions {
+            flex-direction: column-reverse;
+        }
+
+        .cancel-confirm-button {
+            width: 100%;
         }
     }
 </style>
@@ -168,18 +279,180 @@
                     <div id="progress-message" class="progress-message" {% if not progress or not progress.message %}style="display: none;"{% endif %}>
                         {{ progress.message if progress and progress.message else "" }}
                     </div>
+                    <div id="cloud-quote-actions" class="progress-message"
+                         data-task-id="{{ task_id }}"
+                         {% if task_status != "awaiting_cloud_confirmation" %}hidden{% endif %}>
+                        正在从认证任务接口读取云端报价…
+                    </div>
+                    <button id="cancel-task" class="cancel-task" type="button" data-task-id="{{ task_id }}">取消解析</button>
                 </div>
             </div>
         </div>
     </div>
+
+    <dialog id="cancel-confirm-dialog" class="cancel-confirm-dialog" aria-labelledby="cancel-confirm-title" aria-describedby="cancel-confirm-copy">
+        <form method="dialog" class="cancel-confirm-content">
+            <div class="cancel-confirm-icon" aria-hidden="true">!</div>
+            <h3 id="cancel-confirm-title" class="cancel-confirm-title">取消本次解析？</h3>
+            <p id="cancel-confirm-copy" class="cancel-confirm-copy">当前进度不会保留，未完成的后续处理将停止。</p>
+            <div class="cancel-confirm-actions">
+                <button class="cancel-confirm-button cancel-confirm-button-secondary" type="submit" value="cancel" autofocus>继续解析</button>
+                <button class="cancel-confirm-button cancel-confirm-button-danger" type="submit" value="confirm">确认取消</button>
+            </div>
+        </form>
+    </dialog>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     const progressUrl = "/view/{{ view_token }}/progress";
 
+    function readApiToken() {
+        const stored = localStorage.getItem("vta_bearer_token");
+        if (!stored) return "";
+        try {
+            const decoded = decodeURIComponent(escape(atob(stored.split("").reverse().join(""))));
+            return decoded.replace("vta_encrypt_key_2024", "");
+        } catch (error) {
+            return stored;
+        }
+    }
+
+    async function postQuoteAction(path, body) {
+        const token = readApiToken();
+        if (!token) throw new Error("请返回首页设置 API 令牌后重试");
+        const response = await fetch(path, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                ...(body ? {"Content-Type": "application/json"} : {}),
+            },
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || "操作失败");
+        return data;
+    }
+
+    const quoteActions = document.getElementById("cloud-quote-actions");
+    const cancelTaskButton = document.getElementById("cancel-task");
+    const cancelConfirmDialog = document.getElementById("cancel-confirm-dialog");
+    let quoteActionsLoading = false;
+    let quoteActionsLoaded = false;
+    let cancellationPending = false;
+
+    function returnAfterCancellation() {
+        if (document.referrer) {
+            try {
+                if (new URL(document.referrer).origin === window.location.origin) {
+                    window.history.back();
+                    return;
+                }
+            } catch (error) {
+                console.debug("Unable to read previous page", error);
+            }
+        }
+        window.location.assign("/add_task_by_web");
+    }
+
+    async function loadCloudQuoteActions() {
+        if (!quoteActions || quoteActionsLoading || quoteActionsLoaded) return;
+        quoteActionsLoading = true;
+        quoteActions.hidden = false;
+        quoteActions.textContent = "正在从认证任务接口读取云端报价…";
+        const taskId = quoteActions.dataset.taskId;
+        const token = readApiToken();
+        try {
+            const response = await fetch(`/api/task/${encodeURIComponent(taskId)}`, {
+                headers: {"Authorization": `Bearer ${token}`},
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.detail || "无法读取报价");
+            const raw = data.data || data;
+            const quote = raw.progress && raw.progress.evidence && raw.progress.evidence.cloud_quote;
+            if (!quote || !quote.quote_token) throw new Error("报价已失效，请刷新任务页面");
+            quoteActions.textContent = "";
+            const summary = document.createElement("div");
+            summary.textContent = `云端付费转录待确认：可信时长 ${quote.duration_seconds} 秒，计费 ${quote.billable_seconds} 秒，费用上限 ¥${quote.max_cost_cny}`;
+            quoteActions.appendChild(summary);
+            [
+                ["确认云端转录", "cloud-confirm", {quote_token: quote.quote_token, accepted_max_cost_cny: String(quote.max_cost_cny)}],
+                ["改用本地免费", "cloud-use-local", null],
+                ["刷新报价", "cloud-refresh", null],
+            ].forEach(([label, action, body]) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.textContent = label;
+                button.style.margin = "12px 6px 0 0";
+                button.onclick = async () => {
+                    const controls = quoteActions.querySelectorAll("button");
+                    controls.forEach((control) => { control.disabled = true; });
+                    const originalLabel = button.textContent;
+                    button.textContent = "处理中…";
+                    try {
+                        await postQuoteAction(`/api/task/${encodeURIComponent(taskId)}/${action}`, body);
+                        if (action === "cloud-use-local") {
+                            quoteActions.textContent = "已选择本地免费，正在启动本地转录…";
+                            pollProgress();
+                            return;
+                        }
+                        window.location.reload();
+                    } catch (error) {
+                        button.textContent = originalLabel;
+                        controls.forEach((control) => { control.disabled = false; });
+                        alert(error.message);
+                    }
+                };
+                quoteActions.appendChild(button);
+            });
+            quoteActionsLoaded = true;
+        } catch (error) {
+            quoteActions.textContent = error.message;
+        } finally {
+            quoteActionsLoading = false;
+        }
+    }
+
+    if (quoteActions && !quoteActions.hidden) {
+        loadCloudQuoteActions();
+    }
+
+    async function cancelCurrentTask() {
+        const taskId = cancelTaskButton.dataset.taskId;
+        cancelTaskButton.disabled = true;
+        cancelTaskButton.textContent = "正在取消…";
+        try {
+            await postQuoteAction(`/api/task/${encodeURIComponent(taskId)}/cancel`, null);
+            cancellationPending = true;
+            if (quoteActions) quoteActions.hidden = true;
+            document.getElementById("progress-stage").textContent = "任务已取消";
+            document.getElementById("progress-message").textContent = "已取消，正在返回…";
+            document.getElementById("progress-message").style.display = "";
+            cancelTaskButton.textContent = "已取消";
+            window.setTimeout(returnAfterCancellation, 700);
+        } catch (error) {
+            cancelTaskButton.disabled = false;
+            cancelTaskButton.textContent = "取消解析";
+            alert(error.message);
+        }
+    }
+
+    if (cancelTaskButton && cancelConfirmDialog) {
+        cancelTaskButton.onclick = () => {
+            cancelConfirmDialog.showModal();
+        };
+        cancelConfirmDialog.addEventListener("close", () => {
+            if (cancelConfirmDialog.returnValue === "confirm") {
+                cancelCurrentTask();
+            }
+        });
+    }
+
     function updateProgress(progress, data) {
         if (!progress) return;
+        if (progress.stage === "awaiting_cloud_confirmation") {
+            loadCloudQuoteActions();
+        }
         const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
         document.getElementById("progress-stage").textContent = progress.stage_label || progress.stage || "处理中";
         document.getElementById("progress-percent").textContent = `${percent}%`;
@@ -199,12 +472,14 @@
     }
 
     async function pollProgress() {
+        if (cancellationPending) return;
         try {
             const response = await fetch(progressUrl, { headers: { Accept: "application/json" } });
             if (!response.ok) return;
             const data = await response.json();
+            if (cancellationPending) return;
             updateProgress(data.progress, data);
-            if (["success", "failed", "file_cleaned"].includes(data.status)) {
+            if (["success", "failed", "file_cleaned", "canceled"].includes(data.status)) {
                 window.location.reload();
             }
         } catch (error) {

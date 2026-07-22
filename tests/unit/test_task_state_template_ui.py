@@ -22,6 +22,54 @@ def test_processing_page_respects_reduced_motion_and_describes_progress():
     assert 'setAttribute("aria-valuetext"' in source
 
 
+def test_processing_page_loads_quote_actions_after_polling_enters_confirmation():
+    source = (TEMPLATE_DIR / "processing.html").read_text(encoding="utf-8")
+
+    assert 'id="cloud-quote-actions"' in source
+    assert '{% if task_status == "awaiting_cloud_confirmation" %}' not in source
+    assert 'progress.stage === "awaiting_cloud_confirmation"' in source
+    assert "loadCloudQuoteActions();" in source
+
+
+def test_processing_page_reports_local_fallback_immediately_after_selection():
+    source = (TEMPLATE_DIR / "processing.html").read_text(encoding="utf-8")
+
+    assert 'action === "cloud-use-local"' in source
+    assert "已选择本地免费，正在启动本地转录…" in source
+
+
+def test_processing_page_offers_a_confirmed_cancel_action():
+    source = (TEMPLATE_DIR / "processing.html").read_text(encoding="utf-8")
+
+    assert 'id="cancel-task"' in source
+    assert 'data-task-id="{{ task_id }}"' in source
+    assert "取消本次解析？" in source
+    assert "/cancel" in source
+    assert '"canceled"' in source
+
+
+def test_processing_page_uses_an_accessible_custom_cancel_dialog():
+    source = (TEMPLATE_DIR / "processing.html").read_text(encoding="utf-8")
+
+    assert '<dialog id="cancel-confirm-dialog"' in source
+    assert 'aria-labelledby="cancel-confirm-title"' in source
+    assert '<form method="dialog"' in source
+    assert 'value="confirm"' in source
+    assert 'cancelConfirmDialog.showModal();' in source
+    assert 'cancelConfirmDialog.addEventListener("close"' in source
+    assert "window.confirm(" not in source
+
+
+def test_processing_page_returns_to_the_previous_page_after_cancellation():
+    source = (TEMPLATE_DIR / "processing.html").read_text(encoding="utf-8")
+
+    assert "已取消，正在返回…" in source
+    assert "function returnAfterCancellation()" in source
+    assert "window.history.back();" in source
+    assert 'window.location.assign("/add_task_by_web");' in source
+    assert "window.setTimeout(returnAfterCancellation, 700);" in source
+
+
 def test_transcript_reader_and_export_menu_are_keyboard_accessible():
     template_source = (TEMPLATE_DIR / "transcript.html").read_text(encoding="utf-8")
     reader_source = (STATIC_DIR / "js" / "transcript-visual-reader.js").read_text(

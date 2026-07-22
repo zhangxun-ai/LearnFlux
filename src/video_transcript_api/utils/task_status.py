@@ -33,6 +33,7 @@ class TaskStatus(StrEnum):
     QUEUED = "queued"
     PROCESSING = "processing"
     CALIBRATING = "calibrating"
+    AWAITING_CLOUD_CONFIRMATION = "awaiting_cloud_confirmation"
     SUCCESS = "success"
     FAILED = "failed"
     CANCELED = "canceled"
@@ -45,7 +46,12 @@ TERMINAL_STATUSES = frozenset(
 
 # 非终态:仍在处理中,崩溃后可被启动恢复扫描标记为 failed
 NON_TERMINAL_STATUSES = frozenset(
-    {TaskStatus.QUEUED, TaskStatus.PROCESSING, TaskStatus.CALIBRATING}
+    {
+        TaskStatus.QUEUED,
+        TaskStatus.PROCESSING,
+        TaskStatus.CALIBRATING,
+        TaskStatus.AWAITING_CLOUD_CONFIRMATION,
+    }
 )
 
 
@@ -58,7 +64,7 @@ def http_code_for_status(status: str) -> int:
     Returns:
         202(处理中) / 200(完成或未知兜底) / 500(失败)
     """
-    if status in NON_TERMINAL_STATUSES:
+    if status in NON_TERMINAL_STATUSES or status == TaskStatus.AWAITING_CLOUD_CONFIRMATION:
         return 202
     if status == TaskStatus.FAILED:
         return 500

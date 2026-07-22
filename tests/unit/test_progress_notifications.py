@@ -22,8 +22,8 @@ class FakeCache:
     def mark_progress_reminder_sent(self, task_id, marker):
         self.marked.append((task_id, marker))
 
-    def recover_stale_tasks(self, timeout_minutes):
-        self.recovered.append(timeout_minutes)
+    def recover_stale_tasks(self, timeout_minutes, *, protected_task_ids=()):
+        self.recovered.append((timeout_minutes, set(protected_task_ids)))
         return 2
 
 
@@ -114,7 +114,7 @@ def test_recover_stale_tasks_if_enabled_uses_configured_timeout():
     recovered = recover_stale_tasks_if_enabled(cache, "120")
 
     assert recovered == 2
-    assert cache.recovered == [120]
+    assert cache.recovered == [(120, set())]
 
 
 def test_recover_stale_tasks_if_enabled_skips_when_disabled():
@@ -124,3 +124,14 @@ def test_recover_stale_tasks_if_enabled_skips_when_disabled():
 
     assert recovered == 0
     assert cache.recovered == []
+
+
+def test_stale_recovery_passes_cloud_protection_set():
+    cache = FakeCache([])
+
+    recovered = recover_stale_tasks_if_enabled(
+        cache, 120, protected_task_ids={"cloud-task"}
+    )
+
+    assert recovered == 2
+    assert cache.recovered == [(120, {"cloud-task"})]

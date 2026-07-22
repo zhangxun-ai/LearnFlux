@@ -13,6 +13,8 @@ from typing import Any
 
 import requests
 
+from ...transcriber.concurrency import resolve_transcription_limits
+
 from ...utils.logging import (
     load_config,
     load_config_overrides,
@@ -97,8 +99,8 @@ SCHEMA: list[dict[str, Any]] = [
     {"title": "性能与其它", "icon": "🧩", "tier": "advanced",
      "desc": "并发与开关，按需调整。",
      "fields": [
-         {"key": "concurrent.max_workers", "label": "转录最大并发", "type": "int"},
-         {"key": "concurrent.llm_max_workers", "label": "LLM 最大并发", "type": "int"},
+         {"key": "concurrent.local_asr_workers", "label": "本地 ASR 并发", "type": "int", "control": "select"},
+         {"key": "concurrent.cloud_asr_workers", "label": "云端 ASR 并发", "type": "int", "control": "select"},
          {"key": "risk_control.enabled", "label": "启用风控（敏感词脱敏）", "type": "bool"},
          {"key": "log.level", "label": "日志级别", "type": "select",
           "options": ["DEBUG", "INFO", "WARNING", "ERROR"]},
@@ -115,7 +117,11 @@ _PLACEHOLDERS = {
     "your-api-key-here", "http://your-youtube-api-server:8000",
 }
 _SECRET_TYPES = {"secret"}
-_FIELD_OPTS = ("help", "key_url", "options", "provider_key_link")
+_FIELD_OPTS = ("help", "key_url", "options", "provider_key_link", "control")
+
+
+class SettingsValidationError(ValueError):
+    """A writable setting failed its trusted server-side boundary."""
 
 
 def _get_by_path(cfg: dict, path: str) -> Any:
@@ -150,7 +156,9 @@ def _is_set(value: Any) -> bool:
     return value is not None and str(value) not in _PLACEHOLDERS
 
 
-def _schema_groups(with_values: bool) -> list[dict[str, Any]]:
+def _schema_groups(
+    with_values: bool, *, effective_limits=None
+) -> list[dict[str, Any]]:
     """生成分组字段；with_values=True 时附带当前生效值（覆盖值或默认值）。"""
     cfg = load_config() if with_values else {}
     groups: list[dict[str, Any]] = []
@@ -163,6 +171,11 @@ def _schema_groups(with_values: bool) -> list[dict[str, Any]]:
                     field[opt] = spec[opt]
             if with_values:
                 raw = _get_by_path(cfg, spec["key"])
+                if effective_limits is not None:
+                    if spec["key"] == "concurrent.local_asr_workers":
+                        raw = effective_limits.local_soft
+                    elif spec["key"] == "concurrent.cloud_asr_workers":
+                        raw = effective_limits.cloud_soft
                 if spec["type"] in _SECRET_TYPES:
                     field["value"] = ""  # 密钥绝不回显
                     field["masked"] = _mask_secret(raw)
@@ -187,7 +200,16 @@ def get_schema() -> dict[str, Any]:
 
 def read_settings() -> dict[str, Any]:
     """返回配置结构 + 当前生效值（密钥脱敏）。"""
-    return {"providers": PROVIDERS, "groups": _schema_groups(with_values=True)}
+    cfg = load_config()
+    limits = resolve_transcription_limits(cfg)
+    return {
+        "providers": PROVIDERS,
+        "groups": _schema_groups(with_values=True, effective_limits=limits),
+        "concurrency_limits": {
+            "local_asr_workers": limits.local_hard,
+            "cloud_asr_workers": limits.cloud_hard,
+        },
+    }
 
 
 def fetch_provider_models(base_url: str, api_key: str) -> list[str]:
@@ -248,7 +270,7 @@ def _coerce(value: Any, kind: str) -> Any:
     return value.strip() if isinstance(value, str) else value
 
 
-def write_settings(payload: dict[str, Any]) -> dict[str, Any]:
+def write_settings(payload: dict[str, Any], *, controller=None) -> dict[str, Any]:
     """把前端提交的字段写入 overrides 数据库（按 SCHEMA 类型转换/过滤）。
 
     - 只处理 SCHEMA 已知字段；未知键忽略。
@@ -259,6 +281,30 @@ def write_settings(payload: dict[str, Any]) -> dict[str, Any]:
     payload = payload or {}
     new_override: dict[str, Any] = {}
 
+    if controller is not None:
+        snapshot = controller.snapshot()
+        local_current = snapshot["local_asr_workers"]
+        cloud_current = snapshot["cloud_asr_workers"]
+        local_hard = snapshot["local_asr_hard_limit"]
+        cloud_hard = snapshot["cloud_asr_hard_limit"]
+    else:
+        limits = resolve_transcription_limits(load_config())
+        local_current, cloud_current = limits.local_soft, limits.cloud_soft
+        local_hard, cloud_hard = limits.local_hard, limits.cloud_hard
+
+    validated_concurrency: dict[str, int] = {}
+    for key, hard in (
+        ("concurrent.local_asr_workers", local_hard),
+        ("concurrent.cloud_asr_workers", cloud_hard),
+    ):
+        if key not in payload:
+            continue
+        raw = payload[key]
+        value = None if isinstance(raw, bool) else _coerce(raw, "int")
+        if value is None or value < 1 or value > hard:
+            raise SettingsValidationError(f"invalid_{key.replace('.', '_')}")
+        validated_concurrency[key] = value
+
     for key, raw in payload.items():
         kind = _FIELD_TYPE.get(key)
         if kind is None:
@@ -267,7 +313,7 @@ def write_settings(payload: dict[str, Any]) -> dict[str, Any]:
             _set_by_path(new_override, key, _coerce(raw, "bool"))
             continue
         if kind == "int":
-            coerced = _coerce(raw, "int")
+            coerced = validated_concurrency.get(key, _coerce(raw, "int"))
             if coerced is not None:
                 _set_by_path(new_override, key, coerced)
             continue
@@ -281,6 +327,16 @@ def write_settings(payload: dict[str, Any]) -> dict[str, Any]:
     if new_override:
         existing = load_config_overrides()
         save_config_overrides(_deep_merge_dicts(existing, new_override))
+
+    if controller is not None and validated_concurrency:
+        controller.update_soft_limits(
+            local=validated_concurrency.get(
+                "concurrent.local_asr_workers", local_current
+            ),
+            cloud=validated_concurrency.get(
+                "concurrent.cloud_asr_workers", cloud_current
+            ),
+        )
 
     return read_settings()
 

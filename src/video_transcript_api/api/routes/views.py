@@ -23,6 +23,7 @@ from ..context import (
     get_logger,
     get_static_dir,
     get_templates,
+    get_usage_repository,
 )
 from ...utils.rendering import (
     get_base_url,
@@ -84,6 +85,29 @@ _LOCAL_DOCUMENT_EXTS = {
 def _no_store(response: Response) -> Response:
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def _build_asr_usage_display(event: Any | None) -> Dict[str, str]:
+    """Build the small, user-facing ASR cost summary for a result page."""
+    if event is None:
+        return {
+            "label": "云端 ASR 未调用（¥0）",
+            "detail": "本次未产生云端 ASR 用量",
+        }
+    if event.billed_cost is not None:
+        return {
+            "label": f"云端 ASR 账单 ¥{event.billed_cost}",
+            "detail": "供应商返回的账单费用",
+        }
+    if event.calculated_cost is not None:
+        return {
+            "label": f"云端 ASR 费用约 ¥{event.calculated_cost}",
+            "detail": "按云端返回用量计算；最终以供应商账单为准",
+        }
+    return {
+        "label": f"云端 ASR 费用上限 ¥{event.estimated_cost}",
+        "detail": "提交前按可信时长计算的费用上限",
+    }
 
 
 def _is_local_document_view(view_data: Dict[str, Any]) -> bool:
@@ -1536,6 +1560,18 @@ async def view_transcript(
                     },
                 )
             )
+        if view_data["status"] == "canceled":
+            return _no_store(
+                templates.TemplateResponse(
+                    "error.html",
+                    {
+                        "request": request,
+                        "error_heading": "解析已取消",
+                        "message": view_data.get("error_message", "用户已取消任务"),
+                        **view_data,
+                    },
+                )
+            )
         if view_data["status"] == "file_cleaned":
             return _no_store(
                 templates.TemplateResponse(
@@ -1544,6 +1580,18 @@ async def view_transcript(
                 )
             )
         if view_data["status"] == "success":
+            task_id = view_data.get("task_id")
+            if task_id:
+                try:
+                    usage_event = get_usage_repository().find_latest_event_by_task_id(
+                        task_id
+                    )
+                    view_data["asr_usage"] = _build_asr_usage_display(usage_event)
+                except Exception as exc:
+                    logger.warning(
+                        "Unable to load ASR usage for result page: "
+                        f"{type(exc).__name__}"
+                    )
             if view_data.get("summary"):
                 view_data["summary_html"] = render_markdown_to_html(
                     view_data["summary"]
@@ -1728,6 +1776,18 @@ async def view_progress(view_token: str):
         raise HTTPException(status_code=404, detail="view_token 无效或已过期")
     _decorate_view_timing(view_data)
 
+    progress = view_data.get("progress")
+    if isinstance(progress, dict):
+        progress = dict(progress)
+        evidence = progress.get("evidence")
+        if isinstance(evidence, dict):
+            evidence = dict(evidence)
+            quote = evidence.get("cloud_quote")
+            if isinstance(quote, dict):
+                quote = dict(quote)
+                quote.pop("quote_token", None)
+                evidence["cloud_quote"] = quote
+            progress["evidence"] = evidence
     payload = {
         "status": view_data.get("status"),
         "task_id": view_data.get("task_id"),
@@ -1738,7 +1798,7 @@ async def view_progress(view_token: str):
         "elapsed_display": view_data.get("elapsed_display"),
         "duration_seconds": view_data.get("duration_seconds"),
         "duration_display": view_data.get("duration_display"),
-        "progress": view_data.get("progress"),
+        "progress": progress,
     }
     message = view_data.get("message") or view_data.get("error_message")
     if message:

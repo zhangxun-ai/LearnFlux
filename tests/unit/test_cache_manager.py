@@ -207,6 +207,26 @@ class TestGetCache:
         assert result["author"] == "Author"
         assert result["platform"] == "youtube"
 
+    def test_can_require_exact_speaker_setting(self, cm):
+        for speaker_mode in (False, True):
+            cm.save_cache(
+                platform="generic",
+                url="local://same/video.mp4",
+                media_id="same-video",
+                use_speaker_recognition=speaker_mode,
+                transcript_data="transcript",
+                transcript_type="capswriter",
+            )
+
+        exact = cm.get_cache(
+            platform="generic",
+            media_id="same-video",
+            use_speaker_recognition=False,
+            exact_speaker_match=True,
+        )
+
+        assert exact["use_speaker_recognition"] == 0
+
 
 class TestDeleteTaskAndCache:
     """Tests for invalidating a completed task's shared media cache."""
@@ -746,6 +766,37 @@ class TestTaskProgress:
         assert task_info["status"] == "success"
         assert view_data["status"] == "success"
         assert view_data["media_id"] == "note123"
+
+    @pytest.mark.parametrize(
+        "active_status",
+        ["calibrating", "awaiting_cloud_confirmation"],
+    )
+    def test_view_token_prefers_active_task_over_older_failed_task(
+        self, cm, active_status
+    ):
+        url = "local://study-source/media/lesson.mp4"
+        failed_task = cm.create_task(
+            url=url,
+            platform="generic",
+            media_id="media",
+        )
+        cm.update_task_status(
+            failed_task["task_id"],
+            "failed",
+            error_message="old attempt failed",
+        )
+        active_task = cm.create_task(
+            url=url,
+            platform="generic",
+            media_id="media",
+        )
+        cm.update_task_status(active_task["task_id"], active_status)
+
+        selected = cm.get_task_by_view_token(failed_task["view_token"])
+
+        assert active_task["view_token"] == failed_task["view_token"]
+        assert selected["task_id"] == active_task["task_id"]
+        assert selected["status"] == active_status
 
     def test_processing_view_data_recovers_when_final_cache_exists(self, cm):
         _save_sample_capswriter(cm)

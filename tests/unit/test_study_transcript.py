@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_normalize_plain_transcript_returns_untimed_lines():
     from video_transcript_api.study.transcript import normalize_transcript
 
@@ -86,6 +89,7 @@ def test_normalize_repairs_legacy_long_whisper_timestamp_reset():
 
 def test_local_upload_preserves_structured_transcript_cache(monkeypatch, tmp_path):
     import queue
+    from threading import Event
 
     from video_transcript_api.api.services import transcription
     from video_transcript_api.cache.cache_manager import CacheManager
@@ -132,14 +136,246 @@ def test_local_upload_preserves_structured_transcript_cache(monkeypatch, tmp_pat
         preserve_transcript_timestamps=True,
     )
 
-    cached = cache_manager.get_cache(platform="generic", media_id=media_id)
+    cached = None
+    for _ in range(100):
+        cached = cache_manager.get_cache(platform="generic", media_id=media_id)
+        if cached:
+            break
+        Event().wait(0.01)
     cache_manager.close()
 
-    assert result["status"] == "success"
+    assert result == {"status": "processing", "message": "local_asr_queued"}
     assert cached is not None
     assert cached["transcript_type"] == "funasr"
     lines = normalize_transcript(cached["transcript_data"])
     assert [line["start_seconds"] for line in lines] == [0.0, 1.5]
+
+
+def test_local_upload_retry_uses_task_scoped_audio_and_output_names(
+    monkeypatch, tmp_path
+):
+    from video_transcript_api.api.services import transcription
+
+    source = tmp_path / "lesson.mp4"
+    source.write_bytes(b"fake video")
+    extraction_keys = []
+    transcriptions = []
+
+    class Cache:
+        def get_task_by_id(self, task_id):
+            return {"status": "processing"}
+
+        def update_task_status(self, *args, **kwargs):
+            return None
+
+    def extract_audio(source_path, output_dir, artifact_key):
+        extraction_keys.append(artifact_key)
+        audio_path = tmp_path / f"{artifact_key}.m4a"
+        audio_path.write_bytes(b"audio")
+        return str(audio_path)
+
+    class FakeTranscriber:
+        def __init__(self, *args, **kwargs):
+            return None
+
+        def transcribe(self, audio_path, output_base):
+            transcriptions.append((audio_path, output_base))
+            return {"transcript": "正文", "funasr_json_data": {}}
+
+    def submit_immediately(**kwargs):
+        kwargs["run_provider"]()
+
+    monkeypatch.setattr(transcription, "cache_manager", Cache())
+    monkeypatch.setattr(transcription, "_extract_audio_to_file", extract_audio)
+    monkeypatch.setattr(transcription, "Transcriber", FakeTranscriber)
+    monkeypatch.setattr(
+        transcription, "submit_local_asr_continuation", submit_immediately
+    )
+
+    for task_id in ("task-first", "task-retry"):
+        result = transcription.process_local_upload(
+            task_id,
+            str(source),
+            "lesson.mp4",
+            "local://study-source/shared/lesson.mp4",
+            "shared-media",
+            preserve_source_file=True,
+        )
+        assert result == {"status": "processing", "message": "local_asr_queued"}
+
+    assert extraction_keys == [
+        "shared-media_task-first",
+        "shared-media_task-retry",
+    ]
+    assert [output_base for _, output_base in transcriptions] == [
+        "task-first",
+        "task-retry",
+    ]
+
+
+@pytest.mark.parametrize("strategy", ["local", "cloud"])
+def test_completed_video_upload_reuses_cache_before_asr_or_cloud_quote(
+    monkeypatch, tmp_path, strategy
+):
+    import queue
+
+    from video_transcript_api.api.services import transcription
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    media_id = "local_same_video"
+    display_url = f"local://study-source/{media_id}/lesson.mp4"
+    completed = manager.create_task(
+        url=display_url,
+        platform="generic",
+        media_id=media_id,
+    )
+    manager.save_cache(
+        platform="generic",
+        url=display_url,
+        media_id=media_id,
+        use_speaker_recognition=False,
+        transcript_data="cached transcript",
+        transcript_type="capswriter",
+        title="lesson.mp4",
+        author="本地上传",
+    )
+    manager.save_llm_result(
+        "generic", media_id, False, "calibrated", "cached calibrated"
+    )
+    manager.save_llm_result(
+        "generic", media_id, False, "summary", "cached summary"
+    )
+    manager.update_task_status(
+        completed["task_id"],
+        "success",
+        platform="generic",
+        media_id=media_id,
+        title="lesson.mp4",
+    )
+    canceled = manager.create_task(
+        url=display_url,
+        platform="generic",
+        media_id=media_id,
+        force_new_view_token=True,
+    )
+    manager.update_task_status(canceled["task_id"], "canceled")
+    current = manager.create_task(
+        url=display_url,
+        platform="generic",
+        media_id=media_id,
+        force_new_view_token=True,
+    )
+    source = tmp_path / "lesson.mp4"
+    source.write_bytes(b"same video")
+
+    monkeypatch.setattr(transcription, "cache_manager", manager)
+    monkeypatch.setattr(transcription, "llm_task_queue", queue.Queue())
+    monkeypatch.setattr(
+        transcription,
+        "_extract_audio_to_file",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("local ASR started")),
+    )
+    monkeypatch.setattr(
+        transcription,
+        "_pause_for_cloud_confirmation",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("cloud quote started")),
+    )
+
+    try:
+        result = transcription.process_local_upload(
+            current["task_id"],
+            str(source),
+            "lesson.mp4",
+            display_url,
+            media_id,
+            preserve_source_file=True,
+            transcription_strategy=strategy,
+            cloud_confirmation_required=True,
+        )
+        current_task = manager.get_task_by_id(current["task_id"])
+    finally:
+        manager.close()
+
+    assert result == {"status": "success", "message": "cache_hit"}
+    assert current_task["status"] == "success"
+    assert current_task["progress"]["evidence"]["cache_hit"] is True
+    assert (
+        current_task["progress"]["evidence"]["source_task_id"]
+        == completed["task_id"]
+    )
+
+
+def test_canceled_upload_does_not_block_a_fresh_parse(monkeypatch, tmp_path):
+    import queue
+
+    from video_transcript_api.api.services import transcription
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    media_id = "local_canceled_video"
+    display_url = f"local://study-source/{media_id}/lesson.mp4"
+    canceled = manager.create_task(
+        url=display_url,
+        platform="generic",
+        media_id=media_id,
+    )
+    manager.save_cache(
+        platform="generic",
+        url=display_url,
+        media_id=media_id,
+        use_speaker_recognition=False,
+        transcript_data="partial transcript from canceled attempt",
+        transcript_type="capswriter",
+    )
+    manager.update_task_status(canceled["task_id"], "canceled")
+    current = manager.create_task(
+        url=display_url,
+        platform="generic",
+        media_id=media_id,
+        force_new_view_token=True,
+    )
+    source = tmp_path / "lesson.mp4"
+    source.write_bytes(b"video")
+    provider_calls = []
+
+    class FakeTranscriber:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def transcribe(self, *_args):
+            provider_calls.append(True)
+            return {"transcript": "fresh transcript", "funasr_json_data": {}}
+
+    def submit_immediately(**kwargs):
+        result = kwargs["run_provider"]()
+        kwargs["after_provider"](result)
+
+    monkeypatch.setattr(transcription, "cache_manager", manager)
+    monkeypatch.setattr(transcription, "llm_task_queue", queue.Queue())
+    monkeypatch.setattr(transcription, "Transcriber", FakeTranscriber)
+    monkeypatch.setattr(transcription, "_extract_audio_to_file", lambda *_: None)
+    monkeypatch.setattr(
+        transcription, "submit_local_asr_continuation", submit_immediately
+    )
+
+    try:
+        result = transcription.process_local_upload(
+            current["task_id"],
+            str(source),
+            "lesson.mp4",
+            display_url,
+            media_id,
+            preserve_source_file=True,
+            transcription_strategy="local",
+        )
+        current_task = manager.get_task_by_id(current["task_id"])
+    finally:
+        manager.close()
+
+    assert result == {"status": "processing", "message": "local_asr_queued"}
+    assert provider_calls == [True]
+    assert current_task["status"] == "calibrating"
 
 
 def test_clean_visual_document_skips_llm_and_preserves_extracted_text(monkeypatch, tmp_path):

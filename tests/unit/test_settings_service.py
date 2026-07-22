@@ -4,10 +4,13 @@ Config access is monkeypatched so tests never touch real config / DB.
 """
 
 import json
+import asyncio
 
 import pytest
+from fastapi import HTTPException
 
 from video_transcript_api.api.services import settings_service as svc
+from video_transcript_api.api.routes import settings as settings_routes
 
 
 def _field(data, key):
@@ -37,6 +40,10 @@ def test_schema_tiers_and_no_duplicate_auth_token():
         assert required in keys
     # 管理口令不再作为配置字段（去重，仅顶部入口）
     assert "api.auth_token" not in keys
+    assert "concurrent.local_asr_workers" in keys
+    assert "concurrent.cloud_asr_workers" in keys
+    assert "concurrent.max_workers" not in keys
+    assert "concurrent.llm_max_workers" not in keys
 
     tiers = {g["title"]: g["tier"] for g in schema["groups"]}
     assert tiers["AI 模型"] == "core"
@@ -74,6 +81,26 @@ def test_read_settings_masks_and_never_leaks(monkeypatch):
 
 
 @pytest.mark.unit
+def test_read_settings_returns_effective_concurrency_and_trusted_limits(monkeypatch):
+    monkeypatch.setattr(svc, "load_config", lambda: {
+        "concurrent": {
+            "local_asr_workers": 1,
+            "cloud_asr_workers": 8,
+            "cloud_asr_hard_limit": 2,
+        }
+    })
+
+    data = svc.read_settings()
+
+    assert _field(data, "concurrent.local_asr_workers")["value"] == 1
+    assert _field(data, "concurrent.cloud_asr_workers")["value"] == 2
+    assert data["concurrency_limits"] == {
+        "local_asr_workers": 2,
+        "cloud_asr_workers": 2,
+    }
+
+
+@pytest.mark.unit
 def test_write_settings_types_and_filters(monkeypatch):
     captured = {}
     monkeypatch.setattr(svc, "load_config_overrides", lambda: {})
@@ -97,7 +124,7 @@ def test_write_settings_types_and_filters(monkeypatch):
     assert "calibrate_model" not in o.get("llm", {})
     assert "tikhub" not in o
     assert o["youtube_api_server"]["enabled"] is True
-    assert o["concurrent"]["max_workers"] == 5
+    assert "concurrent" not in o  # 旧共享并发不再允许从浏览器改写
     assert o["log"]["level"] == "DEBUG"
     assert "api" not in o          # auth_token not a config field anymore
     assert "unknown" not in o
@@ -121,6 +148,99 @@ def test_write_settings_noop_when_nothing_real(monkeypatch):
     monkeypatch.setattr(svc, "load_config", lambda: {})
     svc.write_settings({"llm.api_key": "", "llm.base_url": ""})
     assert called["save"] is False
+
+
+class _Controller:
+    def __init__(self):
+        self.updates = []
+
+    def snapshot(self):
+        return {
+            "local_asr_workers": 1,
+            "cloud_asr_workers": 3,
+            "local_asr_hard_limit": 2,
+            "cloud_asr_hard_limit": 4,
+        }
+
+    def update_soft_limits(self, **values):
+        self.updates.append(values)
+
+
+@pytest.mark.unit
+def test_concurrency_write_is_partial_and_updates_runtime_after_persistence(monkeypatch):
+    saved = {}
+    controller = _Controller()
+    monkeypatch.setattr(svc, "load_config_overrides", lambda: {
+        "concurrent": {"local_asr_workers": 1, "cloud_asr_workers": 3}
+    })
+    monkeypatch.setattr(svc, "save_config_overrides", lambda value: saved.update(value))
+    monkeypatch.setattr(svc, "load_config", lambda: {
+        "concurrent": {
+            "local_asr_workers": 1,
+            "cloud_asr_workers": 3,
+            "cloud_asr_hard_limit": 4,
+        }
+    })
+
+    svc.write_settings(
+        {"concurrent.local_asr_workers": "2"}, controller=controller
+    )
+
+    assert saved["concurrent"] == {
+        "local_asr_workers": 2,
+        "cloud_asr_workers": 3,
+    }
+    assert controller.updates == [{"local": 2, "cloud": 3}]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", [True, 0, -1, 5])
+def test_cloud_concurrency_write_rejects_invalid_or_over_hard(monkeypatch, value):
+    controller = _Controller()
+    with pytest.raises(svc.SettingsValidationError):
+        svc.write_settings(
+            {"concurrent.cloud_asr_workers": value}, controller=controller
+        )
+
+
+@pytest.mark.unit
+def test_persistence_failure_does_not_change_runtime(monkeypatch):
+    controller = _Controller()
+    monkeypatch.setattr(svc, "load_config_overrides", lambda: {})
+    monkeypatch.setattr(
+        svc,
+        "save_config_overrides",
+        lambda value: (_ for _ in ()).throw(OSError("write failed")),
+    )
+
+    with pytest.raises(OSError):
+        svc.write_settings(
+            {"concurrent.local_asr_workers": 2}, controller=controller
+        )
+
+    assert controller.updates == []
+
+
+@pytest.mark.unit
+def test_settings_route_maps_concurrency_validation_to_422(monkeypatch):
+    class Request:
+        async def json(self):
+            return {"concurrent.cloud_asr_workers": 99}
+
+    monkeypatch.setattr(
+        settings_routes,
+        "write_settings",
+        lambda payload, **kwargs: (_ for _ in ()).throw(
+            svc.SettingsValidationError("invalid_cloud_limit")
+        ),
+    )
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(
+            settings_routes.update_settings(Request(), user_info={"user_id": "u"})
+        )
+
+    assert raised.value.status_code == 422
 
 
 class _FakeResp:

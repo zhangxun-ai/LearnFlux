@@ -256,7 +256,7 @@ class APIManager {
     /**
      * 提交转录任务
      */
-    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100, preserveSourceFile = false) {
+    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100, preserveSourceFile = false, transcriptionStrategy = 'cloud') {
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
 
         if (!token) {
@@ -269,6 +269,7 @@ class APIManager {
             include_comments: Boolean(includeComments),
             comment_limit: Number.parseInt(commentLimit, 10) || 100,
             preserve_source_file: Boolean(preserveSourceFile)
+            ,transcription_strategy: transcriptionStrategy
         };
 
         // 只有当 webhook 不为空时才添加到请求体中
@@ -315,6 +316,45 @@ class APIManager {
         }
 
         return await response.json();
+    }
+
+    static async confirmCloudQuote(taskId, quoteToken, maxCost) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}/cloud-confirm`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                quote_token: quoteToken,
+                accepted_max_cost_cny: String(maxCost)
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || '云端确认失败');
+        return data;
+    }
+
+    static async useLocalForCloudQuote(taskId) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}/cloud-use-local`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || '切换本地转录失败');
+        return data;
+    }
+
+    static async refreshCloudQuote(taskId) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}/cloud-refresh`, {
+            method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || '刷新报价失败');
+        return data;
     }
 
     static async getTaskSummary(viewToken) {
@@ -1035,8 +1075,22 @@ function inDateRange(ts, rangeKey) {
 }
 
 /** 构建单条历史卡片 DOM */
-// 历史条目类型：优先存储的 type；其次有 view_token 视作视频转录（有 /view 结果）；否则按 URL。
+const LOCAL_MEDIA_HISTORY_EXTENSIONS = new Set([
+    'mp3', 'm4a', 'wav', 'aac', 'flac',
+    'mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v'
+]);
+
+function isLocalMediaHistoryItem(task) {
+    const url = String(task && (task.url || task.video_url) || '');
+    if (!url.startsWith('local://')) return false;
+    const sourceName = String(task && task.title || url).split(/[?#]/, 1)[0];
+    const extension = sourceName.includes('.') ? sourceName.split('.').pop().toLowerCase() : '';
+    return LOCAL_MEDIA_HISTORY_EXTENSIONS.has(extension);
+}
+
+// 历史条目类型：本地音视频按真实扩展名纠正旧数据，再使用已存类型或 URL 推断。
 function histTypeOf(task) {
+    if (task.type === 'file' && isLocalMediaHistoryItem(task)) return 'video';
     if (task.type) return task.type;
     if (task.view_token) return 'video';
     const cls = classifyContent(task.url).type;
@@ -1300,6 +1354,54 @@ function renderSubmittedTaskStatus(taskId, viewToken, raw, entry, isDuplicate, o
     const duplicateNote = isDuplicate
         ? '<br><span style="color: #a36b20;">相同链接的旧任务记录已更新</span>'
         : '';
+    if (status === 'awaiting_cloud_confirmation') {
+        const progress = raw && raw.progress || {};
+        const evidence = progress.evidence || {};
+        const quote = evidence.cloud_quote || progress.cloud_quote || {};
+        if (quote.quote_token && quote.max_cost_cny) {
+            const detail = `可信时长：${escapeHtml(quote.duration_seconds)} 秒<br>` +
+                `计费秒数：${escapeHtml(quote.billable_seconds)}<br>` +
+                `费用上限：¥${escapeHtml(quote.max_cost_cny)}<br>` +
+                `<button type="button" class="hist-btn" id="confirm-cloud-quote">确认云端转录</button> ` +
+                `<button type="button" class="hist-btn" id="use-local-quote">改用本地免费</button> ` +
+                `<button type="button" class="hist-btn" id="refresh-cloud-quote">刷新报价</button>`;
+            UIManager.showStatus('loading', '等待费用确认', detail, options);
+            const button = document.getElementById('confirm-cloud-quote');
+            if (button) button.onclick = async () => {
+                button.disabled = true;
+                try {
+                    await APIManager.confirmCloudQuote(taskId, quote.quote_token, quote.max_cost_cny);
+                    UIManager.showStatus('loading', '云端转录已确认', '正在提交转录任务…');
+                } catch (error) {
+                    button.disabled = false;
+                    UIManager.showStatus('error', '确认失败', escapeHtml(error.message));
+                }
+            };
+            const localButton = document.getElementById('use-local-quote');
+            if (localButton) localButton.onclick = async () => {
+                localButton.disabled = true;
+                try {
+                    await APIManager.useLocalForCloudQuote(taskId);
+                    UIManager.showStatus('loading', '已改用本地免费', '正在使用已取得的音频转录，无需重新下载…');
+                } catch (error) {
+                    localButton.disabled = false;
+                    UIManager.showStatus('error', '切换失败', escapeHtml(error.message));
+                }
+            };
+            const refreshButton = document.getElementById('refresh-cloud-quote');
+            if (refreshButton) refreshButton.onclick = async () => {
+                refreshButton.disabled = true;
+                try {
+                    await APIManager.refreshCloudQuote(taskId);
+                    await watchSubmittedTask(taskId, token, options);
+                } catch (error) {
+                    refreshButton.disabled = false;
+                    UIManager.showStatus('error', '刷新失败', escapeHtml(error.message));
+                }
+            };
+            return;
+        }
+    }
     if (state.cls === 'done') {
         const detail = `${title ? `内容：${escapeHtml(title)}<br>` : ''}${taskLink}`;
         UIManager.showStatus('success', '解析完成', detail, options);
@@ -1411,7 +1513,7 @@ function historyTimestampFromAuditItem(item) {
 
 function historyTypeFromAuditItem(item) {
     const url = String(item && item.video_url || '');
-    if (url.startsWith('local://')) return 'file';
+    if (url.startsWith('local://')) return isLocalMediaHistoryItem(item) ? 'video' : 'file';
     const platform = String(item && item.platform || '').toLowerCase();
     if (['twitter', 'x', 'xiaohongshu', 'weixin', 'wechat'].includes(platform)) return 'post';
     return 'video';
@@ -1659,7 +1761,13 @@ function initWorkbenchUI() {
             const fd = new FormData();
             fd.append('file', fileObj);
             fd.append('use_speaker_recognition', 'false');
-            fetch(mediaFile ? '/api/study/upload' : '/api/upload-transcribe', {
+            const fileStrategyEl = document.querySelector('input[name="file-transcription-strategy"]:checked');
+            const fileStrategy = fileStrategyEl ? fileStrategyEl.value : 'cloud';
+            fd.append('transcription_strategy', fileStrategy);
+            const uploadEndpoint = mediaFile && fileStrategy === 'local'
+                ? '/api/study/upload'
+                : '/api/upload-transcribe';
+            fetch(uploadEndpoint, {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + token },
                 body: fd,
@@ -1812,6 +1920,8 @@ async function submitTranscription(event) {
 
     const speakerRecEl = document.getElementById('speaker-recognition');
     const useSpeakerRecognition = speakerRecEl ? speakerRecEl.checked : false;
+    const strategyEl = document.querySelector('input[name="transcription-strategy"]:checked');
+    const transcriptionStrategy = strategyEl ? strategyEl.value : 'cloud';
 
     const preserveEl = document.getElementById('preserve-source-file');
     const preserveSourceFile = preserveEl ? preserveEl.checked : false;
@@ -1865,7 +1975,8 @@ async function submitTranscription(event) {
             wechatWebhook,
             includeComments,
             commentLimit,
-            preserveSourceFile
+            preserveSourceFile,
+            transcriptionStrategy
         );
 
         if (response.code === 202 && response.data && response.data.task_id) {

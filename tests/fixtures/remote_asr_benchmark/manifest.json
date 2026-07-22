@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "status": "confirmed",
+  "reference_policy": "user_accepted_automatic_drafts_without_manual_confirmation",
+  "quality_evidence": "provisional_engineering_observation_not_human_verified_ground_truth",
+  "created_at": "2026-07-21",
+  "audio_profile": {
+    "codec": "flac",
+    "sample_rate_hz": 16000,
+    "channels": 1
+  },
+  "content_acquisition_checks": [
+    {
+      "source": "youtube:hffFkvoDkZw",
+      "metadata_ready": true,
+      "subtitle_ready": false,
+      "audio_ready": true,
+      "duration_seconds": 327,
+      "detected_language": "zh",
+      "eligible_for_en_sample": false,
+      "asr_started": false
+    }
+  ],
+  "samples": [
+    {
+      "id": "zh_terms_clean_15s",
+      "source": "authorized_local_collection:video_73",
+      "source_range_seconds": [20, 35],
+      "language": "zh",
+      "duration_seconds": 15.0,
+      "size_bytes": 463836,
+      "sha256": "2d46a534d6aac1805a9a4721a6fa6bc77930368c75702df77453062af01c8c0b",
+      "reference": {
+        "status": "accepted_unverified_automatic",
+        "draft_artifact": "zh_terms_clean_15s_reference_draft.json",
+        "draft_sha256": "6283206d17876ec27947787f4fd8791387e45af4a50a59746f212eec5adcdbf6",
+        "review_artifact": "zh_terms_clean_15s_reference_review.txt",
+        "review_sha256": "91ad4c249bbf13c51ae57e5703082118202e16d8679c5938ff0a56f8555cce72"
+      }
+    },
+    {
+      "id": "zh_terms_noise_15s",
+      "derived_from": "zh_terms_clean_15s",
+      "language": "zh",
+      "duration_seconds": 15.0,
+      "size_bytes": 543929,
+      "sha256": "00a0daf6716cad5fb4d250432f3554db3965b3224698a62a530c484572b3cbb5",
+      "noise": {
+        "generator": "ffmpeg_anoisesrc",
+        "color": "pink",
+        "sample_rate_hz": 16000,
+        "amplitude": 0.02,
+        "seed": 20260721,
+        "mix": "amix inputs=2 duration=first weights=1 1 normalize=0; alimiter=0.95"
+      },
+      "reference": {
+        "status": "shared_with_zh_terms_clean_15s"
+      }
+    },
+    {
+      "id": "en_clean_90s",
+      "source": "youtube:5a5VSkkdpB4",
+      "source_range_seconds": [120, 210],
+      "language": "en",
+      "duration_seconds": 90.0,
+      "size_bytes": 2961544,
+      "sha256": "f58477788ede88c94a96926f13012ffb2015c0ebc1643b324cde9113162cd16e",
+      "source_has_automatic_captions": true,
+      "benchmark_only_override": "user_supplied_evaluation_sample; production path remains subtitle-first",
+      "reference": {
+        "status": "accepted_unverified_automatic",
+        "draft_artifact": "en_clean_90s_reference_draft.json",
+        "draft_sha256": "3ef5ece2f5a73428f09cf990f71383d750dbb4cf685ecd5c99460582cbdffea4",
+        "caption_source_sha256": "2652a151f74589f056e000bda4b042378a546286857ab53ce6ee077364baffdd",
+        "review_artifact": "en_clean_90s_reference_review.txt",
+        "review_sha256": "0b1a7eb1114c2db543d6d058307e69ae885840f410b382e1a832a5517546a16e"
+      }
+    },
+    {
+      "id": "multi_speaker_5m",
+      "source": "youtube:_IMww7gwIus",
+      "source_range_seconds": [120, 420],
+      "language": "zh",
+      "speaker_count_basis": "user_attested_two-person podcast",
+      "duration_seconds": 300.0,
+      "size_bytes": 11179211,
+      "sha256": "aa0e6c9ebda2c0a413bea3c9d74f80cc32d4d5f5089995b736b319222a20e3ee",
+      "source_has_captions": false,
+      "reference": {
+        "status": "accepted_unverified_automatic",
+        "draft_artifact": "multi_speaker_5m_reference_draft.json",
+        "draft_sha256": "8724a5471d983dba405a75df9be80f046088c795337103ae3e7788442a93b302",
+        "review_artifact": "multi_speaker_5m_reference_review.txt",
+        "review_sha256": "3bee2111a874ee5fa5caaeface5840d626e325f17789bb5e5ede01a3eaf603ce"
+      }
+    },
+    {
+      "id": "long_natural_20_60m",
+      "source": "authorized_local_collection:video_22",
+      "source_range_seconds": [0, 1452.106313],
+      "source_sha256": "b9d039efda16c33d0d17b1584422d3a9d77253c7ff1b29f9060bac63d7912742",
+      "language": "zh",
+      "duration_seconds": 1452.106313,
+      "size_bytes": 45508973,
+      "sha256": "a76206e02eb59324a0df3b60f82e1b67d93e9573fbb3a2c59fc52a5bae935a9a",
+      "groq_transport": {
+        "mode": "pre_registered_chunks",
+        "chunk_seconds": 600,
+        "overlap_seconds": 2,
+        "boundaries_seconds": [
+          [0, 600],
+          [598, 1198],
+          [1196, 1452.106313]
+        ],
+        "reason": "normalized file exceeds 25 MB multipart attachment limit"
+      },
+      "reference": {
+        "status": "accepted_unverified_automatic_anchors",
+        "last_reference_speech_end_seconds": 1451.597188,
+        "last_reference_speech_end_evidence": {
+          "method": "ffmpeg_silencedetect",
+          "noise_threshold_db": -45,
+          "minimum_silence_seconds": 0.4,
+          "terminal_silence_start_seconds": 1451.597188,
+          "terminal_silence_end_seconds": 1452.106313,
+          "tolerance_seconds": 1.0,
+          "audio_sha256": "a76206e02eb59324a0df3b60f82e1b67d93e9573fbb3a2c59fc52a5bae935a9a"
+        },
+        "long_gap_silence_evidence": {
+          "method": "ffmpeg_silencedetect",
+          "noise_threshold_db": -45,
+          "minimum_silence_seconds": 15.0,
+          "audio_sha256": "a76206e02eb59324a0df3b60f82e1b67d93e9573fbb3a2c59fc52a5bae935a9a",
+          "intervals_seconds": []
+        },
+        "anchors": [
+          {
+            "name": "start",
+            "source_range_seconds": [60, 105],
+            "duration_seconds": 45.0,
+            "audio_sha256": "4361e47c317bd94c36c650d2c0cd62daf113b8c29804604ce1c451976784f4b4",
+            "draft_artifact": "long_anchor_start_reference_draft.json",
+            "draft_sha256": "422384c1cf8df240d3509fbd573b529d6a1f33bc8e03244e2367f4f2bce140e1",
+            "review_artifact": "long_anchor_start_reference_review.txt",
+            "review_sha256": "ca3a58ef88759010c4b32fbb2532aafd808684f457b823b9ad5019823d34fadd"
+          },
+          {
+            "name": "middle",
+            "source_range_seconds": [700, 745],
+            "duration_seconds": 45.0,
+            "audio_sha256": "6a8e8aed3fcbd38f6cc2d2c18cf4be078e544ed999ac32f46a7679ef6483aa26",
+            "draft_artifact": "long_anchor_middle_reference_draft.json",
+            "draft_sha256": "f09ac47bf83f962ecd3e362b445b459bb1fb3cf53c9dd379e6d4a6882f8a16de",
+            "review_artifact": "long_anchor_middle_reference_review.txt",
+            "review_sha256": "d16e29751bbda5b1a717caa2156bad3bf44ca46e823ce76ec771986638c3985c"
+          },
+          {
+            "name": "end",
+            "source_range_seconds": [1392, 1452],
+            "duration_seconds": 60.0,
+            "audio_sha256": "7a6fbd70702c745e08acc61ddbbfd227fb666566d6f4b82cd43d799e9316ba75",
+            "draft_artifact": "long_anchor_end_reference_draft.json",
+            "draft_sha256": "67fab4ea2cefa15be8b5c854ba92d11903d893e1a6b4d40c57aa122bbe4e4af2",
+            "review_artifact": "long_anchor_end_reference_review.txt",
+            "review_sha256": "1a6e75cae00e21a27077a25e67b56f03d5ee882ebeba21ed883ba6f644138c69"
+          }
+        ]
+      }
+    }
+  ]
+}

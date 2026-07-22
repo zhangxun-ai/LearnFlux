@@ -725,6 +725,56 @@
     margin-top: 24px;
 }
 
+/* ---------- 转录方式卡片 (Transcription Strategy Cards) ---------- */
+.transcription-strategy-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+.strategy-card {
+    cursor: pointer;
+    display: block;
+    margin: 0;
+}
+.strategy-card-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    transition: all 0.2s ease;
+    height: 100%;
+}
+.strategy-card input[type="radio"]:focus-visible + .strategy-card-content {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
+}
+.strategy-card input[type="radio"]:checked + .strategy-card-content {
+    border-color: var(--accent-ink);
+    background: var(--accent-soft);
+}
+.strategy-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+.strategy-text strong {
+    display: block;
+    font-size: 1rem;
+    color: var(--ink);
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+.strategy-text span {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+
 
 
 .app-home .history-header {
@@ -776,6 +826,10 @@
     }
 
     .app-home .video-options {
+        grid-template-columns: 1fr;
+    }
+
+    .transcription-strategy-cards {
         grid-template-columns: 1fr;
     }
 

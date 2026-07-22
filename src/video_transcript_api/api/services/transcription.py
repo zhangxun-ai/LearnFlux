@@ -1,12 +1,17 @@
 import asyncio
 import copy
 import datetime
+import hashlib
 import inspect
+import json
 import os
 import subprocess
 import threading
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Literal
+from decimal import Decimal, ROUND_CEILING
+from pathlib import Path
+from uuid import uuid4
 
 from fastapi import HTTPException, Header, Request
 from pydantic import BaseModel, Field, field_validator
@@ -16,14 +21,34 @@ from ..context import (
     get_cache_manager,
     get_config,
     get_executor,
+    get_local_asr_executor,
     get_llm_queue,
     get_logger,
     get_task_queue,
     get_temp_manager,
+    get_transcription_control_database,
+    get_transcription_concurrency_controller,
     get_user_manager,
 )
 from ...downloaders import create_downloader
-from ...transcriber import FunASRSpeakerClient, Transcriber
+from ...transcriber import FunASRSpeakerClient, Transcriber, TranscriptionContext
+from ...transcriber.cloud_runtime import build_aliyun_provider
+from ...transcriber.cloud_config import (
+    CloudASRConfigError,
+    NewCloudSubmissionSettings,
+)
+from ...transcriber.cloud_quote_repository import (
+    CloudQuoteConflict,
+    CloudQuoteRepository,
+    NewCloudQuote,
+)
+from ...transcriber.media_preparer import (
+    ASRMediaPreparer,
+    MEDIA_SUFFIXES,
+    MediaPreparationError,
+    PreparedASRMedia,
+)
+from ...transcriber.usage_repository import UsageEventRepository
 from ...utils.notifications import (
     WechatNotifier,
     send_long_text_wechat,
@@ -41,6 +66,16 @@ from .source_preservation import (
     preserve_source_file as _preserve_source_file_to_root,
     source_kind_for_path as _source_kind_for_path,
 )
+from .post_asr import (
+    build_cloud_continuation,
+    dispatch_post_asr,
+    load_cloud_continuation,
+)
+from .asr_continuations import (
+    MediaCleanupOwnership,
+    submit_local_asr_continuation,
+)
+from ...transcriber.providers.aliyun_funasr import CloudProviderError
 
 logger = get_logger()
 config = get_config()
@@ -50,6 +85,614 @@ cache_manager = get_cache_manager()
 task_queue = get_task_queue()
 llm_task_queue = get_llm_queue()
 executor = get_executor()
+
+_CLOUD_RECOVERY_PENDING_CODES = {
+    "attempt_in_progress",
+    "attempt_requires_recovery",
+    "polling_unknown",
+    "submission_unknown",
+}
+
+
+def _sha256_file(path: Path) -> str:
+    """Hash retained media with bounded memory usage."""
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _new_media_preparer() -> ASRMediaPreparer:
+    """Build the one authoritative preparer for the configured temp root."""
+    return ASRMediaPreparer(get_temp_manager().get_temp_dir())
+
+
+def _validate_quote_media_ref(
+    media_ref: str,
+    *,
+    expected_format: str | None = None,
+) -> tuple[Path, str]:
+    """Resolve one allowlisted quote reference without exposing its path."""
+    if not isinstance(media_ref, str) or not media_ref:
+        raise ValueError("retained_media_invalid")
+    reference = Path(media_ref)
+    if reference.is_absolute() or len(reference.parts) != 4:
+        raise ValueError("retained_media_invalid")
+    cloud_dir, task_hash, candidate_dir, filename = reference.parts
+    suffix_by_format = dict(MEDIA_SUFFIXES)
+    format_by_suffix = {
+        suffix: media_format for media_format, suffix in suffix_by_format.items()
+    }
+    suffix_format = format_by_suffix.get(Path(filename).suffix.lower())
+    if (
+        cloud_dir != "cloud_quotes"
+        or len(task_hash) != 64
+        or any(character not in "0123456789abcdef" for character in task_hash)
+        or not candidate_dir.startswith("quote-")
+        or suffix_format is None
+        or filename != f"input{suffix_by_format[suffix_format]}"
+        or (expected_format is not None and suffix_format != expected_format)
+    ):
+        raise ValueError("retained_media_invalid")
+
+    temp_root = Path(get_temp_manager().get_temp_dir()).absolute()
+    candidate = temp_root / reference
+    if not os.path.lexists(candidate):
+        raise ValueError("retained_media_missing")
+    try:
+        lexical_relative = candidate.absolute().relative_to(temp_root)
+        resolved_root = temp_root.resolve(strict=True)
+        resolved_candidate = candidate.resolve(strict=True)
+        resolved_relative = resolved_candidate.relative_to(resolved_root)
+    except (OSError, RuntimeError, ValueError):
+        raise ValueError("retained_media_invalid") from None
+    if lexical_relative != resolved_relative or candidate.is_symlink():
+        raise ValueError("retained_media_invalid")
+    return resolved_candidate, suffix_format
+
+
+def _relative_prepared_media_ref(
+    prepared_media: PreparedASRMedia,
+    temp_root: str | Path,
+) -> str:
+    """Validate a freshly prepared value object and return its safe reference."""
+    if not isinstance(prepared_media, PreparedASRMedia):
+        raise ValueError("prepared_media_invalid")
+    expected_suffix = MEDIA_SUFFIXES.get(prepared_media.media_format)
+    if expected_suffix is None:
+        raise ValueError("prepared_media_invalid")
+    root = Path(temp_root).absolute()
+    candidate = prepared_media.path.absolute()
+    try:
+        reference = candidate.relative_to(root)
+        resolved_root = root.resolve(strict=True)
+        resolved_candidate = candidate.resolve(strict=True)
+        if resolved_candidate.relative_to(resolved_root) != reference:
+            raise ValueError
+    except (OSError, RuntimeError, ValueError):
+        raise ValueError("prepared_media_invalid") from None
+    if candidate.is_symlink():
+        raise ValueError("prepared_media_invalid")
+    parts = reference.parts
+    if (
+        len(parts) != 4
+        or parts[0] != "cloud_quotes"
+        or len(parts[1]) != 64
+        or any(character not in "0123456789abcdef" for character in parts[1])
+        or not parts[2].startswith("quote-")
+        or parts[3] != f"input{expected_suffix}"
+    ):
+        raise ValueError("prepared_media_invalid")
+    return reference.as_posix()
+
+
+def _load_quote_prepared_media(quote) -> PreparedASRMedia:
+    """Rehydrate and fully verify retained quote media before cloud work."""
+    media_path, _ = _validate_quote_media_ref(quote.media_ref)
+    preparer = _new_media_preparer()
+    try:
+        return preparer.verify_existing(
+            media_path,
+            quote.media_sha256,
+            quote.duration_seconds,
+        )
+    except MediaPreparationError:
+        raise ValueError("retained_media_changed") from None
+
+
+def _verified_retained_media(media_ref: str, expected_sha256: str) -> Path:
+    """Resolve and verify quote media without loading it into memory."""
+    temp_root = Path(get_temp_manager().get_temp_dir()).resolve()
+    candidate = temp_root / media_ref
+    if candidate.is_symlink():
+        raise ValueError("retained_media_invalid")
+    media_path = candidate.resolve()
+    if temp_root not in media_path.parents:
+        raise ValueError("retained_media_invalid")
+    if not media_path.is_file():
+        raise ValueError("retained_media_missing")
+    if _sha256_file(media_path) != expected_sha256:
+        raise ValueError("retained_media_changed")
+    return media_path
+
+
+def _fail_missing_quote_media(task_id: str, exc: ValueError) -> None:
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.FAILED,
+        error_message=f"云端报价所用音频已失效，请重新提交（{exc}）",
+        force=True,
+    )
+
+
+def _cleanup_retained_quote_media(media_ref: str) -> None:
+    try:
+        media_path, _ = _validate_quote_media_ref(media_ref)
+    except ValueError:
+        return
+    try:
+        media_path.unlink()
+        media_path.parent.rmdir()
+    except OSError:
+        pass
+
+
+def _prepare_cloud_quote(
+    *, task_id: str, prepared_media: PreparedASRMedia, continuation_json: str,
+    config: dict, db_path, temp_root,
+):
+    """Persist price data for one already verified prepared-media identity."""
+    relative_ref = _relative_prepared_media_ref(prepared_media, temp_root)
+    duration = prepared_media.duration_seconds
+    settings = NewCloudSubmissionSettings.from_config(
+        config, today=datetime.date.today()
+    )
+    billable_seconds = int(duration.to_integral_value(rounding=ROUND_CEILING))
+    max_cost = settings.reserve_estimate(duration)
+    repository = CloudQuoteRepository(db_path)
+    return repository.create(
+        NewCloudQuote(
+            task_id=task_id,
+            media_ref=relative_ref,
+            media_sha256=prepared_media.sha256,
+            duration_seconds=duration,
+            billable_seconds=billable_seconds,
+            model=settings.model,
+            unit_price=settings.price_cny_per_second,
+            max_cost=max_cost,
+            continuation_json=continuation_json,
+        )
+    )
+
+
+def _pause_for_cloud_confirmation(
+    *, task_id: str, media_path: str, continuation_json: str,
+):
+    preparer = _new_media_preparer()
+    prepared_media = preparer.prepare(media_path, task_id)
+    try:
+        temp_root = get_temp_manager().get_temp_dir()
+        db_path = get_transcription_control_database(cache_manager)
+        candidate_ref = _relative_prepared_media_ref(prepared_media, temp_root)
+    except Exception:
+        preparer.cleanup(prepared_media)
+        raise
+    try:
+        quote = _prepare_cloud_quote(
+            task_id=task_id,
+            prepared_media=prepared_media,
+            continuation_json=continuation_json,
+            config=get_config(),
+            db_path=db_path,
+            temp_root=temp_root,
+        )
+    except CloudQuoteConflict as exc:
+        if str(exc) != "quote_already_exists":
+            preparer.cleanup(prepared_media)
+            raise
+        try:
+            persisted_quote = CloudQuoteRepository(db_path).get(task_id)
+        except Exception:
+            preparer.cleanup(prepared_media)
+            raise
+        if persisted_quote.media_ref != candidate_ref:
+            preparer.cleanup(prepared_media)
+        raise
+    except Exception:
+        try:
+            persisted_quote = CloudQuoteRepository(db_path).get(task_id)
+        except CloudQuoteConflict as reconciliation_error:
+            if str(reconciliation_error) == "quote_not_found":
+                preparer.cleanup(prepared_media)
+        except Exception:
+            pass
+        else:
+            if persisted_quote.media_ref != candidate_ref:
+                preparer.cleanup(prepared_media)
+        raise
+    if quote.media_ref != candidate_ref:
+        preparer.cleanup(prepared_media)
+    quote_payload = {
+        "duration_seconds": str(quote.duration_seconds),
+        "billable_seconds": quote.billable_seconds,
+        "unit_price_cny_per_second": str(quote.unit_price),
+        "max_cost_cny": str(quote.max_cost),
+        "quote_token": quote.token,
+    }
+    _safe_update_progress(
+        task_id,
+        stage="awaiting_cloud_confirmation",
+        stage_label="等待确认云端转录费用",
+        basis="trusted_audio_duration",
+        confidence="high",
+        evidence={"cloud_quote": quote_payload},
+    )
+    cache_manager.update_task_status(
+        task_id, TaskStatus.AWAITING_CLOUD_CONFIRMATION
+    )
+    return {
+        "status": "awaiting_cloud_confirmation",
+        "message": "等待确认云端转录费用",
+        "data": quote_payload,
+    }
+
+
+def claim_cloud_quote_confirmation(
+    task_id: str, quote_token: str, accepted_cost: Decimal
+) -> bool:
+    """Atomically authorize one cloud continuation before returning HTTP 202."""
+    _, created = CloudQuoteRepository(
+        get_transcription_control_database(cache_manager)
+    ).confirm_and_queue(
+        task_id, quote_token, accepted_cost
+    )
+    return created
+
+
+def cancel_cloud_quote(task_id: str) -> bool:
+    """Withdraw any cloud or local fallback continuation that has not started."""
+    return CloudQuoteRepository(
+        get_transcription_control_database(cache_manager)
+    ).cancel(task_id)
+
+
+def resume_confirmed_cloud_quote(
+    task_id: str,
+    *,
+    claim_owner: str,
+    slot_owner: str,
+):
+    """Resume one retained cloud task without re-downloading its source."""
+    if _is_task_canceled(task_id):
+        return {"status": "canceled", "message": "任务已取消"}
+    quote_repository = CloudQuoteRepository(
+        get_transcription_control_database(cache_manager)
+    )
+    quote = quote_repository.get(task_id)
+    if quote.status == "canceled":
+        return {"status": "canceled", "message": "任务已取消"}
+    if quote.status == "consumed":
+        return {"status": "processing", "message": "cloud_attempt_already_started"}
+    if quote.status != "confirming" or quote.lease_owner != claim_owner:
+        return {"status": "processing", "message": "cloud_confirmation_in_progress"}
+    cache_manager.update_task_status(task_id, TaskStatus.PROCESSING, force=True)
+    try:
+        prepared_media = _load_quote_prepared_media(quote)
+    except ValueError as exc:
+        quote_repository.fail_claim(task_id, claim_owner)
+        _cleanup_retained_quote_media(quote.media_ref)
+        _fail_missing_quote_media(task_id, exc)
+        raise
+    if _is_task_canceled(task_id):
+        return {"status": "canceled", "message": "任务已取消"}
+    payload = load_cloud_continuation(quote.continuation_json)
+    context = TranscriptionContext(
+        task_id,
+        payload["platform"],
+        payload["media_id"],
+        owner_key=slot_owner,
+        continuation_json=quote.continuation_json,
+        accepted_max_cost=quote.max_cost,
+        prepared_media=prepared_media,
+    )
+    transcriber = Transcriber(
+        config=copy.deepcopy(get_config()),
+        strategy="cloud",
+        cloud_provider_factory=build_aliyun_provider,
+        progress_callback=_make_asr_progress_callback(task_id, "cloud-confirmed"),
+    )
+    usage_repository = UsageEventRepository(
+        get_transcription_control_database(cache_manager)
+    )
+    try:
+        transcriber.transcribe(
+            str(prepared_media.path),
+            datetime.datetime.now().strftime("%y%m%d-%H%M%S"),
+            context=context,
+        )
+    except CloudASRConfigError as exc:
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
+        quote_repository.require_refresh(task_id)
+        cache_manager.update_task_status(
+            task_id, TaskStatus.AWAITING_CLOUD_CONFIRMATION, force=True
+        )
+        return {"status": "refresh_required", "message": exc.code}
+    except CloudProviderError as exc:
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
+        if exc.code == "cloud_quote_changed":
+            quote_repository.require_refresh(task_id)
+            cache_manager.update_task_status(
+                task_id, TaskStatus.AWAITING_CLOUD_CONFIRMATION, force=True
+            )
+            return {"status": "refresh_required", "message": exc.code}
+        if exc.code not in _CLOUD_RECOVERY_PENDING_CODES:
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.FAILED,
+                error_message=f"云端转录失败（{exc.code}）",
+                force=True,
+            )
+        raise
+    except Exception:
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
+        cache_manager.update_task_status(
+            task_id,
+            TaskStatus.FAILED,
+            error_message="云端转录失败，请重新提交",
+            force=True,
+        )
+        raise
+    typed_result = transcriber.last_result
+    if _is_task_canceled(task_id):
+        return {"status": "canceled", "message": "任务已取消"}
+    try:
+        get_executor().submit(
+            dispatch_post_asr,
+            typed_result,
+            quote.continuation_json,
+            cache_manager=cache_manager,
+            llm_queue=llm_task_queue,
+            repository=usage_repository,
+        )
+    except Exception:
+        if _is_task_canceled(task_id):
+            return {"status": "canceled", "message": "任务已取消"}
+        cache_manager.update_task_status(
+            task_id,
+            TaskStatus.FAILED,
+            error_message="云端转录后处理提交失败",
+            force=True,
+        )
+        raise
+    return {
+        "status": "processing",
+        "message": "云端转录已完成，后处理已排队",
+    }
+
+
+def claim_cloud_quote_local_selection(task_id: str, *, owner: str):
+    """Validate retained media and atomically choose local before HTTP 202."""
+    repository = CloudQuoteRepository(
+        get_transcription_control_database(cache_manager)
+    )
+    quote = repository.get(task_id)
+    if quote.status in {"local_selected", "local_queued"}:
+        quote, acquired = repository.claim_local(task_id, owner)
+        if not acquired:
+            return quote, False
+    else:
+        acquired = None
+    try:
+        _verified_retained_media(quote.media_ref, quote.media_sha256)
+    except ValueError as exc:
+        if acquired:
+            repository.release_local_queue(task_id, owner)
+        _fail_missing_quote_media(task_id, exc)
+        raise
+    if acquired:
+        return quote, True
+    return repository.claim_local(task_id, owner)
+
+
+def resume_cloud_quote_locally(task_id: str, *, claim_owner: str):
+    """Use retained media for local ASR without downloading it again."""
+    if _is_task_canceled(task_id):
+        return {"status": "canceled", "message": "任务已取消"}
+    repository = CloudQuoteRepository(
+        get_transcription_control_database(cache_manager)
+    )
+    quote = repository.get(task_id)
+    try:
+        media_path = _verified_retained_media(
+            quote.media_ref, quote.media_sha256
+        )
+    except ValueError as exc:
+        _fail_missing_quote_media(task_id, exc)
+        raise
+    payload = load_cloud_continuation(quote.continuation_json)
+    output_base = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+    derived_path = _extract_audio_to_file(
+        str(media_path),
+        str(media_path.parent),
+        f"local-{uuid4().hex}",
+    )
+    if derived_path is None:
+        if not repository.release_local_queue(task_id, claim_owner):
+            raise RuntimeError("local_handoff_unknown")
+        raise ValueError("local_media_preparation_failed")
+    local_media_path = Path(derived_path)
+    if _is_task_canceled(task_id):
+        local_media_path.unlink(missing_ok=True)
+        return {"status": "canceled", "message": "任务已取消"}
+    try:
+        repository.mark_local_queued(task_id, claim_owner)
+    except Exception:
+        local_media_path.unlink(missing_ok=True)
+        raise
+
+    def run_provider():
+        transcriber = Transcriber(
+            config=copy.deepcopy(get_config()),
+            strategy="local",
+            progress_callback=_make_asr_progress_callback(
+                task_id, "local-fallback"
+            ),
+        )
+        return transcriber.transcribe(str(local_media_path), output_base)
+
+    def after_provider(result):
+        if _is_task_canceled(task_id):
+            return result
+        transcript = (result.get("transcript") or "").strip()
+        if not transcript:
+            raise RuntimeError("empty_local_transcript")
+        cache_manager.save_cache(
+            platform=payload["platform"],
+            url=payload["url"],
+            media_id=payload["media_id"],
+            use_speaker_recognition=False,
+            transcript_data=transcript,
+            transcript_type="capswriter",
+            title=payload["video_title"],
+            author=payload["author"],
+            description=payload["description"],
+        )
+        llm_task_queue.put(
+            {
+                **payload,
+                "transcript": transcript,
+                "use_speaker_recognition": False,
+                "notification_webhooks": {},
+            }
+        )
+        cache_manager.update_task_status(
+            task_id,
+            TaskStatus.CALIBRATING,
+            platform=payload["platform"],
+            media_id=payload["media_id"],
+            title=payload["video_title"],
+            author=payload["author"],
+            force=True,
+        )
+        return transcript
+
+    def on_failure(exc):
+        if not _is_task_canceled(task_id):
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.FAILED,
+                error_message="本地转录失败，请重试",
+                force=True,
+            )
+
+    try:
+        submit_local_asr_continuation(
+            task_id=task_id,
+            run_provider=run_provider,
+            after_provider=after_provider,
+            media=MediaCleanupOwnership((media_path, local_media_path)),
+            controller=get_transcription_concurrency_controller(),
+            asr_executor=get_local_asr_executor(),
+            post_executor=get_executor(),
+            on_result=lambda result: None,
+            on_failure=on_failure,
+            cancelled=lambda: _is_task_canceled(task_id),
+            submit_failure_preserved=frozenset({media_path}),
+        )
+    except Exception:
+        if not repository.release_local_queue(task_id, claim_owner):
+            raise RuntimeError("local_handoff_unknown") from None
+        raise
+    return {"status": "processing", "message": "local_asr_queued"}
+
+
+def refresh_cloud_quote(task_id: str):
+    repository = CloudQuoteRepository(
+        get_transcription_control_database(cache_manager)
+    )
+    current = repository.get(task_id)
+    try:
+        prepared_media = _load_quote_prepared_media(current)
+    except ValueError as exc:
+        _fail_missing_quote_media(task_id, exc)
+        raise
+    duration = prepared_media.duration_seconds
+    settings = NewCloudSubmissionSettings.from_config(get_config(), today=datetime.date.today())
+    refreshed = repository.refresh_required(
+        NewCloudQuote(
+            task_id=task_id, media_ref=current.media_ref,
+            media_sha256=current.media_sha256, duration_seconds=duration,
+            billable_seconds=int(duration.to_integral_value(rounding=ROUND_CEILING)),
+            model=settings.model, unit_price=settings.price_cny_per_second,
+            max_cost=settings.reserve_estimate(duration),
+            continuation_json=current.continuation_json,
+        )
+    )
+    payload = {
+        "duration_seconds": str(refreshed.duration_seconds),
+        "billable_seconds": refreshed.billable_seconds,
+        "unit_price_cny_per_second": str(refreshed.unit_price),
+        "max_cost_cny": str(refreshed.max_cost),
+        "quote_token": refreshed.token,
+    }
+    _safe_update_progress(
+        task_id, stage="awaiting_cloud_confirmation",
+        stage_label="云端转录报价已刷新", basis="trusted_audio_duration",
+        confidence="high", evidence={"cloud_quote": payload},
+    )
+    return payload
+
+
+def _transcribe_prepared_cloud(
+    *,
+    task_id: str,
+    media_path: str,
+    platform: str,
+    media_id: str,
+    continuation_json: str,
+    output_base: str,
+    progress_source: str,
+    transcriber_config: dict | None = None,
+):
+    """Prepare once, call the cloud Provider once, then release the candidate."""
+    preparer = _new_media_preparer()
+    prepared_media = preparer.prepare(media_path, task_id)
+    try:
+        context = TranscriptionContext(
+            task_id,
+            platform,
+            media_id,
+            continuation_json=continuation_json,
+            prepared_media=prepared_media,
+        )
+        transcriber = Transcriber(
+            config=(
+                transcriber_config
+                if transcriber_config is not None
+                else copy.deepcopy(get_config())
+            ),
+            progress_callback=_make_asr_progress_callback(
+                task_id, progress_source
+            ),
+            strategy="cloud",
+            cloud_provider_factory=build_aliyun_provider,
+        )
+        result = transcriber.transcribe(
+            str(prepared_media.path),
+            output_base,
+            context=context,
+        )
+        return transcriber, result
+    finally:
+        preparer.cleanup(prepared_media)
+
+
+def _is_cloud_recovery_pending(exc: Exception) -> bool:
+    return getattr(exc, "code", None) in _CLOUD_RECOVERY_PENDING_CODES
 
 
 def _safe_update_progress(task_id: str, **kwargs):
@@ -286,6 +929,9 @@ def process_local_upload(
     preserve_source_file: bool = False,
     preserve_transcript_timestamps: bool = False,
     document_fast_path: bool = False,
+    *,
+    transcription_strategy: str | None = None,
+    cloud_confirmation_required: bool = False,
 ) -> Dict[str, Any]:
     """处理本地上传的音视频或文档，复用 LLM 后处理与结果页。
 
@@ -296,7 +942,10 @@ def process_local_upload(
     audio_path = None
     structured_transcript = None
     document_quality = None
+    media_handed_off = False
     try:
+        if transcription_strategy is not None and use_speaker_recognition:
+            raise ValueError("strategy_conflicts_with_speaker_mode")
         if _is_task_canceled(task_id):
             return {"status": "canceled", "message": "任务已取消"}
         cache_manager.update_task_status(task_id, TaskStatus.PROCESSING)
@@ -310,6 +959,56 @@ def process_local_upload(
             return {"status": "failed", "message": "上传文件不存在"}
 
         ext = os.path.splitext(original_name)[1].lower()
+
+        completed_task_lookup = getattr(
+            cache_manager, "get_existing_task_by_media", None
+        )
+        completed_task = (
+            completed_task_lookup("generic", media_id, use_speaker_recognition)
+            if callable(completed_task_lookup)
+            else None
+        )
+        cached_result = None
+        if (
+            completed_task
+            and completed_task.get("task_id") != task_id
+            and completed_task.get("status") == TaskStatus.SUCCESS
+        ):
+            cached_result = cache_manager.get_cache(
+                platform="generic",
+                media_id=media_id,
+                use_speaker_recognition=use_speaker_recognition,
+                exact_speaker_match=True,
+            )
+            if (
+                cached_result
+                and ext not in _DOC_EXTS
+                and not cache_manager.cache_has_final_artifacts(cached_result)
+            ):
+                cached_result = None
+
+        if cached_result:
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.SUCCESS,
+                platform="generic",
+                media_id=media_id,
+                title=original_name,
+                author=cached_result.get("author") or "本地上传",
+                cache_id=cached_result.get("id"),
+                terminal_evidence={
+                    "cache_hit": True,
+                    "source_task_id": completed_task.get("task_id"),
+                },
+            )
+            tracker.count("cache_hit")
+            logger.info(
+                "local upload cache hit: task=%s, source_task=%s, media=%s",
+                task_id,
+                completed_task.get("task_id"),
+                media_id,
+            )
+            return {"status": "success", "message": "cache_hit"}
 
         if ext in _DOC_EXTS:
             # 文档：直接提取文本，不走转写
@@ -345,13 +1044,66 @@ def process_local_upload(
                     evidence={"document_quality": document_quality},
                 )
         else:
+            if transcription_strategy == "cloud":
+                cloud_continuation = build_cloud_continuation(
+                    task_id=task_id,
+                    url=display_url,
+                    display_url=original_name,
+                    platform="generic",
+                    media_id=media_id,
+                    video_title=original_name,
+                    author="本地上传",
+                    description="",
+                    is_generic=True,
+                    include_comments=False,
+                    comment_limit=100,
+                    preserve_transcript_timestamps=preserve_transcript_timestamps,
+                )
+                if cloud_confirmation_required:
+                    return _pause_for_cloud_confirmation(
+                        task_id=task_id,
+                        media_path=file_path,
+                        continuation_json=cloud_continuation,
+                    )
+                output_base = (
+                    datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+                    + "_"
+                    + media_id[:8]
+                )
+                transcriber, result = _transcribe_prepared_cloud(
+                    task_id=task_id,
+                    media_path=file_path,
+                    platform="generic",
+                    media_id=media_id,
+                    continuation_json=cloud_continuation,
+                    output_base=output_base,
+                    progress_source="local-upload",
+                )
+                repository = UsageEventRepository(
+                    get_transcription_control_database(cache_manager)
+                )
+                if not dispatch_post_asr(
+                    transcriber.last_result,
+                    cloud_continuation,
+                    cache_manager=cache_manager,
+                    llm_queue=llm_task_queue,
+                    repository=repository,
+                    ephemeral={"perf_tracker": tracker},
+                ):
+                    return {"status": "failed", "message": "postprocess_blocked"}
+                return {"status": "success", "message": "云端转录成功"}
+
             # 音视频：默认省空间，先抽 16kHz 单声道小音频并删除原视频。
             # 学习集合需要后续打开源文件时，会传 preserve_source_file=True。
             _safe_update_progress(
                 task_id, stage="transcribing", stage_label="正在提取音频",
                 basis="local_upload", confidence="high",
             )
-            audio_path = _extract_audio_to_file(file_path, os.path.dirname(file_path), media_id)
+            audio_path = _extract_audio_to_file(
+                file_path,
+                os.path.dirname(file_path),
+                f"{media_id}_{task_id}",
+            )
             transcribe_target = file_path
             if audio_path:
                 transcribe_target = audio_path
@@ -373,18 +1125,105 @@ def process_local_upload(
             upload_cfg = copy.deepcopy(get_config())
             _lw = upload_cfg.setdefault("local_whisper", {})
             _lw["timeout"] = max(int(_lw.get("timeout") or 1800), 14400)
-            transcriber = Transcriber(
-                config=upload_cfg,
-                progress_callback=_make_asr_progress_callback(task_id, "local-upload"),
-            )
-            output_base = (
-                datetime.datetime.now().strftime("%y%m%d-%H%M%S") + "_" + media_id[:8]
-            )
-            result = transcriber.transcribe(transcribe_target, output_base)
-            transcript = (result.get("transcript") or "").strip()
-            structured_transcript = result.get("funasr_json_data")
-            empty_msg = "转录结果为空"
+            if transcription_strategy != "cloud":
+                cleanup_paths = tuple(
+                    Path(path)
+                    for path in dict.fromkeys((file_path, audio_path))
+                    if path and not (preserve_source_file and path == file_path)
+                )
+                output_base = task_id
 
+                def run_provider():
+                    local_transcriber = Transcriber(
+                        config=upload_cfg,
+                        progress_callback=_make_asr_progress_callback(
+                            task_id, "local-upload"
+                        ),
+                        strategy=transcription_strategy,
+                    )
+                    return local_transcriber.transcribe(
+                        transcribe_target, output_base
+                    )
+
+                def after_provider(result):
+                    transcript = (result.get("transcript") or "").strip()
+                    structured = result.get("funasr_json_data")
+                    if not transcript:
+                        raise RuntimeError("empty_local_transcript")
+                    if _is_task_canceled(task_id):
+                        raise RuntimeError("local_asr_cancelled")
+                    transcript_payload = (
+                        structured
+                        if preserve_transcript_timestamps and structured
+                        else transcript
+                    )
+                    transcript_type = (
+                        "funasr"
+                        if preserve_transcript_timestamps and structured
+                        else "capswriter"
+                    )
+                    cache_manager.save_cache(
+                        platform="generic",
+                        url=display_url,
+                        media_id=media_id,
+                        use_speaker_recognition=False,
+                        transcript_data=transcript_payload,
+                        transcript_type=transcript_type,
+                        title=original_name,
+                        author="本地上传",
+                        description="",
+                    )
+                    llm_task_queue.put(
+                        {
+                            "task_id": task_id,
+                            "url": display_url,
+                            "display_url": original_name,
+                            "platform": "generic",
+                            "media_id": media_id,
+                            "video_title": original_name,
+                            "author": "本地上传",
+                            "description": "",
+                            "transcript": transcript,
+                            "use_speaker_recognition": False,
+                            "is_generic": True,
+                            "wechat_webhook": None,
+                            "notification_channel": None,
+                            "notification_webhooks": {},
+                            "include_comments": False,
+                            "comment_limit": 100,
+                            "perf_tracker": tracker,
+                        }
+                    )
+                    cache_manager.update_task_status(
+                        task_id,
+                        TaskStatus.CALIBRATING,
+                        platform="generic",
+                        media_id=media_id,
+                    )
+                    return transcript
+
+                def on_failure(exc):
+                    if not _is_task_canceled(task_id):
+                        cache_manager.update_task_status(
+                            task_id,
+                            TaskStatus.FAILED,
+                            error_message="本地转录失败，请重试",
+                        )
+
+                submit_local_asr_continuation(
+                    task_id=task_id,
+                    run_provider=run_provider,
+                    after_provider=after_provider,
+                    media=MediaCleanupOwnership(cleanup_paths),
+                    controller=get_transcription_concurrency_controller(),
+                    asr_executor=get_local_asr_executor(),
+                    post_executor=get_executor(),
+                    on_result=lambda result: None,
+                    on_failure=on_failure,
+                    cancelled=lambda: _is_task_canceled(task_id),
+                )
+                media_handed_off = True
+                return {"status": "processing", "message": "local_asr_queued"}
         if not transcript or not transcript.strip():
             cache_manager.update_task_status(
                 task_id, TaskStatus.FAILED, error_message=empty_msg
@@ -469,6 +1308,11 @@ def process_local_upload(
         )
         return {"status": "success", "message": "本地转录成功"}
     except Exception as exc:
+        if (
+            transcription_strategy == "cloud"
+            and _is_cloud_recovery_pending(exc)
+        ):
+            return {"status": "processing", "message": exc.code}
         logger.exception(f"本地上传转录失败: {task_id}, error={exc}")
         if not _is_task_canceled(task_id):
             cache_manager.update_task_status(
@@ -477,14 +1321,15 @@ def process_local_upload(
         return {"status": "failed", "message": str(exc)}
     finally:
         # 默认清理全部临时文件；学习集合会保留原 source 文件用于后续打开。
-        for _p in (file_path, audio_path):
-            if preserve_source_file and _p == file_path:
-                continue
-            if _p and os.path.exists(_p):
-                try:
-                    os.remove(_p)
-                except OSError:
-                    pass
+        if not media_handed_off:
+            for _p in (file_path, audio_path):
+                if preserve_source_file and _p == file_path:
+                    continue
+                if _p and os.path.exists(_p):
+                    try:
+                        os.remove(_p)
+                    except OSError:
+                        pass
 
 
 def _make_download_progress_callback(task_id: str):
@@ -592,6 +1437,129 @@ def _make_asr_progress_callback(task_id: str, source: str):
     return _callback
 
 
+def _submit_local_link_asr(
+    *,
+    task_id: str,
+    local_file: str,
+    url: str,
+    display_url: str,
+    platform: str,
+    media_id: str,
+    video_title: str,
+    author: str,
+    description: str,
+    is_generic: bool,
+    task_notifier,
+    engine_info: str,
+    wechat_webhook,
+    notification_channel,
+    notification_webhooks,
+    include_comments: bool,
+    comment_limit: int,
+    tracker,
+    download_url,
+    transcription_strategy: str | None,
+) -> dict[str, str]:
+    """Hand acquired link media to the local provider continuation."""
+    output_base = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+
+    def run_provider():
+        transcriber = Transcriber(
+            progress_callback=_make_asr_progress_callback(
+                task_id, "capswriter"
+            ),
+            strategy=transcription_strategy,
+        )
+        return transcriber.transcribe(local_file, output_base)
+
+    def after_provider(result):
+        transcript = (result.get("transcript") or "").strip()
+        if not transcript:
+            raise RuntimeError("empty_local_transcript")
+        if _is_task_canceled(task_id):
+            raise RuntimeError("local_asr_cancelled")
+        cache_manager.save_cache(
+            platform=platform,
+            url=url,
+            media_id=media_id,
+            use_speaker_recognition=False,
+            transcript_data=transcript,
+            transcript_type="capswriter",
+            title=video_title,
+            author=author,
+            description=description,
+        )
+        task_notifier.notify_task_status(
+            display_url,
+            f"转录完成 - {engine_info}",
+            title=video_title,
+            author=author,
+            transcript=transcript,
+        )
+        llm_task_queue.put(
+            {
+                "task_id": task_id,
+                "url": url,
+                "display_url": display_url,
+                "platform": platform,
+                "media_id": media_id,
+                "video_title": video_title,
+                "author": author,
+                "description": description,
+                "transcript": transcript,
+                "use_speaker_recognition": False,
+                "transcription_data": None,
+                "is_generic": is_generic,
+                "wechat_webhook": wechat_webhook,
+                "notification_channel": notification_channel,
+                "notification_webhooks": notification_webhooks,
+                "include_comments": include_comments,
+                "comment_limit": comment_limit,
+                "perf_tracker": tracker,
+            }
+        )
+        _safe_update_progress(
+            task_id,
+            stage="calibrating",
+            stage_label="转录已完成，正在校对和总结",
+            basis="llm_started",
+            confidence="medium",
+            evidence={"transcript_chars": len(transcript)},
+        )
+        cache_manager.update_task_status(
+            task_id,
+            TaskStatus.CALIBRATING,
+            platform=platform,
+            media_id=media_id,
+            title=video_title,
+            author=author,
+            download_url=download_url,
+        )
+        return transcript
+
+    def on_failure(exc):
+        if not _is_task_canceled(task_id):
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.FAILED,
+                error_message="本地转录失败，请重试",
+            )
+
+    submit_local_asr_continuation(
+        task_id=task_id,
+        run_provider=run_provider,
+        after_provider=after_provider,
+        media=MediaCleanupOwnership((Path(local_file),)),
+        controller=get_transcription_concurrency_controller(),
+        asr_executor=get_local_asr_executor(),
+        post_executor=get_executor(),
+        on_result=lambda result: None,
+        on_failure=on_failure,
+        cancelled=lambda: _is_task_canceled(task_id),
+    )
+    return {"status": "processing", "message": "local_asr_queued"}
+
+
 class MetadataOverride(BaseModel):
     """元数据覆盖模型"""
     title: Optional[str] = Field(None, description="视频标题", max_length=200)
@@ -621,6 +1589,9 @@ class TranscribeRequest(BaseModel):
     """转录请求数据模型"""
 
     url: str = Field(..., description="视频URL（平台链接，用于 view_token 和缓存）")
+    transcription_strategy: Literal["local", "cloud"] = Field(
+        "local", description="转录策略；旧客户端安全默认使用本地免费"
+    )
     use_speaker_recognition: bool = Field(False, description="是否使用说话人识别功能")
     wechat_webhook: Optional[str] = Field(
         None, description="企业微信webhook地址"
@@ -842,6 +1813,7 @@ async def process_task_queue():
             include_comments = task.get("include_comments", False)
             comment_limit = task.get("comment_limit", 100)
             preserve_source_file = task.get("preserve_source_file", False)
+            transcription_strategy = task.get("transcription_strategy")
 
             try:
                 if _is_task_canceled(task_id):
@@ -872,6 +1844,8 @@ async def process_task_queue():
                     include_comments=include_comments,
                     comment_limit=comment_limit,
                     preserve_source_file=preserve_source_file,
+                    transcription_strategy=transcription_strategy,
+                    cloud_confirmation_required=True,
                 )
 
                 def task_completed(future_result):
@@ -926,6 +1900,9 @@ def process_transcription(
     download_url=None, metadata_override=None, notification_channel=None,
     notification_webhooks=None, include_comments=False, comment_limit=100,
     preserve_source_file=False,
+    *,
+    transcription_strategy: str | None = None,
+    cloud_confirmation_required: bool = False,
 ):
     """
     处理视频转录
@@ -949,6 +1926,8 @@ def process_transcription(
     tracker = PerfTracker(task_id=task_id)
 
     try:
+        if transcription_strategy is not None and use_speaker_recognition:
+            raise ValueError("strategy_conflicts_with_speaker_mode")
         if _is_task_canceled(task_id):
             return {"status": "canceled", "message": "任务已取消"}
         # 规范化 download_url：将空字符串转换为 None
@@ -1602,16 +2581,92 @@ def process_transcription(
                                 logger.info(
                                     "[youtube-api] Using CapsWriter for transcription"
                                 )
-                                transcriber = Transcriber(
-                                    progress_callback=_make_asr_progress_callback(task_id, "capswriter")
-                                )
+                                if transcription_strategy != "cloud":
+                                    return _submit_local_link_asr(
+                                        task_id=task_id,
+                                        local_file=local_file,
+                                        url=url,
+                                        display_url=display_url,
+                                        platform=platform,
+                                        media_id=media_id,
+                                        video_title=video_title,
+                                        author=author,
+                                        description=description,
+                                        is_generic=False,
+                                        task_notifier=task_notifier,
+                                        engine_info=engine_info,
+                                        wechat_webhook=wechat_webhook,
+                                        notification_channel=notification_channel,
+                                        notification_webhooks=notification_webhooks,
+                                        include_comments=include_comments,
+                                        comment_limit=comment_limit,
+                                        tracker=tracker,
+                                        download_url=download_url,
+                                        transcription_strategy=transcription_strategy,
+                                    )
                                 temp_output_base = datetime.datetime.now().strftime(
                                     "%y%m%d-%H%M%S"
                                 )
-                                transcription_result = transcriber.transcribe(
-                                    local_file, temp_output_base
+                                cloud_continuation = build_cloud_continuation(
+                                    task_id=task_id,
+                                    url=url,
+                                    display_url=display_url,
+                                    platform=platform,
+                                    media_id=media_id,
+                                    video_title=video_title,
+                                    author=author,
+                                    description=description,
+                                    is_generic=False,
+                                    include_comments=include_comments,
+                                    comment_limit=comment_limit,
+                                )
+                                if cloud_confirmation_required:
+                                    return _pause_for_cloud_confirmation(
+                                        task_id=task_id,
+                                        media_path=local_file,
+                                        continuation_json=cloud_continuation,
+                                    )
+                                transcriber, transcription_result = (
+                                    _transcribe_prepared_cloud(
+                                        task_id=task_id,
+                                        media_path=local_file,
+                                        platform=platform,
+                                        media_id=media_id,
+                                        continuation_json=cloud_continuation,
+                                        output_base=temp_output_base,
+                                        progress_source="capswriter",
+                                    )
                                 )
                                 transcript = transcription_result.get("transcript", "")
+
+                                if transcription_strategy == "cloud":
+                                    repository = UsageEventRepository(
+                                        get_transcription_control_database(cache_manager)
+                                    )
+                                    if not dispatch_post_asr(
+                                        transcriber.last_result,
+                                        cloud_continuation,
+                                        cache_manager=cache_manager,
+                                        llm_queue=llm_task_queue,
+                                        repository=repository,
+                                        ephemeral={
+                                            "wechat_webhook": wechat_webhook,
+                                            "notification_channel": notification_channel,
+                                            "notification_webhooks": notification_webhooks,
+                                            "perf_tracker": tracker,
+                                        },
+                                    ):
+                                        return {"status": "failed", "message": "postprocess_blocked"}
+                                    return {
+                                        "status": "success",
+                                        "message": "使用 YouTube API Server 云端转录成功",
+                                        "data": {
+                                            "video_title": video_title,
+                                            "author": author,
+                                            "transcript": transcript,
+                                            "speaker_recognition": False,
+                                        },
+                                    }
 
                                 cache_result = cache_manager.save_cache(
                                     platform=platform,
@@ -1716,6 +2771,11 @@ def process_transcription(
 
                 except Exception as exc:
                     # 其他异常也不降级
+                    if (
+                        transcription_strategy == "cloud"
+                        and _is_cloud_recovery_pending(exc)
+                    ):
+                        return {"status": "processing", "message": exc.code}
                     error_msg = f"YouTube API Server unexpected error: {exc}"
                     logger.exception(f"[youtube-api] {error_msg}")
                     task_notifier.notify_task_status(display_url, "下载失败", error_msg)
@@ -2009,17 +3069,95 @@ def process_transcription(
                             }
                         else:
                             # 使用普通 CapsWriter 转录器
-                            transcriber = Transcriber(
-                                progress_callback=_make_asr_progress_callback(task_id, "capswriter")
-                            )
+                            if transcription_strategy != "cloud":
+                                return _submit_local_link_asr(
+                                    task_id=task_id,
+                                    local_file=local_file,
+                                    url=url,
+                                    display_url=display_url,
+                                    platform=platform,
+                                    media_id=media_id,
+                                    video_title=video_title,
+                                    author=author,
+                                    description=description,
+                                    is_generic=(
+                                        is_generic_downloader or is_from_generic
+                                    ),
+                                    task_notifier=task_notifier,
+                                    engine_info=engine_info,
+                                    wechat_webhook=wechat_webhook,
+                                    notification_channel=notification_channel,
+                                    notification_webhooks=notification_webhooks,
+                                    include_comments=include_comments,
+                                    comment_limit=comment_limit,
+                                    tracker=tracker,
+                                    download_url=download_url,
+                                    transcription_strategy=transcription_strategy,
+                                )
                             # 使用时间戳作为临时输出基础名
                             temp_output_base = datetime.datetime.now().strftime(
                                 "%y%m%d-%H%M%S"
                             )
-                            transcription_result = transcriber.transcribe(
-                                local_file, temp_output_base
+                            cloud_continuation = build_cloud_continuation(
+                                task_id=task_id,
+                                url=url,
+                                display_url=display_url,
+                                platform=platform,
+                                media_id=media_id,
+                                video_title=video_title,
+                                author=author,
+                                description=description,
+                                is_generic=is_generic_downloader or is_from_generic,
+                                include_comments=include_comments,
+                                comment_limit=comment_limit,
+                            )
+                            if cloud_confirmation_required:
+                                return _pause_for_cloud_confirmation(
+                                    task_id=task_id,
+                                    media_path=local_file,
+                                    continuation_json=cloud_continuation,
+                                )
+                            transcriber, transcription_result = (
+                                _transcribe_prepared_cloud(
+                                    task_id=task_id,
+                                    media_path=local_file,
+                                    platform=platform,
+                                    media_id=media_id,
+                                    continuation_json=cloud_continuation,
+                                    output_base=temp_output_base,
+                                    progress_source="capswriter",
+                                )
                             )
                             transcript = transcription_result.get("transcript", "")
+
+                            if transcription_strategy == "cloud":
+                                repository = UsageEventRepository(
+                                    get_transcription_control_database(cache_manager)
+                                )
+                                if not dispatch_post_asr(
+                                    transcriber.last_result,
+                                    cloud_continuation,
+                                    cache_manager=cache_manager,
+                                    llm_queue=llm_task_queue,
+                                    repository=repository,
+                                    ephemeral={
+                                        "wechat_webhook": wechat_webhook,
+                                        "notification_channel": notification_channel,
+                                        "notification_webhooks": notification_webhooks,
+                                        "perf_tracker": tracker,
+                                    },
+                                ):
+                                    return {"status": "failed", "message": "postprocess_blocked"}
+                                return {
+                                    "status": "success",
+                                    "message": "云端转录成功",
+                                    "data": {
+                                        "video_title": video_title,
+                                        "author": author,
+                                        "transcript": transcript,
+                                        "speaker_recognition": False,
+                                    },
+                                }
 
                             # 使用新缓存系统保存
                             cache_result = cache_manager.save_cache(
@@ -2124,6 +3262,11 @@ def process_transcription(
 
         return result
     except Exception as exc:
+        if (
+            transcription_strategy == "cloud"
+            and _is_cloud_recovery_pending(exc)
+        ):
+            return {"status": "processing", "message": exc.code}
         logger.exception(f"转录处理异常: {exc}")
         # 任务失败时输出已记录的性能摘要
         tracker.log_summary()

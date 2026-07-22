@@ -521,11 +521,41 @@ def test_study_upload_preserves_source_file(monkeypatch, tmp_path):
     assert response.status_code == 202
     assert response.json()["data"]["view_token"] == "view-1"
     assert cache_manager.create_task.call_args.kwargs["url"].startswith("local://study-source/")
+    assert cache_manager.create_task.call_args.kwargs["force_new_view_token"] is True
     assert background_calls
     assert background_calls[0][-3:-1] == (True, True)
     assert background_calls[0][-1] is False
     assert audit_logger.log_api_call.call_args.kwargs["task_id"] == "task-1"
     assert audit_logger.log_api_call.call_args.kwargs["user_id"] == "test-user"
+
+
+def test_repeated_study_uploads_get_independent_view_tokens(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import study
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    monkeypatch.setattr(study, "cache_manager", cache_manager)
+    monkeypatch.setattr(study, "process_local_upload", lambda *args: None)
+    monkeypatch.setattr(study, "get_source_root", lambda: tmp_path / "sources")
+    monkeypatch.setattr(study, "audit_logger", MagicMock())
+    client = TestClient(_build_app())
+
+    try:
+        first = client.post(
+            "/api/study/upload",
+            files={"file": ("lesson.mp4", b"same-video", "video/mp4")},
+        )
+        second = client.post(
+            "/api/study/upload",
+            files={"file": ("lesson.mp4", b"same-video", "video/mp4")},
+        )
+    finally:
+        cache_manager.close()
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json()["data"]["task_id"] != second.json()["data"]["task_id"]
+    assert first.json()["data"]["view_token"] != second.json()["data"]["view_token"]
 
 
 def test_retry_failed_single_study_creates_new_task_and_audits(monkeypatch, tmp_path):
@@ -551,6 +581,7 @@ def test_retry_failed_single_study_creates_new_task_and_audits(monkeypatch, tmp_
     monkeypatch.setattr(study, "cache_manager", cache)
     monkeypatch.setattr(study, "audit_logger", audit)
     monkeypatch.setattr(study, "get_study_service", lambda: service)
+    monkeypatch.setattr(study, "process_local_upload", lambda *args: None)
 
     response = TestClient(_build_app()).post("/api/study/old-view/retry")
 

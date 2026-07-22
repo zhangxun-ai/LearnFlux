@@ -118,6 +118,31 @@ class TestRecoverOrphanedTasks:
         cm.recover_orphaned_tasks()
         assert cm.get_task_by_id(processing)["completed_at"] is not None
 
+    def test_protected_cloud_task_is_excluded_from_startup_and_stale_sweeps(self, cm):
+        protected = _new_task(cm, "https://example.com/cloud")
+        ordinary = _new_task(cm, "https://example.com/ordinary")
+        cm.update_task_status(protected, TaskStatus.PROCESSING)
+        cm.update_task_status(ordinary, TaskStatus.PROCESSING)
+
+        assert cm.recover_orphaned_tasks(protected_task_ids={protected}) == 1
+        assert cm.get_task_by_id(protected)["status"] == "processing"
+        assert cm.get_task_by_id(ordinary)["status"] == "failed"
+
+        self._set_last_heartbeat(cm, protected, "2026-07-12 08:00:00")
+        assert cm.recover_stale_tasks(
+            30,
+            now="2026-07-12 10:00:00",
+            protected_task_ids={protected},
+        ) == 0
+
+    @staticmethod
+    def _set_last_heartbeat(cm, task_id, value):
+        with cm._get_cursor() as cursor:
+            cursor.execute(
+                "UPDATE task_status SET last_heartbeat_at = ? WHERE task_id = ?",
+                (value, task_id),
+            )
+
 
 class TestRecoverStaleTasks:
     """Runtime recovery for tasks that stop sending progress heartbeats."""

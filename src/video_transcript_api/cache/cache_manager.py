@@ -40,9 +40,14 @@ class CacheManager:
 
         # 使用线程本地存储来管理数据库连接
         self._local = threading.local()
+        self._task_status_repository = None
 
         # 初始化数据库
         self._init_database()
+
+    def set_task_status_repository(self, repository) -> None:
+        """Install an explicit task-status authority for SaaS mode only."""
+        self._task_status_repository = repository
 
     def _get_connection(self) -> sqlite3.Connection:
         """获取当前线程的数据库连接"""
@@ -112,6 +117,7 @@ class CacheManager:
                     progress_json TEXT,
                     progress_reminders_json TEXT,
                     source_file_path TEXT,
+                    owner_user_id TEXT,
                     last_heartbeat_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (cache_id) REFERENCES video_cache(id)
                 )
@@ -216,6 +222,15 @@ class CacheManager:
                         """
                     )
                     logger.info("last_heartbeat_at 字段添加成功")
+
+                cursor.execute("PRAGMA table_info(task_status)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if 'owner_user_id' not in columns:
+                    logger.info("添加 owner_user_id 字段到 task_status 表...")
+                    cursor.execute(
+                        "ALTER TABLE task_status ADD COLUMN owner_user_id TEXT"
+                    )
+                    logger.info("owner_user_id 字段添加成功")
                 else:
                     logger.debug("数据库结构正常，无需迁移")
 
@@ -263,6 +278,7 @@ class CacheManager:
                 progress_json TEXT,
                 progress_reminders_json TEXT,
                 source_file_path TEXT,
+                owner_user_id TEXT,
                 last_heartbeat_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (cache_id) REFERENCES video_cache(id)
             )
@@ -297,6 +313,7 @@ class CacheManager:
                 row_map.get("progress_json"),
                 row_map.get("progress_reminders_json"),
                 row_map.get("source_file_path"),
+                row_map.get("owner_user_id"),
                 row_map.get("last_heartbeat_at")
                 or row_map.get("completed_at")
                 or row_map.get("created_at"),
@@ -307,8 +324,8 @@ class CacheManager:
                 (task_id, view_token, url, download_url, platform, media_id, use_speaker_recognition,
                  status, title, author, created_at, completed_at, cache_id, llm_config,
                  error_message, progress_json, progress_reminders_json, source_file_path,
-                 last_heartbeat_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 owner_user_id, last_heartbeat_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', new_row_data)
 
         logger.info(f"数据库迁移完成，恢复了 {len(existing_data)} 条记录")
@@ -345,7 +362,8 @@ class CacheManager:
                    title: str = "",
                    author: str = "",
                    description: str = "",
-                   extra_json_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+                   extra_json_data: Optional[Dict[str, Any]] = None,
+                   source_language: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         保存缓存
 
@@ -387,6 +405,9 @@ class CacheManager:
                     logger.info(f"已保存 CapsWriter FunASR 兼容格式: {json_file}")
 
             # 计算相对路径（兼容 Windows 和 Linux）
+            if source_language:
+                language_file = file_path / "source_language.txt"
+                language_file.write_text(source_language.strip(), encoding="utf-8")
             relative_path = file_path.relative_to(self.cache_dir)
             files_loc = relative_path.as_posix()  # 使用 POSIX 格式保证跨平台兼容
 
@@ -415,7 +436,8 @@ class CacheManager:
                   platform: str = None,
                   media_id: str = None,
                   url: str = None,
-                  use_speaker_recognition: Optional[bool] = None) -> Optional[Dict[str, Any]]:
+                  use_speaker_recognition: Optional[bool] = None,
+                  exact_speaker_match: bool = False) -> Optional[Dict[str, Any]]:
         """
         获取缓存
 
@@ -424,6 +446,7 @@ class CacheManager:
             media_id: 媒体ID
             url: 视频URL
             use_speaker_recognition: 是否需要说话人识别的缓存
+            exact_speaker_match: 是否要求说话人识别配置完全一致
 
         Returns:
             Dict: 缓存数据，包含数据库记录和文件内容
@@ -445,7 +468,10 @@ class CacheManager:
                     return None
 
                 # 处理 use_speaker_recognition 条件
-                if use_speaker_recognition is True:
+                if exact_speaker_match and use_speaker_recognition is not None:
+                    conditions.append("use_speaker_recognition = ?")
+                    params.append(int(use_speaker_recognition))
+                elif use_speaker_recognition is True:
                     # 如果明确要求说话人识别，只查找带说话人识别的
                     conditions.append("use_speaker_recognition = 1")
                 elif use_speaker_recognition is False:
@@ -492,6 +518,19 @@ class CacheManager:
                     logger.info(f"已删除无效的缓存记录: {cache_data['id']}")
                     return None
 
+                # Keep the legacy transcript as the immutable source transcript.
+                cache_data['source_transcript'] = cache_data['transcript_data']
+                transcript_zh = file_path / "transcript_zh.txt"
+                if transcript_zh.exists():
+                    with open(transcript_zh, 'r', encoding='utf-8') as f:
+                        cache_data['zh_translation'] = f.read()
+                    cache_data['translation_language'] = 'zh'
+                source_language = file_path / "source_language.txt"
+                if source_language.exists():
+                    cache_data['source_language'] = source_language.read_text(
+                        encoding='utf-8'
+                    ).strip()
+
                 # 读取其他文件（如果存在）
                 llm_calibrated = file_path / "llm_calibrated.txt"
                 llm_summary = file_path / "llm_summary.txt"
@@ -523,6 +562,32 @@ class CacheManager:
         except Exception as e:
             logger.error(f"获取缓存失败: {e}")
             return None
+
+    def save_zh_translation(self, platform: str, media_id: str, text: str) -> str:
+        """Atomically save Chinese translation without touching source artifacts."""
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("translation_must_not_be_empty")
+        with self._get_cursor() as cursor:
+            row = cursor.execute(
+                "SELECT files_loc FROM video_cache WHERE platform=? AND media_id=? "
+                "ORDER BY updated_at DESC LIMIT 1",
+                (platform, media_id),
+            ).fetchone()
+        if row is None:
+            raise FileNotFoundError("source_transcript_not_found")
+        target_dir = self.cache_dir / Path(row['files_loc'])
+        target = target_dir / "transcript_zh.txt"
+        temporary = target_dir / f".transcript_zh.{uuid.uuid4().hex}.tmp"
+        try:
+            with open(temporary, "w", encoding="utf-8") as handle:
+                handle.write(text)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+        return str(target)
 
     def delete_task_and_cache(self, task_id: str) -> Optional[Dict[str, int]]:
         """Delete a terminal task and invalidate every cache variant for its media.
@@ -894,7 +959,8 @@ class CacheManager:
     def create_task(self, url: str, use_speaker_recognition: bool = False,
                     download_url: str = None, platform: str = None,
                     media_id: str = None,
-                    force_new_view_token: bool = False) -> Dict[str, str]:
+                    force_new_view_token: bool = False,
+                    owner_user_id: str = None) -> Dict[str, str]:
         """
         创建新任务，相同URL或相同(platform, media_id)会复用view_token
 
@@ -912,6 +978,16 @@ class CacheManager:
         Returns:
             Dict: 包含task_id和view_token的字典
         """
+        if self._task_status_repository is not None:
+            return self._task_status_repository.create_task(
+                url=url,
+                use_speaker_recognition=use_speaker_recognition,
+                download_url=download_url,
+                platform=platform,
+                media_id=media_id,
+                force_new_view_token=force_new_view_token,
+                owner_user_id=owner_user_id,
+            )
         task_id = self.generate_task_id()
 
         # 将空字符串转换为 None，避免存储无意义的空字符串
@@ -951,11 +1027,11 @@ class CacheManager:
                     INSERT INTO task_status
                     (task_id, view_token, url, download_url, use_speaker_recognition,
                      status, platform, media_id, progress_json, progress_reminders_json,
-                     last_heartbeat_at)
-                    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     last_heartbeat_at, owner_user_id)
+                    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
                 ''', (task_id, view_token, url, download_url, use_speaker_recognition,
                       platform, media_id, json.dumps(queued_progress, ensure_ascii=False),
-                      json.dumps([], ensure_ascii=False)))
+                      json.dumps([], ensure_ascii=False), owner_user_id))
 
             logger.info(f"任务创建成功: {task_id}, view_token: {view_token}, download_url: {download_url}")
             return {
@@ -991,6 +1067,21 @@ class CacheManager:
             force: 是否绕过终态黏性保护(recalibrate 显式重置时为 True)
             source_file_path: 可选，本地保存的源内容文件路径
         """
+        if self._task_status_repository is not None:
+            return self._task_status_repository.update_task_status(
+                task_id,
+                status,
+                platform=platform,
+                media_id=media_id,
+                title=title,
+                author=author,
+                cache_id=cache_id,
+                download_url=download_url,
+                force=force,
+                error_message=error_message,
+                source_file_path=source_file_path,
+                terminal_evidence=terminal_evidence,
+            )
         try:
             # 将空字符串转换为 None，避免存储无意义的空字符串
             if download_url is not None and isinstance(download_url, str) and not download_url.strip():
@@ -1093,6 +1184,18 @@ class CacheManager:
         message: str = None,
     ) -> Optional[Dict[str, Any]]:
         """Persist structured progress for a task."""
+        if self._task_status_repository is not None:
+            return self._task_status_repository.update_task_progress(
+                task_id,
+                stage=stage,
+                stage_label=stage_label,
+                fraction=fraction,
+                basis=basis,
+                confidence=confidence,
+                evidence=evidence,
+                eta_seconds=eta_seconds,
+                message=message,
+            )
         progress = build_progress(
             stage=stage,
             stage_label=stage_label,
@@ -1188,7 +1291,13 @@ class CacheManager:
             logger.error(f"查询本地源文件引用失败: {e}")
             return []
 
-    def recover_stale_tasks(self, max_age_minutes: int = 30, now=None) -> int:
+    def recover_stale_tasks(
+        self,
+        max_age_minutes: int = 30,
+        now=None,
+        *,
+        protected_task_ids=(),
+    ) -> int:
         """Mark non-terminal tasks failed when progress heartbeat is stale."""
         try:
             timeout_minutes = int(max_age_minutes)
@@ -1210,10 +1319,18 @@ class CacheManager:
             evidence={"timeout_minutes": timeout_minutes},
         )
 
+        protected = tuple(sorted(set(protected_task_ids or ())))
+        exclusion_sql = ""
+        exclusion_values = ()
+        if protected:
+            placeholders = ",".join("?" for _ in protected)
+            exclusion_sql = f" AND task_id NOT IN ({placeholders})"
+            exclusion_values = protected
+
         try:
             with self._get_cursor() as cursor:
                 cursor.execute(
-                    """
+                    f"""
                     UPDATE task_status
                     SET status = ?,
                         completed_at = ?,
@@ -1222,6 +1339,7 @@ class CacheManager:
                         progress_json = ?
                     WHERE status IN (?, ?, ?)
                       AND COALESCE(last_heartbeat_at, created_at) < ?
+                      {exclusion_sql}
                     """,
                     (
                         TaskStatus.FAILED,
@@ -1233,7 +1351,7 @@ class CacheManager:
                         TaskStatus.PROCESSING,
                         TaskStatus.CALIBRATING,
                         cutoff_sql,
-                    ),
+                    ) + exclusion_values,
                 )
                 count = cursor.rowcount
             if count:
@@ -1245,7 +1363,7 @@ class CacheManager:
             logger.error(f"运行期卡死任务回收失败: {e}")
             return 0
 
-    def recover_orphaned_tasks(self) -> int:
+    def recover_orphaned_tasks(self, *, protected_task_ids=()) -> int:
         """启动恢复:将中断的非终态任务标记为 failed.
 
         任务队列存在内存中,进程崩溃/重启时正在处理的任务会随队列丢失,
@@ -1257,19 +1375,27 @@ class CacheManager:
         Returns:
             int: 被恢复(标记为 failed)的任务数
         """
+        protected = tuple(sorted(set(protected_task_ids or ())))
+        exclusion_sql = ""
+        exclusion_values = ()
+        if protected:
+            placeholders = ",".join("?" for _ in protected)
+            exclusion_sql = f" AND task_id NOT IN ({placeholders})"
+            exclusion_values = protected
+
         try:
             with self._get_cursor() as cursor:
                 cursor.execute(
                     "UPDATE task_status "
                     "SET status = ?, completed_at = CURRENT_TIMESTAMP, "
                     "last_heartbeat_at = CURRENT_TIMESTAMP "
-                    "WHERE status IN (?, ?, ?)",
+                    f"WHERE status IN (?, ?, ?){exclusion_sql}",
                     (
                         TaskStatus.FAILED,
                         TaskStatus.QUEUED,
                         TaskStatus.PROCESSING,
                         TaskStatus.CALIBRATING,
-                    ),
+                    ) + exclusion_values,
                 )
                 count = cursor.rowcount
             if count:
@@ -1294,6 +1420,8 @@ class CacheManager:
         Returns:
             Dict: 任务信息
         """
+        if self._task_status_repository is not None:
+            return self._task_status_repository.get_task_by_id(task_id)
         try:
             with self._get_cursor() as cursor:
                 cursor.execute("SELECT * FROM task_status WHERE task_id = ?", (task_id,))
@@ -1319,6 +1447,8 @@ class CacheManager:
         Returns:
             Dict: 任务信息
         """
+        if self._task_status_repository is not None:
+            return self._task_status_repository.get_task_by_view_token(view_token)
         try:
             with self._get_cursor() as cursor:
                 # 优先返回成功状态的任务，其次返回最新的任务
@@ -1329,11 +1459,14 @@ class CacheManager:
                         CASE status
                             WHEN 'success' THEN 1
                             WHEN 'processing' THEN 2
-                            WHEN 'queued' THEN 3
-                            WHEN 'failed' THEN 4
-                            ELSE 5
+                            WHEN 'calibrating' THEN 3
+                            WHEN 'awaiting_cloud_confirmation' THEN 4
+                            WHEN 'queued' THEN 5
+                            WHEN 'failed' THEN 6
+                            ELSE 7
                         END,
-                        created_at DESC
+                        created_at DESC,
+                        rowid DESC
                     LIMIT 1
                 """, (view_token,))
                 row = cursor.fetchone()
@@ -1346,7 +1479,7 @@ class CacheManager:
             logger.error(f"根据view_token获取任务信息失败: {e}")
             return None
 
-    def _cache_has_final_artifacts(self, cache_data: Optional[Dict[str, Any]]) -> bool:
+    def cache_has_final_artifacts(self, cache_data: Optional[Dict[str, Any]]) -> bool:
         """Return True when cache contains user-facing final LLM output."""
         if not cache_data:
             return False
@@ -1385,8 +1518,12 @@ class CacheManager:
                 )
 
             # 如果任务还在进行中（calibrating 表示转录已完成、LLM 校对/总结进行中）
-            if task_info['status'] in ['queued', 'processing', 'calibrating']:
-                if self._cache_has_final_artifacts(cache_data):
+            active_statuses = [
+                'queued', 'processing', 'calibrating',
+                TaskStatus.AWAITING_CLOUD_CONFIRMATION,
+            ]
+            if task_info['status'] in active_statuses:
+                if self.cache_has_final_artifacts(cache_data):
                     self.update_task_status(
                         task_info['task_id'],
                         TaskStatus.SUCCESS,
@@ -1401,6 +1538,7 @@ class CacheManager:
                 else:
                     return {
                         'status': 'processing',
+                        'task_status': task_info['status'],
                         'task_id': task_info.get('task_id'),
                         'view_token': task_info.get('view_token'),
                         'title': task_info.get('title', '转录处理中...'),
@@ -1412,9 +1550,10 @@ class CacheManager:
                         'source_file_path': source_file_path,
                     }
 
-            if task_info['status'] in ['queued', 'processing', 'calibrating']:
+            if task_info['status'] in active_statuses:
                 return {
                     'status': 'processing',
+                    'task_status': task_info['status'],
                     'task_id': task_info.get('task_id'),
                     'view_token': task_info.get('view_token'),
                     'title': task_info.get('title', '转录处理中...'),
@@ -1483,6 +1622,10 @@ class CacheManager:
                         'summary': summary,
                         'summary_missing': summary_missing,
                         'transcript': transcript,
+                        'source_transcript': cache_data.get('source_transcript'),
+                        'source_language': cache_data.get('source_language'),
+                        'zh_translation': cache_data.get('zh_translation'),
+                        'translation_language': cache_data.get('translation_language'),
                         'use_speaker_recognition': cache_data.get('use_speaker_recognition', False),
                         'created_at': task_info['created_at'],
                         'completed_at': task_info.get('completed_at'),

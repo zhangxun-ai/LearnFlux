@@ -57,7 +57,7 @@
 {% block content %}
     <div class="section error-shell">
         <article class="error-panel" role="alert" aria-labelledby="error-title">
-            <h2 id="error-title">出现错误</h2>
+            <h2 id="error-title">{{ error_heading or "出现错误" }}</h2>
             <p class="error-message">{{ message or "页面无法正常显示" }}</p>
 
             <div class="error-actions">

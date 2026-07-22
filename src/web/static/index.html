@@ -199,19 +199,63 @@
                         </div>
 
 
+                        <div class="form-group transcription-strategy-cards" role="group" aria-label="转录方式">
+                            <label class="strategy-card">
+                                <input type="radio" name="transcription-strategy" value="local" class="sr-only">
+                                <div class="strategy-card-content">
+                                    <div class="strategy-icon">💻</div>
+                                    <div class="strategy-text">
+                                        <strong>本地免费</strong>
+                                        <span>使用本机资源，不产生云端转录费用</span>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="strategy-card">
+                                <input type="radio" name="transcription-strategy" value="cloud" checked class="sr-only">
+                                <div class="strategy-card-content">
+                                    <div class="strategy-icon">☁️</div>
+                                    <div class="strategy-text">
+                                        <strong>云端付费</strong>
+                                        <span>取得可信时长后展示费用上限，确认前不提交</span>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
 
                         <div class="form-group">
                             <button type="submit" id="submit-btn" class="submit-btn" disabled>
                                 <span class="btn-icon" aria-hidden="true">↗</span>
                                 <span class="btn-text">开始解析</span>
                             </button>
-                            <div id="submit-hint" class="submit-hint" role="status" aria-live="polite"></div>
+                            <div id="submit-hint" class="submit-hint" role="status" aria-live="polite">粘贴或选择一个链接后即可开始解析。</div>
                         </div>
                     </form>
                 </div>
 
                 <!-- 本地文件面板：视频/音频上传转录 -->
                 <div class="input-panel" id="panel-file" role="tabpanel" aria-labelledby="tab-file" hidden>
+                    <div class="form-group transcription-strategy-cards" role="group" aria-label="音视频转录方式">
+                        <label class="strategy-card">
+                            <input type="radio" name="file-transcription-strategy" value="local" class="sr-only">
+                            <div class="strategy-card-content">
+                                <div class="strategy-icon">💻</div>
+                                <div class="strategy-text">
+                                    <strong>本地免费</strong>
+                                    <span>使用本机资源转录</span>
+                                </div>
+                            </div>
+                        </label>
+                        <label class="strategy-card">
+                            <input type="radio" name="file-transcription-strategy" value="cloud" checked class="sr-only">
+                            <div class="strategy-card-content">
+                                <div class="strategy-icon">☁️</div>
+                                <div class="strategy-text">
+                                    <strong>云端付费</strong>
+                                    <span>取得可信时长后确认费用</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
                     <input type="file" id="file-input"
                            accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.mov,.mkv,.webm,.txt,.md,.markdown,.csv,.log,.html,.htm,.pdf,.docx"
                            hidden>

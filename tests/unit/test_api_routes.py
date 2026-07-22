@@ -376,6 +376,32 @@ class TestUploadTranscribeEndpoint:
             media_id=ANY,
             title="notes.md",
         )
+        assert (
+            mock_cache_manager.create_task.call_args.kwargs["force_new_view_token"]
+            is True
+        )
+
+    def test_upload_transcribe_uses_content_hash_as_media_id(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        with patch(
+            "video_transcript_api.api.routes.tasks.config",
+            {"storage": {"temp_dir": str(tmp_path)}},
+        ), patch(
+            "video_transcript_api.api.routes.tasks.process_local_upload"
+        ):
+            for _ in range(2):
+                response = client.post(
+                    "/api/upload-transcribe",
+                    files={"file": ("lesson.mp4", b"same-video", "video/mp4")},
+                )
+                assert response.status_code == 200
+
+        first_call, second_call = mock_cache_manager.create_task.call_args_list[-2:]
+        first_media_id = first_call.kwargs["media_id"]
+        second_media_id = second_call.kwargs["media_id"]
+        assert first_media_id == second_media_id
+        assert first_media_id.startswith("local_")
 
 
 class TestGetTaskStatus:

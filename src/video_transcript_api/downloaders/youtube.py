@@ -525,7 +525,18 @@ class YoutubeDownloader(BaseDownloader):
                     f"[youtube-api] Metadata fetch failed, fallback to TikHub: {e}"
                 )
 
-        info = self.get_video_info(url)
+        try:
+            info = self.get_video_info(url)
+        except Exception as exc:
+            # TikHub may reject a valid video while yt-dlp can still read its
+            # public metadata and subtitles. Keep that metadata authoritative
+            # instead of leaking the URL path ("watch") into the result page.
+            logger.warning(
+                f"[youtube] TikHub metadata unavailable; trying yt-dlp: "
+                f"{type(exc).__name__}"
+            )
+            info = self._get_video_info_with_ytdlp(url)
+            self._cached_video_info[video_id] = info
         extra = {}
         if "subtitle_info" in info:
             extra["subtitle_info"] = info.get("subtitle_info")

@@ -1097,6 +1097,10 @@ body.export-document-mode .export-print-nav {
                 <span style="opacity: 0.5; margin: 0 4px;">·</span>
                 <span>耗时 {{ stats.duration_display }}</span>
             {% endif %}
+            {% if asr_usage %}
+                <span style="opacity: 0.5; margin: 0 4px;">·</span>
+                <span title="{{ asr_usage.detail }}">{{ asr_usage.label }}</span>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -1171,17 +1175,6 @@ body.export-document-mode .export-print-nav {
         {% endif %}
     </nav>
     {% endif %}
-
-    {% if longcut_action %}
-    <div style="margin-bottom: 32px;">
-        <a href="{{ longcut_action.url }}" style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #2563eb; text-decoration: none; font-weight: 500;">
-            <span style="background: rgba(37,99,235,0.1); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">▶</span>
-            {{ longcut_action.label }}
-        </a>
-    </div>
-    {% endif %}
-
-
 
     <div class="section" data-export-section="summary">
         <div class="section-header">

@@ -44,6 +44,7 @@ data/services/
 data/source_files/
 data/server.pid
 tests/llm/output
+tests/cache/remote_asr_benchmark/
 
 
 # 媒体文件

@@ -1,11 +1,12 @@
 import asyncio
 import concurrent.futures
+import os
 import queue
 import threading
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi.templating import Jinja2Templates
 
@@ -16,10 +17,26 @@ from ..utils.logging import get_audit_logger as _get_audit_logger_impl
 from ..utils.logging import load_config as _load_config_impl
 from ..utils.logging import setup_logger
 from ..utils.tempfile_manager import TempFileManager
+from ..transcriber.concurrency import (
+    LOCAL_ASR_HARD_LIMIT,
+    TranscriptionConcurrencyController,
+    resolve_transcription_limits,
+)
+from ..transcriber.control_store import (
+    PostgresTranscriptionControlStore,
+    SQLiteTranscriptionControlStore,
+)
+from ..transcriber.online_runtime import OnlineRuntimeSettings
+from ..transcriber.object_store import LocalObjectStore, S3ObjectStore
 
 # Lazy initialized runtime resources
 _task_queue: asyncio.Queue | None = None
 _executor: concurrent.futures.ThreadPoolExecutor | None = None
+_local_asr_executor: concurrent.futures.ThreadPoolExecutor | None = None
+_cloud_asr_executor: concurrent.futures.ThreadPoolExecutor | None = None
+_transcription_concurrency_controller: TranscriptionConcurrencyController | None = None
+_cloud_asr_dispatcher: Any | None = None
+_cloud_asr_dispatcher_guard = threading.Lock()
 _llm_task_queue: queue.Queue | None = None
 _llm_executor: concurrent.futures.ThreadPoolExecutor | None = None
 _templates: Jinja2Templates | None = None
@@ -52,9 +69,55 @@ def get_audit_logger():
 
 
 @lru_cache
+def get_online_runtime_settings() -> OnlineRuntimeSettings:
+    """Return validated infrastructure selection without logging its values."""
+    return OnlineRuntimeSettings.from_environ(os.environ)
+
+
+@lru_cache
+def get_transcription_control_store():
+    """Return the single task/quote/usage authority for this process."""
+    settings = get_online_runtime_settings()
+    if settings.persistence_backend == "postgres":
+        return PostgresTranscriptionControlStore(settings.database_url)
+    cache_dir = get_config().get("storage", {}).get("cache_dir", "./data/cache")
+    return SQLiteTranscriptionControlStore(Path(cache_dir) / "cache.db")
+
+
+def get_cloud_quote_repository():
+    return get_transcription_control_store().quote_repository
+
+
+def get_usage_repository():
+    return get_transcription_control_store().usage_repository
+
+
+def get_transcription_control_database(cache_manager=None):
+    """Resolve the selected control DB while preserving legacy local callers."""
+    manager = cache_manager or get_cache_manager()
+    repository = getattr(manager, "_task_status_repository", None)
+    if repository is not None and hasattr(repository, "database"):
+        return repository.database
+    return manager.db_path
+
+
+@lru_cache
+def get_transcription_object_store():
+    """Return private temporary media storage for the selected runtime."""
+    settings = get_online_runtime_settings()
+    if settings.object_backend == "s3":
+        return S3ObjectStore.from_settings(settings)
+    temp_dir = get_config().get("storage", {}).get("temp_dir", "./data/temp")
+    return LocalObjectStore(Path(temp_dir) / "online_objects")
+
+
+@lru_cache
 def get_cache_manager():
     cache_dir = get_config().get("storage", {}).get("cache_dir", "./data/cache")
-    return CacheManager(cache_dir)
+    manager = CacheManager(cache_dir)
+    if get_online_runtime_settings().persistence_backend == "postgres":
+        manager.set_task_status_repository(get_transcription_control_store())
+    return manager
 
 
 @lru_cache
@@ -95,6 +158,62 @@ def get_executor() -> concurrent.futures.ThreadPoolExecutor:
         max_workers = get_config().get("concurrent", {}).get("max_workers", 3)
         _executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
     return _executor
+
+
+def get_transcription_concurrency_controller() -> TranscriptionConcurrencyController:
+    """Return the process-wide ASR concurrency controller."""
+    global _transcription_concurrency_controller
+    if _transcription_concurrency_controller is None:
+        limits = resolve_transcription_limits(
+            get_config(), warn=get_logger().warning
+        )
+        _transcription_concurrency_controller = TranscriptionConcurrencyController(
+            local=limits.local_soft,
+            cloud=limits.cloud_soft,
+            local_hard=limits.local_hard,
+            cloud_hard=limits.cloud_hard,
+        )
+    return _transcription_concurrency_controller
+
+
+def get_local_asr_executor() -> concurrent.futures.ThreadPoolExecutor:
+    """Return the provider-only local ASR executor."""
+    global _local_asr_executor
+    if _local_asr_executor is None:
+        _local_asr_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=LOCAL_ASR_HARD_LIMIT,
+            thread_name_prefix="local-asr",
+        )
+    return _local_asr_executor
+
+
+def get_cloud_asr_executor() -> concurrent.futures.ThreadPoolExecutor:
+    """Return the provider-only cloud ASR executor."""
+    global _cloud_asr_executor
+    if _cloud_asr_executor is None:
+        hard_limit = get_transcription_concurrency_controller().snapshot()[
+            "cloud_asr_hard_limit"
+        ]
+        _cloud_asr_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=hard_limit,
+            thread_name_prefix="cloud-asr",
+        )
+    return _cloud_asr_executor
+
+
+def set_cloud_asr_dispatcher(dispatcher: Any | None) -> None:
+    """Publish or clear the active cloud dispatcher without exposing config."""
+    global _cloud_asr_dispatcher
+    with _cloud_asr_dispatcher_guard:
+        _cloud_asr_dispatcher = dispatcher
+
+
+def get_cloud_asr_dispatcher() -> Any:
+    """Return the active cloud dispatcher or fail closed during startup/shutdown."""
+    with _cloud_asr_dispatcher_guard:
+        if _cloud_asr_dispatcher is None:
+            raise RuntimeError("cloud_asr_dispatcher_unavailable")
+        return _cloud_asr_dispatcher
 
 
 def get_llm_queue() -> queue.Queue:

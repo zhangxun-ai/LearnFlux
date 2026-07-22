@@ -4,6 +4,13 @@
 import os
 import sys
 import argparse
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load local development values before application modules read the environment.
+# Deployment-provided values always win and dotenv values are never logged.
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 # 添加src目录到Python路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))

@@ -10,8 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 
-from ..context import get_logger, get_static_dir
+from ..context import (
+    get_logger,
+    get_static_dir,
+    get_transcription_concurrency_controller,
+)
 from ..services.settings_service import (
+    SettingsValidationError,
     fetch_provider_models,
     get_schema,
     read_settings,
@@ -91,7 +96,12 @@ async def update_settings(request: Request, user_info: dict = Depends(verify_tok
         raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象")
 
     try:
-        data = write_settings(payload)
+        data = write_settings(
+            payload,
+            controller=get_transcription_concurrency_controller(),
+        )
+    except SettingsValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         logger.exception("写入配置失败: %s", exc)
         raise HTTPException(status_code=500, detail=f"写入配置失败: {exc}")

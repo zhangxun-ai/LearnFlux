@@ -762,6 +762,7 @@ async def upload_study_video(
         use_speaker_recognition=use_speaker_recognition,
         platform="generic",
         media_id=media_id,
+        force_new_view_token=True,
     )
     audit_logger.log_api_call(
         api_key=user_info.get("api_key") or "",

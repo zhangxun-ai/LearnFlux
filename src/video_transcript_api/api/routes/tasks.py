@@ -1,7 +1,9 @@
 import asyncio
 import datetime
+import hashlib
 import os
 import uuid
+from decimal import Decimal, InvalidOperation
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -12,10 +14,12 @@ from fastapi import (
     Request,
     UploadFile,
 )
+from pydantic import BaseModel
 
 from ..context import (
     get_audit_logger,
     get_cache_manager,
+    get_cloud_asr_dispatcher,
     get_config,
     get_logger,
     get_task_queue,
@@ -24,12 +28,18 @@ from ..services.transcription import (
     RecalibrateRequest,
     TranscribeRequest,
     TranscribeResponse,
+    claim_cloud_quote_confirmation,
+    claim_cloud_quote_local_selection,
+    cancel_cloud_quote,
     process_local_upload,
+    resume_cloud_quote_locally,
+    refresh_cloud_quote,
     verify_token,
 )
+from ...transcriber.cloud_quote_repository import CloudQuoteConflict
 from ...utils.notifications import send_view_link_wechat, get_notification_router
 from ...utils.accounts.user_manager import get_user_manager
-from ...utils.task_status import TaskStatus, http_code_for_status
+from ...utils.task_status import TERMINAL_STATUSES, TaskStatus, http_code_for_status
 
 logger = get_logger()
 config = get_config()
@@ -37,6 +47,11 @@ audit_logger = get_audit_logger()
 cache_manager = get_cache_manager()
 
 router = APIRouter(prefix="/api", tags=["tasks"])
+
+
+class CloudQuoteConfirmationRequest(BaseModel):
+    quote_token: str
+    accepted_max_cost_cny: str
 
 
 def _normalize_empty_string(value: str | None) -> str | None:
@@ -48,6 +63,16 @@ def _normalize_empty_string(value: str | None) -> str | None:
     return value
 
 
+def _require_task_owner(task_info: dict, user_info: dict, *, paid_action: bool) -> None:
+    owner = task_info.get("owner_user_id")
+    current_user = user_info.get("user_id")
+    if owner and owner == current_user:
+        return
+    if owner is None and not paid_action:
+        return
+    raise HTTPException(status_code=403, detail="task_access_denied")
+
+
 @router.post("/transcribe", response_model=TranscribeResponse)
 async def transcribe_video(
     request_body: TranscribeRequest,
@@ -55,6 +80,8 @@ async def transcribe_video(
     request: Request,
     user_info: dict = Depends(verify_token),
 ):
+    if request_body.use_speaker_recognition and request_body.transcription_strategy == "cloud":
+        raise HTTPException(status_code=422, detail="strategy_conflicts_with_speaker_mode")
     url = request_body.url
     if not url:
         logger.warning("请求未提供视频URL")
@@ -115,6 +142,7 @@ async def transcribe_video(
             download_url=normalized_download_url,
             platform=parsed_platform,
             media_id=parsed_media_id,
+            owner_user_id=user_id,
         )
         task_id = task_info["task_id"]
         view_token = task_info["view_token"]
@@ -160,6 +188,10 @@ async def transcribe_video(
                 "include_comments": request_body.include_comments,
                 "comment_limit": request_body.comment_limit,
                 "preserve_source_file": request_body.preserve_source_file,
+                "transcription_strategy": (
+                    None if request_body.use_speaker_recognition
+                    else request_body.transcription_strategy
+                ),
             }
 
             try:
@@ -258,22 +290,28 @@ async def upload_transcribe(
     request: Request,
     file: UploadFile = File(...),
     use_speaker_recognition: bool = Form(False),
+    transcription_strategy: str = Form("local"),
     user_info: dict = Depends(verify_token),
 ):
     """接收本地音视频文件，转录后复用 LLM 后处理与结果页（不走下载）。"""
     start_time = datetime.datetime.now()
+    if transcription_strategy not in {"local", "cloud"}:
+        raise HTTPException(status_code=422, detail="必须选择本地免费或云端付费")
+    if use_speaker_recognition and transcription_strategy == "cloud":
+        raise HTTPException(status_code=422, detail="strategy_conflicts_with_speaker_mode")
     filename = (file.filename or "upload").strip() or "upload"
-    media_id = uuid.uuid4().hex
+    upload_id = uuid.uuid4().hex
 
     upload_dir = os.path.join(
         config.get("storage", {}).get("temp_dir", "./data/temp"), "uploads"
     )
     os.makedirs(upload_dir, exist_ok=True)
     ext = os.path.splitext(filename)[1][:10] or ".bin"
-    temp_path = os.path.join(upload_dir, f"{media_id}{ext}")
+    temp_path = os.path.join(upload_dir, f"{upload_id}{ext}")
 
     # 边读边写，限制大小，避免占满磁盘
     size = 0
+    content_hash = hashlib.sha256()
     try:
         with open(temp_path, "wb") as out:
             while True:
@@ -288,6 +326,7 @@ async def upload_transcribe(
                         status_code=413,
                         detail=f"文件过大（上限 {_UPLOAD_MAX_MB // 1024}GB）",
                     )
+                content_hash.update(chunk)
                 out.write(chunk)
     except HTTPException:
         raise
@@ -300,12 +339,15 @@ async def upload_transcribe(
             os.remove(temp_path)
         raise HTTPException(status_code=400, detail="上传文件为空")
 
+    media_id = f"local_{content_hash.hexdigest()[:32]}"
     display_url = f"local://{media_id}/{filename}"
     task_info = cache_manager.create_task(
         url=display_url,
         use_speaker_recognition=use_speaker_recognition,
         platform="generic",
         media_id=media_id,
+        force_new_view_token=True,
+        owner_user_id=user_info.get("user_id"),
     )
     task_id = task_info["task_id"]
     view_token = task_info["view_token"]
@@ -339,12 +381,130 @@ async def upload_transcribe(
         display_url,
         media_id,
         use_speaker_recognition,
+        False,
+        False,
+        transcription_strategy=transcription_strategy,
+        cloud_confirmation_required=True,
     )
     logger.info(f"本地上传受理: task={task_id}, file={filename}, size={size}")
     return TranscribeResponse(
         code=202,
         message="本地文件已上传，转录中",
         data={"task_id": task_id, "view_token": view_token},
+    )
+
+
+@router.post("/task/{task_id}/cloud-confirm", response_model=TranscribeResponse)
+async def confirm_cloud_quote(
+    task_id: str,
+    request_body: CloudQuoteConfirmationRequest,
+    background_tasks: BackgroundTasks,
+    user_info: dict = Depends(verify_token),
+):
+    try:
+        accepted_cost = Decimal(request_body.accepted_max_cost_cny)
+    except (InvalidOperation, ValueError):
+        raise HTTPException(status_code=422, detail="invalid_cloud_quote_amount")
+    if not accepted_cost.is_finite() or accepted_cost < 0:
+        raise HTTPException(status_code=422, detail="invalid_cloud_quote_amount")
+    task_info = cache_manager.get_task_by_id(task_id)
+    if not task_info:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    _require_task_owner(task_info, user_info, paid_action=True)
+    try:
+        claim_cloud_quote_confirmation(
+            task_id, request_body.quote_token, accepted_cost
+        )
+    except (CloudQuoteConflict, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    try:
+        get_cloud_asr_dispatcher().notify(task_id)
+    except RuntimeError:
+        # The durable queue remains authoritative during startup/shutdown.
+        pass
+    return TranscribeResponse(
+        code=202,
+        message="云端转录确认已受理",
+        data={"task_id": task_id},
+    )
+
+
+@router.post("/task/{task_id}/cloud-use-local", response_model=TranscribeResponse)
+async def use_local_for_cloud_quote(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    user_info: dict = Depends(verify_token),
+):
+    task_info = cache_manager.get_task_by_id(task_id)
+    if not task_info:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    _require_task_owner(task_info, user_info, paid_action=True)
+    claim_owner = f"local:{uuid.uuid4().hex}"
+    try:
+        _, acquired = claim_cloud_quote_local_selection(
+            task_id, owner=claim_owner
+        )
+    except (CloudQuoteConflict, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if not acquired:
+        return TranscribeResponse(
+            code=202,
+            message="本地转录已在处理",
+            data={"task_id": task_id},
+        )
+    background_tasks.add_task(
+        resume_cloud_quote_locally, task_id, claim_owner=claim_owner
+    )
+    return TranscribeResponse(
+        code=202, message="已选择本地免费转录", data={"task_id": task_id}
+    )
+
+
+@router.post("/task/{task_id}/cloud-refresh", response_model=TranscribeResponse)
+async def refresh_task_cloud_quote(
+    task_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    task_info = cache_manager.get_task_by_id(task_id)
+    if not task_info:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    _require_task_owner(task_info, user_info, paid_action=True)
+    try:
+        quote = refresh_cloud_quote(task_id)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return TranscribeResponse(
+        code=200, message="云端报价已刷新", data={"task_id": task_id, **quote}
+    )
+
+
+@router.post("/task/{task_id}/cancel", response_model=TranscribeResponse)
+async def cancel_task(
+    task_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    """Cancel a non-terminal task and withdraw any not-yet-started cloud work."""
+    task_info = cache_manager.get_task_by_id(task_id)
+    if not task_info:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    _require_task_owner(task_info, user_info, paid_action=False)
+
+    status = task_info.get("status") or TaskStatus.QUEUED
+    if status in TERMINAL_STATUSES:
+        if status == TaskStatus.CANCELED:
+            return TranscribeResponse(
+                code=200, message="任务已取消", data={"task_id": task_id}
+            )
+        raise HTTPException(status_code=409, detail="task_not_cancellable")
+
+    cancel_cloud_quote(task_id)
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.CANCELED,
+        error_message="用户已取消任务",
+    )
+    return TranscribeResponse(
+        code=200, message="任务已取消", data={"task_id": task_id}
     )
 
 
@@ -378,6 +538,15 @@ async def get_task_status(
             logger.warning("任务不存在: %s", task_id)
             raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
 
+        _require_task_owner(
+            task_info,
+            user_info,
+            paid_action=(
+                task_info.get("status")
+                == TaskStatus.AWAITING_CLOUD_CONFIRMATION
+            ),
+        )
+
         status = task_info.get("status") or TaskStatus.QUEUED
         code = http_code_for_status(status)
 
@@ -399,6 +568,7 @@ async def get_task_status(
             TaskStatus.QUEUED: "任务排队中",
             TaskStatus.PROCESSING: "任务处理中",
             TaskStatus.CALIBRATING: "转录完成，校对/总结生成中",
+            TaskStatus.AWAITING_CLOUD_CONFIRMATION: "等待确认云端转录费用",
             TaskStatus.SUCCESS: "任务已完成",
             TaskStatus.FAILED: "任务处理失败",
             TaskStatus.CANCELED: "任务已取消",

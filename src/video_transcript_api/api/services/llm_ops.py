@@ -10,7 +10,10 @@
 """
 
 import time
+import threading
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 from ..context import (
     get_cache_manager,
     get_config,
@@ -18,6 +21,7 @@ from ..context import (
     get_llm_executor,
     get_llm_queue,
     get_logger,
+    get_transcription_control_database,
     task_lock,
 )
 from ...comments import CommentInsightAnalyzer, generate_comment_insight
@@ -32,6 +36,7 @@ from ...utils.notifications.channel import _clean_url, _apply_risk_control_safe
 from ...utils.rendering import get_base_url, normalize_markdown_text
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
+from ...transcriber.usage_repository import UsageEventRepository
 
 logger = get_logger()
 config = get_config()
@@ -39,6 +44,37 @@ cache_manager = get_cache_manager()
 llm_coordinator = get_llm_coordinator()
 llm_task_queue = get_llm_queue()
 llm_executor = get_llm_executor()
+
+
+class _PostprocessHeartbeat:
+    """Keep one durable postprocess claim alive while LLM work blocks."""
+
+    def __init__(self, repository, event_id: str, owner: str) -> None:
+        self.repository = repository
+        self.event_id = event_id
+        self.owner = owner
+        self.stop_event = threading.Event()
+        self.lost = threading.Event()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def _run(self) -> None:
+        while not self.stop_event.wait(20):
+            try:
+                if not self.repository.heartbeat_postprocess(
+                    self.event_id, self.owner, now=datetime.now(UTC)
+                ):
+                    self.lost.set()
+                    return
+            except Exception:
+                self.lost.set()
+                return
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        self.thread.join()
 
 
 def _safe_update_progress(task_id: str, **kwargs):
@@ -97,6 +133,15 @@ def _is_task_canceled(task_id: str) -> bool:
     return task_info.get("status") == TaskStatus.CANCELED
 
 
+def _is_cloud_postprocess_terminal(task_id: str) -> bool:
+    task_info = cache_manager.get_task_by_id(task_id) or {}
+    return task_info.get("status") in {
+        TaskStatus.CANCELED,
+        TaskStatus.FAILED,
+        TaskStatus.SUCCESS,
+    }
+
+
 def process_llm_queue():
     """处理LLM队列的后台任务"""
     logger.info("启动LLM队列处理器")
@@ -126,6 +171,46 @@ def _handle_llm_task(llm_task: dict):
     """
     task_id = llm_task.get("task_id")
 
+    usage_event_id = llm_task.get("usage_event_id")
+    postprocess_owner = None
+    postprocess_heartbeat = None
+    postprocess_repository = None
+    if usage_event_id:
+        postprocess_repository = UsageEventRepository(
+            get_transcription_control_database(cache_manager)
+        )
+        try:
+            postprocess_event = postprocess_repository.get_event(usage_event_id)
+        except Exception:
+            llm_task_queue.task_done()
+            return
+        if (
+            not llm_task.get("postprocess_key")
+            or llm_task.get("postprocess_key")
+            != postprocess_event.postprocess_key
+        ):
+            llm_task_queue.task_done()
+            return
+        postprocess_owner = uuid4().hex
+        if not postprocess_repository.claim_postprocess(
+            usage_event_id, postprocess_owner, now=datetime.now(UTC)
+        ):
+            llm_task_queue.task_done()
+            return
+        postprocess_heartbeat = _PostprocessHeartbeat(
+            postprocess_repository, usage_event_id, postprocess_owner
+        )
+        postprocess_heartbeat.start()
+        if _is_cloud_postprocess_terminal(task_id):
+            postprocess_repository.complete_postprocess(
+                usage_event_id,
+                postprocess_owner,
+                now=datetime.now(UTC),
+            )
+            postprocess_heartbeat.stop()
+            llm_task_queue.task_done()
+            return
+
     # 从 transcription 阶段传递过来的性能追踪器，若无则创建新实例
     tracker: PerfTracker = llm_task.pop("perf_tracker", None) or PerfTracker(task_id=task_id)
 
@@ -134,6 +219,16 @@ def _handle_llm_task(llm_task: dict):
             logger.info(f"LLM任务已取消，跳过处理: {task_id}")
             return
         with task_lock(task_id):
+            if (
+                postprocess_repository is not None
+                and _is_cloud_postprocess_terminal(task_id)
+            ):
+                postprocess_repository.complete_postprocess(
+                    usage_event_id,
+                    postprocess_owner,
+                    now=datetime.now(UTC),
+                )
+                return
             if _is_task_canceled(task_id):
                 logger.info(f"LLM任务已取消，跳过处理: {task_id}")
                 return
@@ -385,6 +480,20 @@ def _handle_llm_task(llm_task: dict):
                     author=llm_task.get("author", ""),
                     terminal_evidence=_terminal_evidence(llm_task),
                 )
+
+                # Complete the durable outbox only after artifacts and the
+                # LearnFlux terminal state are persisted. A crash before this
+                # point is reconciled by the scanner using the same key.
+                if postprocess_repository is not None:
+                    if (
+                        postprocess_heartbeat.lost.is_set()
+                        or not postprocess_repository.complete_postprocess(
+                            usage_event_id,
+                            postprocess_owner,
+                            now=datetime.now(UTC),
+                        )
+                    ):
+                        raise RuntimeError("postprocess_lease_lost")
                 logger.info(f"任务状态已更新为 success: {task_id} ({done_message})")
 
             except Exception as exc:
@@ -398,15 +507,18 @@ def _handle_llm_task(llm_task: dict):
                     f"重新校对失败: {exc}" if llm_task.get("calibrate_only")
                     else f"LLM处理失败: {exc}"
                 )
-                try:
-                    cache_manager.update_task_status(
-                        task_id, TaskStatus.FAILED, error_message=fail_message,
-                        terminal_evidence=_terminal_evidence(llm_task),
-                    )
-                    logger.info(f"任务状态已更新为 failed: {task_id} ({fail_message})")
-                except Exception:
-                    pass
+                if postprocess_repository is None:
+                    try:
+                        cache_manager.update_task_status(
+                            task_id, TaskStatus.FAILED, error_message=fail_message,
+                            terminal_evidence=_terminal_evidence(llm_task),
+                        )
+                        logger.info(f"任务状态已更新为 failed: {task_id} ({fail_message})")
+                    except Exception:
+                        pass
     finally:
+        if postprocess_heartbeat is not None:
+            postprocess_heartbeat.stop()
         llm_task_queue.task_done()
 
 

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 
@@ -35,11 +36,15 @@ def test_study_asset_version_tracks_player_runtime_changes():
 
 def test_production_navigation_targets_real_study_picker():
     shell = APP_SHELL_JS.read_text(encoding="utf-8")
+    navigation = json.loads(
+        (REPO_ROOT / "src/web/product-navigation.json").read_text(encoding="utf-8")
+    )
     history = APP_JS.read_text(encoding="utf-8")
     collections_html = COLLECTIONS_HTML.read_text(encoding="utf-8")
     collections_js = COLLECTIONS_JS.read_text(encoding="utf-8")
 
-    assert "const studyPlayerHref = '/study';" in shell
+    assert navigation["items"]["study_player"]["href"] == "/study"
+    assert "replaceChildren" not in shell
     assert "task.study_available" in history
     assert "task.study_url" in history
     assert 'id="open-study-player"' in collections_html

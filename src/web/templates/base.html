@@ -21,7 +21,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
     <meta name="description" content="{% block meta_description %}LearnFlux - AI 驱动的内容学习工作台{% endblock %}">
-    <meta name="theme-color" content="#14233F">
+    <meta name="theme-color" content="#F6F7F9">
     <meta name="application-name" content="LearnFlux">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -30,10 +30,7 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" href="/static/icon/learnflux-logo.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
-    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
-    <meta property="og:title" content="{% block og_title %}LearnFlux{% endblock %}">
+                <meta property="og:title" content="{% block og_title %}LearnFlux{% endblock %}">
     <meta property="og:description" content="{% block og_description %}视频转录 · 帖子精华提炼 · 文档解析，附可信度判断{% endblock %}">
     <meta property="og:type" content="article">
     <meta property="og:locale" content="zh_CN">
@@ -41,6 +38,7 @@
     <meta property="og:image" content="/static/icon/learnflux-og.png">
     <title>{% block title %}LearnFlux{% endblock %}</title>
     <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
+    <script src="/static/js/ui-features.js?v={{ asset_ver }}" defer></script>
     <script src="/static/js/app-shell.js?v={{ asset_ver }}" defer></script>
     <style>
         /* 配色 token 统一来自 editorial.css（单一来源） */
@@ -51,7 +49,7 @@
             color: var(--text-primary);
             margin: 0;
             padding: 0;
-            background: var(--bg-secondary);
+            background: var(--paper-warm, #F6F7F9);
             transition: color 0.3s ease, background 0.3s ease;
         }
 
@@ -1016,6 +1014,10 @@
     <link rel="stylesheet" href="/static/css/product-linear.css?v={{ asset_ver }}">
     {% block extra_css %}{% endblock %}
     {% block product_linear_adapter %}<link rel="stylesheet" href="/static/css/product-linear-system.css?v={{ asset_ver }}">{% endblock %}
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
+    <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
 </head>
 <body class="app-shell has-app-shell product-linear {% block body_class %}page-result{% endblock %}">
     {% set shell_path = request.url.path if request is defined else '' %}
@@ -1026,58 +1028,11 @@
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
             <a class="brand-link" href="/add_task_by_web" aria-label="LearnFlux 首页">
-                <span class="brand-mark" aria-hidden="true">
-                    <img src="/static/icon/learnflux-logo.png" alt="">
-                </span>
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
                 <span class="brand-text">LearnFlux</span>
             </a>
         </div>
-
-        <nav class="sidebar-nav" aria-label="主导航">
-            <section class="nav-group" aria-labelledby="nav-core">
-                <h2 id="nav-core" class="nav-group-title">核心工具</h2>
-                <a class="nav-item {% if shell_path == '/' or shell_path.startswith('/add_task_by_web') or shell_path.startswith('/view/') %}is-active{% endif %}" href="/add_task_by_web">
-                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-2 9h9l-9 11 2-9H4l9-11z"/></svg></span>
-                    <span>单篇深度学习</span>
-                </a>
-                <a class="nav-item {% if shell_path.startswith('/collections') %}is-active{% endif %}" href="/collections">
-                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg></span>
-                    <span>系列深度学习</span>
-                </a>
-                <a class="nav-item {% if shell_path.startswith('/static/focus-studio') %}is-active{% endif %}" href="/static/focus-studio.html">
-                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></span>
-                    <span>心流写作</span>
-                </a>
-            </section>
-
-            <section class="nav-group" aria-labelledby="nav-insight">
-                <h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
-                <a class="nav-item {% if shell_path.startswith('/post') %}is-active{% endif %}" href="/post">
-                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h10"/></svg></span>
-                    <span>帖子洞察</span>
-                </a>
-                <a class="nav-item {% if shell_path.startswith('/trend-radar') %}is-active{% endif %}" href="/trend-radar">
-                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
-                    <span>趋势雷达</span>
-                </a>
-                <a class="nav-item {% if shell_path.startswith('/flywheel') %}is-active{% endif %}" href="/flywheel">
-                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg></span>
-                    <span>IP 对标</span>
-                </a>
-            </section>
-
-            <section class="nav-group nav-group-bottom" aria-labelledby="nav-system">
-                <h2 id="nav-system" class="nav-group-title">系统</h2>
-                <a class="nav-item {% if shell_path.startswith('/static/history') %}is-active{% endif %}" href="/static/history.html">
-                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                    <span>历史记录</span>
-                </a>
-                <a class="nav-item {% if shell_path.startswith('/settings') %}is-active{% endif %}" href="/settings">
-                    <span class="nav-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
-                    <span>系统设置</span>
-                </a>
-            </section>
-        </nav>
+        {% include "partials/product_navigation.html" %}
     </aside>
 
     <main class="main-area" id="main-content">

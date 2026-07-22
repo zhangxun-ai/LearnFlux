@@ -42,8 +42,8 @@ def test_trend_radar_static_page_exposes_core_ui_contract():
     assert 'id="budget-hint"' in html
     assert 'id="report-history-list"' in html
     assert 'data-stage-filter="opportunity"' in html
-    assert 'href="/static/css/trend-radar.css?v=7"' in html
-    assert 'src="/static/js/trend-radar.js?v=6"' in html
+    assert 'href="/static/css/trend-radar.css?v=__ASSET_VERSION__"' in html
+    assert 'src="/static/js/trend-radar.js?v=__ASSET_VERSION__"' in html
 
 
 def test_trend_radar_assets_support_responsive_interaction():

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'learnflux-pwa-20260720-brand-2';
+const CACHE_NAME = 'learnflux-pwa-20260722-shell';
 
 const PRECACHE_URLS = [
   '/',
@@ -28,6 +28,7 @@ const PRECACHE_URLS = [
   '/static/css/product-linear-system.css',
   '/static/js/app.js',
   '/static/js/app-shell.js',
+  '/static/js/ui-features.js',
   '/static/js/collections.js',
   '/static/js/floating-toc.js',
   '/static/js/focus-studio.js',

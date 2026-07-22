@@ -8,7 +8,7 @@
 :root {
     /* —— 唯一配色来源 —— */
     --paper: #F3F4F6;
-    --paper-warm: #FBF8F3;
+    --paper-warm: #F6F7F9;
     --ink: #1B1A17;
     --ink-soft: #4A463F;
     --muted: #736B62;
@@ -54,7 +54,7 @@
     --text-secondary: #6B6258;
     --text-tertiary: #9A938A;
     --bg-primary: #FFFFFF;
-    --bg-secondary: #F3F4F6;
+    --bg-secondary: #F6F7F9;
     --bg-tertiary: #F3EDE4;
     --border-primary: #EBE4D9;
     --border-secondary: #E0D8CC;
@@ -66,7 +66,7 @@
     --accent-secondary: #C23A26;
     --success-bg: #ECF7F0; --success-border: #2F8F6B; --success-text: #2F8F6B;
     --error-bg: #FCEEEA; --error-border: #C23A26; --error-text: #B0463A;
-    --loading-bg: #FBF8F3; --loading-border: #E4503A; --loading-text: #C23A26;
+    --loading-bg: #F6F7F9; --loading-border: #E4503A; --loading-text: #C23A26;
     --scrollbar-track: #F3EDE4; --scrollbar-thumb: #D8CFC2; --scrollbar-thumb-hover: #C9BFAE;
 }
 

@@ -164,12 +164,6 @@ body.product-linear.page-visual-learning .vl-evidence-drawer {
     box-shadow: var(--product-shadow-md);
 }
 
-body.product-linear.page-focus .sidebar,
-body.product-linear.page-focus .topbar {
-    background: color-mix(in srgb, var(--product-surface-muted) 90%, transparent);
-    backdrop-filter: blur(16px);
-}
-
 body.product-linear.page-focus .mode-panel,
 body.product-linear.page-focus .type-panel,
 body.product-linear.page-focus .mixer-panel,

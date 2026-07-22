@@ -43,11 +43,10 @@ body.product-linear.page-post .insight-card:hover {
     transform: none;
 }
 
-body.product-linear.page-trend .page-stage {
-    max-width: 1440px;
-}
-
 body.product-linear.page-trend .radar-shell {
+    width: 100%;
+    max-width: 1376px;
+    margin: 0 auto;
     color: var(--product-ink);
 }
 

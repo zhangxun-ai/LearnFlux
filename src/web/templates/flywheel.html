@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#FBF8F3">
+<meta name="theme-color" content="#F6F7F9">
 <meta name="application-name" content="LearnFlux">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -23,16 +23,15 @@
   })();
 </script>
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" type="image/png" href="/static/icon/learnflux-logo.png">
-<link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
 <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
 <link rel="stylesheet" href="/static/css/app-shell.css?v={{ asset_ver }}">
 <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
+<script src="/static/js/ui-features.js?v={{ asset_ver }}" defer></script>
 <script src="/static/js/app-shell.js?v={{ asset_ver }}" defer></script>
 <style>
   /* ===== Theme Variables ===== */
   :root, [data-theme="light"], [data-theme="dark"] {
-      --fw-bg: var(--bg-secondary);
+      --fw-bg: var(--paper-warm, #F6F7F9);
       --fw-card: var(--bg-primary);
       --fw-border: var(--border-primary);
       --fw-ink: var(--text-primary);
@@ -273,33 +272,23 @@
 </style>
 <link rel="stylesheet" href="/static/css/product-linear.css?v={{ asset_ver }}">
 <link rel="stylesheet" href="/static/css/product-linear-insights.css?v={{ asset_ver }}">
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
+    <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
 </head>
 <body class="app-shell has-app-shell product-linear page-flywheel">
   <a class="skip-link" href="#main-content">跳到主要内容</a>
-  <aside class="sidebar" aria-label="应用导航">
-    <div class="sidebar-brand">
-      <a class="brand-link" href="/add_task_by_web" aria-label="LearnFlux 首页">
-        <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-logo.png" alt=""></span>
-        <span class="brand-text">LearnFlux</span>
-      </a>
-    </div>
-    <nav class="sidebar-nav" aria-label="主导航">
-      <section class="nav-group" aria-labelledby="nav-core"><h2 id="nav-core" class="nav-group-title">核心工具</h2>
-        <a class="nav-item" href="/add_task_by_web"><span class="nav-icon" aria-hidden="true">↯</span><span>单篇深度学习</span></a>
-        <a class="nav-item" href="/collections"><span class="nav-icon" aria-hidden="true">▥</span><span>系列深度学习</span></a>
-        <a class="nav-item" href="/static/focus-studio.html"><span class="nav-icon" aria-hidden="true">✎</span><span>心流写作</span></a>
-      </section>
-      <section class="nav-group" aria-labelledby="nav-insight"><h2 id="nav-insight" class="nav-group-title">洞察与分析</h2>
-        <a class="nav-item" href="/post"><span class="nav-icon" aria-hidden="true">☷</span><span>帖子洞察</span></a>
-        <a class="nav-item" href="/trend-radar"><span class="nav-icon" aria-hidden="true">◎</span><span>趋势雷达</span></a>
-        <a class="nav-item is-active" href="/flywheel"><span class="nav-icon" aria-hidden="true">⌘</span><span>IP 对标</span></a>
-      </section>
-      <section class="nav-group nav-group-bottom" aria-labelledby="nav-system"><h2 id="nav-system" class="nav-group-title">系统</h2>
-        <a class="nav-item" href="/static/history.html"><span class="nav-icon" aria-hidden="true">◷</span><span>历史记录</span></a>
-        <a class="nav-item" href="/settings"><span class="nav-icon" aria-hidden="true">⚙</span><span>系统设置</span></a>
-      </section>
-    </nav>
-  </aside>
+  {% set shell_path = request.url.path if request is defined else '' %}
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/add_task_by_web" aria-label="LearnFlux 首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-text">LearnFlux</span>
+            </a>
+        </div>
+        {% include "partials/product_navigation.html" %}
+    </aside>
   <main class="main-area" id="main-content">
     <header class="topbar" aria-label="页面导航栏">
       <div class="topbar-title"><span class="topbar-page-title">IP 对标</span></div>

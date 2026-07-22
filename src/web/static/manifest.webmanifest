@@ -9,7 +9,7 @@
   "scope": "/",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "browser"],
-  "background_color": "#FBF8F3",
+  "background_color": "#F6F7F9",
   "theme_color": "#E4503A",
   "categories": ["productivity", "education", "utilities"],
   "icons": [

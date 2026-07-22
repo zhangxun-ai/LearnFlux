@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 
@@ -21,7 +22,7 @@ def test_visual_learning_page_exposes_text_file_and_diagram_controls():
     assert 'id="visual-history"' in html
     assert 'id="visual-recommendations"' in html
     assert "css/editorial.css" in html
-    assert "visual-learning.css?v=5" in html
+    assert "visual-learning.css?v=__ASSET_VERSION__" in html
     assert '<h1>图解生成</h1>' not in html
 
 
@@ -55,9 +56,13 @@ def test_visual_learning_workbench_uses_existing_ingestion_and_visual_apis():
 
 def test_app_shell_adds_visual_learning_navigation():
     js = (PROJECT_ROOT / "src/web/static/js/app-shell.js").read_text(encoding="utf-8")
+    navigation = json.loads(
+        (PROJECT_ROOT / "src/web/product-navigation.json").read_text(encoding="utf-8")
+    )
 
-    assert "/visual-learning" in js
-    assert "图解生成" in js
+    assert navigation["items"]["visual_learning"]["href"] == "/visual-learning"
+    assert navigation["items"]["visual_learning"]["label"] == "图解生成"
+    assert "replaceChildren" not in js
 
 
 def test_visual_workbench_is_precached():

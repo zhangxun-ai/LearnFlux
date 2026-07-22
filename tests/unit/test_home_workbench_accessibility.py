@@ -36,8 +36,9 @@ def test_home_form_controls_have_programmatic_labels_and_native_upload_button():
 def test_shared_shell_uses_design_tokens_without_layout_transitions():
     css = (STATIC_DIR / "css/app-shell.css").read_text(encoding="utf-8")
 
-    assert "--shell-bg: var(--paper-warm, #FBF8F3);" in css
-    assert "--shell-accent: var(--accent-ink, #C23A26);" in css
+    assert "--shell-bg: #F6F8FB;" in css
+    assert "--shell-sidebar-bg: #EEF2F7;" in css
+    assert "--shell-accent: #2868D8;" in css
     assert "transition: width 180ms" not in css
     assert "backdrop-filter: blur(18px);" not in css
 
@@ -66,29 +67,31 @@ def _theme_token_values(css: str, token: str) -> list[str]:
 
 def test_home_linear_theme_is_scoped_and_meets_wcag_contrast_contracts():
     css = (STATIC_DIR / "css/home-linear.css").read_text(encoding="utf-8")
+    product_css = (STATIC_DIR / "css/product-linear.css").read_text(encoding="utf-8")
 
     assert "body.app-shell.home-linear" in css
-    assert '[data-theme="dark"] body.app-shell.home-linear' in css
+    assert "--home-surface: var(--product-surface);" in css
+    assert '[data-theme="dark"] body.product-linear' in product_css
     assert "!important" not in css
     for naked_selector in ("\n:root {", "\nbody {", "\nbutton {", "\n.sidebar {"):
         assert naked_selector not in css
 
     tokens = {
-        token: _theme_token_values(css, token)
+        token: _theme_token_values(product_css, token)
         for token in (
-            "--home-surface",
-            "--home-ink",
-            "--home-muted",
-            "--home-placeholder",
-            "--home-control-border",
-            "--home-focus",
+            "--product-surface",
+            "--product-ink",
+            "--product-muted",
+            "--product-subtle",
+            "--product-line-strong",
+            "--product-focus",
         )
     }
     assert all(len(values) == 2 for values in tokens.values())
 
     for theme_index in (0, 1):
-        surface = tokens["--home-surface"][theme_index]
-        for text_token in ("--home-ink", "--home-muted", "--home-placeholder"):
+        surface = tokens["--product-surface"][theme_index]
+        for text_token in ("--product-ink", "--product-muted", "--product-subtle"):
             assert _contrast_ratio(tokens[text_token][theme_index], surface) >= 4.5
-        for ui_token in ("--home-control-border", "--home-focus"):
+        for ui_token in ("--product-line-strong", "--product-focus"):
             assert _contrast_ratio(tokens[ui_token][theme_index], surface) >= 3

@@ -7,187 +7,23 @@
  */
 
 body.app-shell.home-linear {
-    --home-bg: #f6f7f9;
-    --home-surface: #ffffff;
-    --home-surface-muted: #eef0f3;
-    --home-ink: #17181d;
-    --home-muted: #555a64;
-    --home-placeholder: #626873;
-    --home-control-border: #858a94;
-    --home-line: #d9dce2;
-    --home-focus: #4d5bd1;
-    --home-accent: #4d5bd1;
-    --home-accent-hover: #3f4cb7;
-    --home-on-accent: #ffffff;
-    --home-accent-soft: rgba(77, 91, 209, 0.1);
-    --home-radius-sm: 6px;
-    --home-radius-md: 8px;
-    --home-radius-lg: 12px;
-    --home-shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
-
-    --paper: var(--home-bg);
-    --paper-warm: var(--home-bg);
-    --ink: var(--home-ink);
-    --ink-soft: var(--home-muted);
-    --muted: var(--home-muted);
-    --line: var(--home-line);
-    --card: var(--home-surface);
-    --card-translucent: var(--home-surface);
-    --card-translucent-light: var(--home-surface-muted);
-    --accent: var(--home-accent);
-    --accent-ink: var(--home-accent);
-    --accent-pressed: var(--home-accent-hover);
-    --accent-soft: var(--home-accent-soft);
-    --bg-primary: var(--home-surface);
-    --bg-secondary: var(--home-bg);
-    --bg-tertiary: var(--home-surface-muted);
-    --text-primary: var(--home-ink);
-    --text-secondary: var(--home-muted);
-    --text-tertiary: var(--home-placeholder);
-    --border-primary: var(--home-line);
-    --border-secondary: var(--home-control-border);
-    --border-focus: var(--home-focus);
-    --shell-bg: var(--home-bg);
-    --shell-surface: var(--home-surface-muted);
-    --shell-line: var(--home-line);
-    --shell-text: var(--home-ink);
-    --shell-muted: var(--home-muted);
-    --shell-accent: var(--home-accent);
-    --shell-accent-soft: var(--home-accent-soft);
-    --shell-radius: var(--home-radius-md);
-    --shell-shadow-sm: var(--home-shadow-sm);
-    --shell-topbar-bg: color-mix(in srgb, var(--home-surface) 92%, transparent);
-
-    background: var(--home-bg);
-    color: var(--home-ink);
-}
-
-[data-theme="dark"] body.app-shell.home-linear {
-    --home-bg: #101115;
-    --home-surface: #191a1f;
-    --home-surface-muted: #222329;
-    --home-ink: #f3f4f6;
-    --home-muted: #b4b8c2;
-    --home-placeholder: #aab0ba;
-    --home-control-border: #747a86;
-    --home-line: #353740;
-    --home-focus: #929cff;
-    --home-accent: #929cff;
-    --home-accent-hover: #aab2ff;
-    --home-on-accent: #111217;
-    --home-accent-soft: rgba(146, 156, 255, 0.14);
-    --home-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
-}
-
-.home-linear .sidebar {
-    background: var(--home-surface-muted);
-    border-color: var(--home-line);
-}
-
-.home-linear .sidebar-brand {
-    padding: 18px 14px;
-    border-color: var(--home-line);
-}
-
-.home-linear .brand-link {
-    gap: 10px;
-    font-size: 0.98rem;
-    font-weight: 680;
-    letter-spacing: -0.02em;
-}
-
-.home-linear .brand-mark {
-    width: 36px;
-    height: 36px;
-    flex-basis: 36px;
-    border-radius: var(--home-radius-md);
-    background: var(--home-ink);
-}
-
-.home-linear .brand-mark img {
-    width: 24px;
-    height: 24px;
-}
-
-.home-linear .shell-icon-button {
-    border-color: var(--home-line);
-    background: var(--home-surface);
-    color: var(--home-muted);
-    box-shadow: var(--home-shadow-sm);
-    transition: border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
-        color 180ms cubic-bezier(0.16, 1, 0.3, 1),
-        background 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.home-linear .shell-icon-button:hover,
-.home-linear .shell-icon-button:focus-visible {
-    border-color: var(--home-focus);
-    background: var(--home-surface);
-    color: var(--home-accent);
-    transform: none;
-}
-
-.home-linear .sidebar-nav {
-    padding: 16px 12px;
-}
-
-.home-linear .nav-group {
-    gap: 4px;
-    margin-bottom: 24px;
-}
-
-.home-linear .nav-group-title {
-    margin: 0 9px 7px;
-    color: var(--home-muted);
-    font-size: 0.75rem;
-    font-weight: 650;
-}
-
-.home-linear .nav-item {
-    height: 40px;
-    gap: 10px;
-    padding: 0 10px;
-    border: 1px solid transparent;
-    border-radius: var(--home-radius-sm);
-    color: var(--home-muted);
-    font-size: 0.9rem;
-    font-weight: 560;
-    transition: border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
-        background 180ms cubic-bezier(0.16, 1, 0.3, 1),
-        color 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.home-linear .nav-item:hover {
-    background: color-mix(in srgb, var(--home-surface) 74%, transparent);
-    color: var(--home-ink);
-    transform: none;
-}
-
-.home-linear .nav-item.is-active {
-    border-color: var(--home-line);
-    background: var(--home-surface);
-    color: var(--home-ink);
-    box-shadow: var(--home-shadow-sm);
-}
-
-.home-linear .nav-item:focus-visible,
-.home-linear .shell-icon-button:focus-visible {
-    outline: 2px solid var(--home-focus);
-    outline-offset: 2px;
-}
-
-.home-linear .main-area {
-    background: var(--home-bg);
-}
-
-.home-linear .topbar {
-    border-color: var(--home-line);
-    background: var(--shell-topbar-bg);
-}
-
-.home-linear .page-stage {
-    max-width: 1200px;
-    padding: 28px 32px;
+    --home-bg: var(--product-page);
+    --home-surface: var(--product-surface);
+    --home-surface-muted: var(--product-surface-muted);
+    --home-ink: var(--product-ink);
+    --home-muted: var(--product-muted);
+    --home-placeholder: var(--product-subtle);
+    --home-control-border: var(--product-line-strong);
+    --home-line: var(--product-line);
+    --home-focus: var(--product-focus);
+    --home-accent: var(--product-accent);
+    --home-accent-hover: var(--product-accent-hover);
+    --home-on-accent: var(--product-on-accent);
+    --home-accent-soft: var(--product-accent-soft);
+    --home-radius-sm: var(--product-radius-sm);
+    --home-radius-md: var(--product-radius-md);
+    --home-radius-lg: var(--product-radius-lg);
+    --home-shadow-sm: var(--product-shadow-sm);
 }
 
 .home-linear .app-home {
@@ -410,10 +246,6 @@ body.app-shell.home-linear {
 }
 
 @media (max-width: 900px) {
-    .home-linear .page-stage {
-        padding: 20px 16px;
-    }
-
     .home-linear .app-home {
         padding: 1.25rem 0.75rem 1rem;
     }
@@ -458,8 +290,6 @@ body.app-shell.home-linear {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .home-linear .nav-item,
-    .home-linear .shell-icon-button,
     .home-linear .app-home .input-tab,
     .home-linear .app-home .file-dropzone,
     .home-linear .app-home .hist-card {

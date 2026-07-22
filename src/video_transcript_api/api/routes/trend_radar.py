@@ -34,6 +34,9 @@ async def trend_radar_page():
         static_dir / "css" / "product-linear.css",
         static_dir / "css" / "product-linear-insights.css",
         static_dir / "js" / "trend-radar.js",
+        static_dir / "js" / "ui-features.js",
+        static_dir / "js" / "app-shell.js",
+        static_dir / "js" / "pwa-register.js",
     ]
     version = str(max(
         (asset.stat().st_mtime_ns for asset in version_files if asset.exists()),

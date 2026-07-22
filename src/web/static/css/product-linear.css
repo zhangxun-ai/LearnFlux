@@ -1,31 +1,49 @@
-/* Production-only Linear visual foundation. */
+/* LearnFlux brand-cool product tokens and shared content primitives. */
 
 body.product-linear {
-    --product-bg: #f6f7f9;
-    --product-surface: #ffffff;
-    --product-surface-muted: #eef0f3;
-    --product-surface-raised: #ffffff;
-    --product-ink: #17181d;
-    --product-muted: #555a64;
-    --product-subtle: #626873;
-    --product-line: #d9dce2;
-    --product-line-strong: #858a94;
-    --product-accent: #4d5bd1;
-    --product-accent-hover: #3f4cb7;
-    --product-accent-soft: rgba(77, 91, 209, 0.1);
-    --product-focus: #4d5bd1;
-    --product-on-accent: #ffffff;
-    --product-success: #18794e;
-    --product-warning: #9a6700;
-    --product-danger: #c13232;
+    --product-page: #F6F8FB;
+    --product-bg: #F6F8FB;
+    --product-sidebar: #EEF2F7;
+    --product-surface: #FFFFFF;
+    --product-surface-muted: #F1F4F8;
+    --product-surface-raised: #FFFFFF;
+    --product-ink: #172033;
+    --product-muted: #596579;
+    --product-subtle: #68758A;
+    --product-line: #DCE2EA;
+    --product-line-strong: #758195;
+    --product-accent: #2868D8;
+    --product-accent-hover: #1F57B6;
+    --product-accent-soft: #E9F1FF;
+    --product-focus: #2868D8;
+    --product-on-accent: #FFFFFF;
+    --product-info: #0F7890;
+    --product-info-soft: #E7F7FA;
+    --product-success: #18794E;
+    --product-success-soft: #E9F8F0;
+    --product-warning: #8A5B00;
+    --product-warning-soft: #FFF4D8;
+    --product-danger: #B42318;
+    --product-danger-soft: #FDECEA;
+    --product-attention: #C94B42;
+    --product-attention-text: #B93C35;
+    --product-attention-soft: #FCEDEA;
     --product-radius-sm: 6px;
     --product-radius-md: 8px;
     --product-radius-lg: 12px;
-    --product-shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
-    --product-shadow-md: 0 8px 24px rgba(17, 24, 39, 0.08);
+    --product-shadow-sm: 0 1px 2px rgba(23, 32, 51, 0.06);
+    --product-shadow-md: 0 10px 28px rgba(23, 32, 51, 0.08);
+    --product-font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    --product-font-xs: 12px;
+    --product-font-sm: 14px;
+    --product-font-md: 16px;
+    --product-font-lg: 18px;
+    --product-font-xl: 24px;
+    --product-font-2xl: 32px;
 
-    --paper: var(--product-bg);
-    --paper-warm: var(--product-bg);
+    /* Compatibility aliases for existing production page styles. */
+    --paper: var(--product-page);
+    --paper-warm: var(--product-page);
     --ink: var(--product-ink);
     --ink-soft: var(--product-muted);
     --muted: var(--product-muted);
@@ -40,7 +58,7 @@ body.product-linear {
     --accent-secondary: var(--product-accent-hover);
     --accent-soft: var(--product-accent-soft);
     --bg-primary: var(--product-surface);
-    --bg-secondary: var(--product-bg);
+    --bg-secondary: var(--product-page);
     --bg-tertiary: var(--product-surface-muted);
     --text-primary: var(--product-ink);
     --text-secondary: var(--product-muted);
@@ -52,141 +70,87 @@ body.product-linear {
     --shadow: var(--product-shadow-md);
     --radius-card: var(--product-radius-lg);
     --radius-control: var(--product-radius-md);
-    --shell-bg: var(--product-bg);
-    --shell-surface: var(--product-surface-muted);
+
+    /* The shell owns layout; product tokens supply its shared visual values. */
+    --shell-bg: var(--product-page);
+    --shell-sidebar-bg: var(--product-sidebar);
+    --shell-surface: var(--product-surface);
+    --shell-surface-muted: var(--product-surface-muted);
     --shell-line: var(--product-line);
+    --shell-line-strong: var(--product-line-strong);
     --shell-text: var(--product-ink);
     --shell-muted: var(--product-muted);
+    --shell-subtle: var(--product-subtle);
     --shell-accent: var(--product-accent);
+    --shell-accent-hover: var(--product-accent-hover);
     --shell-accent-soft: var(--product-accent-soft);
+    --shell-focus: var(--product-focus);
+    --shell-on-accent: var(--product-on-accent);
     --shell-radius: var(--product-radius-md);
     --shell-shadow-sm: var(--product-shadow-sm);
-    --shell-topbar-bg: color-mix(in srgb, var(--product-surface) 94%, transparent);
+    --shell-shadow-md: var(--product-shadow-md);
 
-    background: var(--product-bg);
+    background: var(--product-page);
     color: var(--product-ink);
     color-scheme: light;
+    font-family: var(--product-font-ui);
+    font-size: var(--product-font-md);
+    line-height: 1.6;
 }
+
 [data-theme="dark"] body.product-linear {
-    --product-bg: #101115;
-    --product-surface: #191a1f;
-    --product-surface-muted: #222329;
-    --product-surface-raised: #25262c;
-    --product-ink: #f3f4f6;
-    --product-muted: #b4b8c2;
-    --product-subtle: #aab0ba;
-    --product-line: #353740;
-    --product-line-strong: #747a86;
-    --product-accent: #929cff;
-    --product-accent-hover: #aab2ff;
-    --product-accent-soft: rgba(146, 156, 255, 0.14);
-    --product-focus: #929cff;
-    --product-on-accent: #111217;
-    --product-success: #62c995;
-    --product-warning: #e3b341;
-    --product-danger: #ff7b72;
+    --product-page: #0F141D;
+    --product-bg: #0F141D;
+    --product-sidebar: #151C27;
+    --product-surface: #1B2431;
+    --product-surface-muted: #202A38;
+    --product-surface-raised: #243040;
+    --product-ink: #F3F6FA;
+    --product-muted: #B5C0CF;
+    --product-subtle: #94A3B8;
+    --product-line: #2D3948;
+    --product-line-strong: #758195;
+    --product-accent: #78A7FF;
+    --product-accent-hover: #91B7FF;
+    --product-accent-soft: rgba(120, 167, 255, 0.14);
+    --product-focus: #78A7FF;
+    --product-on-accent: #0F141D;
+    --product-info: #5DD5E8;
+    --product-info-soft: #18333C;
+    --product-success: #55D69E;
+    --product-success-soft: #19372C;
+    --product-warning: #F0C66C;
+    --product-warning-soft: #3A301E;
+    --product-danger: #FF8A80;
+    --product-danger-soft: #3D2527;
+    --product-attention: #FF948C;
+    --product-attention-text: #FF948C;
+    --product-attention-soft: #402629;
     --product-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
-    --product-shadow-md: 0 12px 30px rgba(0, 0, 0, 0.3);
+    --product-shadow-md: 0 14px 34px rgba(0, 0, 0, 0.30);
     color-scheme: dark;
 }
 
-body.product-linear .sidebar {
-    background: var(--product-surface-muted);
-    border-color: var(--product-line);
+body.product-linear :where(h1, h2, h3, h4, p) {
+    text-wrap: pretty;
 }
 
-body.product-linear .sidebar-brand {
-    padding: 18px 14px;
-    border-color: var(--product-line);
-}
-
-body.product-linear .brand-link {
-    gap: 10px;
-    font-size: 0.98rem;
-    font-weight: 680;
+body.product-linear :where(h1, h2, h3, h4) {
+    color: var(--product-ink);
+    font-family: var(--product-font-ui);
     letter-spacing: -0.02em;
 }
 
-body.product-linear .brand-mark {
-    width: 36px;
-    height: 36px;
-    flex-basis: 36px;
-    border-radius: var(--product-radius-md);
-    background: var(--product-ink);
+body.product-linear.page-home .hero h1 {
+    font-family: var(--product-font-ui);
 }
 
-body.product-linear .brand-mark img {
-    width: 24px;
-    height: 24px;
+body.product-linear :where(button, input, textarea, select) {
+    font: inherit;
 }
 
-body.product-linear .sidebar-nav {
-    padding: 16px 12px;
-}
-
-body.product-linear .nav-group {
-    gap: 4px;
-    margin-bottom: 24px;
-}
-
-body.product-linear .nav-group-title {
-    margin: 0 9px 7px;
-    color: var(--product-muted);
-    font-size: 0.75rem;
-    font-weight: 650;
-}
-
-body.product-linear .nav-item {
-    height: 40px;
-    gap: 10px;
-    padding: 0 10px;
-    border: 1px solid transparent;
-    border-radius: var(--product-radius-sm);
-    color: var(--product-muted);
-    font-size: 0.9rem;
-    font-weight: 560;
-    transition: border-color 180ms cubic-bezier(0.16, 1, 0.3, 1), background 180ms cubic-bezier(0.16, 1, 0.3, 1), color 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-body.product-linear .nav-item:hover {
-    background: color-mix(in srgb, var(--product-surface) 74%, transparent);
-    color: var(--product-ink);
-    transform: none;
-}
-
-body.product-linear .nav-item.is-active {
-    border-color: var(--product-line);
-    background: var(--product-surface);
-    color: var(--product-ink);
-    box-shadow: var(--product-shadow-sm);
-}
-
-body.product-linear .main-area {
-    background: var(--product-bg);
-}
-
-body.product-linear .topbar {
-    border-color: var(--product-line);
-    background: var(--shell-topbar-bg);
-}
-
-body.product-linear .page-stage {
-    width: 100%;
-    max-width: 1320px;
-    padding: 28px 32px;
-}
-
-body.product-linear .shell-icon-button {
-    border-color: var(--product-line);
-    background: var(--product-surface);
-    color: var(--product-muted);
-    box-shadow: var(--product-shadow-sm);
-}
-
-body.product-linear .shell-icon-button:hover {
-    border-color: var(--product-line-strong);
-    color: var(--product-ink);
-    transform: none;
+body.product-linear :where(button, [role="button"], input:not([type="checkbox"]):not([type="radio"]), select) {
+    min-height: 44px;
 }
 
 body.product-linear :where(button, input, textarea, select, a, summary):focus-visible {
@@ -211,25 +175,24 @@ body.product-linear :where(.card, .panel, .surface, .section) {
     border-color: var(--product-line);
 }
 
-@media (max-width: 900px) {
-    body.product-linear .page-stage {
-        padding: 20px 16px;
-    }
-
-    body.product-linear .sidebar {
-        background: var(--product-surface-muted);
-    }
-
-    body.product-linear .shell-mobile-toggle {
-        border-color: var(--product-line);
-        background: var(--product-surface);
-    }
+body.product-linear :where(.status-info, .is-info) {
+    background: var(--product-info-soft);
+    color: var(--product-info);
 }
 
-@media (max-width: 560px) {
-    body.product-linear .page-stage {
-        padding: 16px 12px;
-    }
+body.product-linear :where(.status-success, .is-success) {
+    background: var(--product-success-soft);
+    color: var(--product-success);
+}
+
+body.product-linear :where(.status-warning, .is-warning) {
+    background: var(--product-warning-soft);
+    color: var(--product-warning);
+}
+
+body.product-linear :where(.status-danger, .is-error) {
+    background: var(--product-danger-soft);
+    color: var(--product-danger);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -121,6 +121,9 @@ async def visual_learning_page():
         static_dir / "css" / "product-linear-core.css",
         static_dir / "js" / "visual-learning.js",
         static_dir / "js" / "visual-learning-workbench.js",
+        static_dir / "js" / "ui-features.js",
+        static_dir / "js" / "app-shell.js",
+        static_dir / "js" / "pwa-register.js",
     ]
     version = str(max(
         (path.stat().st_mtime_ns for path in version_files if path.exists()),

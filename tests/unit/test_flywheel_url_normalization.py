@@ -219,7 +219,7 @@ def test_frontend_module_names_keep_workflows_separate():
     assert "单个解析" not in shell_sources
     assert "学做小红书" not in shell_sources
 
-    assert "工作台首页" in workbench
+    assert '<span class="topbar-page-title">单篇深度学习</span>' in workbench
     assert 'id="share-content"' in workbench
     assert 'name="deep-learning-source-content"' in workbench
     assert "系列深度学习" in collections

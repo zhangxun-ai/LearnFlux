@@ -86,12 +86,10 @@ body.product-linear.page-settings details.card summary {
     color: var(--product-ink);
 }
 
-body.product-linear.page-result .page-stage {
+body.product-linear.page-result .container {
+    width: 100%;
     max-width: 1180px;
     margin: 0 auto;
-}
-
-body.product-linear.page-result .page-stage > .container {
     border: 1px solid var(--product-line);
     border-radius: var(--product-radius-lg);
     background: var(--product-surface);
@@ -145,7 +143,7 @@ body.product-linear.page-result .transcript-content {
         grid-template-columns: 1fr;
     }
 
-    body.product-linear.page-result .page-stage > .container {
+    body.product-linear.page-result .container {
         border-radius: var(--product-radius-md);
         padding: 24px 18px;
     }

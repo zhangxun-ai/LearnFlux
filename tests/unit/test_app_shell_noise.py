@@ -52,14 +52,14 @@ def test_production_shells_have_one_content_heading():
         assert len(re.findall(r"<h1(?:\s|>)", html)) == 1
 
 
-def test_shared_shell_hides_desktop_topbar_and_uses_compact_mobile_bar():
+def test_shared_shell_uses_consistent_desktop_and_compact_mobile_bars():
     css = (
         PROJECT_ROOT / "src/web/static/css/app-shell.css"
     ).read_text(encoding="utf-8")
 
     desktop, mobile = css.split("@media (max-width: 900px)", maxsplit=1)
-    assert "--shell-topbar: 0px" in desktop
-    assert re.search(r"\.topbar\s*\{[^}]*display:\s*none", desktop, re.DOTALL)
+    assert "--shell-topbar: 64px" in desktop
+    assert re.search(r"\.topbar\s*\{[^}]*display:\s*flex", desktop, re.DOTALL)
     assert "--shell-topbar: 56px" in mobile
     assert re.search(r"\.topbar\s*\{[^}]*display:\s*flex", mobile, re.DOTALL)
     assert re.search(r"\.sr-only\s*\{", css)

@@ -83,7 +83,7 @@ def test_workbench_local_upload_adds_file_to_recent_history():
     app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
 
     assert "TaskHistoryManager.addTask" in app_js
-    assert "type: 'file'" in app_js
+    assert "type: mediaFile ? 'video' : 'file'" in app_js
     assert "title: fileObj.name" in app_js
 
 

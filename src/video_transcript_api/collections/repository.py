@@ -62,6 +62,7 @@ class LearningCollectionRepository:
                 """
                 CREATE TABLE IF NOT EXISTS learning_collections (
                     id TEXT PRIMARY KEY,
+                    owner_user_id TEXT,
                     title TEXT NOT NULL,
                     creator_name TEXT NOT NULL DEFAULT '',
                     collection_type TEXT NOT NULL,
@@ -135,6 +136,7 @@ class LearningCollectionRepository:
                 ("import_method", "TEXT NOT NULL DEFAULT ''"),
                 ("tags", "TEXT NOT NULL DEFAULT ''"),
                 ("exported_at", "TIMESTAMP"),
+                ("owner_user_id", "TEXT"),
             ]
             for name, definition in migrations:
                 if name not in columns:
@@ -151,6 +153,7 @@ class LearningCollectionRepository:
         description: str = "",
         import_method: str = "",
         tags: str = "",
+        owner_user_id: str = "",
     ) -> Dict[str, Any]:
         title = (title or "").strip()
         creator_name = (creator_name or "").strip()
@@ -159,6 +162,7 @@ class LearningCollectionRepository:
         description = (description or "").strip()
         import_method = (import_method or "").strip()
         tags = (tags or "").strip()
+        owner_user_id = (owner_user_id or "").strip()
 
         if not title:
             raise ValueError("title is required")
@@ -172,11 +176,12 @@ class LearningCollectionRepository:
             cursor.execute(
                 """
                 INSERT INTO learning_collections
-                (id, title, creator_name, collection_type, goal, description, import_method, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, owner_user_id, title, creator_name, collection_type, goal, description, import_method, tags)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     collection_id,
+                    owner_user_id or None,
                     title,
                     creator_name,
                     collection_type,
@@ -196,9 +201,13 @@ class LearningCollectionRepository:
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         collection_type: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         where = []
         params: List[Any] = []
+        if owner_user_id is not None:
+            where.append("c.owner_user_id = ?")
+            params.append(owner_user_id.strip())
         if creator_name:
             where.append("c.creator_name = ?")
             params.append(creator_name.strip())
@@ -243,27 +252,43 @@ class LearningCollectionRepository:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_filter_options(self) -> Dict[str, List[str]]:
+    def get_filter_options(self, owner_user_id: Optional[str] = None) -> Dict[str, List[str]]:
+        owner_where = " AND owner_user_id = ?" if owner_user_id is not None else ""
+        params = (owner_user_id.strip(),) if owner_user_id is not None else ()
         with self._get_cursor() as cursor:
             cursor.execute(
-                """
+                f"""
                 SELECT DISTINCT creator_name
                 FROM learning_collections
-                WHERE TRIM(creator_name) != ''
+                WHERE TRIM(creator_name) != ''{owner_where}
                 ORDER BY creator_name ASC
-                """
+                """,
+                params,
             )
             creator_names = [row["creator_name"] for row in cursor.fetchall()]
             cursor.execute(
-                """
+                f"""
                 SELECT DISTINCT title
                 FROM learning_collections
-                WHERE TRIM(title) != ''
+                WHERE TRIM(title) != ''{owner_where}
                 ORDER BY title ASC
-                """
+                """,
+                params,
             )
             titles = [row["title"] for row in cursor.fetchall()]
         return {"creator_names": creator_names, "titles": titles}
+
+    def assign_unowned_collections(self, owner_user_id: str) -> int:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collections
+                SET owner_user_id = ?
+                WHERE owner_user_id IS NULL OR TRIM(owner_user_id) = ''
+                """,
+                ((owner_user_id or "").strip(),),
+            )
+            return cursor.rowcount
 
     def get_collection(self, collection_id: str) -> Optional[Dict[str, Any]]:
         with self._get_cursor() as cursor:
@@ -298,6 +323,15 @@ class LearningCollectionRepository:
 
         source_id = uuid.uuid4().hex
         with self._get_cursor() as cursor:
+            if position is not None:
+                cursor.execute(
+                    """
+                    UPDATE learning_collection_sources
+                    SET position = position + 1
+                    WHERE collection_id = ? AND position >= ?
+                    """,
+                    (collection_id, int(position)),
+                )
             cursor.execute(
                 """
                 INSERT INTO learning_collection_sources
@@ -317,10 +351,69 @@ class LearningCollectionRepository:
             cursor.execute(
                 """
                 UPDATE learning_collections
-                SET status = 'processing', updated_at = CURRENT_TIMESTAMP
+                SET status = 'processing',
+                    summary_status = 'not_started',
+                    summary_markdown = NULL,
+                    exported_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
                 (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_knowledge_maps
+                WHERE collection_id = ? AND scope = 'collection'
+                """,
+                (collection_id,),
+            )
+        return self.get_source(source_id)
+
+    def update_source_task(
+        self,
+        source_id: str,
+        task_id: str,
+        view_token: str,
+    ) -> Dict[str, Any]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT collection_id FROM learning_collection_sources
+                WHERE id = ?
+                """,
+                (source_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise ValueError("source not found")
+            collection_id = row["collection_id"]
+            cursor.execute(
+                """
+                UPDATE learning_collection_sources
+                SET task_id = ?, view_token = ?
+                WHERE id = ?
+                """,
+                (task_id, view_token, source_id),
+            )
+            cursor.execute(
+                """
+                UPDATE learning_collections
+                SET status = 'processing',
+                    summary_status = 'not_started',
+                    summary_markdown = NULL,
+                    exported_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_knowledge_maps
+                WHERE collection_id = ?
+                  AND (scope = 'collection' OR (scope = 'source' AND source_id = ?))
+                """,
+                (collection_id, source_id),
             )
         return self.get_source(source_id)
 
@@ -356,6 +449,27 @@ class LearningCollectionRepository:
                 (collection_id,),
             )
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_source_with_collection_by_view_token(
+        self, view_token: str
+    ) -> Optional[Dict[str, Any]]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    s.*,
+                    c.title AS collection_title,
+                    c.creator_name AS collection_creator_name,
+                    c.collection_type AS collection_type
+                FROM learning_collection_sources s
+                JOIN learning_collections c ON c.id = s.collection_id
+                WHERE s.view_token = ?
+                LIMIT 1
+                """,
+                (view_token,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
     def get_collection_detail(self, collection_id: str) -> Optional[Dict[str, Any]]:
         collection = self.get_collection(collection_id)

@@ -1,382 +1,637 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
+        <script>
+        (function() {
+            try {
+                var theme = localStorage.getItem('vta_theme_preference');
+                if (theme) {
+                    var parsedTheme = theme;
+                    try { parsedTheme = JSON.parse(theme); } catch(e) {}
+                    document.documentElement.setAttribute('data-theme', parsedTheme);
+                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch(e) {}
+        })();
+    </script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>任务历史 - 内容解析工作台</title>
-    <link rel="stylesheet" href="/static/css/editorial.css">
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <title>任务历史 - LearnFlux</title>
+    <meta name="theme-color" content="#F6F7F9">
+    <meta name="application-name" content="LearnFlux">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="LearnFlux">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
+            <link rel="stylesheet" href="/static/css/editorial.css?v=2228265df40b">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=2228265df40b">
+    <link rel="stylesheet" href="/static/css/styles.css?v=2228265df40b">
+    <script src="/static/js/pwa-register.js?v=2228265df40b" defer></script>
+    <script src="/static/js/ui-features.js?v=05b7834ae213" defer></script>
+    <script src="/static/js/app-shell.js?v=2228265df40b" defer></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root, [data-theme="light"], [data-theme="dark"] {
+            --hist-accent: var(--accent-primary);
+            --hist-accent-hover: var(--accent-hover);
+            --hist-accent-soft: var(--accent-soft);
+            --hist-card: var(--bg-primary);
+            --hist-card-hover: var(--bg-secondary);
+            --hist-border: var(--border-primary);
+            --hist-shadow: var(--shadow-sm);
+            --hist-shadow-hover: var(--shadow);
+            --hist-radius: 12px;
+            --hist-radius-lg: 16px;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
             min-height: 100vh;
-            color: var(--text-primary);
+            color: var(--ink);
         }
 
-        /* 留白移到内容容器：避免 body 的 padding 把 sticky 站点导航整体内缩，与其他页保持贴边满宽一致 */
-        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
 
-        /* 顶部 */
+        /* 顶部 Header */
         .header {
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 24px;
+            gap: 16px;
+            margin-bottom: 32px;
         }
-        .header h1 { font-size: 1.5rem; font-weight: 700; }
+        .header h1 { font-size: 1.8rem; font-weight: 700; color: var(--text-primary); }
         .header a {
             color: var(--text-tertiary);
             text-decoration: none;
-            font-size: 0.875rem;
-            margin-left: auto; /* 返回主页靠右 */
+            font-size: 0.95rem;
+            margin-left: auto;
+            transition: color 0.2s;
+            font-weight: 500;
         }
-        .header a:hover { color: var(--accent-primary); }
+        .header a:hover { color: var(--hist-accent); }
 
-        /* API Key 输入区 */
+        /* API Key / Webhook 输入区 (Toolbar blocks) */
+        .auth-bar, .alias-panel, .filter-bar {
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            /* background/border inherited from editorial.css */
+        }
+        
         .auth-bar {
-            background: var(--bg-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 16px;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 16px;
             flex-wrap: wrap;
         }
-        .auth-bar label { font-size: 0.875rem; color: var(--text-secondary); white-space: nowrap; }
+        .auth-bar label { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
         .auth-bar input {
             flex: 1;
-            min-width: 200px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-primary);
-            border-radius: 8px;
-            padding: 8px 12px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
+            min-width: 240px;
+            background: var(--card-translucent-light);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-control);
+            padding: 10px 14px;
+            color: var(--ink);
+            font-size: 0.95rem;
             font-family: monospace;
+            transition: all 0.2s;
+            box-shadow: inset 0 1px 2px rgba(27, 26, 23, 0.02);
         }
-        .auth-bar input:focus { outline: none; border-color: var(--accent-primary); }
+        .auth-bar input:focus { outline: none; border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px var(--accent-soft); }
+        
+        /* 按钮样式 */
         .btn {
-            padding: 8px 18px;
-            border-radius: 8px;
+            padding: 10px 20px;
+            border-radius: var(--hist-radius);
             border: none;
             cursor: pointer;
-            font-size: 0.875rem;
+            font-size: 0.95rem;
             font-weight: 600;
-            transition: opacity 0.15s;
+            transition: all 0.2s;
         }
-        .btn:hover { opacity: 0.85; }
-        .btn-primary { background: var(--accent-primary); color: #fff; }
+        .btn-primary { 
+            background: var(--accent); 
+            color: #fff; 
+            box-shadow: 0 10px 18px -16px rgba(228, 80, 58, 0.8);
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 14px 22px -18px rgba(194, 58, 38, 0.9); background: var(--accent-ink); }
+        .btn-primary:active { transform: scale(0.97); }
+        
         .btn-ghost {
-            background: var(--bg-secondary);
+            background: transparent;
             color: var(--text-secondary);
-            border: 1px solid var(--border-primary);
+            border: 1.5px solid var(--hist-border);
         }
+        .btn-ghost:hover { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--text-tertiary); }
+        
         .auth-status {
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             padding: 4px 12px;
-            border-radius: 6px;
+            border-radius: 999px;
             white-space: nowrap;
+            font-weight: 600;
         }
-        .auth-status.ok { background: var(--success-bg); color: var(--success-text); }
-        .auth-status.err { background: var(--error-bg); color: var(--error-text); }
+        .auth-status.ok { background: rgba(16, 185, 129, 0.1); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.2); }
+        .auth-status.err { background: rgba(239, 68, 68, 0.1); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+        
         .remember-label {
-            font-size: 0.75rem;
+            font-size: 0.85rem;
             color: var(--text-tertiary);
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-        .remember-label input { cursor: pointer; }
-
-        /* Webhook 别名设置 */
-        .alias-panel {
-            background: var(--bg-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 16px;
-            display: none;
-        }
-        .alias-panel.visible { display: block; }
-        .alias-panel h3 { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 12px; }
-        .alias-row {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 8px;
+            cursor: pointer;
+            white-space: nowrap;
         }
+        .remember-label input { width: 16px; height: 16px; accent-color: var(--hist-accent); cursor: pointer; }
+
+        /* Webhook 别名设置 */
+        .alias-panel { display: none; }
+        .alias-panel.visible { display: block; animation: fadeIn 0.3s ease; }
+        .alias-panel h3 { font-size: 1.05rem; color: var(--text-primary); font-weight: 600; margin-bottom: 16px; }
+        .alias-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
         .alias-url {
             font-family: monospace;
-            font-size: 0.75rem;
-            color: var(--text-tertiary);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
             flex: 1;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            background: var(--bg-secondary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--hist-border);
         }
         .alias-input {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-primary);
-            border-radius: 6px;
-            padding: 5px 10px;
+            background: var(--bg-primary);
+            border: 1.5px solid var(--hist-border);
+            border-radius: 8px;
+            padding: 8px 12px;
             color: var(--text-primary);
-            font-size: 0.8rem;
-            width: 180px;
+            font-size: 0.9rem;
+            width: 220px;
+            transition: all 0.2s;
         }
-        .alias-input:focus { outline: none; border-color: var(--accent-primary); }
-        .alias-save-hint { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 8px; }
+        .alias-input:focus { outline: none; border-color: var(--hist-accent); box-shadow: 0 0 0 3px var(--hist-accent-soft); }
+        .alias-save-hint { font-size: 0.85rem; color: var(--text-tertiary); margin-top: 12px; }
 
         /* 过滤栏 */
         .filter-bar {
-            background: var(--bg-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 16px;
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 16px;
             align-items: flex-end;
         }
-        .filter-group { display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
-        .filter-group label { font-size: 0.75rem; color: var(--text-tertiary); }
+        .filter-group { display: flex; flex-direction: column; gap: 8px; min-width: 160px; }
+        .filter-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
         .filter-group select,
         .filter-group input[type="date"] {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-primary);
-            border-radius: 8px;
-            padding: 7px 10px;
-            color: var(--text-primary);
-            font-size: 0.8rem;
+            background: var(--card-translucent-light);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-control);
+            padding: 10px 14px;
+            color: var(--ink);
+            font-size: 0.95rem;
+            transition: all 0.2s;
         }
         .filter-group select:focus,
-        .filter-group input[type="date"]:focus { outline: none; border-color: var(--accent-primary); }
-        .filter-group select option { background: var(--bg-secondary); }
-        .filter-actions { display: flex; gap: 8px; align-items: flex-end; margin-left: auto; }
+        .filter-group input[type="date"]:focus { outline: none; border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px var(--accent-soft); }
+        .filter-group select option { background: var(--bg-primary); }
+        .filter-actions { display: flex; gap: 12px; align-items: flex-end; margin-left: auto; }
 
         /* 频道多选下拉 */
         .multi-select {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-primary);
-            border-radius: 8px;
-            padding: 7px 10px;
+            background: var(--bg-primary);
+            border: 1.5px solid var(--hist-border);
+            border-radius: var(--hist-radius);
+            padding: 10px 14px;
             color: var(--text-primary);
-            font-size: 0.8rem;
+            font-size: 0.95rem;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 4px;
-            min-width: 120px;
+            gap: 8px;
+            min-width: 140px;
             white-space: nowrap;
             overflow: hidden;
+            transition: all 0.2s;
         }
-        .multi-select:hover { border-color: var(--accent-primary); }
+        .multi-select:hover { border-color: var(--hist-accent); }
         .multi-dropdown {
             position: absolute;
             top: 100%;
             left: 0;
             z-index: 100;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 8px;
-            max-height: 240px;
+            background: var(--hist-card);
+            border: 1px solid var(--hist-border);
+            border-radius: var(--hist-radius);
+            max-height: 280px;
             overflow-y: auto;
-            min-width: 180px;
-            box-shadow: 0 8px 24px var(--shadow-medium);
-            margin-top: 4px;
+            min-width: 200px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+            margin-top: 8px;
         }
+        [data-theme="dark"] .multi-dropdown { box-shadow: 0 12px 32px rgba(0,0,0,0.6); }
         .multi-opt {
-            padding: 6px 12px;
-            font-size: 0.8rem;
+            padding: 10px 14px;
+            font-size: 0.9rem;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 10px;
             color: var(--text-primary);
+            transition: background 0.15s;
         }
-        .multi-opt:hover { background: var(--bg-secondary); }
-        .multi-opt input { accent-color: var(--accent-primary); cursor: pointer; }
+        .multi-opt:hover { background: var(--hist-accent-soft); }
+        .multi-opt input { width: 16px; height: 16px; accent-color: var(--hist-accent); cursor: pointer; }
 
         /* 统计条 */
         .stats-bar {
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 12px;
-            font-size: 0.8rem;
-            color: var(--text-tertiary);
+            gap: 16px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
         }
         .unread-badge {
-            background: var(--accent-primary);
+            background: var(--hist-accent);
             color: #fff;
-            border-radius: 12px;
-            padding: 2px 10px;
-            font-size: 0.75rem;
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 0.8rem;
             font-weight: 600;
         }
 
         /* 任务列表 */
-        .task-list { display: flex; flex-direction: column; gap: 6px; }
-
-        .task-row {
-            background: var(--bg-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 10px;
-            padding: 12px 16px;
-            display: grid;
-            grid-template-columns: 24px 130px 1fr 100px;
-            gap: 12px;
-            align-items: center;
-            cursor: pointer;
-            transition: border-color 0.15s, background 0.15s;
+        .task-list { display: flex; flex-direction: column; gap: 0; }
+        .task-card {
+            background: transparent;
+            border: 1px solid transparent;
+            border-bottom: 1px solid var(--line);
+            border-radius: var(--radius-card);
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transition: all 0.2s ease;
+            box-shadow: none;
             position: relative;
         }
-        .task-row:hover { border-color: var(--accent-primary); background: var(--bg-secondary); }
-        .task-row.unclickable { cursor: default; opacity: 0.4; }
-        .task-row.unclickable:hover { border-color: var(--border-primary); background: var(--bg-primary); }
-        .task-row.selected { border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-primary)); }
-
-        /* 多选复选框 */
+        .task-card:last-child {
+            border-bottom-color: transparent;
+        }
+        .task-card:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: var(--line);
+            background: var(--card-translucent-light);
+        }
+        .task-card.unread { border-left: 4px solid var(--accent); }
+        .task-card.unread::after {
+            content: '';
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+        .task-card.selected {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
         .row-checkbox {
-            width: 16px; height: 16px;
-            accent-color: var(--accent-primary);
+            width: 16px;
+            height: 16px;
+            accent-color: var(--hist-accent);
             cursor: pointer;
-            flex-shrink: 0;
         }
 
-        .task-time { font-size: 0.75rem; color: var(--text-tertiary); white-space: nowrap; }
-
-        /* 标题列容器：min-width:0 是让 grid 1fr 内 ellipsis 生效的关键 */
-        .task-title-cell { min-width: 0; overflow: hidden; }
-
+        /* 卡片头部 */
+        .task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+        .task-meta { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
         .task-title {
-            font-size: 0.875rem;
-            font-weight: 500;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: nowrap;
         }
-        .task-author {
-            font-size: 0.75rem;
+        .task-subtitle { font-size: 0.9rem; color: var(--text-secondary); display: flex; gap: 12px; flex-wrap: wrap; }
+        .task-status {
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid transparent;
+        }
+        .status-completed { background: rgba(16, 185, 129, 0.1); color: #10B981; border-color: rgba(16, 185, 129, 0.2); }
+        .status-failed { background: rgba(239, 68, 68, 0.1); color: #EF4444; border-color: rgba(239, 68, 68, 0.2); }
+        .status-processing { background: rgba(245, 158, 11, 0.1); color: #F59E0B; border-color: rgba(245, 158, 11, 0.2); }
+        .mark-badge {
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            white-space: nowrap;
+            color: #E4503A;
+            background: rgba(228, 80, 58, 0.1);
+            border: 1px solid rgba(228, 80, 58, 0.2);
+        }
+
+        /* 卡片内容区 */
+        .task-body { display: flex; flex-direction: column; gap: 16px; }
+        .task-url {
+            font-family: monospace;
+            font-size: 0.85rem;
             color: var(--text-tertiary);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .task-platform {
-            font-size: 0.75rem;
-            padding: 2px 8px;
-            border-radius: 6px;
             background: var(--bg-secondary);
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--hist-border);
+            word-break: break-all;
+        }
+        .task-url a { color: var(--hist-accent); text-decoration: none; font-weight: 500; }
+        .task-url a:hover { text-decoration: underline; }
+        
+        .task-error {
+            background: rgba(239, 68, 68, 0.05);
+            border-left: 3px solid #EF4444;
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.9rem;
+            color: #EF4444;
+        }
+
+        /* 标签 */
+        .tag-list { display: flex; gap: 8px; flex-wrap: wrap; }
+        .tag {
+            background: var(--bg-secondary);
+            border: 1px solid var(--hist-border);
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.8rem;
             color: var(--text-secondary);
-            text-align: center;
-            white-space: nowrap;
+            font-weight: 500;
         }
-        .task-webhook {
-            font-size: 0.7rem;
-            color: var(--text-tertiary);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+        
+        /* Webhook 投递结果 */
+        .webhook-results { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .wh-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.85rem;
+            background: var(--bg-secondary);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--hist-border);
         }
-        .task-status-badge {
-            font-size: 0.7rem;
+        .wh-status {
             padding: 2px 8px;
             border-radius: 6px;
-            text-align: center;
-            white-space: nowrap;
+            font-weight: 600;
+            font-size: 0.75rem;
         }
-        .status-processing { background: var(--loading-bg); color: var(--loading-text); }
-        .status-failed { background: var(--error-bg); color: var(--error-text); }
-        .status-unknown { background: var(--bg-tertiary); color: var(--text-tertiary); }
+        .wh-status.ok { background: rgba(16, 185, 129, 0.1); color: #10B981; }
+        .wh-status.err { background: rgba(239, 68, 68, 0.1); color: #EF4444; }
+        .wh-alias { font-weight: 600; color: var(--text-primary); }
+        .wh-detail { color: var(--text-tertiary); font-family: monospace; }
 
         /* 摘要预览卡片 */
         .summary-tooltip {
             position: fixed;
-            background: var(--bg-primary);
-            border: 1px solid var(--accent-primary);
-            border-radius: 10px;
+            background: var(--hist-card);
+            border: 1px solid var(--hist-border);
+            border-radius: var(--hist-radius);
             padding: 14px 16px;
             width: 340px;
-            max-height: 200px;
+            max-height: 240px;
             overflow-y: auto;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             line-height: 1.6;
             color: var(--text-secondary);
             z-index: 1000;
-            box-shadow: 0 8px 32px var(--shadow-medium);
+            box-shadow: var(--hist-shadow-hover);
             pointer-events: none;
-            display: none;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
         }
-        .summary-tooltip.visible { display: block; }
+        .summary-tooltip.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
         .summary-tooltip-title {
             font-weight: 600;
             color: var(--text-primary);
             margin-bottom: 8px;
-            font-size: 0.8rem;
+            font-size: 0.9rem;
         }
 
-        /* 分页 */
-        .pagination {
+        /* 卡片底部动作 */
+        .task-footer {
             display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            margin-top: 20px;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 8px;
+            padding-top: 16px;
+            border-top: 1px solid var(--hist-border);
         }
-        .page-btn {
-            padding: 6px 14px;
-            border-radius: 8px;
-            border: 1px solid var(--border-primary);
-            background: var(--bg-primary);
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 0.8rem;
-            transition: all 0.15s;
-        }
-        .page-btn:hover:not(:disabled) { border-color: var(--accent-primary); color: var(--accent-primary); }
-        .page-btn:disabled { opacity: 0.35; cursor: default; }
-        .page-info { font-size: 0.8rem; color: var(--text-tertiary); }
 
-        /* 空态 / 加载 / 错误 */
-        .state-box {
-            background: var(--bg-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 12px;
-            padding: 48px 24px;
+        /* 空状态与加载 */
+        .empty-state {
             text-align: center;
+            padding: 80px 20px;
             color: var(--text-tertiary);
-            font-size: 0.875rem;
+            background: var(--hist-card);
+            border: 1px dashed var(--hist-border);
+            border-radius: var(--hist-radius-lg);
+            font-size: 1.05rem;
         }
-        .state-box .icon { font-size: 2rem; margin-bottom: 12px; }
+        .loading { text-align: center; padding: 60px 20px; color: var(--text-secondary); font-size: 1.05rem; }
+        .error-state { text-align: center; padding: 40px 20px; color: #EF4444; background: rgba(239, 68, 68, 0.05); border-radius: var(--hist-radius-lg); }
 
-        /* 已读：仅降低标题行对比度，不影响整行点击 */
-        .task-row.read .task-title { opacity: 0.45; }
-        .task-row.read .task-author { opacity: 0.35; }
-
-        /* 未读蓝点 */
-        .read-dot {
-            width: 7px; height: 7px;
-            border-radius: 50%;
-            background: var(--accent-primary);
-            position: absolute;
-            left: 5px;
-            top: 50%;
-            transform: translateY(-50%);
-            flex-shrink: 0;
+        /* 模态框 (JSON Viewer) */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s;
         }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content {
+            background: var(--hist-card);
+            border-radius: var(--hist-radius-lg);
+            width: 90%; max-width: 800px; max-height: 85vh;
+            display: flex; flex-direction: column;
+            box-shadow: 0 24px 48px rgba(0,0,0,0.2);
+            transform: translateY(20px) scale(0.98);
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .modal-overlay.active .modal-content { transform: translateY(0) scale(1); }
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--hist-border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-header h2 { font-size: 1.25rem; font-weight: 600; color: var(--text-primary); }
+        .modal-close {
+            background: transparent; border: none; font-size: 1.5rem;
+            cursor: pointer; color: var(--text-tertiary); padding: 4px; line-height: 1;
+            transition: color 0.2s;
+        }
+        .modal-close:hover { color: var(--hist-accent); }
+        .modal-body {
+            padding: 20px 24px;
+            overflow-y: auto;
+            flex: 1;
+            background: var(--bg-secondary);
+        }
+        .modal-body pre {
+            white-space: pre-wrap; word-break: break-all;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.9rem; color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* 动画 */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 响应式与壳子覆盖 */
+        body.has-app-shell .container { width: min(100%, 1100px); max-width: none; padding: 2rem 2.5rem 6rem; }
+        body.has-app-shell .header { margin-bottom: 24px; }
+        body.has-app-shell .header h1 { font-family: var(--font-display); font-size: 2.2rem; }
+
+        @media (max-width: 768px) {
+            .auth-bar, .filter-bar { flex-direction: column; align-items: stretch; }
+            .auth-bar input, .filter-group { min-width: 100%; }
+            .task-header { flex-direction: column; }
+            .task-status { align-self: flex-start; }
+            body.has-app-shell .container { padding: 1.5rem 1.5rem 5rem; }
+        }
+
     </style>
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=2228265df40b">
+    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=2228265df40b">
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
+    <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
 </head>
-<body>
-<div id="site-nav"></div>
-<script src="/static/js/site-nav.js"></script>
+<body class="app-shell has-app-shell product-linear page-history">
+<a class="skip-link" href="#main-content">跳到主要内容</a>
+<aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/" aria-label="LearnFlux 首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-text">LearnFlux</span>
+            </a>
+        </div>
+        <!-- PRODUCT_NAV_START: generated by scripts/sync_product_navigation.py -->
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" data-group="core" aria-labelledby="nav-core-label">
+                <button class="nav-group-toggle" id="nav-core-label" type="button" data-group="core" aria-expanded="true" aria-controls="nav-core-items">
+                    <span class="nav-group-label">核心工具</span>
+                    <span class="nav-group-current" aria-hidden="true"></span>
+                    <svg class="nav-group-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                </button>
+                <div class="nav-group-items" id="nav-core-items">
+                    <a class="nav-item" href="/add_task_by_web" data-aliases="/,/view">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m13 2-2 9h9l-9 11 2-9H4l9-11z"/></svg></span>
+                        <span class="nav-label">单篇深度学习</span>
+                    </a>
+                    <a class="nav-item" href="/collections" data-feature="collections" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg></span>
+                        <span class="nav-label">系列深度学习</span>
+                    </a>
+                    <a class="nav-item" href="/visual-learning" data-feature="visual_learning" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
+                        <span class="nav-label">图解生成</span>
+                    </a>
+                    <a class="nav-item" href="/study" data-feature="study_player" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
+                        <span class="nav-label">边播边学</span>
+                    </a>
+                </div>
+            </section>
+            <section class="nav-group" data-group="flow" aria-labelledby="nav-flow-label">
+                <button class="nav-group-toggle" id="nav-flow-label" type="button" data-group="flow" aria-expanded="true" aria-controls="nav-flow-items">
+                    <span class="nav-group-label">心流空间</span>
+                    <span class="nav-group-current" aria-hidden="true"></span>
+                    <svg class="nav-group-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                </button>
+                <div class="nav-group-items" id="nav-flow-items">
+                    <a class="nav-item" href="/reading" data-feature="reading" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+                        <span class="nav-label">心流阅读</span>
+                    </a>
+                    <a class="nav-item" href="/static/focus-studio.html" data-feature="focus_studio" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></span>
+                        <span class="nav-label">心流写作</span>
+                    </a>
+                </div>
+            </section>
+            <section class="nav-group" data-group="insight" aria-labelledby="nav-insight-label">
+                <button class="nav-group-toggle" id="nav-insight-label" type="button" data-group="insight" aria-expanded="true" aria-controls="nav-insight-items">
+                    <span class="nav-group-label">洞察与分析</span>
+                    <span class="nav-group-current" aria-hidden="true"></span>
+                    <svg class="nav-group-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                </button>
+                <div class="nav-group-items" id="nav-insight-items">
+                    <a class="nav-item" href="/post" data-feature="post_insight" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h10"/></svg></span>
+                        <span class="nav-label">帖子洞察</span>
+                    </a>
+                    <a class="nav-item" href="/trend-radar" data-feature="trend_radar" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+                        <span class="nav-label">趋势雷达</span>
+                    </a>
+                    <a class="nav-item" href="/flywheel" data-feature="flywheel" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg></span>
+                        <span class="nav-label">IP 对标</span>
+                    </a>
+                </div>
+            </section>
+            <section class="nav-group nav-group-bottom" data-group="system" aria-labelledby="nav-system-label">
+                <button class="nav-group-toggle" id="nav-system-label" type="button" data-group="system" aria-expanded="true" aria-controls="nav-system-items">
+                    <span class="nav-group-label">系统</span>
+                    <span class="nav-group-current" aria-hidden="true"></span>
+                    <svg class="nav-group-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                </button>
+                <div class="nav-group-items" id="nav-system-items">
+                    <a class="nav-item is-active" href="/static/history.html" data-feature="history" hidden aria-current="page">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                        <span class="nav-label">历史记录</span>
+                    </a>
+                    <a class="nav-item" href="/settings">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82.33V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-2.82-1.18l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3.09 14H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.27 7.18l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.18l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.91 10H21a2 2 0 0 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z"/></svg></span>
+                        <span class="nav-label">系统设置</span>
+                    </a>
+                </div>
+            </section>
+        </nav>
+        <!-- PRODUCT_NAV_END -->
+    </aside>
+<main class="main-area" id="main-content">
+    <header class="topbar" aria-label="页面导航栏">
+        <div class="topbar-title"><span class="topbar-page-title">历史记录</span></div>
+    </header>
+    <section class="page-stage">
 <div class="container">
     <div class="header">
         <h1>任务历史</h1>
@@ -441,6 +696,13 @@
                 <option value="read">已读</option>
             </select>
         </div>
+        <div class="filter-group">
+            <label>精华</label>
+            <select id="filterMarked" onchange="serializeFiltersToURL(); loadHistory(0)">
+                <option value="all">全部</option>
+                <option value="marked">仅精华</option>
+            </select>
+        </div>
         <div class="filter-group" style="min-width:200px; flex:1">
             <label>搜索</label>
             <input type="text" id="filterQ" placeholder="标题 / 频道 / URL..."
@@ -488,6 +750,8 @@
     <div class="summary-tooltip-title" id="tooltipTitle"></div>
     <div id="tooltipContent"></div>
 </div>
+</section>
+</main>
 
 <script>
 // ===================== 状态 =====================
@@ -620,6 +884,7 @@ function serializeFiltersToURL() {
     const author    = get('filterAuthor');
     const status    = get('filterStatus');
     const read      = get('filterRead');
+    const marked    = get('filterMarked');
 
     if (q)         params.set('q', q);
     if (startDate) params.set('start_date', startDate);
@@ -630,6 +895,7 @@ function serializeFiltersToURL() {
     // 默认值不写入 URL，保持简洁
     if (status && status !== 'success') params.set('status', status);
     if (read   && read   !== 'all')     params.set('read', read);
+    if (marked && marked !== 'all')     params.set('marked', '1');
 
     const qs = params.toString();
     history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
@@ -659,6 +925,11 @@ function loadFiltersFromURL() {
     }
     set('filterStatus',     'status');
     set('filterRead',       'read');
+    const markedParam = params.get('marked');
+    if (markedParam === '1' || markedParam === 'true') {
+        const el = document.getElementById('filterMarked');
+        if (el) el.value = 'marked';
+    }
 }
 
 function getAliasMap() {
@@ -681,11 +952,11 @@ function shortWebhook(url) {
 }
 
 const PLATFORM_LABELS = {
-    youtube: '🎬 YouTube',
-    bilibili: '📺 Bilibili',
-    xiaoyuzhou: '🎵 小宇宙',
-    xiaohongshu: '📕 小红书',
-    douyin: '🎭 抖音',
+    youtube: 'YouTube',
+    bilibili: 'Bilibili',
+    xiaoyuzhou: '小宇宙',
+    xiaohongshu: '小红书',
+    douyin: '抖音',
 };
 
 // ===================== Auth =====================
@@ -832,6 +1103,7 @@ function resetFilter() {
     document.getElementById('filterAuthor').value = '';
     document.getElementById('filterStatus').value = 'success';
     document.getElementById('filterRead').value = 'all';
+    document.getElementById('filterMarked').value = 'all';
     const qEl = document.getElementById('filterQ'); if (qEl) qEl.value = '';
     history.replaceState(null, '', window.location.pathname);  // 清空 URL 参数
     loadHistory(0);
@@ -887,6 +1159,7 @@ async function fetchHistory() {
     const platform  = document.getElementById('filterPlatform').value;
     const author    = document.getElementById('filterAuthor').value;
     const status    = document.getElementById('filterStatus').value;
+    const marked    = document.getElementById('filterMarked')?.value || 'all';
     const q = document.getElementById('filterQ')?.value.trim() || '';
 
     if (startDate) params.start_date = startDate;
@@ -894,6 +1167,7 @@ async function fetchHistory() {
     if (platform)  params.platform = platform;
     if (author)    params.author = author;
     if (status)    params.status = status;
+    if (marked === 'marked') params.marked = 'true';
     if (q)         params.q = q;
 
     try {
@@ -971,21 +1245,16 @@ function buildRow(item, readSet) {
     const isRead = isCompleted && item.view_token && readSet.has(item.view_token);
     const canClick = isCompleted && item.view_token;
 
-    const time = item.request_time
-        ? item.request_time.replace('T', ' ').slice(0, 16)
+    const rawTime = item.request_time_display || item.request_time;
+    const time = rawTime
+        ? rawTime.replace('T', ' ').slice(0, 16)
         : '—';
 
-    const titleHtml = item.title
-        ? `<div class="task-title">${esc(item.title)}</div><div class="task-author">${esc(item.author || '')}</div>`
-        : `<div class="task-title" style="color:var(--text-tertiary)">${esc(item.video_url || '(无标题)')}</div>
-           ${!isCompleted ? `<div class="task-author"><span class="task-status-badge status-${item.status}">${item.status}</span></div>` : ''}`;
-
     const platformLabel = item.platform ? (PLATFORM_LABELS[item.platform] || item.platform) : '—';
-    const webhookLabel = item.wechat_webhook ? shortWebhook(item.wechat_webhook) : '—';
 
-    const classes = ['task-row'];
+    const classes = ['task-row', 'task-card'];
     if (isRead) classes.push('read');
-    if (!canClick) classes.push('unclickable');
+    if (!isRead && canClick) classes.push('unread');
 
     const vtAttr = canClick ? `data-vt="${esc(item.view_token)}"` : '';
     const clickHandler = canClick
@@ -993,16 +1262,37 @@ function buildRow(item, readSet) {
         : '';
 
     const checkboxHtml = canClick
-        ? `<input type="checkbox" class="row-checkbox" onclick="event.stopPropagation()">`
-        : `<span></span>`;
+        ? `<div style="display:flex;align-items:center;margin-right:12px;margin-top:2px;"><input type="checkbox" class="row-checkbox" onclick="event.stopPropagation()"></div>`
+        : ``;
+
+    let statusCls = '';
+    let statusTxt = item.status;
+    if (item.status === 'success') { statusCls = 'status-completed'; statusTxt = '已完成'; }
+    else if (item.status === 'failed') { statusCls = 'status-failed'; statusTxt = '失败'; }
+    else { statusCls = 'status-processing'; statusTxt = '处理中'; }
+
+    const titleText = item.title || item.video_url || '(无标题)';
 
     return `
-        <div class="${classes.join(' ')}" ${vtAttr} ${clickHandler}>
-            ${!isRead && canClick ? '<div class="read-dot"></div>' : ''}
-            ${checkboxHtml}
-            <div class="task-time">${time}</div>
-            <div class="task-title-cell">${titleHtml}</div>
-            <div class="task-platform">${platformLabel}</div>
+        <div class="${classes.join(' ')}" ${vtAttr} style="${canClick ? 'cursor:pointer;' : ''}">
+            <div class="task-header" ${clickHandler}>
+                <div style="display:flex; flex:1; min-width:0;">
+                    ${checkboxHtml}
+                    <div class="task-meta">
+                        <div class="task-title" title="${esc(titleText)}">${esc(titleText)}</div>
+                        <div class="task-subtitle">
+                            <span>${time}</span>
+                            ${item.author ? `<span>·</span><span>${esc(item.author)}</span>` : ''}
+                            <span>·</span><span>${platformLabel}</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    ${item.is_marked ? '<span class="mark-badge">精华</span>' : ''}
+                    <span class="task-status ${statusCls}">${statusTxt}</span>
+                </div>
+            </div>
+            ${item.error ? `<div class="task-body"><div class="task-error">${esc(item.error)}</div></div>` : ''}
         </div>`;
 }
 
@@ -1012,8 +1302,7 @@ function renderReadState() {
         const vt = row.dataset.vt;
         if (readSet.has(vt)) {
             row.classList.add('read');
-            const dot = row.querySelector('.read-dot');
-            if (dot) dot.remove();
+            row.classList.remove('unread');
         }
     });
     updateUnreadBadgeFromDOM();
@@ -1148,11 +1437,11 @@ function saveAliases() {
 // ===================== UI 辅助 =====================
 function showListLoading() {
     document.getElementById('listArea').innerHTML =
-        `<div class="state-box"><div class="icon">⏳</div><div>加载中...</div></div>`;
+        `<div class="state-box"><div class="icon">—</div><div>加载中...</div></div>`;
 }
 function showError(msg) {
     document.getElementById('listArea').innerHTML =
-        `<div class="state-box"><div class="icon">⚠️</div><div>${esc(msg)}</div><br>
+        `<div class="state-box"><div class="icon">!</div><div>${esc(msg)}</div><br>
          <button class="btn btn-ghost" onclick="loadHistory(0)" style="margin-top:8px">重试</button></div>`;
 }
 function showStatus(type, msg) {

@@ -173,7 +173,13 @@ class TempFileManager:
 
         return cleaned_count
 
-    def clean_up_old_files(self, hours: int = 24, silent: bool = False) -> int:
+    def clean_up_old_files(
+        self,
+        hours: int = 24,
+        silent: bool = False,
+        *,
+        protected_roots=(),
+    ) -> int:
         """
         清理旧的临时文件（启动时调用）
 
@@ -190,11 +196,44 @@ class TempFileManager:
         if not self.base_dir.exists():
             return 0
 
+        base_resolved = self.base_dir.resolve()
+        validated_protected = []
+        for root in protected_roots or ():
+            try:
+                resolved = Path(root).resolve()
+                resolved.relative_to(base_resolved)
+            except (OSError, ValueError):
+                continue
+            if resolved != base_resolved:
+                validated_protected.append(resolved)
+
+        def is_protected(item: Path) -> bool:
+            try:
+                resolved = item.resolve()
+            except OSError:
+                return False
+            for protected in validated_protected:
+                if resolved == protected:
+                    return True
+                try:
+                    resolved.relative_to(protected)
+                    return True
+                except ValueError:
+                    pass
+                try:
+                    protected.relative_to(resolved)
+                    return True
+                except ValueError:
+                    pass
+            return False
+
         # 遍历所有文件和目录
         for item in self.base_dir.rglob("*"):
             try:
                 # 跳过目录本身和跟踪列表中的文件
                 if item == self.base_dir or item in self.temp_files:
+                    continue
+                if is_protected(item):
                     continue
 
                 if item.is_file() or (item.is_dir() and any(item.rglob("*"))):

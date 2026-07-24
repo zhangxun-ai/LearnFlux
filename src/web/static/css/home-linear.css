@@ -1,0 +1,298 @@
+/*
+ * Home workbench visual refinement.
+ *
+ * This layer intentionally stays local to body.home-linear. It borrows the
+ * restrained surfaces and compact controls from the Google AI Studio preview
+ * without changing the production DOM, JavaScript contracts, or other pages.
+ */
+
+body.app-shell.home-linear {
+    --home-bg: var(--product-page);
+    --home-surface: var(--product-surface);
+    --home-surface-muted: var(--product-surface-muted);
+    --home-ink: var(--product-ink);
+    --home-muted: var(--product-muted);
+    --home-placeholder: var(--product-subtle);
+    --home-control-border: var(--product-line-strong);
+    --home-line: var(--product-line);
+    --home-focus: var(--product-focus);
+    --home-accent: var(--product-accent);
+    --home-accent-hover: var(--product-accent-hover);
+    --home-on-accent: var(--product-on-accent);
+    --home-accent-soft: var(--product-accent-soft);
+    --home-radius-sm: var(--product-radius-sm);
+    --home-radius-md: var(--product-radius-md);
+    --home-radius-lg: var(--product-radius-lg);
+    --home-shadow-sm: var(--product-shadow-sm);
+}
+
+.home-linear .app-home {
+    width: min(100%, 68rem);
+    min-height: calc(100vh - var(--shell-topbar));
+    padding: 1.75rem 2rem 1.25rem;
+}
+
+.home-linear .app-home .workbench-hero {
+    max-width: 44rem;
+    margin-bottom: 1.75rem;
+}
+
+.home-linear .app-home .workbench-hero h1 {
+    max-width: 18ch;
+    margin-inline: auto;
+    color: var(--home-ink);
+    font-family: var(--shell-font-ui);
+    font-size: 2.25rem;
+    font-weight: 720;
+    letter-spacing: -0.03em;
+    line-height: 1.18;
+    text-wrap: balance;
+    white-space: normal;
+}
+
+.home-linear .app-home .workbench-hero p {
+    max-width: 62ch;
+    margin-top: 0.65rem;
+    color: var(--home-muted);
+    font-size: 0.96rem;
+    font-weight: 450;
+    line-height: 1.65;
+    text-wrap: pretty;
+}
+
+.home-linear .app-home .main-content {
+    width: min(100%, 50rem);
+    margin-bottom: 1.5rem;
+}
+
+.home-linear .app-home .input-tabs {
+    gap: 2px;
+    margin: 0 0 1rem;
+    padding: 4px;
+    border: 1px solid var(--home-line);
+    border-radius: var(--home-radius-md);
+    background: var(--home-surface-muted);
+}
+
+.home-linear .app-home .input-tab {
+    min-height: 40px;
+    padding-inline: 1rem;
+    border: 1px solid transparent;
+    border-radius: var(--home-radius-sm);
+    color: var(--home-muted);
+    font-size: 0.875rem;
+    font-weight: 560;
+}
+
+.home-linear .app-home .input-tab:hover {
+    background: color-mix(in srgb, var(--home-surface) 68%, transparent);
+    color: var(--home-ink);
+}
+
+.home-linear .app-home .input-tab.active {
+    border-color: var(--home-line);
+    background: var(--home-surface);
+    color: var(--home-ink);
+    box-shadow: var(--home-shadow-sm);
+}
+
+.home-linear .app-home .input-tab:focus-visible,
+.home-linear .app-home .file-dropzone:focus-visible,
+.home-linear .app-home .submit-btn:focus-visible,
+.home-linear .app-home .filter-chip:focus-visible,
+.home-linear .app-home .hist-date-select:focus-visible,
+.home-linear .app-home .page-btn:focus-visible {
+    outline: 2px solid var(--home-focus);
+    outline-offset: 2px;
+}
+
+.home-linear .app-home .form-group {
+    margin-bottom: 1rem;
+}
+
+.home-linear .app-home .form-textarea,
+.home-linear .app-home .form-input,
+.home-linear .app-home .form-select {
+    color: var(--home-ink);
+    font-size: 0.95rem;
+    line-height: 1.65;
+}
+
+.home-linear .app-home .form-textarea {
+    min-height: 10.5rem;
+    padding: 1.15rem 1.25rem;
+}
+
+.home-linear .app-home .form-textarea::placeholder,
+.home-linear .app-home .form-input::placeholder {
+    color: var(--home-placeholder);
+    font-weight: 450;
+}
+
+.home-linear .app-home .form-textarea:focus,
+.home-linear .app-home .form-input:focus,
+.home-linear .app-home .form-select:focus {
+    outline: 2px solid var(--home-focus);
+    outline-offset: 1px;
+}
+
+.home-linear .app-home .submit-hint {
+    margin-top: 0.6rem;
+    color: var(--home-muted);
+    font-size: 0.84rem;
+    font-weight: 500;
+}
+
+.home-linear .app-home .file-dropzone {
+    min-height: 11.5rem;
+    padding: 2.5rem 1.5rem;
+    color: var(--home-ink);
+}
+
+.home-linear .app-home .file-dropzone:hover,
+.home-linear .app-home .file-dropzone.dragover {
+    background: var(--home-accent-soft);
+    border-color: var(--home-focus);
+    transform: none;
+}
+
+.home-linear .app-home .dropzone-icon {
+    font-size: 1.65rem;
+    color: var(--home-muted);
+}
+
+.home-linear .app-home .dropzone-title {
+    color: var(--home-ink);
+    font-size: 0.98rem;
+}
+
+.home-linear .app-home .dropzone-sub,
+.home-linear .app-home .dropzone-badge {
+    color: var(--home-muted);
+}
+
+.home-linear .app-home .dropzone-badge {
+    border-color: var(--home-line);
+    background: var(--home-surface-muted);
+}
+
+.home-linear .app-home .advanced-summary,
+.home-linear .app-home .advanced-toggle {
+    color: var(--home-muted);
+}
+
+.home-linear .app-home .status-container,
+.home-linear .app-home .history-container {
+    border: 1px solid var(--home-line);
+    border-radius: var(--home-radius-lg);
+    background: var(--home-surface);
+    box-shadow: var(--home-shadow-sm);
+    backdrop-filter: none;
+    padding: 1.25rem;
+}
+
+.home-linear .app-home .history-header {
+    border-color: var(--home-line);
+}
+
+.home-linear .app-home .filter-chip,
+.home-linear .app-home .hist-date-select,
+.home-linear .app-home .page-btn {
+    min-height: 36px;
+    border-color: var(--home-line);
+    border-radius: var(--home-radius-sm);
+    background: var(--home-surface);
+    color: var(--home-muted);
+}
+
+.home-linear .app-home .filter-chip:hover,
+.home-linear .app-home .page-btn:hover:not(:disabled) {
+    border-color: var(--home-control-border);
+    color: var(--home-ink);
+}
+
+.home-linear .app-home .filter-chip.active {
+    border-color: var(--home-ink);
+    background: var(--home-ink);
+    color: var(--home-surface);
+}
+
+.home-linear .app-home .hist-card {
+    border-color: var(--home-line);
+    border-radius: var(--home-radius-md);
+    background: var(--home-surface);
+}
+
+.home-linear .app-home .hist-card:hover {
+    border-color: var(--home-control-border);
+    box-shadow: var(--home-shadow-sm);
+    transform: none;
+}
+
+.home-linear .app-home .footer {
+    margin-top: 2.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--home-line);
+    opacity: 1;
+}
+
+.home-linear .app-home .footer p,
+.home-linear .app-home .footer a {
+    color: var(--home-muted);
+}
+
+.home-linear .app-home .footer a:hover {
+    color: var(--home-ink);
+}
+
+@media (max-width: 900px) {
+    .home-linear .app-home {
+        padding: 1.25rem 0.75rem 1rem;
+    }
+
+    .home-linear .app-home .workbench-hero {
+        margin-bottom: 1.35rem;
+        text-align: left;
+    }
+
+    .home-linear .app-home .workbench-hero h1 {
+        max-width: 14ch;
+        margin-inline: 0;
+        font-size: 1.85rem;
+    }
+
+    .home-linear .app-home .workbench-hero p {
+        margin-inline: 0;
+        font-size: 0.92rem;
+    }
+}
+
+@media (max-width: 560px) {
+    .home-linear .app-home .input-tabs {
+        width: 100%;
+    }
+
+    .home-linear .app-home .input-tab {
+        flex: 1 1 0;
+        min-width: 0;
+        padding-inline: 0.4rem;
+    }
+
+    .home-linear .app-home .form-textarea {
+        min-height: 9rem;
+        padding: 1rem;
+    }
+
+    .home-linear .app-home .history-controls,
+    .home-linear .app-home .history-filter {
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-linear .app-home .input-tab,
+    .home-linear .app-home .file-dropzone,
+    .home-linear .app-home .hist-card {
+        transition: none;
+    }
+}

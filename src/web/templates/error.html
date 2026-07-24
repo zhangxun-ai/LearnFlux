@@ -1,77 +1,114 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title or "出现错误" }} - 视频转录查看器{% endblock %}
+{% block title %}{{ title or "出现错误" }} - LearnFlux{% endblock %}
 
 {% block extra_css %}
 <style>
-    .error-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
-    .error-btn { display: inline-block; text-decoration: none; padding: 10px 20px; border-radius: 8px;
-        font-weight: 600; font-size: 0.95rem; border: 1px solid var(--border-primary);
-        background: var(--card); color: var(--text-primary); transition: background .15s; }
-    .error-btn:hover { background: var(--bg-tertiary); }
-    .error-btn-primary { background: var(--accent); color: #fff; border-color: transparent; }
-    .error-btn-primary:hover { background: var(--accent-ink); }
+    .error-shell { display: grid; gap: 24px; }
+    .error-panel, .error-guidance {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 28px 30px;
+    }
+    .error-panel {
+        background: var(--error-bg);
+        border-color: var(--error-border);
+        color: var(--error-text);
+    }
+    .error-panel h2, .error-guidance h2 {
+        border: 0;
+        margin: 0;
+        padding: 0;
+    }
+    .error-message { margin: 14px 0 0; font-size: 1rem; line-height: 1.7; }
+    .error-guidance { background: var(--card); }
+    .error-guidance h2 { color: var(--text-primary); }
+    .error-guidance .content { margin-top: 16px; }
+    .error-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+    .error-btn {
+        align-items: center;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--text-primary);
+        cursor: pointer;
+        display: inline-flex;
+        font: inherit;
+        font-size: 0.95rem;
+        font-weight: 650;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 18px;
+        text-decoration: none;
+        transition: background .15s ease, border-color .15s ease;
+    }
+    .error-btn:hover { background: var(--bg-tertiary); border-color: var(--text-secondary); }
+    .error-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .error-btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .error-btn-primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+    .error-timestamp { color: var(--text-secondary); margin: 0; text-align: center; }
+    @media (max-width: 640px) {
+        .error-panel, .error-guidance { padding: 22px 20px; }
+        .error-actions > * { flex: 1 1 100%; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-    <div class="section">
-        <div class="status-error">
-            <h2 style="margin-top: 0;">❌ 出现错误</h2>
-            <p>{{ message or "页面无法正常显示" }}</p>
+    <div class="section error-shell">
+        <article class="error-panel" role="alert" aria-labelledby="error-title">
+            <h2 id="error-title">{{ error_heading or "出现错误" }}</h2>
+            <p class="error-message">{{ message or "页面无法正常显示" }}</p>
 
             <div class="error-actions">
-                <a class="error-btn error-btn-primary" href="/add_task_by_web">🚀 去解析新内容</a>
-                <a class="error-btn" href="/static/history.html">📋 查看历史记录</a>
+                <a class="error-btn error-btn-primary" href="/add_task_by_web">解析新内容</a>
+                <a class="error-btn" href="/static/history.html" data-feature="history" hidden>查看历史记录</a>
             </div>
 
             {% if url %}
             <div style="margin-top: 20px;">
                 <h3>您可以：</h3>
                 <ul class="action-list">
-                    <li>📎 <a href="{{ url }}" target="_blank" rel="noopener">查看原始视频链接</a></li>
-                    <li>🔄 刷新页面重试</li>
-                    <li>📝 <a href="/add_task_by_web">重新提交转录任务</a></li>
+                    <li><a href="{{ url }}" target="_blank" rel="noopener">查看原始视频链接</a></li>
+                    <li>刷新页面重试</li>
+                    <li><a href="/add_task_by_web">重新提交转录任务</a></li>
                 </ul>
             </div>
             {% endif %}
-        </div>
-    </div>
+        </article>
     
-    <div class="section">
-        <h2>💡 可能的解决方法</h2>
-        <div class="content">
+        <section class="error-guidance" aria-labelledby="error-guidance-title">
+            <h2 id="error-guidance-title">可能的解决方法</h2>
+            <div class="content">
             <ul>
                 <li><strong>404 - 页面不存在</strong>：检查链接是否正确，或者任务可能已被删除</li>
                 <li><strong>转录失败</strong>：视频可能无法访问或格式不支持，请尝试重新提交</li>
                 <li><strong>服务异常</strong>：系统临时故障，请稍后重试</li>
             </ul>
             
-            <p style="margin-top: 20px;">
-                <button onclick="window.location.reload()" style="
-                    background: var(--accent);
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 1rem;
-                ">🔄 重新加载</button>
-            </p>
-        </div>
-    </div>
+                <p class="error-actions"><button type="button" class="error-btn error-btn-primary" data-reload-page>重新加载</button></p>
+            </div>
+        </section>
     
     {% if created_at_display %}
-    <div class="section">
-        <p style="color: #666; text-align: center;">
+    <div>
+        <p class="error-timestamp">
             任务创建时间：{{ created_at_display }}
         </p>
     </div>
     {% elif created_at %}
-    <div class="section">
-        <p style="color: #666; text-align: center;">
+    <div>
+        <p class="error-timestamp">
             任务创建时间：{{ created_at }}
         </p>
     </div>
     {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.querySelector('[data-reload-page]')?.addEventListener('click', function () {
+        window.location.reload();
+    });
+</script>
 {% endblock %}

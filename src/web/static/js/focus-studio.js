@@ -13,6 +13,19 @@
         sound: 'vta_focus_studio_sound'
     };
 
+    // 背景音清单：kind=file 用真实录音（自托管或导入），kind=noise 用合成有色噪声。
+    // 想新增一个背景音：把 mp3 放到 /static/audio/，在此加一行 { id, label, kind:'file', src }，
+    // 菜单与播放会自动对应（选项即对应你上传的文件）。噪声类对标系统背景音（明亮/平衡/低沉）。
+    const SOUNDS = [
+        { id: 'rain',     label: '雨声',   kind: 'file',  src: '/static/audio/rain.mp3' },
+        { id: 'snow',     label: '雪夜',   kind: 'file',  src: '/static/audio/snow.mp3' },
+        { id: 'stream',   label: '溪流',   kind: 'file',  src: '/static/audio/stream.mp3' },
+        { id: 'bright',   label: '明亮噪声', kind: 'noise', color: 'white' },
+        { id: 'balanced', label: '平衡噪声', kind: 'noise', color: 'pink' },
+        { id: 'dark',     label: '低沉噪声', kind: 'noise', color: 'brown' }
+    ];
+    const SOUND_BY_ID = Object.fromEntries(SOUNDS.map((item) => [item.id, item]));
+
     const state = {
         mode: localStorage.getItem(STORAGE.mode) || 'rainy',
         font: localStorage.getItem(STORAGE.font) || 'handwriting',
@@ -38,8 +51,11 @@
     const soundCurrent = document.getElementById('sound-current');
     const soundName = document.getElementById('sound-name');
     const soundMenu = document.getElementById('sound-menu');
-    const soundStart = document.getElementById('sound-start');
-    const brandMode = document.getElementById('brand-mode');
+    const timerToggle = document.getElementById('timer-toggle');   // 复用氛围 orb 作为番茄钟控制
+    const timerTime = document.getElementById('timer-time');
+    const timerPhase = document.getElementById('timer-phase');
+    const timerRing = document.getElementById('timer-ring-progress');
+    const timerZone = document.getElementById('mixer-zone');
     const exportButton = document.getElementById('focus-export');
     const exportMenu = document.getElementById('export-menu');
     const exportFormatButtons = document.querySelectorAll('[data-export-format]');
@@ -64,13 +80,12 @@
         state.mode = mode;
         localStorage.setItem(STORAGE.mode, mode);
         setDataset();
-        document.querySelectorAll('[data-mode]').forEach((button) => {
+        document.querySelectorAll('button[data-mode]').forEach((button) => {
             const active = button.dataset.mode === mode;
             button.classList.toggle('active', active);
             button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
         weatherName.textContent = mode === 'snowy' ? 'Snow' : 'Rain';
-        brandMode.textContent = mode === 'snowy' ? 'Snowy Mode' : 'Rainy Mode';
         renderer.setMode(mode);
         if (audioEngine.currentSound === 'rain' || audioEngine.currentSound === 'snow') {
             updateSound(mode === 'snowy' ? 'snow' : 'rain');
@@ -81,7 +96,7 @@
         state.font = font;
         localStorage.setItem(STORAGE.font, font);
         setDataset();
-        document.querySelectorAll('[data-font]').forEach((button) => {
+        document.querySelectorAll('button[data-font]').forEach((button) => {
             button.classList.toggle('active', button.dataset.font === font);
         });
     }
@@ -90,7 +105,7 @@
         state.size = size;
         localStorage.setItem(STORAGE.size, size);
         setDataset();
-        document.querySelectorAll('[data-size]').forEach((button) => {
+        document.querySelectorAll('button[data-size]').forEach((button) => {
             button.classList.toggle('active', button.dataset.size === size);
         });
     }
@@ -113,22 +128,16 @@
     }
 
     function soundLabel(sound) {
-        return {
-            rain: '雨声',
-            snow: '雪夜',
-            ocean: '海洋',
-            stream: '溪流',
-            night: '夜晚',
-            noise: '平衡噪声'
-        }[sound] || sound;
+        return (SOUND_BY_ID[sound] && SOUND_BY_ID[sound].label) || sound;
     }
 
     function updateSound(sound) {
+        if (!SOUND_BY_ID[sound]) sound = 'rain';
         state.sound = sound;
         localStorage.setItem(STORAGE.sound, sound);
         soundName.textContent = 'Volume';
         soundCurrent.title = '当前背景音：' + soundLabel(sound);
-        document.querySelectorAll('[data-sound]').forEach((button) => {
+        document.querySelectorAll('button[data-sound]').forEach((button) => {
             button.classList.toggle('active', button.dataset.sound === sound);
         });
         audioEngine.setSound(sound);
@@ -153,115 +162,227 @@
 
     const renderer = (function createRenderer() {
         let gl = null;
-        let program = null;
         let buffer = null;
-        let uniforms = {};
+        let scenes = null;          // { rainy, snowy } 每个含 program / uniforms / texture
         let lastRender = 0;
         let start = performance.now();
         let dpr = 1;
         let fallbackTimer = null;
 
-        const vertexSource = `
+        // 自托管底图：雨=车内模糊 bokeh，雪=阿尔卑斯雪湖（与目标站点同源素材）
+        const TEXTURES = {
+            rainy: '/static/img/focus/rain-bg.jpg',
+            snowy: '/static/img/focus/snow-bg.jpg'
+        };
+
+        // 共享顶点着色器：全屏四边形，并把裁剪坐标映射成 [0,1] 的 vUv 供片元采样底图
+        const VERTEX_SHADER = `
             attribute vec2 a_position;
+            varying vec2 vUv;
             void main() {
+                vUv = a_position * 0.5 + 0.5;
                 gl_Position = vec4(a_position, 0.0, 1.0);
             }
         `;
 
-        const fragmentSource = `
+        // 雨模式：玻璃雨痕折射（"Heartfelt" by Martijn Steinrucken / BigWIngs, Shadertoy）
+        // 折射水珠对底图做位移采样 + 日间冷色分级 + 高光 + 胶片颗粒 + 暗角
+        const RAIN_FRAGMENT = `
             precision highp float;
-            uniform vec2 u_resolution;
-            uniform vec2 u_mouse;
-            uniform float u_time;
-            uniform float u_mode;
-            uniform float u_intensity;
+            uniform float uTime;
+            uniform vec2 uResolution;
+            uniform float uIntensity;
+            uniform float uBlur;
+            uniform sampler2D uTexture;
+            varying vec2 vUv;
 
-            float hash(vec2 p) {
-                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+            #define S(a, b, t) smoothstep(a, b, t)
+
+            vec3 N13(float p) {
+                vec3 p3 = fract(vec3(p) * vec3(.1031, .11369, .13787));
+                p3 += dot(p3, p3.yzx + 19.19);
+                return fract(vec3((p3.x + p3.y) * p3.z, (p3.x + p3.z) * p3.y, (p3.y + p3.z) * p3.x));
             }
 
-            float softCircle(vec2 p, float radius, float feather) {
-                return 1.0 - smoothstep(radius, radius + feather, length(p));
+            float N(float t) {
+                return fract(sin(t * 12345.564) * 7658.76);
             }
 
-            float rainCell(vec2 uv, vec2 scale, float speed, float seed) {
-                vec2 g = uv * scale;
-                vec2 id = floor(g);
-                vec2 f = fract(g);
-                float rnd = hash(id + seed);
-                float fall = fract(f.y + u_time * speed + rnd);
-                float x = 0.5 + (rnd - 0.5) * 0.72 + sin(u_time * 0.7 + rnd * 6.28) * 0.04;
-                vec2 dropPos = vec2(x, fall);
-                vec2 p = f - dropPos;
-                p.x *= 1.9;
-                float body = softCircle(p, 0.052 + rnd * 0.025, 0.025);
-                float trail = (1.0 - smoothstep(0.0, 0.025, abs(f.x - x))) * smoothstep(0.04, 0.34, f.y - fall) * (1.0 - smoothstep(0.34, 0.72, f.y - fall));
-                float shine = softCircle(p - vec2(-0.018, 0.02), 0.018, 0.018);
-                return (body + trail * 0.32 + shine * 0.60) * smoothstep(0.14, 1.0, rnd);
+            float Saw(float b, float t) {
+                return S(0., b, t) * S(1., b, t);
             }
 
-            float rain(vec2 uv) {
-                float r = 0.0;
-                r += rainCell(uv + vec2(0.03, 0.0), vec2(16.0, 9.0), 0.22, 1.0);
-                r += rainCell(uv + vec2(-0.08, 0.12), vec2(28.0, 15.0), 0.34, 8.0) * 0.58;
-                r += rainCell(uv + vec2(0.11, -0.04), vec2(46.0, 24.0), 0.48, 19.0) * 0.34;
-                float streak = smoothstep(0.985, 1.0, hash(floor(vec2((uv.x - uv.y * 0.23) * 90.0, uv.y * 12.0 + u_time * 18.0))));
-                return r + streak * 0.13;
+            float StaticDrops(vec2 uv, float t) {
+                uv *= 40.;
+                vec2 id = floor(uv);
+                uv = fract(uv) - .5;
+                vec3 n = N13(id.x * 107.45 + id.y * 3543.654);
+                vec2 p = (n.xy - .5) * .7;
+                float d = length(uv - p);
+                float fade = Saw(.025, fract(t + n.z));
+                float c = S(.3, 0., d) * fract(n.z * 10.) * fade;
+                return c;
             }
 
-            float snowLayer(vec2 uv, float scale, float speed, float seed) {
-                vec2 mouse = (u_mouse - 0.5) * 0.40;
-                vec2 p = uv;
-                p.x += sin(uv.y * 6.0 + u_time * 0.25 + seed) * 0.045;
-                p += mouse * (0.035 + seed * 0.004);
-                p.y += u_time * speed;
-                p *= scale;
-                vec2 id = floor(p);
-                vec2 f = fract(p) - 0.5;
-                float rnd = hash(id + seed);
-                vec2 offset = vec2(rnd - 0.5, hash(id + seed + 2.8) - 0.5) * 0.58;
-                return softCircle(f - offset, 0.030 + rnd * 0.022, 0.030) * smoothstep(0.08, 1.0, rnd);
+            vec2 DropLayer(vec2 uv, float t) {
+                vec2 UV = uv;
+                uv.y += t * 0.75;
+                vec2 a = vec2(6., 1.);
+                vec2 grid = a * 2.;
+                vec2 id = floor(uv * grid);
+
+                float colShift = N(id.x);
+                uv.y += colShift;
+
+                id = floor(uv * grid);
+                vec3 n = N13(id.x * 35.2 + id.y * 2376.1);
+                vec2 st = fract(uv * grid) - vec2(.5, 0);
+
+                float x = n.x - .5;
+                float y = UV.y * 20.;
+                float wiggle = sin(y + sin(y));
+                x += wiggle * (.5 - abs(x)) * (n.z - .5);
+                x *= .7;
+                float ti = fract(t + n.z);
+                y = (Saw(.85, ti) - .5) * .9 + .5;
+                vec2 p = vec2(x, y);
+
+                float d = length((st - p) * a.yx);
+                float mainDrop = S(.4, .0, d);
+
+                float r = sqrt(S(1., y, st.y));
+                float cd = abs(st.x - x);
+                float trail = S(.23 * r, .15 * r * r, cd);
+                float trailFront = S(-.02, .02, st.y - y);
+                trail *= trailFront * r * r;
+
+                y = UV.y;
+                float trail2 = S(.2 * r, .0, cd);
+                float droplets = max(0., (sin(y * (1. - y) * 120.) - st.y)) * trail2 * trailFront * n.z;
+                y = fract(y * 10.) + (st.y - .5);
+                float dd = length(st - vec2(x, y));
+                droplets = S(.3, 0., dd);
+                float m = mainDrop + droplets * r * trailFront;
+
+                return vec2(m, trail);
             }
 
-            float snow(vec2 uv) {
-                float s = 0.0;
-                s += snowLayer(uv, 11.0, 0.035, 2.0) * 0.90;
-                s += snowLayer(uv + vec2(0.17, 0.0), 19.0, 0.060, 7.0) * 0.60;
-                s += snowLayer(uv + vec2(-0.09, 0.21), 31.0, 0.095, 13.0) * 0.42;
-                return s;
-            }
+            vec2 Drops(vec2 uv, float t, float l0, float l1, float l2) {
+                float s = StaticDrops(uv, t) * l0;
+                vec2 m1 = DropLayer(uv, t) * l1;
+                vec2 m2 = DropLayer(uv * 1.85, t) * l2;
 
-            vec3 rainBackground(vec2 uv) {
-                vec2 p = uv - 0.5;
-                vec3 col = vec3(0.018, 0.021, 0.020);
-                col += vec3(0.36, 0.31, 0.22) * exp(-length((p - vec2(0.23, 0.18)) * vec2(1.2, 1.8)) * 3.6);
-                col += vec3(0.34, 0.42, 0.38) * exp(-length((p - vec2(-0.18, -0.22)) * vec2(1.5, 1.1)) * 4.0);
-                col += vec3(0.20, 0.23, 0.21) * exp(-length((p - vec2(0.02, -0.02)) * vec2(0.8, 0.8)) * 2.7);
-                return col;
-            }
+                float c = s + m1.x + m2.x;
+                c = S(.3, 1., c);
 
-            vec3 snowBackground(vec2 uv) {
-                vec2 p = uv - 0.5;
-                vec3 sky = mix(vec3(0.018, 0.032, 0.046), vec3(0.18, 0.25, 0.34), uv.y);
-                float valley = exp(-length((p - vec2(0.00, -0.24)) * vec2(1.1, 0.8)) * 3.4);
-                float ridge = smoothstep(0.15, 0.74, uv.y + abs(p.x) * 0.48);
-                vec3 col = mix(vec3(0.015, 0.026, 0.032), sky, ridge);
-                col += vec3(0.18, 0.28, 0.36) * valley;
-                col += vec3(0.04, 0.08, 0.10) * (1.0 - smoothstep(0.10, 0.54, uv.y));
-                return col;
+                return vec2(c, max(m1.y * l0, m2.y * l1));
             }
 
             void main() {
-                vec2 uv = gl_FragCoord.xy / max(u_resolution.xy, vec2(1.0));
-                vec2 p = uv - 0.5;
-                float aspect = u_resolution.x / max(u_resolution.y, 1.0);
-                float vignette = 1.0 - smoothstep(0.28, 0.92, length(p * vec2(aspect, 1.0)));
-                vec3 col = mix(rainBackground(uv), snowBackground(uv), u_mode);
-                float weather = mix(rain(uv), snow(uv), u_mode) * (0.35 + u_intensity * 1.35);
-                vec3 weatherColor = mix(vec3(0.80, 0.92, 0.96), vec3(0.90, 0.96, 1.00), u_mode);
-                col += weatherColor * weather * mix(0.38, 0.82, u_mode);
-                col *= 0.48 + vignette * 0.72;
-                col += pow(weather, 2.0) * vec3(0.22, 0.25, 0.27);
+                vec2 uv = vUv;
+                vec2 centeredUv = (uv - 0.5) * 2.0;
+                float aspect = uResolution.y > 0.0 ? uResolution.x / uResolution.y : 1.0;
+                centeredUv.x *= aspect;
+
+                float t = uTime * 0.2;
+                vec2 rainUv = uv * vec2(aspect, 1.0);
+
+                float staticDrops = S(-.5, 1., uIntensity) * 2.;
+                float layer1 = S(.25, .75, uIntensity);
+                float layer2 = S(.0, .5, uIntensity);
+
+                vec2 c = Drops(rainUv, t, staticDrops, layer1, layer2);
+
+                vec2 e = vec2(.001, 0.);
+                float cx = Drops(rainUv + e, t, staticDrops, layer1, layer2).x;
+                float cy = Drops(rainUv + e.yx, t, staticDrops, layer1, layer2).x;
+                vec2 n = vec2(cx - c.x, cy - c.x);
+
+                vec3 col = texture2D(uTexture, uv + n).rgb;
+
+                vec3 daytimeTint = vec3(0.75, 0.82, 0.9);
+                col = mix(col, col * daytimeTint, 0.8);
+                col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.8);
+
+                vec3 lightDir = normalize(vec3(-1.0, 1.0, 0.5));
+                float spec = max(0.0, dot(normalize(vec3(n, 0.05)), lightDir));
+                col += pow(spec, 30.0) * 0.5 * S(0.1, 0.5, c.x);
+
+                float grain = fract(sin(dot(uv + t * 0.01, vec2(12.9898, 78.233))) * 43758.5453);
+                col += (grain - 0.5) * 0.03;
+
+                float vignette = 1.0 - length(centeredUv * 0.5);
+                col *= S(0.0, 1.0, vignette);
+
+                gl_FragColor = vec4(col, 1.0);
+            }
+        `;
+
+        // 雪模式："Just snow" by Andrew Baldwin (thndl.com)
+        // License: CC BY-NC-SA 3.0 (http://creativecommons.org/licenses/by-nc-sa/3.0/deed.en_US)
+        // 50 层视差雪花 + 景深(DoF) + 鼠标视差，叠加在雪景底图上并做冬季冷色分级
+        const SNOW_FRAGMENT = `
+            precision highp float;
+            uniform float uTime;
+            uniform vec2 uResolution;
+            uniform vec2 uMouse;
+            uniform sampler2D uTexture;
+            uniform float uIntensity;
+            varying vec2 vUv;
+
+            #define S(a, b, t) smoothstep(a, b, t)
+
+            #define LAYERS 50
+            #define DEPTH .5
+            #define WIDTH .3
+            #define SPEED .6
+
+            void main() {
+                const mat3 p = mat3(13.323122, 23.5112, 21.71123, 21.1212, 28.7312, 11.9312, 21.8112, 14.7212, 61.3934);
+
+                vec2 uv = vUv;
+                vec2 centeredUv = (uv - 0.5) * 2.0;
+                float aspect = uResolution.y > 0.0 ? uResolution.x / uResolution.y : 1.0;
+                centeredUv.x *= aspect;
+
+                // 鼠标视差
+                vec2 snowUv = uMouse.xy / uResolution.xy + vec2(1., uResolution.y / uResolution.x) * vUv;
+
+                vec3 acc = vec3(0.0);
+                float dof = 5. * sin(uTime * .1);
+
+                for (int i = 0; i < LAYERS; i++) {
+                    // 用强度控制实际可见的雪花层数
+                    if (float(i) > float(LAYERS) * uIntensity) break;
+
+                    float fi = float(i);
+                    vec2 q = snowUv * (1. + fi * DEPTH);
+                    q += vec2(q.y * (WIDTH * mod(fi * 7.238917, 1.) - WIDTH * .5), SPEED * uTime / (1. + fi * DEPTH * .03));
+                    vec3 n = vec3(floor(q), 31.189 + fi);
+                    vec3 m = floor(n) * .00001 + fract(n);
+                    vec3 mp = (31415.9 + m) / fract(p * m);
+                    vec3 r = fract(mp);
+                    vec2 s = abs(mod(q, 1.) - .5 + .9 * r.xy - .45);
+                    s += .01 * abs(2. * fract(10. * q.yx) - 1.);
+                    float d = .6 * max(s.x - s.y, s.x + s.y) + max(s.x, s.y) - .01;
+                    float edge = .005 + .05 * min(.5 * abs(fi - 5. - dof), 1.);
+                    acc += vec3(smoothstep(edge, -edge, d) * (r.x / (1. + .02 * fi * DEPTH)));
+                }
+
+                // 采样雪景底图
+                vec3 col = texture2D(uTexture, uv).rgb;
+
+                // 冬季冷色分级
+                vec3 winterTint = vec3(0.85, 0.9, 1.0);
+                col = mix(col, col * winterTint, 0.5);
+
+                // 叠加雪花
+                col += acc * 0.8;
+
+                // 暗角
+                float vignette = 1.0 - length(centeredUv * 0.4);
+                col *= S(0.0, 1.0, vignette);
+
                 gl_FragColor = vec4(col, 1.0);
             }
         `;
@@ -276,6 +397,53 @@
             return shader;
         }
 
+        // 创建底图纹理：先用 1x1 占位色，图片异步加载完成后再上传（NPOT 用 CLAMP_TO_EDGE + LINEAR）
+        function createTexture(url) {
+            const texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 12, 16, 255]));
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            const image = new Image();
+            image.crossOrigin = 'anonymous';
+            image.onload = () => {
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+            };
+            image.onerror = () => console.warn('Focus Studio texture failed:', url);
+            image.src = url;
+            return texture;
+        }
+
+        // 用共享顶点着色器 + 指定片元着色器构建一套独立场景（program + uniforms + texture）
+        function buildScene(fragmentSource, textureUrl) {
+            const vertex = compile(gl.VERTEX_SHADER, VERTEX_SHADER);
+            const fragment = compile(gl.FRAGMENT_SHADER, fragmentSource);
+            const program = gl.createProgram();
+            gl.attachShader(program, vertex);
+            gl.attachShader(program, fragment);
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                throw new Error(gl.getProgramInfoLog(program));
+            }
+            return {
+                program,
+                position: gl.getAttribLocation(program, 'a_position'),
+                uniforms: {
+                    time: gl.getUniformLocation(program, 'uTime'),
+                    resolution: gl.getUniformLocation(program, 'uResolution'),
+                    mouse: gl.getUniformLocation(program, 'uMouse'),
+                    intensity: gl.getUniformLocation(program, 'uIntensity'),
+                    blur: gl.getUniformLocation(program, 'uBlur'),
+                    texture: gl.getUniformLocation(program, 'uTexture')
+                },
+                texture: createTexture(textureUrl)
+            };
+        }
+
         function init() {
             try {
                 gl = canvas.getContext('webgl', {
@@ -285,28 +453,12 @@
                     preserveDrawingBuffer: true
                 });
                 if (!gl) throw new Error('WebGL unavailable');
-                const vertex = compile(gl.VERTEX_SHADER, vertexSource);
-                const fragment = compile(gl.FRAGMENT_SHADER, fragmentSource);
-                program = gl.createProgram();
-                gl.attachShader(program, vertex);
-                gl.attachShader(program, fragment);
-                gl.linkProgram(program);
-                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                    throw new Error(gl.getProgramInfoLog(program));
-                }
-                gl.useProgram(program);
                 buffer = gl.createBuffer();
                 gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
                 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-                const position = gl.getAttribLocation(program, 'a_position');
-                gl.enableVertexAttribArray(position);
-                gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-                uniforms = {
-                    resolution: gl.getUniformLocation(program, 'u_resolution'),
-                    mouse: gl.getUniformLocation(program, 'u_mouse'),
-                    time: gl.getUniformLocation(program, 'u_time'),
-                    mode: gl.getUniformLocation(program, 'u_mode'),
-                    intensity: gl.getUniformLocation(program, 'u_intensity')
+                scenes = {
+                    rainy: buildScene(RAIN_FRAGMENT, TEXTURES.rainy),
+                    snowy: buildScene(SNOW_FRAGMENT, TEXTURES.snowy)
                 };
                 resize();
                 requestAnimationFrame(render);
@@ -367,15 +519,25 @@
         }
 
         function render(now) {
-            if (!gl) return;
+            if (!gl || !scenes) return;
             if (!document.hidden && state.running && now - lastRender > 33) {
                 lastRender = now;
-                gl.useProgram(program);
-                gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
-                gl.uniform2f(uniforms.mouse, state.mouseX, state.mouseY);
-                gl.uniform1f(uniforms.time, (now - start) / 1000);
-                gl.uniform1f(uniforms.mode, state.mode === 'snowy' ? 1 : 0);
-                gl.uniform1f(uniforms.intensity, state.intensity);
+                const scene = state.mode === 'snowy' ? scenes.snowy : scenes.rainy;
+                const u = scene.uniforms;
+                gl.useProgram(scene.program);
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+                gl.enableVertexAttribArray(scene.position);
+                gl.vertexAttribPointer(scene.position, 2, gl.FLOAT, false, 0, 0);
+                if (u.time) gl.uniform1f(u.time, (now - start) / 1000);
+                if (u.resolution) gl.uniform2f(u.resolution, canvas.width, canvas.height);
+                if (u.mouse) gl.uniform2f(u.mouse, state.mouseX * canvas.width, state.mouseY * canvas.height);
+                if (u.intensity) gl.uniform1f(u.intensity, state.intensity);
+                if (u.blur) gl.uniform1f(u.blur, 0.4);
+                if (u.texture) {
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, scene.texture);
+                    gl.uniform1i(u.texture, 0);
+                }
                 gl.drawArrays(gl.TRIANGLES, 0, 6);
             }
             requestAnimationFrame(render);
@@ -399,9 +561,8 @@
     const audioEngine = (function createAudioEngine() {
         let context = null;
         let master = null;
-        let source = null;
-        let filter = null;
-        let customAudio = null;
+        let source = null;        // 合成噪声源
+        let customAudio = null;   // 真实录音 / 导入文件（HTMLAudioElement）
         let customUrl = null;
         let playing = false;
 
@@ -416,32 +577,51 @@
             return context;
         }
 
-        function createNoiseBuffer(duration) {
+        // 生成 4 秒可循环的有色噪声：white=明亮、pink=平衡、brown=低沉（纯 DSP，听感对标系统背景音）
+        function createNoiseBuffer(color) {
             const ctx = ensureContext();
             if (!ctx) return null;
-            const length = Math.floor(ctx.sampleRate * duration);
+            const length = Math.floor(ctx.sampleRate * 4);
             const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
             for (let channel = 0; channel < 2; channel++) {
                 const data = buffer.getChannelData(channel);
-                let last = 0;
-                for (let i = 0; i < length; i++) {
-                    const white = Math.random() * 2 - 1;
-                    last = last * 0.82 + white * 0.18;
-                    data[i] = last * 0.78 + white * 0.22;
+                if (color === 'pink') {
+                    // Paul Kellet 粉噪声近似：能量随频率 1/f 下降，听感最"平衡"
+                    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+                    for (let i = 0; i < length; i++) {
+                        const white = Math.random() * 2 - 1;
+                        b0 = 0.99886 * b0 + white * 0.0555179;
+                        b1 = 0.99332 * b1 + white * 0.0750759;
+                        b2 = 0.96900 * b2 + white * 0.1538520;
+                        b3 = 0.86650 * b3 + white * 0.3104856;
+                        b4 = 0.55000 * b4 + white * 0.5329522;
+                        b5 = -0.7616 * b5 - white * 0.0168980;
+                        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+                        b6 = white * 0.115926;
+                    }
+                } else if (color === 'brown') {
+                    // 棕（红）噪声：白噪声积分，低频厚实、听感最"低沉"
+                    let last = 0;
+                    for (let i = 0; i < length; i++) {
+                        const white = Math.random() * 2 - 1;
+                        last = (last + 0.02 * white) / 1.02;
+                        data[i] = last * 3.5;
+                    }
+                } else {
+                    // 白噪声：全频均匀，听感最"明亮"
+                    for (let i = 0; i < length; i++) {
+                        data[i] = (Math.random() * 2 - 1) * 0.5;
+                    }
                 }
             }
             return buffer;
         }
 
-        function stopGenerated() {
+        function stopNoise() {
             if (source) {
                 try { source.stop(); } catch (e) {}
                 source.disconnect();
                 source = null;
-            }
-            if (filter) {
-                filter.disconnect();
-                filter = null;
             }
         }
 
@@ -457,58 +637,49 @@
             }
         }
 
-        function configureFilter(sound) {
-            const ctx = ensureContext();
-            if (!ctx) return null;
-            const biquad = ctx.createBiquadFilter();
-            const settings = {
-                rain: ['bandpass', 820, 0.55],
-                snow: ['lowpass', 620, 0.38],
-                ocean: ['lowpass', 520, 0.62],
-                stream: ['bandpass', 1320, 0.72],
-                night: ['lowpass', 360, 0.28],
-                noise: ['lowpass', 920, 0.40]
-            }[sound] || ['lowpass', 700, 0.5];
-            biquad.type = settings[0];
-            biquad.frequency.value = settings[1];
-            biquad.Q.value = settings[2];
-            return biquad;
-        }
-
-        function startGenerated(sound) {
+        function startNoise(color) {
             const ctx = ensureContext();
             if (!ctx) return;
-            stopGenerated();
-            const buffer = createNoiseBuffer(sound === 'stream' ? 1.2 : 2.4);
+            stopNoise();
             source = ctx.createBufferSource();
-            source.buffer = buffer;
+            source.buffer = createNoiseBuffer(color);
             source.loop = true;
-            filter = configureFilter(sound);
-            source.connect(filter);
-            filter.connect(master);
+            source.connect(master);
             source.start();
         }
 
+        // 播放真实录音（自托管或导入文件），停掉合成噪声
+        function startFile(url, isObjectUrl) {
+            stopNoise();
+            stopCustom();
+            if (isObjectUrl) customUrl = url;
+            customAudio = new Audio(url);
+            customAudio.loop = true;
+            customAudio.volume = state.volume;
+            customAudio.play().catch((error) => {
+                console.warn('Focus Studio audio playback blocked:', error);
+            });
+        }
+
         function setVolume(value) {
-            if (master) master.gain.setTargetAtTime(value, context.currentTime, 0.08);
+            if (master && context) master.gain.setTargetAtTime(value, context.currentTime, 0.08);
             if (customAudio) customAudio.volume = value;
         }
 
-        function setIntensity(value) {
-            if (filter && context) {
-                const target = state.sound === 'rain' ? 620 + value * 620 : 420 + value * 360;
-                filter.frequency.setTargetAtTime(target, context.currentTime, 0.12);
+        function setSound(id) {
+            const sound = SOUND_BY_ID[id];
+            // 已在播放同一音源则不重启，避免任何重复选择打断正在播放的背景音
+            const alreadyPlaying = playing && id === audioEngine.currentSound && Boolean(customAudio || source);
+            state.sound = id;
+            audioEngine.currentSound = id;
+            if (!playing || !sound || alreadyPlaying) return;
+            if (sound.kind === 'file') {
+                startFile(sound.src, false);
+            } else {
+                stopCustom();
+                startNoise(sound.color);
             }
-        }
-
-        function setSound(sound) {
-            state.sound = sound;
-            audioEngine.currentSound = sound;
-            if (!playing) return;
-            stopCustom();
-            startGenerated(sound);
             setVolume(state.volume);
-            setIntensity(state.intensity);
         }
 
         async function play() {
@@ -516,39 +687,179 @@
             if (!ctx) return;
             if (ctx.state === 'suspended') await ctx.resume();
             playing = true;
-            soundStart.classList.add('is-playing');
-            soundStart.textContent = 'Sound On';
             setSound(state.sound);
+        }
+
+        function pause() {
+            playing = false;
+            stopNoise();
+            stopCustom();
         }
 
         function playCustom(file) {
             if (!file) return;
-            stopGenerated();
-            stopCustom();
-            customUrl = URL.createObjectURL(file);
-            customAudio = new Audio(customUrl);
-            customAudio.loop = true;
-            customAudio.volume = state.volume;
-            customAudio.play().then(() => {
-                playing = true;
-                audioEngine.currentSound = 'custom';
-                soundStart.classList.add('is-playing');
-                soundStart.textContent = 'Sound On';
-                soundName.textContent = file.name.replace(/\.[^/.]+$/, '').slice(0, 14) || 'Custom';
-            }).catch((error) => {
-                console.warn('Custom audio playback blocked:', error);
-            });
+            playing = true;
+            startFile(URL.createObjectURL(file), true);
+            audioEngine.currentSound = 'custom';
+            soundName.textContent = file.name.replace(/\.[^/.]+$/, '').slice(0, 14) || 'Custom';
         }
 
         return {
             currentSound: state.sound,
             play,
+            pause,
             playCustom,
             setSound,
             setVolume,
-            setIntensity
+            setIntensity: () => {},
+            getContext: () => context
         };
     })();
+
+    // 番茄钟：25 分钟专注 ↔ 5 分钟休息循环；开始即联动播放背景音，暂停/重置联动停止
+    const pomodoro = (function createPomodoro() {
+        const FOCUS = 25 * 60;
+        const BREAK = 5 * 60;
+        const RING = 2 * Math.PI * 24;   // 与 SVG 进度圆 r=24 对应的周长
+        let phase = 'focus';
+        let total = FOCUS;
+        let remaining = FOCUS;
+        let running = false;
+        let interval = null;
+        let sessions = 0;
+        let pressTimer = null;
+        let longPressed = false;
+
+        function format(sec) {
+            const m = Math.floor(sec / 60);
+            const s = sec % 60;
+            return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        }
+
+        function paint() {
+            timerTime.textContent = format(remaining);
+            const elapsed = total > 0 ? (total - remaining) / total : 0;
+            // 环随时间顺时针"填满"（与 flow-space 一致）：dashoffset 从周长降到 0，起始仅顶部圆点
+            timerRing.style.strokeDashoffset = (RING * (1 - elapsed)).toFixed(2);
+            timerPhase.textContent = phase === 'focus' ? '专注' : '休息';
+            timerZone.classList.toggle('is-running', running);
+            timerZone.classList.toggle('is-break', phase === 'break');
+            timerToggle.setAttribute('aria-pressed', running ? 'true' : 'false');
+        }
+
+        // 阶段结束的柔和提示音（Web Audio 合成，无需音频素材）
+        function chime(bright) {
+            const ctx = audioEngine.getContext();
+            if (!ctx) return;
+            const notes = bright ? [880, 1320] : [660, 880];
+            notes.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const t0 = ctx.currentTime + i * 0.18;
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0, t0);
+                gain.gain.linearRampToValueAtTime(0.22, t0 + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.0008, t0 + 0.6);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(t0);
+                osc.stop(t0 + 0.62);
+            });
+        }
+
+        function complete() {
+            chime(phase === 'focus');
+            if (phase === 'focus') {
+                sessions += 1;
+                phase = 'break';
+                total = BREAK;
+            } else {
+                phase = 'focus';
+                total = FOCUS;
+            }
+            remaining = total;
+            paint();   // 自动进入下一阶段，保持运行与背景音
+        }
+
+        function tick() {
+            remaining -= 1;
+            if (remaining <= 0) {
+                complete();
+            } else {
+                paint();
+            }
+        }
+
+        function start() {
+            if (running) return;
+            running = true;
+            audioEngine.play();          // 开始番茄钟即播放当前背景音
+            interval = window.setInterval(tick, 1000);
+            paint();
+        }
+
+        function pause() {
+            if (!running) return;
+            running = false;
+            window.clearInterval(interval);
+            interval = null;
+            audioEngine.pause();         // 暂停联动停止背景音
+            paint();
+        }
+
+        function toggle() {
+            if (longPressed) { longPressed = false; return; }   // 长按已触发重置，忽略本次点击
+            if (running) {
+                pause();
+            } else {
+                start();
+            }
+        }
+
+        // 长按 orb 重置（参考 flow-space 的交互）
+        function pressStart() {
+            longPressed = false;
+            pressTimer = window.setTimeout(() => {
+                longPressed = true;
+                reset();
+            }, 600);
+        }
+
+        function pressEnd() {
+            if (pressTimer) {
+                window.clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+        }
+
+        function reset() {
+            running = false;
+            window.clearInterval(interval);
+            interval = null;
+            phase = 'focus';
+            total = FOCUS;
+            remaining = FOCUS;
+            audioEngine.pause();
+            paint();
+        }
+
+        return { toggle, reset, paint, pressStart, pressEnd };
+    })();
+
+    // 依据 SOUNDS 生成背景音菜单（插在"导入录音"之前）；新增背景音只需改 SOUNDS 配置
+    function renderSoundMenu() {
+        const fragment = document.createDocumentFragment();
+        SOUNDS.forEach((item) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.dataset.sound = item.id;
+            button.textContent = item.label;
+            if (item.id === state.sound) button.classList.add('active');
+            fragment.appendChild(button);
+        });
+        soundMenu.insertBefore(fragment, audioImport);
+    }
 
     function formatClock(value) {
         if (!value) return '';
@@ -644,16 +955,16 @@
     }
 
     function bindEvents() {
-        document.querySelectorAll('[data-mode]').forEach((button) => {
+        document.querySelectorAll('button[data-mode]').forEach((button) => {
             button.addEventListener('click', () => updateMode(button.dataset.mode));
         });
-        document.querySelectorAll('[data-font]').forEach((button) => {
+        document.querySelectorAll('button[data-font]').forEach((button) => {
             button.addEventListener('click', () => updateFont(button.dataset.font));
         });
-        document.querySelectorAll('[data-size]').forEach((button) => {
+        document.querySelectorAll('button[data-size]').forEach((button) => {
             button.addEventListener('click', () => updateSize(button.dataset.size));
         });
-        document.querySelectorAll('[data-sound]').forEach((button) => {
+        document.querySelectorAll('button[data-sound]').forEach((button) => {
             button.addEventListener('click', () => updateSound(button.dataset.sound));
         });
         soundGroup.addEventListener('pointerenter', () => setSoundMenuOpen(true));
@@ -680,7 +991,12 @@
         });
         weatherSlider.addEventListener('input', () => updateIntensity(Number(weatherSlider.value) / 100));
         volumeSlider.addEventListener('input', () => updateVolume(Number(volumeSlider.value) / 100));
-        soundStart.addEventListener('click', () => audioEngine.play());
+        timerToggle.addEventListener('click', () => pomodoro.toggle());
+        timerToggle.addEventListener('mousedown', () => pomodoro.pressStart());
+        timerToggle.addEventListener('touchstart', () => pomodoro.pressStart(), { passive: true });
+        ['mouseup', 'mouseleave', 'touchend'].forEach((evt) => {
+            timerToggle.addEventListener(evt, () => pomodoro.pressEnd());
+        });
         exportButton.addEventListener('click', (event) => {
             event.stopPropagation();
             setExportMenuOpen(!exportMenu.classList.contains('is-open'));
@@ -713,6 +1029,8 @@
 
     function init() {
         setDataset();
+        if (!SOUND_BY_ID[state.sound]) state.sound = 'rain';
+        renderSoundMenu();
         editor.value = loadInitialText();
         bindEvents();
         updateMode(state.mode);
@@ -722,6 +1040,7 @@
         updateVolume(state.volume);
         updateSound(state.sound);
         updateSaveStatus(editor.value.trim() ? undefined : 'Ready');
+        pomodoro.paint();
         renderer.init();
         setTimeout(() => editor.focus(), 120);
     }

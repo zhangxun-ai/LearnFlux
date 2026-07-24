@@ -21,8 +21,8 @@
 
         // 需要纳入目录的正文区块
         CONTENT_SECTIONS: [
-            { title: '📝 内容总结', headingText: '内容总结' },
-            { title: '💬 高赞评论洞察', headingText: '高赞评论洞察' }
+            { title: '内容总结', headingText: '内容总结' },
+            { title: '高赞评论洞察', headingText: '高赞评论洞察' }
         ],
 
         // 校对文本区块选择器
@@ -155,7 +155,6 @@
         });
 
         tocData.headingGroups = headingGroups;
-        console.log(`提取到 ${headings.length} 个标题`);
         return headings;
     }
 
@@ -197,7 +196,7 @@
             headingsHTML += `
                 <div class="toc-item">
                     <a class="toc-link toc-anchor" href="#calibrated-section" data-id="calibrated-section">
-                        ✨ 校对文本
+                        校对文本
                     </a>
                 </div>
             `;
@@ -212,8 +211,8 @@
                     <div class="toc-indicator-line"></div>
                 </div>
                 <div class="toc-header">
-                    <div class="toc-title">📑 目录</div>
-                    <button class="toc-pin-btn" id="toc-pin-btn" title="固定目录（点击保持展开）">📌</button>
+                    <div class="toc-title">目录</div>
+                    <button class="toc-pin-btn" id="toc-pin-btn" title="固定目录（点击保持展开）">固定</button>
                 </div>
                 <div class="toc-content">
                     <ul class="toc-list">
@@ -253,7 +252,7 @@
             headingsHTML += `
                 <div class="toc-item">
                     <a class="toc-link toc-anchor" href="#calibrated-section" data-id="calibrated-section">
-                        ✨ 校对文本
+                        校对文本
                     </a>
                 </div>
             `;
@@ -261,13 +260,13 @@
 
         return `
             <button class="floating-toc-mobile-btn" id="toc-mobile-btn" title="目录">
-                📑
+                目录
             </button>
             <div class="floating-toc-mobile-panel" id="toc-mobile-panel">
                 <div class="toc-mobile-overlay" id="toc-mobile-overlay"></div>
                 <div class="toc-mobile-content">
                     <div class="toc-mobile-header">
-                        <div class="toc-mobile-title">📑 目录</div>
+                        <div class="toc-mobile-title">目录</div>
                         <button class="toc-mobile-close-btn" id="toc-mobile-close-btn">✕</button>
                     </div>
                     <div class="toc-mobile-body">
@@ -295,7 +294,6 @@
 
         // 如果没有标题，不渲染
         if (tocData.headings.length === 0 && !tocData.calibratedSection) {
-            console.log('没有标题数据，跳过 TOC 渲染');
             return;
         }
 
@@ -307,7 +305,6 @@
         const mobileTocHTML = createMobileTocHTML();
         document.body.insertAdjacentHTML('beforeend', mobileTocHTML);
 
-        console.log('TOC 渲染完成');
     }
 
     // ========== 事件处理 ==========
@@ -376,6 +373,7 @@
             container.classList.remove('collapsed');
             pinBtn.classList.add('pinned');
             pinBtn.title = '取消固定目录（已固定）';
+            document.body.classList.add('toc-pinned');
         } else {
             // 取消固定动画
             pinBtn.classList.add('animating-unpin');
@@ -387,6 +385,7 @@
             container.classList.add('collapsed');
             pinBtn.classList.remove('pinned');
             pinBtn.title = '固定目录（点击保持展开）';
+            document.body.classList.remove('toc-pinned');
         }
 
         savePinState(isPinned);
@@ -462,7 +461,6 @@
             if (element) observer.observe(element);
         });
 
-        console.log('滚动监听已设置');
     }
 
     // ========== 响应式处理 ==========
@@ -524,15 +522,12 @@
         // 窗口大小变化
         window.addEventListener('resize', handleResize);
 
-        console.log('事件监听器已绑定');
     }
 
     /**
      * 初始化 TOC
      */
     function init() {
-        console.log('初始化浮动 TOC...');
-
         // 检测设备类型
         isMobile = checkMobile();
 
@@ -547,7 +542,6 @@
 
         // 如果没有任何内容，退出
         if (tocData.headings.length === 0 && !tocData.calibratedSection) {
-            console.log('页面没有可用的标题或区块，跳过 TOC 初始化');
             return;
         }
 
@@ -559,14 +553,15 @@
 
         // 恢复 Pin 状态
         isPinned = loadPinState();
+        const container = document.getElementById('floating-toc');
         if (isPinned && !isMobile) {
-            const container = document.getElementById('floating-toc');
             const pinBtn = document.getElementById('toc-pin-btn');
             if (container && pinBtn) {
                 container.classList.add('pinned');
                 container.classList.remove('collapsed');
                 pinBtn.classList.add('pinned');
                 pinBtn.title = '取消固定目录（已固定）';
+                document.body.classList.add('toc-pinned');
             }
         } else {
             // 确保初始状态的 tooltip 正确
@@ -574,12 +569,21 @@
             if (pinBtn) {
                 pinBtn.title = '固定目录（点击保持展开）';
             }
+            document.body.classList.remove('toc-pinned');
+        }
+
+        if (container) {
+            container.addEventListener('mouseenter', () => {
+                document.body.classList.add('toc-hovered');
+            });
+            container.addEventListener('mouseleave', () => {
+                document.body.classList.remove('toc-hovered');
+            });
         }
 
         // 设置滚动监听
         setupScrollObserver();
 
-        console.log('浮动 TOC 初始化完成');
     }
 
     // ========== 启动 ==========

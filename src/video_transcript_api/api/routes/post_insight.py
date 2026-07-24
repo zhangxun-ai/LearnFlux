@@ -26,8 +26,11 @@ router = APIRouter()
 # Map an analyzer section heading to a stable key + canonical title. The key
 # drives per-section styling on the page (the credibility card is emphasized).
 _SECTION_MAP = [
+    ("positioning", "内容定位", ("内容定位", "类型定位")),
     ("claims", "正文核心主张", ("核心主张", "正文核心")),
-    ("credibility", "可信度与存疑点", ("可信度", "存疑")),
+    ("credibility", "证据与可信度", ("可信度", "存疑", "证据")),
+    ("demand_mine", "评论需求矿场", ("评论需求矿场", "需求矿场", "需求信号")),
+    ("opportunity", "机会判断", ("机会判断", "机会")),
     ("comments", "评论区：共识 vs 争议", ("评论区", "共识")),
     ("representative", "代表性高赞回复", ("代表性", "高赞回复")),
     ("actions", "对你的可行动启发", ("可行动", "启发")),
@@ -139,6 +142,7 @@ async def create_post_insight(
         "fetched_comment_count": result.fetched_comment_count,
         "analyzed_comment_count": len(result.comment_samples),
         "thread_text": result.thread_text,
+        "demand_signals": result.demand_signals,
         "raw_markdown": result.insight_markdown,
         "sections": build_insight_sections(result.insight_markdown),
     }

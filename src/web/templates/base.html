@@ -1,28 +1,45 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
-    <script>
-    (function() {
-        document.documentElement.setAttribute('data-theme', 'light');
-    })();
+        <script>
+        (function() {
+            try {
+                var theme = localStorage.getItem('vta_theme_preference');
+                if (theme) {
+                    var parsedTheme = theme;
+                    try { parsedTheme = JSON.parse(theme); } catch(e) {}
+                    document.documentElement.setAttribute('data-theme', parsedTheme);
+                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch(e) {}
+        })();
     </script>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
-    <meta name="description" content="{% block meta_description %}Video Transcript API - 多平台视频转录与 AI 校对服务{% endblock %}">
-    <meta name="theme-color" content="#E4503A">
+    <meta name="description" content="{% block meta_description %}LearnFlux - AI 驱动的内容学习工作台{% endblock %}">
+    <meta name="theme-color" content="#F6F7F9">
+    <meta name="application-name" content="LearnFlux">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="LearnFlux">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/favicon-32.png">
-    <link rel="apple-touch-icon" href="/static/icon/apple-touch-icon.png">
-    <meta property="og:title" content="{% block og_title %}内容解析工作台{% endblock %}">
+                <meta property="og:title" content="{% block og_title %}LearnFlux{% endblock %}">
     <meta property="og:description" content="{% block og_description %}视频转录 · 帖子精华提炼 · 文档解析，附可信度判断{% endblock %}">
     <meta property="og:type" content="article">
     <meta property="og:locale" content="zh_CN">
-    <meta property="og:site_name" content="内容解析工作台">
-    <meta property="og:image" content="/static/icon/og.png">
-    <title>{% block title %}视频转录查看器{% endblock %}</title>
+    <meta property="og:site_name" content="LearnFlux">
+    <meta property="og:image" content="/static/icon/learnflux-og.png">
+    <title>{% block title %}LearnFlux{% endblock %}</title>
+    <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
+    <script src="/static/js/ui-features.js?v={{ asset_ver }}" defer></script>
+    <script src="/static/js/app-shell.js?v={{ asset_ver }}" defer></script>
     <style>
         /* 配色 token 统一来自 editorial.css（单一来源） */
 
@@ -32,16 +49,18 @@
             color: var(--text-primary);
             margin: 0;
             padding: 0;
-            background: var(--bg-secondary);
+            background: var(--paper-warm, #F6F7F9);
             transition: color 0.3s ease, background 0.3s ease;
         }
 
         .container {
-            max-width: 900px;
+            width: min(100%, 72rem);
+            max-width: none;
             margin: 24px auto 40px;
             background: var(--bg-primary);
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid rgba(27, 26, 23, 0.08);
+            box-shadow: var(--shadow-sm);
             overflow: hidden;
             transition: background 0.3s ease;
         }
@@ -49,37 +68,75 @@
         .header {
             background: var(--bg-primary);
             color: var(--text-primary);
-            padding: 38px 30px 24px;
-            text-align: center;
+            padding: 28px 30px 22px;
+            text-align: left;
             position: relative;
             border-bottom: 1px solid var(--border-primary);
         }
 
         .header h1 {
             margin: 0;
-            font-size: 1.9rem;
-            font-weight: 500;
-            font-family: 'Fraunces', Georgia, 'Songti SC', serif;
-            letter-spacing: -0.01em;
+            font-size: 1.8rem;
+            font-weight: 650;
+            font-family: var(--font-display);
+            letter-spacing: 0;
+            word-break: keep-all;
+            white-space: nowrap;
         }
 
         .header .meta {
-            margin-top: 10px;
-            opacity: 0.9;
-            font-size: 0.9rem;
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .header .meta > span {
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .header .meta > span:not(:last-child)::after {
+            content: "·";
+            margin-left: 12px;
+            opacity: 0.5;
         }
 
         .header .meta a {
-            color: #C2533F;
+            color: var(--text-secondary);
             text-decoration: none;
+            transition: color 0.15s ease;
         }
 
         .header .meta a:hover {
-            text-decoration: underline;
+            color: var(--accent-ink);
+        }
+
+        .header .tags {
+            margin-top: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .header .tag {
+            background: rgba(0, 0, 0, 0.04);
+            color: var(--text-secondary);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        [data-theme="dark"] .header .tag {
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .section {
-            padding: 30px;
+            padding: 24px 30px;
             border-bottom: 1px solid var(--border-primary);
         }
 
@@ -537,11 +594,6 @@
             gap: 10px;
         }
 
-        .stats-icon {
-            font-size: 1rem;
-            opacity: 0.8;
-        }
-
         .stats-label {
             font-weight: 600;
             opacity: 0.9;
@@ -650,7 +702,7 @@
             font-size: 0.75rem;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0;
         }
 
         .config-value {
@@ -752,7 +804,7 @@
 
         .quick-copy-desc {
             grid-column: 1;
-            font-size: 0.72rem;
+            font-size: 0.78rem; /* Increased for readability */
             color: var(--text-secondary);
             opacity: 0.7;
             font-weight: 400;
@@ -791,11 +843,13 @@
 
         /* ========== 开源脚注样式 ========== */
         .powered-footer {
-            padding: 12px 30px;
+            padding: 16px 30px 12px;
             text-align: center;
-            font-size: 0.78rem;
-            color: var(--text-secondary);
-            opacity: 0.5;
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            opacity: 0.7;
+            margin-top: 32px;
+            border-top: 1px solid var(--border-primary);
             transition: opacity 0.2s ease;
         }
 
@@ -938,41 +992,124 @@
                 font-size: 0.8rem;
             }
         }
+
+        .source-reveal-button {
+            appearance: none;
+            border: 0;
+            background: transparent;
+            color: #E4503A;
+            cursor: pointer;
+            font: inherit;
+            padding: 0;
+            text-decoration: underline;
+        }
+
+        .source-reveal-button:disabled {
+            cursor: wait;
+            opacity: 0.65;
+        }
     </style>
     <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v={{ asset_ver }}">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v={{ asset_ver }}">
     {% block extra_css %}{% endblock %}
+    {% block product_linear_adapter %}<link rel="stylesheet" href="/static/css/product-linear-system.css?v={{ asset_ver }}">{% endblock %}
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
+    <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
 </head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js?v={{ asset_ver }}"></script>
-    <div class="container">
-        <div class="header">
-            <h1>{{ title or "视频转录查看器" }}</h1>
-            {% if author or url %}
-            <div class="meta">
-                {% if author %}👤 {{ author }}{% endif %}
-                {% if source_link_url %}
-                    <br>🔗 <a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }}</a>
-                {% elif source_unavailable_message %}
-                    <br>🔗 <span>{{ source_unavailable_message }}</span>
-                {% endif %}
-                {% if created_at_display %}
-                    <br>⏰ {{ created_at_display }}
-                {% elif created_at %}
-                    <br>⏰ {{ created_at }}
-                {% endif %}
+<body class="app-shell has-app-shell product-linear {% block body_class %}page-result{% endblock %}">
+    {% set shell_path = request.url.path if request is defined else '' %}
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <div class="sidebar-overlay" aria-hidden="true" onclick="document.body.classList.remove('sidebar-drawer-open')"></div>
+
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/" aria-label="LearnFlux 首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-text">LearnFlux</span>
+            </a>
+        </div>
+        {% include "partials/product_navigation.html" %}
+    </aside>
+
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <button class="mobile-menu-btn" aria-label="打开导航菜单" onclick="document.body.classList.add('sidebar-drawer-open')">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="topbar-title">
+                <span class="topbar-page-title">{% block shell_title %}{{ title or page_title or "LearnFlux" }}{% endblock %}</span>
             </div>
-            {% endif %}
-        </div>
+        </header>
 
-        {% block content %}{% endblock %}
+        <section class="page-stage">
+            <div class="container">
+                <div class="header">
+                    <h1>{{ title or "LearnFlux" }}</h1>
+            {% if author or url or created_at_display or created_at %}
+                <div class="meta">
+                    {% if author %}<span>作者：{{ author }}</span>{% endif %}
+                    {% if source_link_url %}
+                        <span><a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }} ↗</a></span>
+                    {% endif %}
+                    {% if source_reveal_url %}
+                        <span><button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button></span>
+                    {% endif %}
+                    {% if created_at_display %}
+                        <span>创建：{{ created_at_display }}</span>
+                    {% elif created_at %}
+                        <span>创建：{{ created_at }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                </div>
 
-        <div class="powered-footer">
-            Powered by <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">VideoTranscriptAPI</a> · Open Source · <a href="https://github.com/zj1123581321/VideoTranscriptAPI" target="_blank" rel="noopener">☆ Star on GitHub</a>
-        </div>
-    </div>
+                {% block content %}{% endblock %}
+            </div>
+        </section>
+    </main>
 
     {% block extra_js %}{% endblock %}
+
+    <!-- 本机源文件定位脚本 -->
+    <script>
+        document.addEventListener('click', async function(event) {
+            const button = event.target.closest('[data-source-reveal-url]');
+            if (!button) return;
+            event.preventDefault();
+
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.textContent = '正在打开...';
+
+            try {
+                const response = await fetch(button.dataset.sourceRevealUrl, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(function() { return {}; });
+                    throw new Error(data.detail || '打开本地位置失败');
+                }
+                button.textContent = '已打开';
+                setTimeout(function() {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }, 1600);
+            } catch (error) {
+                button.textContent = originalText;
+                button.disabled = false;
+                alert(error.message || '打开本地位置失败');
+            }
+        });
+    </script>
 
     <!-- 主题切换脚本 -->
     <script>
@@ -1013,12 +1150,12 @@
 
                 if (theme === 'dark') {
                     if (themeToggle) {
-                        themeToggle.textContent = '☀️';
+                        themeToggle.textContent = '浅色';
                         themeToggle.title = '切换到浅色模式';
                     }
                 } else {
                     if (themeToggle) {
-                        themeToggle.textContent = '🌙';
+                        themeToggle.textContent = '深色';
                         themeToggle.title = '切换到深色模式';
                     }
                 }
@@ -1070,32 +1207,82 @@
     <!-- 一键复制脚本 -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            function copyText(text) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    return navigator.clipboard.writeText(text);
+                }
+
+                var tmp = document.createElement('textarea');
+                tmp.value = text;
+                tmp.setAttribute('readonly', '');
+                tmp.style.position = 'fixed';
+                tmp.style.left = '-9999px';
+                document.body.appendChild(tmp);
+                tmp.select();
+                try {
+                    document.execCommand('copy');
+                    return Promise.resolve();
+                } catch (err) {
+                    return Promise.reject(err);
+                } finally {
+                    document.body.removeChild(tmp);
+                }
+            }
+
+            function stripMetadataHeader(text) {
+                if (typeof text !== 'string' || text.indexOf('---\n') !== 0) {
+                    return text;
+                }
+                var end = text.indexOf('\n---\n', 4);
+                if (end === -1) {
+                    return text;
+                }
+                return text.slice(end + 5).replace(/^\n/, '');
+            }
+
+            function setCopyState(btn, actionEl, text, className) {
+                if (className) btn.classList.add(className);
+                actionEl.textContent = text;
+            }
+
             document.querySelectorAll('.quick-copy-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var path = btn.getAttribute('data-path');
-                    var fullUrl = window.location.origin + path;
-                    var actionEl = btn.querySelector('.quick-copy-action');
-                    var originalText = actionEl.textContent;
+                    var copyPath = btn.getAttribute('data-copy-path');
+                    var stripMetadata = btn.getAttribute('data-copy-strip-metadata') === 'true';
+                    var targetPath = copyPath || path;
+                    if (!targetPath) return;
 
-                    navigator.clipboard.writeText(fullUrl).then(function() {
-                        btn.classList.add('copied');
-                        actionEl.textContent = 'Copied!';
+                    var fullUrl = window.location.origin + targetPath;
+                    var actionEl = btn.querySelector('.quick-copy-action');
+                    if (!actionEl) return;
+
+                    var originalText = actionEl.textContent;
+                    var copyPromise;
+
+                    if (copyPath) {
+                        copyPromise = fetch(fullUrl, { headers: { 'Accept': 'text/plain' } })
+                            .then(function(resp) {
+                                if (!resp.ok) throw new Error('Fetch failed: ' + resp.status);
+                                return resp.text();
+                            })
+                            .then(function(text) {
+                                return stripMetadata ? stripMetadataHeader(text) : text;
+                            })
+                            .then(copyText);
+                    } else {
+                        copyPromise = copyText(fullUrl);
+                    }
+
+                    copyPromise.then(function() {
+                        setCopyState(btn, actionEl, '已复制', 'copied');
                         setTimeout(function() {
                             btn.classList.remove('copied');
                             actionEl.textContent = originalText;
                         }, 1500);
                     }).catch(function() {
-                        // Fallback: select from temp input
-                        var tmp = document.createElement('input');
-                        tmp.value = fullUrl;
-                        document.body.appendChild(tmp);
-                        tmp.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(tmp);
-                        btn.classList.add('copied');
-                        actionEl.textContent = 'Copied!';
+                        setCopyState(btn, actionEl, '复制失败');
                         setTimeout(function() {
-                            btn.classList.remove('copied');
                             actionEl.textContent = originalText;
                         }, 1500);
                     });

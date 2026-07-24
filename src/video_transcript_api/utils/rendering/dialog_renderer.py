@@ -351,21 +351,32 @@ class DialogRenderer:
         """
         logger.info(f"开始选择渲染策略，缓存目录: {cache_dir}")
 
-        # 策略1: structured - FunASR V2（最优）
+        # 策略1: 校对文本始终优先
+        if os.path.exists(os.path.join(cache_dir, "llm_calibrated.txt")):
+            logger.info(
+                "  [Strategy] 'capswriter_long_text' - Calibrated text rendering"
+            )
+            return "capswriter_long_text"
+
+        # 策略2: structured - FunASR V2
         if os.path.exists(os.path.join(cache_dir, "llm_processed.json")):
             logger.info(
                 "  [Strategy] 'structured' - Structured rendering based on llm_processed.json"
             )
             return "structured"
 
-        # 策略2: capswriter_long_text - CapsWriter（无版本，直接使用长文本分段）
-        if os.path.exists(os.path.join(cache_dir, "transcript_capswriter.txt")):
+        # 策略3: capswriter_long_text - 原始文本文件（按优先级使用可用文本）
+        text_files = (
+            "transcript_funasr.json",
+            "transcript_capswriter.txt",
+        )
+        if any(os.path.exists(os.path.join(cache_dir, filename)) for filename in text_files):
             logger.info(
-                "  [Strategy] 'capswriter_long_text' - CapsWriter long text rendering"
+                "  [Strategy] 'capswriter_long_text' - Text file long text rendering"
             )
             return "capswriter_long_text"
 
-        # 策略3: normal - fallback
+        # 策略4: normal - fallback
         logger.warning(
             "  [Strategy] 'normal' - Normal text rendering (fallback - no cache found)"
         )
@@ -384,6 +395,8 @@ class DialogRenderer:
                 raise ValueError("结构化数据格式不正确")
 
             dialogs = structured_data["dialogs"]
+            if not dialogs:
+                raise ValueError("结构化数据不包含对话内容")
             speaker_mapping = structured_data.get("speaker_mapping", {})
 
             # 获取说话人列表
@@ -455,7 +468,7 @@ class DialogRenderer:
         try:
             logger.info(f"开始CapsWriter长文本渲染: {cache_dir}")
 
-            # 文本优先级：校对文本 > 原始转录文本 > 降级文本
+            # 文本优先级：校对文本 > FunASR分段文本 > CapsWriter原始文本 > 降级文本
             text_content = None
             source_file = None
 
@@ -466,6 +479,22 @@ class DialogRenderer:
                     text_content = f.read().strip()
                 source_file = "llm_calibrated.txt"
                 logger.info(f"  使用校对文本作为源: {source_file}")
+
+            # 降级到FunASR原始转录分段文本
+            if not text_content:
+                funasr_file = os.path.join(cache_dir, "transcript_funasr.json")
+                if os.path.exists(funasr_file):
+                    with open(funasr_file, "r", encoding="utf-8") as f:
+                        funasr_data = json.load(f)
+                    segments = funasr_data.get("segments", [])
+                    text_content = "\n".join(
+                        segment.get("text", "").strip()
+                        for segment in segments
+                        if segment.get("text", "").strip()
+                    )
+                    if text_content:
+                        source_file = "transcript_funasr.json"
+                        logger.info(f"  使用FunASR原始转录: {source_file}")
 
             # 降级到原始CapsWriter转录文本
             if not text_content:
@@ -521,7 +550,11 @@ class DialogRenderer:
             logger.info(f"  选择策略: {strategy}")
 
             if strategy == "structured":
-                return self._render_from_structured_data(cache_dir)
+                try:
+                    return self._render_from_structured_data(cache_dir)
+                except Exception as exc:
+                    logger.warning(f"结构化数据不可用，降级到原始转录: {exc}")
+                    return self._render_capswriter_long_text(cache_dir, fallback_text)
             elif strategy == "capswriter_long_text":
                 return self._render_capswriter_long_text(cache_dir, fallback_text)
             else:  # normal
@@ -541,7 +574,9 @@ class DialogRenderer:
             else:
                 return '<p style="color: #666;">渲染失败，无法显示内容</p>'
 
-    def render_calibrated_content_smart(self, cache_dir: str) -> Optional[str]:
+    def render_calibrated_content_smart(
+        self, cache_dir: str, fallback_text: Optional[str] = None
+    ) -> Optional[str]:
         """
         智能渲染校对文本内容的便捷函数
         简化版本：直接使用 render_with_cache_analysis
@@ -554,17 +589,22 @@ class DialogRenderer:
         """
         if not cache_dir or not os.path.exists(cache_dir):
             logger.debug(f"校对文本渲染：缓存目录不存在: {cache_dir}")
-            return None
+            return self._render_normal_text(fallback_text) if fallback_text else None
 
-        # 检查是否存在校对文本文件
-        calibrated_file = os.path.join(cache_dir, "llm_calibrated.txt")
-        if not os.path.exists(calibrated_file):
-            logger.debug(f"校对文本渲染：校对文本不存在: {calibrated_file}")
-            return None
+        # 检查是否存在可渲染文本文件
+        text_files = (
+            "llm_calibrated.txt",
+            "llm_processed.json",
+            "transcript_funasr.json",
+            "transcript_capswriter.txt",
+        )
+        if not any(os.path.exists(os.path.join(cache_dir, filename)) for filename in text_files):
+            logger.debug(f"校对文本渲染：无可用文本文件: {cache_dir}")
+            return self._render_normal_text(fallback_text) if fallback_text else None
 
         try:
             logger.info(f"开始校对文本专用渲染: {cache_dir}")
-            return self.render_with_cache_analysis(cache_dir)
+            return self.render_with_cache_analysis(cache_dir, fallback_text)
 
         except Exception as e:
             logger.error(f"智能渲染校对文本失败 {cache_dir}: {e}", exc_info=True)
@@ -585,7 +625,9 @@ def render_transcript_content(text: str) -> str:
     return renderer.render_dialog_html(text)
 
 
-def render_calibrated_content_smart(cache_dir: str) -> Optional[str]:
+def render_calibrated_content_smart(
+    cache_dir: str, fallback_text: Optional[str] = None
+) -> Optional[str]:
     """
     智能渲染校对文本内容的便捷函数
 
@@ -596,7 +638,7 @@ def render_calibrated_content_smart(cache_dir: str) -> Optional[str]:
         str: 渲染后的HTML，如果没有校对文本则返回None
     """
     renderer = DialogRenderer()
-    return renderer.render_calibrated_content_smart(cache_dir)
+    return renderer.render_calibrated_content_smart(cache_dir, fallback_text)
 
 
 def render_transcript_content_smart(

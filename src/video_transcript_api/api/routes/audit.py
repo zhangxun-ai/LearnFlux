@@ -6,12 +6,16 @@
 
 import sqlite3
 import time
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..context import get_audit_logger, get_cache_manager, get_logger
 from ..services.transcription import TranscribeResponse, verify_token
+from ...marks import ContentMarkRepository
+from ...study.source_files import media_type_for_filename
+from ...utils.timeutil import format_datetime_with_timezone
 
 logger = get_logger()
 audit_logger = get_audit_logger()
@@ -69,6 +73,7 @@ async def get_history(
     author: Optional[str] = Query(None, description="频道/作者过滤，支持逗号分隔多选"),
     q: Optional[str] = Query(None, description="关键词搜索：匹配标题、频道名、视频URL"),
     status: Optional[str] = Query(None, description="任务状态过滤，默认只显示 success（已完成）"),
+    marked: bool = Query(False, description="仅返回已标记精华的任务"),
     limit: int = Query(20, ge=1, le=10000, description="每页条数，客户端已读过滤时传大值"),
     offset: int = Query(0, ge=0, description="分页偏移"),
     user_info: dict = Depends(verify_token),
@@ -82,9 +87,14 @@ async def get_history(
     api_key_masked = audit_logger._mask_api_key(api_key)
     cache_manager = get_cache_manager()
     cache_db_path = str(cache_manager.db_path)
+    marks_repository = ContentMarkRepository(db_path=cache_db_path)
+    marks_repository.close()
 
     # 构建 WHERE 条件
-    conditions = ["a.api_key_masked = ?"]
+    conditions = [
+        "a.api_key_masked = ?",
+        "COALESCE(a.task_id, t.task_id) IS NOT NULL",
+    ]
     params: list = [api_key_masked]
 
     if webhook:
@@ -130,31 +140,76 @@ async def get_history(
         )
         params.extend([pattern, pattern, pattern])
 
+    if marked:
+        cache_conditions.append("m.id IS NOT NULL")
+
     where_clause = " AND ".join(conditions + cache_conditions)
 
-    base_sql = f"""
-        SELECT
-            a.task_id,
-            a.video_url,
-            a.wechat_webhook,
-            a.request_time,
-            a.api_key_masked,
-            t.view_token,
-            t.title,
-            t.author,
-            t.platform,
-            t.status
-        FROM api_audit_logs a
-        LEFT JOIN cache.task_status t ON a.task_id = t.task_id
-        WHERE {where_clause}
-        ORDER BY a.request_time DESC
+    history_cte = f"""
+        WITH filtered AS (
+            SELECT
+                a.id AS audit_id,
+                COALESCE(a.task_id, t.task_id) AS task_id,
+                COALESCE(NULLIF(a.video_url, ''), t.url) AS video_url,
+                a.wechat_webhook,
+                COALESCE(t.created_at, a.request_time) AS request_time,
+                a.api_key_masked,
+                t.view_token,
+                t.title,
+                t.author,
+                t.platform,
+                t.status,
+                t.source_file_path,
+                CASE WHEN m.id IS NULL THEN 0 ELSE 1 END AS is_marked,
+                COALESCE(t.view_token, a.task_id, t.task_id) AS dedupe_key,
+                ROW_NUMBER() OVER (
+                    PARTITION BY COALESCE(t.view_token, a.task_id, t.task_id)
+                    ORDER BY
+                        COALESCE(t.created_at, a.request_time) DESC,
+                        CASE WHEN a.video_url IS NOT NULL AND a.video_url != '' THEN 0 ELSE 1 END,
+                        a.request_time DESC,
+                        a.id DESC
+                ) AS rn
+            FROM api_audit_logs a
+            LEFT JOIN cache.task_status t
+                ON a.task_id = t.task_id
+                OR (
+                    a.task_id IS NULL
+                    AND a.video_url IS NOT NULL
+                    AND a.video_url != ''
+                    AND a.video_url = t.url
+                )
+            LEFT JOIN cache.content_marks m
+                ON m.owner_type = 'transcript'
+               AND m.owner_id = t.view_token
+               AND m.user_key = a.api_key_masked
+            WHERE {where_clause}
+        )
     """
 
-    count_sql = f"""
+    base_sql = history_cte + """
+        SELECT
+            task_id,
+            video_url,
+            wechat_webhook,
+            request_time,
+            api_key_masked,
+            view_token,
+            title,
+            author,
+            platform,
+            status,
+            source_file_path,
+            is_marked
+        FROM filtered
+        WHERE rn = 1
+        ORDER BY request_time DESC, audit_id DESC
+    """
+
+    count_sql = history_cte + """
         SELECT COUNT(*)
-        FROM api_audit_logs a
-        LEFT JOIN cache.task_status t ON a.task_id = t.task_id
-        WHERE {where_clause}
+        FROM filtered
+        WHERE rn = 1
     """
 
     def _run_query():
@@ -174,17 +229,33 @@ async def get_history(
 
             items = []
             for row in rows:
+                request_time = row[3]
+                source_path = Path(row[10]) if row[10] else None
+                source_name = row[6] or (source_path.name if source_path else "")
+                source_media_type = media_type_for_filename(source_name)
+                study_available = bool(
+                    row[5]
+                    and source_path
+                    and source_path.is_file()
+                    and source_media_type.startswith(("audio/", "video/"))
+                )
                 items.append({
                     "task_id": row[0],
                     "video_url": row[1],
                     "wechat_webhook": row[2],
-                    "request_time": row[3],
+                    "request_time": request_time,
+                    "request_time_display": format_datetime_with_timezone(
+                        request_time, "%Y-%m-%d %H:%M"
+                    ),
                     "api_key_masked": row[4],
                     "view_token": row[5],
                     "title": row[6],
                     "author": row[7],
                     "platform": row[8],
                     "status": row[9] or "unknown",
+                    "is_marked": bool(row[11]),
+                    "study_available": study_available,
+                    "study_url": f"/study/{row[5]}" if study_available else "",
                 })
             return total, items
         finally:

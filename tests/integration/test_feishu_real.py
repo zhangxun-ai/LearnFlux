@@ -31,7 +31,7 @@ class TestFeishuRealWebhook:
         """Send a plain text message to Feishu."""
         result = notifier.send_text(
             webhook_url=FEISHU_WEBHOOK,
-            content="[Integration Test] send_text from VideoTranscriptAPI",
+            content="[Integration Test] send_text from LearnFlux",
             async_send=False,
         )
         assert result.success is True, f"send_text failed: {result.error}"
@@ -40,7 +40,7 @@ class TestFeishuRealWebhook:
         """Send a card (markdown) message to Feishu."""
         content = (
             "## Integration Test\n\n"
-            "**Project:** VideoTranscriptAPI\n\n"
+            "**Project:** LearnFlux\n\n"
             "**Status:** send_card works\n\n"
             "| Column A | Column B |\n"
             "|----------|----------|\n"
@@ -50,7 +50,7 @@ class TestFeishuRealWebhook:
         result = notifier.send_card(
             webhook_url=FEISHU_WEBHOOK,
             content=content,
-            title="VideoTranscriptAPI Integration Test",
+            title="LearnFlux Integration Test",
             template="green",
             async_send=False,
         )

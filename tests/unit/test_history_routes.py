@@ -69,20 +69,21 @@ def db_pair(tmp_path):
             completed_at TIMESTAMP,
             cache_id   TEXT,
             llm_config TEXT,
-            download_url TEXT
+            download_url TEXT,
+            source_file_path TEXT
         )
     ''')
     conn.commit()
     conn.close()
 
     def insert_task(task_id, view_token, platform="youtube", title="Test Title",
-                    author="Test Author", status="success"):
+                    author="Test Author", status="success", source_file_path=None):
         c = sqlite3.connect(cache_db_path)
         c.execute(
             "INSERT OR IGNORE INTO task_status "
-            "(task_id, view_token, platform, title, author, status) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (task_id, view_token, platform, title, author, status),
+            "(task_id, view_token, platform, title, author, status, source_file_path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (task_id, view_token, platform, title, author, status, source_file_path),
         )
         c.commit()
         c.close()
@@ -366,6 +367,85 @@ class TestHistoryEndpoint:
         item = next(i for i in resp.json()["data"]["items"] if i["task_id"] == "task-vt")
         assert item["view_token"] == "my-view-token-abc"
         assert item["title"] == "My Video Title"
+
+    def test_history_marks_retained_media_as_available_for_study(self, history_client, tmp_path):
+        client, setup = history_client
+        source = tmp_path / "lesson.mp4"
+        source.write_bytes(b"video")
+        _log(setup["audit_logger"], "task-study")
+        setup["insert_task"](
+            "task-study",
+            "view-study",
+            title="Lesson.mp4",
+            source_file_path=str(source),
+        )
+
+        response = client.get("/api/audit/history")
+
+        assert response.status_code == 200
+        item = next(
+            value
+            for value in response.json()["data"]["items"]
+            if value["task_id"] == "task-study"
+        )
+        assert item["study_available"] is True
+        assert item["study_url"] == "/study/view-study"
+
+    def test_history_deduplicates_task_audit_rows_and_formats_local_time(self, history_client):
+        """Multiple audit rows for one task should display as one local-time history item."""
+        client, setup = history_client
+        al = setup["audit_logger"]
+        cache_db_path = setup["cache_db_path"]
+
+        conn = sqlite3.connect(al.db_path)
+        rows = [
+            (None, "http://xhslink.com/o/5D5gM73GKqp", "2026-06-30 13:24:52", None),
+            ("task-xhs", "http://xhslink.com/o/5D5gM73GKqp", "2026-06-30 13:24:53", 202),
+            ("task-xhs", None, "2026-06-30 13:24:53", 202),
+            ("task-xhs", None, "2026-06-30 13:28:14", 200),
+        ]
+        for task_id, video_url, request_time, status_code in rows:
+            conn.execute(
+                "INSERT INTO api_audit_logs "
+                "(api_key_masked, user_id, endpoint, task_id, video_url, request_time, status_code) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (_API_KEY_MASK, "test-user", "/api/transcribe", task_id, video_url, request_time, status_code),
+            )
+        conn.commit()
+        conn.close()
+
+        conn = sqlite3.connect(cache_db_path)
+        conn.execute(
+            "INSERT INTO task_status "
+            "(task_id, view_token, url, platform, media_id, status, title, author, created_at, completed_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "task-xhs",
+                "view-xhs",
+                "http://xhslink.com/o/5D5gM73GKqp",
+                "xiaohongshu",
+                "6a2fd6d1000000001702f4b6",
+                "success",
+                "分享一个做好决策的方法",
+                "加肯",
+                "2026-06-30 13:24:53",
+                "2026-06-30 13:26:57",
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        resp = client.get("/api/audit/history")
+
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["total"] == 1
+        assert len(data["items"]) == 1
+        item = data["items"][0]
+        assert item["task_id"] == "task-xhs"
+        assert item["video_url"] == "http://xhslink.com/o/5D5gM73GKqp"
+        assert item["request_time"] == "2026-06-30 13:24:53"
+        assert item["request_time_display"] == "2026-06-30 21:24"
 
     def test_api_key_masked_in_response(self, history_client):
         """Response data should include api_key_masked for localStorage key construction."""

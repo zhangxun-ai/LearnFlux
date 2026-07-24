@@ -1,16 +1,248 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title or "视频转录" }} - 视频转录查看器{% endblock %}
+{% block title %}{{ title or "视频转录" }} - LearnFlux{% endblock %}
 {% block meta_description %}{{ title or "视频转录" }} - {{ platform or "" }} 视频转录校对结果{% endblock %}
-{% block og_title %}{{ title or "视频转录" }} - 视频转录查看器{% endblock %}
+{% block og_title %}{{ title or "视频转录" }} - LearnFlux{% endblock %}
 {% block og_description %}{{ title or "视频转录" }} 的转录校对结果{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/floating-toc.css">
+<link rel="stylesheet" href="/static/css/visual-learning.css?v={{ asset_ver }}">
 <style>
 /* Section header with inline action */
 .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .section-header h2 { margin-bottom: 0; }
+.summary-reader-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--line, #EBE4D9);
+    border-radius: 8px;
+    background: var(--bg-tertiary, #F3EDE4);
+}
+.summary-reader-btn {
+    min-height: 36px;
+    border: 0;
+    border-radius: 7px;
+    padding: 0 14px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary, #666);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.summary-reader-btn[aria-selected="true"] {
+    background: var(--card, #FFFFFF);
+    color: var(--text-primary, #1B1A17);
+    box-shadow: inset 0 0 0 1px var(--line, #EBE4D9), 0 2px 6px rgba(0,0,0,0.04);
+}
+.summary-reader-btn:focus-visible {
+    outline: 2px solid var(--accent, #D6412D);
+    outline-offset: 2px;
+}
+.summary-view-panel[hidden] { display: none; }
+.summary-view-panel:not([hidden]) {
+    animation: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes fade-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.transcript-visual-panel { margin-top: 18px; }
+.transcript-visual-shell {
+    display: grid;
+    gap: 18px;
+    padding-top: 4px;
+}
+.transcript-visual-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    padding-bottom: 12px;
+}
+.transcript-visual-kicker {
+    display: block;
+    margin-bottom: 2px;
+    color: #2563eb;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+.transcript-visual-toolbar strong {
+    color: var(--text-primary, #222);
+    font-size: 1rem;
+}
+.transcript-visual-status {
+    margin: 3px 0 0;
+    color: var(--text-secondary, #666);
+    font-size: 0.86rem;
+}
+.transcript-visual-toolbar-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.transcript-visual-action {
+    min-height: 34px;
+    border: 1px solid var(--border-color, #d6dce5);
+    border-radius: 8px;
+    padding: 0 12px;
+    cursor: pointer;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #222);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+.transcript-visual-action.primary {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #fff;
+}
+.transcript-visual-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+.transcript-visual-empty {
+    display: grid;
+    justify-items: start;
+    gap: 12px;
+    min-height: 260px;
+    padding: clamp(24px, 5vw, 44px);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: var(--text-primary, #222);
+}
+.transcript-visual-empty.is-generating {
+    align-content: center;
+}
+.transcript-visual-empty strong {
+    font-size: 1.15rem;
+}
+.transcript-visual-empty p {
+    max-width: 62ch;
+    margin: 0;
+    color: var(--text-secondary, #666);
+    line-height: 1.7;
+}
+.transcript-visual-progress {
+    display: grid;
+    gap: 8px;
+    width: min(100%, 560px);
+    margin: 10px 0 6px;
+}
+.transcript-visual-progress-track {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e5e7eb;
+}
+.transcript-visual-progress-fill {
+    display: block;
+    width: 12%;
+    height: 100%;
+    border-radius: inherit;
+    background: #2563eb;
+    transition: width 0.24s ease;
+}
+.transcript-visual-progress-meta {
+    color: var(--text-secondary, #666);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+.transcript-visual-diagram .vl-reader-visual-atlas.vl-continuous-article {
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.section-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.transcript-copy-btn.quick-copy-btn {
+    display: inline-flex;
+    grid-template-columns: none;
+    grid-template-rows: none;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 6px 10px;
+    border-color: rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.018);
+    color: rgba(0, 0, 0, 0.62);
+    font-size: 0.82rem;
+    box-shadow: none;
+}
+.transcript-copy-btn.quick-copy-btn:hover {
+    border-color: rgba(228, 80, 58, 0.28);
+    background: rgba(228, 80, 58, 0.05);
+    color: rgba(0, 0, 0, 0.86);
+}
+.transcript-copy-btn.quick-copy-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.transcript-copy-btn.quick-copy-btn svg {
+    width: 14px;
+    height: 14px;
+    opacity: 0.72;
+}
+.transcript-copy-btn.quick-copy-btn .quick-copy-label {
+    font-weight: 600;
+}
+.transcript-copy-btn.quick-copy-btn .quick-copy-action {
+    position: static;
+    grid-row: auto;
+    grid-column: auto;
+    border-left: 0;
+    padding-left: 0;
+    color: rgba(0, 0, 0, 0.46);
+    font-size: 0.78rem;
+}
+.transcript-copy-btn.quick-copy-btn.copied {
+    border-color: rgba(16, 185, 129, 0.28);
+    background: rgba(16, 185, 129, 0.08);
+}
+.transcript-copy-btn.quick-copy-btn.copied .quick-copy-action {
+    color: #059669;
+}
+[data-theme="dark"] .transcript-copy-btn.quick-copy-btn {
+    border-color: rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.72);
+}
+[data-theme="dark"] .transcript-copy-btn.quick-copy-btn:hover {
+    border-color: rgba(194, 83, 63, 0.36);
+    background: rgba(194, 83, 63, 0.10);
+    color: rgba(255, 255, 255, 0.92);
+}
+[data-theme="dark"] .transcript-copy-btn.quick-copy-btn .quick-copy-action {
+    color: rgba(255, 255, 255, 0.5);
+}
+@media (max-width: 720px) {
+    .section-header { align-items: flex-start; flex-direction: column; }
+    .summary-reader-actions { width: 100%; }
+    .summary-reader-btn { flex: 1 1 0; }
+    .transcript-visual-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .transcript-visual-toolbar-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .section-header-actions {
+        width: 100%;
+    }
+}
 
 /* Recalibrate button */
 .recalibrate-btn {
@@ -66,9 +298,19 @@
 .dialog-status-ok { color: #5cb85c; }
 
 /* Inline recalibrate status (replaces button during processing) */
-.recalibrate-status { font-size: 0.85rem; color: var(--text-secondary, #888); white-space: nowrap; }
+.recalibrate-status { font-size: 0.85rem; color: var(--text-secondary, #888); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
 .recalibrate-done { color: #5cb85c; }
 .recalibrate-error { color: #d9534f; }
+@keyframes spin-loader { 100% { transform: rotate(360deg); } }
+.recalibrate-loader {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin-loader 0.8s linear infinite;
+}
 
 /* Comment insight */
 .comment-samples-details {
@@ -139,6 +381,81 @@
     padding: 4px 0 0;
     border-bottom: 0;
     background: transparent;
+}
+
+.content-export-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0 12px;
+}
+
+.content-export-row {
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+}
+
+.content-export-name {
+    color: var(--text-secondary, #666);
+    font-size: 0.82rem;
+    font-weight: 500;
+}
+
+.content-export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.content-export-action.quick-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 7px 12px;
+}
+
+.content-export-action.quick-copy-btn .quick-copy-action {
+    position: static;
+    grid-row: auto;
+    grid-column: auto;
+}
+
+.content-export-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 7px 12px;
+    border: 1px solid var(--border-primary, #ddd);
+    border-radius: 6px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #333);
+    font-size: 0.82rem;
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.content-export-link:hover {
+    border-color: #E4503A;
+    background: rgba(228, 80, 58, 0.06);
+}
+
+.content-export-link:active {
+    transform: scale(0.97);
+}
+
+@media (max-width: 560px) {
+    .content-export-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .content-export-actions > * {
+        flex: 1 1 96px;
+    }
 }
 
 .focus-handoff-bar {
@@ -247,186 +564,647 @@
     font-size: 0.88rem;
 }
 
+.collection-nav {
+    display: grid;
+    gap: 10px;
+    padding: 14px 30px;
+    background: #fffaf3;
+    border-bottom: 1px solid rgba(159, 113, 58, 0.18);
+}
+
+.collection-nav,
+.collection-nav * {
+    box-sizing: border-box;
+}
+
+.collection-nav-top,
+.collection-nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.collection-nav-top {
+    justify-content: space-between;
+}
+
+.collection-nav-context {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.collection-nav-kicker {
+    color: var(--text-secondary, #666);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.collection-nav-return,
+.collection-nav-collection {
+    color: #8b4f20;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.collection-nav-return:hover,
+.collection-nav-collection:hover {
+    color: #5f3517;
+    text-decoration: underline;
+}
+
+.collection-nav-count {
+    color: var(--text-secondary, #666);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.collection-nav-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 1.08fr) minmax(0, 1fr);
+    align-items: stretch;
+}
+
+.collection-nav-link,
+.collection-nav-disabled,
+.collection-nav-select {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid rgba(159, 113, 58, 0.22);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text-primary, #333);
+    font-size: 0.86rem;
+    min-width: 0;
+}
+
+.collection-nav-link,
+.collection-nav-disabled {
+    display: grid;
+    gap: 2px;
+    padding: 7px 10px;
+    text-decoration: none;
+}
+
+.collection-nav-select-wrap {
+    min-width: 0;
+}
+
+.collection-nav-link:hover {
+    border-color: rgba(139, 79, 32, 0.45);
+    background: #fff7ed;
+}
+
+.collection-nav-disabled {
+    color: var(--text-secondary, #777);
+    opacity: 0.58;
+}
+
+.collection-nav-dir {
+    color: var(--text-secondary, #666);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.collection-nav-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.collection-nav-select {
+    display: block;
+    height: 100%;
+    padding: 0 10px;
+}
+
+.collection-nav-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
 @media (max-width: 720px) {
     .learning-action-bar {
         align-items: flex-start;
         flex-direction: column;
         padding: 12px 18px;
     }
+
+    .collection-nav {
+        padding: 12px 18px;
+    }
+
+    .collection-nav-top {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .collection-nav-controls {
+        grid-template-columns: 1fr;
+    }
+}
+
+.export-menu-item:hover {
+    background-color: var(--bg-secondary, #f0f0f0) !important;
+    color: var(--accent-color, #E4503A) !important;
+}
+.export-hidden-for-export {
+    display: none !important;
+}
+.export-print-nav {
+    display: none;
+}
+body.export-document-mode .top-actions,
+body.export-document-mode .summary-reader-actions,
+body.export-document-mode .section-header-actions,
+body.export-document-mode #recalibrateArea {
+    display: none !important;
+}
+body.export-document-mode .export-print-nav {
+    display: block;
+    margin: 0 0 32px;
+    padding: 22px 24px;
+    border: 1px solid var(--line, rgba(0,0,0,0.08));
+    border-radius: 8px;
+    background: var(--card, #fff);
+}
+.export-print-nav h2 {
+    margin: 0 0 12px;
+    font-size: 1.2rem;
+}
+.export-print-nav ol {
+    margin: 0;
+    padding-left: 20px;
+}
+.export-print-nav li {
+    margin: 6px 0;
+}
+.export-print-nav a {
+    color: inherit;
+    text-decoration: none;
+}
+.export-transcript-section pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    font-family: inherit;
+    line-height: 1.75;
+}
+@media print {
+    @page {
+        margin: 16mm 14mm;
+    }
+    body.app-shell {
+        display: block !important;
+        background: #fff !important;
+        color: #111 !important;
+    }
+    body.app-shell .sidebar,
+    body.app-shell .sidebar-overlay,
+    body.app-shell .topbar,
+    body.app-shell .top-actions,
+    body.app-shell .minimal-nav,
+    body.app-shell .summary-reader-actions,
+    body.app-shell .section-header-actions,
+    body.app-shell #recalibrateArea {
+        display: none !important;
+    }
+    body.app-shell .main-area,
+    body.app-shell .page-stage,
+    body.app-shell .page-stage > .container {
+        display: block !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    body.app-shell .export-print-nav {
+        display: block !important;
+        page-break-after: always;
+        break-after: page;
+        border: 1px solid #ddd;
+        box-shadow: none;
+    }
+    body.app-shell .section {
+        break-inside: auto;
+        page-break-inside: auto;
+        margin-bottom: 28px !important;
+    }
+    body.app-shell h1,
+    body.app-shell h2,
+    body.app-shell h3,
+    body.app-shell h4 {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+    body.app-shell .content {
+        font-size: 11pt;
+        line-height: 1.75;
+    }
 }
 </style>
 {% endblock %}
 
 {% block content %}
-    <!-- 统计信息（单行显示） -->
-    {% if stats and stats.original_length > 0 %}
-    <div class="stats-line">
-        <span class="stats-icon">📊</span>
-        <span class="stats-label">转录统计</span>
-        <span class="stats-content">
-            {% if stats.duration_display %}总耗时 {{ stats.duration_display }} | {% endif %}
-            原始转录 {{ "{:,}".format(stats.original_length) }} 字
-            {% if stats.calibrated_length > 0 %} | 校对文本 {{ "{:,}".format(stats.calibrated_length) }} 字{% endif %}
-            {% if stats.summary_length > 0 and stats.summary_length != stats.calibrated_length %} | 内容总结 {{ "{:,}".format(stats.summary_length) }} 字{% endif %}
-        </span>
-    </div>
-    {% endif %}
+    <style id="immersive-styles">
+    /* --- Result reading layout --- */
+    
+    /* Paper-like Card Layout */
+    body.app-shell .page-stage {
+        background: var(--paper-warm, #F6F7F9);
+        padding: 40px 24px;
+    }
+    body.app-shell .page-stage > .container {
+        background: var(--card, #FFFFFF);
+        border: 1px solid var(--line, #EBE4D9);
+        box-shadow: none;
+        border-radius: 8px;
+        padding: 64px 80px;
+        max-width: 960px;
+    }
+    [data-theme="dark"] body.app-shell .page-stage {
+        background: var(--paper-warm, #181613);
+    }
+    [data-theme="dark"] body.app-shell .page-stage > .container {
+        background: var(--card, #1A1815);
+        border-color: var(--line, #2B2722);
+    }
+    
+    /* Typography Rhythm */
+    body.app-shell .content {
+        line-height: 1.8;
+        font-size: 1.05rem;
+        color: rgba(0,0,0,0.85);
+    }
+    [data-theme="dark"] body.app-shell .content {
+        color: rgba(255,255,255,0.85);
+    }
+    
+    /* --- Top Actions --- */
+    .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 24px;
+    }
+    .top-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 32px;
+        padding: 0 14px;
+        border: 1px solid rgba(0,0,0,0.06);
+        border-radius: 8px;
+        background: white;
+        color: rgba(0, 0, 0, 0.65);
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .top-btn:hover {
+        background: rgba(0, 0, 0, 0.02);
+        color: var(--ink, #1B1A17);
+    }
+    .top-btn:active { transform: scale(0.97); }
+    .top-btn.primary {
+        background: rgba(0, 0, 0, 0.04);
+        color: var(--ink, #1B1A17);
+        border-color: transparent;
+    }
+    .top-btn.primary:hover {
+        background: rgba(0, 0, 0, 0.06);
+    }
+    .top-btn.mark-btn.is-marked {
+        background: rgba(228, 80, 58, 0.1);
+        border-color: rgba(228, 80, 58, 0.24);
+        color: #E4503A;
+        font-weight: 600;
+    }
+    .top-btn.mark-btn:disabled {
+        opacity: 0.65;
+        cursor: default;
+    }
+    
+    /* Subdued Status Indicators */
+    .status-island {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0;
+        background: transparent;
+        font-size: 0.82rem;
+        color: var(--muted, rgba(0, 0, 0, 0.5));
+        margin-bottom: 24px;
+        transition: all 0.2s ease;
+        cursor: default;
+    }
+    .status-island:hover { color: var(--ink-soft, rgba(0,0,0,0.8)); }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .status-dot.error { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.5); }
+    .status-dot.warn { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.5); }
+    .status-dot.ok { background: #10b981; }
 
-    {% if longcut_action %}
-    <div class="learning-action-bar">
-        <a class="longcut-action-btn" href="{{ longcut_action.url }}">
-            <span>▶</span>
-            <span>{{ longcut_action.label }}</span>
-        </a>
-        <span class="learning-action-desc">{{ longcut_action.description }}</span>
-    </div>
-    {% endif %}
+    /* Minimal Collection Nav */
+    .minimal-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0;
+        margin-bottom: 32px;
+        border-bottom: 1px solid var(--line, rgba(0,0,0,0.06));
+    }
+    .minimal-nav a {
+        color: var(--muted, rgba(0,0,0,0.5));
+        text-decoration: none;
+        font-size: 0.88rem;
+        font-weight: 500;
+        transition: color 0.2s;
+    }
+    .minimal-nav a:hover { color: var(--ink, #1B1A17); }
+    .minimal-nav-disabled {
+        color: var(--text-tertiary, rgba(0,0,0,0.25));
+    }
+    .minimal-nav-center {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.88rem;
+        color: var(--ink-soft, rgba(0,0,0,0.8));
+    }
+    .minimal-nav-select {
+        appearance: none;
+        -webkit-appearance: none;
+        background: transparent;
+        border: none;
+        font-size: 0.88rem;
+        color: var(--ink-soft, rgba(0,0,0,0.8));
+        cursor: pointer;
+        padding-right: 18px;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right center;
+        background-size: 14px;
+        font-family: inherit;
+        outline: none;
+    }
+    .minimal-nav-select:hover {
+        color: var(--ink, #1B1A17);
+    }
+    
+    /* Export Menu */
+    #exportMenu {
+        top: calc(100% + 8px);
+        right: 0;
+        border: 1px solid var(--line, #EBE4D9);
+        border-radius: 8px;
+        background: var(--card, #FFFFFF);
+        box-shadow: var(--shadow-sm, 0 2px 8px rgba(35, 31, 26, 0.08));
+        padding: 6px;
+    }
+    .export-menu-item {
+        display: block;
+        width: 100%;
+        border: 0;
+        border-radius: 6px;
+        margin-bottom: 2px;
+        padding: 9px 10px;
+        background: transparent;
+        color: var(--ink, #1B1A17);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.86rem;
+        font-weight: 600;
+        text-align: left;
+    }
+    .export-menu-item:hover {
+        background: rgba(0,0,0,0.04) !important;
+        color: var(--ink, #1B1A17) !important;
+    }
+    .export-menu-section + .export-menu-section {
+        border-top: 1px solid rgba(0,0,0,0.08);
+        margin-top: 6px;
+        padding-top: 6px;
+    }
+    .export-menu-title {
+        padding: 4px 10px 6px;
+        color: var(--muted, rgba(0,0,0,0.5));
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+    .export-scope-options {
+        display: grid;
+        gap: 4px;
+    }
+    .export-scope-option {
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: transparent;
+        color: var(--ink, #1B1A17);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.84rem;
+        font-weight: 600;
+        text-align: left;
+    }
+    .export-scope-option:hover {
+        background: rgba(0,0,0,0.04);
+    }
+    .export-scope-option.is-active {
+        border-color: rgba(228, 80, 58, 0.22);
+        background: rgba(228, 80, 58, 0.08);
+        color: #E4503A;
+    }
 
-    <!-- 校准质量警告 -->
-    {% if stats and stats.calibration_stats %}
-    {% set cal = stats.calibration_stats %}
-    {% if cal.failed_count == cal.total_chunks and cal.total_chunks > 0 %}
-    <div class="calibration-warning" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#991b1b;display:flex;align-items:center;gap:8px;">
-        <span>&#x26A0;&#xFE0F;</span>
-        <span><strong>校准失败</strong>：LLM API 超时，当前显示为未校准的原始语音识别文本，可能包含较多错别字。建议点击上方「重新校对」按钮。</span>
-    </div>
-    {% elif cal.failed_count > 0 or cal.fallback_count > 0 %}
-    <div class="calibration-warning" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:0.9em;color:#92400e;display:flex;align-items:center;gap:8px;">
-        <span>&#x26A0;&#xFE0F;</span>
-        <span><strong>校准部分异常</strong>：{{ cal.success_count }}/{{ cal.total_chunks }} 段校准成功，{{ cal.fallback_count }} 段降级，{{ cal.failed_count }} 段失败。部分内容可能包含错别字。</span>
-    </div>
-    {% endif %}
-    {% endif %}
+    /* Redefine section headers to be cleaner */
+    .section { border: none !important; box-shadow: none !important; padding: 0 !important; margin-bottom: 56px !important; background: transparent !important; }
+    .section-header { margin-bottom: 24px; border-bottom: 1px solid rgba(0,0,0,0.06); padding-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; }
+    [data-theme="dark"] .section-header { border-bottom-color: rgba(255,255,255,0.08); }
+    .section-header h2 { font-size: 1.35rem !important; color: var(--ink, rgba(0,0,0,0.9)) !important; font-weight: 600 !important; margin: 0 !important; }
+    
+    /* Override summary actions */
+    .summary-reader-actions {
+        background: var(--bg-tertiary, #F3EDE4) !important;
+        border: 1px solid var(--line, #EBE4D9) !important;
+        border-radius: 8px !important;
+        padding: 4px !important;
+    }
+    .summary-reader-btn {
+        border-radius: 6px !important;
+        min-height: 32px !important;
+        font-size: 0.85rem !important;
+        color: var(--muted, rgba(0,0,0,0.5)) !important;
+    }
+    .summary-reader-btn[aria-selected="true"] {
+        background: var(--card, white) !important;
+        color: var(--text-primary, #1B1A17) !important;
+        box-shadow: inset 0 0 0 1px var(--line, #EBE4D9) !important;
+        font-weight: 600 !important;
+    }
+    [data-theme="dark"] .top-btn:hover {
+        background: rgba(255, 255, 255, 0.08);
+    }
+    [data-theme="dark"] .status-island {
+        background: rgba(255, 255, 255, 0.06);
+    }
+    [data-theme="dark"] .status-island:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    [data-theme="dark"] .summary-reader-actions {
+        background: var(--bg-tertiary, #211E1A) !important;
+        border-color: var(--line, #2B2722) !important;
+    }
+    [data-theme="dark"] .summary-reader-btn[aria-selected="true"] {
+        box-shadow: inset 0 0 0 1px var(--line, #2B2722) !important;
+    }
+    </style>
 
-    <!-- 模型配置信息（折叠展示） -->
-    {% if llm_config %}
-    <details class="llm-config-details">
-        <summary>
-            <span class="config-icon">⚙️</span>
-            <span class="config-label">高级信息</span>
-            {% if llm_config.has_risk %}<span class="risk-badge">风险降级</span>{% endif %}
-        </summary>
-        <div class="llm-config-grid">
-            {% if llm_config.calibrate_model %}
-            <div class="config-item">
-                <span class="config-key">校对模型</span>
-                <span class="config-value">{{ llm_config.calibrate_model }}{% if llm_config.calibrate_reasoning_effort %} <span class="reasoning-tag">reasoning: {{ llm_config.calibrate_reasoning_effort }}</span>{% endif %}</span>
-            </div>
+    <!-- Top Status & Meta Island -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
+        {% if stats %}
+        <div class="status-island" title="{% if llm_config %}校对模型: {{ llm_config.calibrate_model or '默认' }} | 总结模型: {{ llm_config.summary_model or '默认' }}{% endif %}">
+            {% set cal = stats.calibration_stats %}
+            {% if cal and cal.failed_count == cal.total_chunks and cal.total_chunks > 0 %}
+                <span class="status-dot error"></span>
+                <span>校准失败，显示原文</span>
+            {% elif cal and (cal.failed_count > 0 or cal.fallback_count > 0) %}
+                <span class="status-dot warn"></span>
+                <span>部分校准异常 ({{ cal.success_count }}/{{ cal.total_chunks }})</span>
+            {% else %}
+                <span class="status-dot ok"></span>
+                <span>校准完成</span>
             {% endif %}
-            {% if llm_config.summary_model %}
-            <div class="config-item">
-                <span class="config-key">总结模型</span>
-                <span class="config-value">{{ llm_config.summary_model }}{% if llm_config.summary_reasoning_effort %} <span class="reasoning-tag">reasoning: {{ llm_config.summary_reasoning_effort }}</span>{% endif %}</span>
-            </div>
+            
+            {% if stats.original_length > 0 %}
+                <span style="opacity: 0.5; margin: 0 4px;">·</span>
+                <span>转录 {{ "{:,}".format(stats.original_length) }} 字</span>
+            {% endif %}
+            {% if stats.duration_display %}
+                <span style="opacity: 0.5; margin: 0 4px;">·</span>
+                <span>耗时 {{ stats.duration_display }}</span>
+            {% endif %}
+            {% if asr_usage %}
+                <span style="opacity: 0.5; margin: 0 4px;">·</span>
+                <span title="{{ asr_usage.detail }}">{{ asr_usage.label }}</span>
             {% endif %}
         </div>
-    </details>
-    {% endif %}
+        {% endif %}
 
-    <!-- 高级操作：导出与复制 -->
-    {% if view_token %}
-    <details class="advanced-actions-details">
-        <summary>
-            <span>导出与复制</span>
-        </summary>
-        <div>
-            <div class="quick-copy-bar">
-                <button class="quick-copy-btn" data-path="/view/{{ view_token }}?raw=calibrated" title="复制 Raw 校对文本 URL">
-                    <span class="quick-copy-label">Raw 校对文本</span>
-                    <span class="quick-copy-action">复制 URL</span>
-                    <span class="quick-copy-desc">纯文本，粘贴到 ChatGPT / Claude 直接读取</span>
+        {% if view_token %}
+        <div class="top-actions">
+            <button
+                type="button"
+                class="top-btn mark-btn"
+                id="contentMarkBtn"
+                data-view-token="{{ view_token }}"
+                data-marked="false"
+                aria-pressed="false"
+                onclick="toggleContentMark()"
+            >精华</button>
+            <button type="button" class="top-btn" onclick="submitRecalibrate()">重新校对</button>
+            <div style="position: relative;" id="exportDropdownContainer">
+                <button type="button" id="exportMainBtn" class="top-btn primary" onclick="toggleExportMenu(event)" aria-haspopup="dialog" aria-controls="exportMenu" aria-expanded="false">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    导出
                 </button>
-                <button class="quick-copy-btn" data-path="/view/{{ view_token }}?page=calibrated" title="复制 HTML 校对页面 URL">
-                    <span class="quick-copy-label">HTML 校对页面</span>
-                    <span class="quick-copy-action">复制 URL</span>
-                    <span class="quick-copy-desc">带标题的 HTML，供 NotebookLM 等工具爬取</span>
-                </button>
-            </div>
-
-            <div class="focus-handoff-bar" aria-label="送入心流写作">
-                <span class="focus-handoff-title">心流写作</span>
-                {% if calibrated_html %}
-                <button type="button" class="focus-handoff-btn" data-focus-handoff data-view-token="{{ view_token }}" data-focus-type="calibrated" data-focus-label="校对文本" data-focus-title="{{ title or '视频转录' }}">
-                    <span class="focus-handoff-label">校对文本</span>
-                    <span class="focus-handoff-action">送入</span>
-                </button>
-                {% endif %}
-                {% if summary_html %}
-                <button type="button" class="focus-handoff-btn" data-focus-handoff data-view-token="{{ view_token }}" data-focus-type="summary" data-focus-label="内容总结" data-focus-title="{{ title or '视频转录' }}">
-                    <span class="focus-handoff-label">内容总结</span>
-                    <span class="focus-handoff-action">送入</span>
-                </button>
-                {% endif %}
-                {% if comment_insight %}
-                <button type="button" class="focus-handoff-btn" data-focus-handoff data-view-token="{{ view_token }}" data-focus-type="comment_insight" data-focus-label="高赞评论洞察" data-focus-title="{{ title or '视频转录' }}">
-                    <span class="focus-handoff-label">评论洞察</span>
-                    <span class="focus-handoff-action">送入</span>
-                </button>
-                {% endif %}
-                {% if stats and stats.original_length > 0 %}
-                <button type="button" class="focus-handoff-btn" data-focus-handoff data-view-token="{{ view_token }}" data-focus-type="transcript" data-focus-label="原始转录" data-focus-title="{{ title or '视频转录' }}">
-                    <span class="focus-handoff-label">原始转录</span>
-                    <span class="focus-handoff-action">送入</span>
-                </button>
-                {% endif %}
-            </div>
-
-            <details class="export-links-details">
-                <summary class="export-links-summary">
-                    <span class="export-icon">📤</span>
-                    <span class="export-summary-label">更多导出选项</span>
-                </summary>
-                <div class="export-links-content">
-                    <div class="export-group">
-                        <span class="export-group-label">Raw 纯文本</span>
-                        <span class="export-group-items">
-                            <a href="/view/{{ view_token }}?raw=calibrated" title="导出校对文本（纯文本）">校对文本</a>
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?raw=summary" title="导出内容总结（纯文本）">总结</a>
-                            {% if comment_insight %}
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?raw=comment_insight" title="导出高赞评论洞察（纯文本）">评论洞察</a>
-                            {% endif %}
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?raw=transcript" title="导出原始转录（纯文本）">原始转录</a>
-                        </span>
-                        <span class="export-hint">下载 TXT / 粘贴 URL 到 ChatGPT、Claude 等 LLM 直接读取</span>
+                <div id="exportMenu" role="dialog" aria-label="导出选项" style="display: none; position: absolute; right: 0; min-width: 220px; z-index: 1000;">
+                    <div class="export-menu-section">
+                        <div class="export-menu-title">导出内容</div>
+                        <div class="export-scope-options" role="radiogroup" aria-label="导出内容范围">
+                            <button type="button" role="radio" class="export-scope-option" data-export-scope="analysis" aria-checked="false" onclick="selectExportScope('analysis', event)">AI 解析</button>
+                            <button type="button" role="radio" class="export-scope-option" data-export-scope="calibrated" aria-checked="false" onclick="selectExportScope('calibrated', event)">校对文本</button>
+                            <button type="button" role="radio" class="export-scope-option is-active" data-export-scope="full" aria-checked="true" onclick="selectExportScope('full', event)">全内容</button>
+                        </div>
                     </div>
-                    <div class="export-group">
-                        <span class="export-group-label">HTML 页面</span>
-                        <span class="export-group-items">
-                            <a href="/view/{{ view_token }}?page=calibrated" title="导出校对文本（HTML 页面）">校对文本</a>
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?page=summary" title="导出内容总结（HTML 页面）">总结</a>
-                            {% if comment_insight %}
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?page=comment_insight" title="导出高赞评论洞察（HTML 页面）">评论洞察</a>
-                            {% endif %}
-                            <span class="export-sep">·</span>
-                            <a href="/view/{{ view_token }}?page=transcript" title="导出原始转录（HTML 页面）">原始转录</a>
-                        </span>
-                        <span class="export-hint">带标题与 Meta 标签，适合 NotebookLM 等工具爬取</span>
+                    <div class="export-menu-section">
+                        <div class="export-menu-title">导出格式</div>
+                        <button type="button" class="export-menu-item" onclick="executeExport('markdown', '{{ view_token }}')">Markdown 文档</button>
+                        <button type="button" class="export-menu-item" onclick="executeExport('pdf', '{{ view_token }}')">PDF 文档</button>
+                        <button type="button" class="export-menu-item" onclick="executeExport('html', '{{ view_token }}')">HTML 页面</button>
+                        <button type="button" class="export-menu-item" onclick="executeExport('png', '{{ view_token }}')">PNG 长图</button>
                     </div>
                 </div>
-            </details>
+            </div>
         </div>
-    </details>
+        {% endif %}
+    </div>
+
+    <!-- Minimal Collection Navigation -->
+    {% if collection_navigation %}
+    <nav class="minimal-nav">
+        {% if collection_navigation.previous and collection_navigation.previous.view_url %}
+            <a href="{{ collection_navigation.previous.view_url }}">← 上一节</a>
+        {% else %}
+            <span class="minimal-nav-disabled">← 上一节</span>
+        {% endif %}
+
+        <div class="minimal-nav-center">
+            <a href="{{ collection_navigation.collection.url }}">{{ collection_navigation.collection.title }}</a>
+            <span style="opacity: 0.2;">/</span>
+            <select class="minimal-nav-select" onchange="if (this.value) window.location.href = this.value" aria-label="切换章节" title="切换其他章节">
+                {% for item in collection_navigation["items"] %}
+                <option value="{{ item.view_url }}" {% if item.is_current %}selected{% endif %}>
+                    第 {{ loop.index }}/{{ collection_navigation.total }} 节 {% if item.title %}- {{ item.title }}{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        {% if collection_navigation.next and collection_navigation.next.view_url %}
+            <a href="{{ collection_navigation.next.view_url }}">下一节 →</a>
+        {% else %}
+            <span class="minimal-nav-disabled">下一节 →</span>
+        {% endif %}
+    </nav>
     {% endif %}
 
-    <div class="section">
-        <h2>📝 内容总结</h2>
-        <div class="content" data-focus-section="summary">
+    <div class="section" data-export-section="summary">
+        <div class="section-header">
+            <h2>内容总结</h2>
+            {% if view_token and summary %}
+            <div class="summary-reader-actions" role="tablist" aria-label="内容总结视图">
+                <button type="button" class="summary-reader-btn" id="transcript-reader-text" role="tab" aria-selected="true" aria-controls="transcript-summary-text-panel">文字版</button>
+                <button type="button" class="summary-reader-btn" id="transcript-reader-visual" role="tab" aria-selected="false" aria-controls="transcript-summary-visual-panel">图解版</button>
+            </div>
+            {% endif %}
+        </div>
+        <div class="content summary-view-panel is-active" id="transcript-summary-text-panel" role="tabpanel" aria-labelledby="transcript-reader-text" data-focus-section="summary">
             {% if summary_html %}
                 {{ summary_html|safe }}
+            {% elif summary_pending %}
+                <p style="color: var(--text-secondary); font-style: italic;">AI 解读失败：主模型与备用模型均未成功。逐字稿已可阅读，可稍后重新生成总结。</p>
+            {% elif summary_missing %}
+                <p style="color: var(--text-secondary); font-style: italic;">总结未生成，请重新校对后查看。</p>
             {% else %}
                 <p style="color: var(--text-secondary); font-style: italic;">总结处理中...</p>
             {% endif %}
         </div>
+        {% if view_token and summary %}
+        <div class="transcript-visual-panel summary-view-panel" id="transcript-summary-visual-panel" role="tabpanel" aria-labelledby="transcript-reader-visual" data-view-token="{{ view_token }}" data-reader-title="{{ title or '内容总结' }}" hidden></div>
+        {% endif %}
     </div>
 
     {% if comment_insight_html %}
-    <div class="section">
-        <h2>💬 高赞评论洞察</h2>
+    <div class="section transcript-secondary-section" data-export-section="comment_insight">
+        <h2>高赞评论洞察</h2>
         <div class="content" data-focus-section="comment_insight">
             {{ comment_insight_html|safe }}
         </div>
@@ -449,19 +1227,66 @@
     </div>
     {% endif %}
 
+    {% set normalized_source_language = source_language|default('', true)|lower %}
+    {% if zh_translation and source_transcript is string and normalized_source_language.startswith('en') %}
+    <div class="section transcript-secondary-section" data-export-section="bilingual-transcript">
+        <div class="section-header"><h2>双语文字稿</h2></div>
+        <div class="summary-reader-tabs" role="tablist" aria-label="文字稿语言">
+            <button type="button" class="summary-reader-btn is-active" data-bilingual-mode="source" role="tab" aria-selected="true">英文原文</button>
+            <button type="button" class="summary-reader-btn" data-bilingual-mode="translation" role="tab" aria-selected="false">中文译文</button>
+            <button type="button" class="summary-reader-btn" data-bilingual-mode="both" role="tab" aria-selected="false">双语</button>
+        </div>
+        <div class="content bilingual-source" data-bilingual-panel="source"><pre>{{ source_transcript }}</pre></div>
+        <div class="content bilingual-translation" data-bilingual-panel="translation" hidden><pre>{{ zh_translation }}</pre></div>
+        <div class="bilingual-both" data-bilingual-panel="both" hidden>
+            <div class="content"><h3>英文原文</h3><pre>{{ source_transcript }}</pre></div>
+            <div class="content"><h3>中文译文</h3><pre>{{ zh_translation }}</pre></div>
+        </div>
+    </div>
+    <script>
+    document.querySelectorAll('[data-bilingual-mode]').forEach(function(button) {
+        button.addEventListener('click', function() {
+            var mode = button.getAttribute('data-bilingual-mode');
+            document.querySelectorAll('[data-bilingual-mode]').forEach(function(item) {
+                var selected = item === button;
+                item.classList.toggle('is-active', selected);
+                item.setAttribute('aria-selected', selected ? 'true' : 'false');
+            });
+            document.querySelectorAll('[data-bilingual-panel]').forEach(function(panel) {
+                panel.hidden = panel.getAttribute('data-bilingual-panel') !== mode;
+            });
+        });
+    });
+    </script>
+    {% endif %}
+
     {% if calibrated_html %}
-    <div class="section">
+    <div class="section transcript-secondary-section" data-export-section="calibrated">
         <div class="section-header">
-            <h2>✨ 校对文本</h2>
+            <h2>校对文本</h2>
             {% if view_token %}
-            <span id="recalibrateArea">
-                <button class="recalibrate-btn" id="recalibrateBtn" onclick="document.getElementById('recalibrateDialog').showModal()">🔄 重新校对</button>
-            </span>
+            <div class="section-header-actions">
+                <button
+                    type="button"
+                    class="quick-copy-btn transcript-copy-btn"
+                    data-copy-path="/export/{{ view_token }}/calibrated"
+                    data-copy-strip-metadata="true"
+                    aria-label="复制逐字稿"
+                    title="复制逐字稿"
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span class="quick-copy-label">逐字稿</span>
+                    <span class="quick-copy-action">复制</span>
+                </button>
+            </div>
             {% endif %}
         </div>
         {% if use_speaker_recognition %}
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
-                🎤 本校对文本包含说话人识别信息
+                本校对文本包含说话人识别信息
             </p>
         {% endif %}
         <div class="content" data-focus-section="calibrated">
@@ -469,19 +1294,8 @@
         </div>
 
         {% if view_token %}
-        <dialog id="recalibrateDialog" class="recalibrate-dialog">
-            <form method="dialog">
-                <h3>重新校对</h3>
-                <p class="dialog-desc">将重新执行 LLM 校对（跳过下载、转录和总结），校对完成后刷新页面即可查看新结果。</p>
-                <label for="recalibrateApiKey">API Key</label>
-                <input type="password" id="recalibrateApiKey" placeholder="Bearer token" autocomplete="off">
-                <div class="dialog-actions">
-                    <button type="button" class="dialog-btn dialog-btn-cancel" onclick="document.getElementById('recalibrateDialog').close()">取消</button>
-                    <button type="button" class="dialog-btn dialog-btn-confirm" id="recalibrateConfirmBtn" onclick="submitRecalibrate()">确认</button>
-                </div>
-                <p id="recalibrateStatus" class="dialog-status" style="display:none;"></p>
-            </form>
-        </dialog>
+        <span id="recalibrateArea" style="position: fixed; bottom: 16px; right: 32px; font-size: 0.85rem; color: var(--text-secondary); z-index: 1000;">
+        </span>
         {% endif %}
     </div>
     {% endif %}
@@ -489,9 +1303,11 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/floating-toc.js?v=comment-toc-20260607"></script>
+<script src="/static/js/floating-toc.js?v={{ asset_ver }}"></script>
 {% if view_token %}
 <script src="/static/js/focus-handoff.js?v=20260617-1"></script>
+<script src="/static/js/visual-learning.js?v={{ asset_ver }}"></script>
+<script src="/static/js/transcript-visual-reader.js?v={{ asset_ver }}-reader-20260718"></script>
 <script>
 (function() {
     // Auto-fill API key from localStorage (shared with /add_task_by_web)
@@ -501,25 +1317,10 @@
 })();
 
 function submitRecalibrate() {
-    var btn = document.getElementById('recalibrateConfirmBtn');
-    var status = document.getElementById('recalibrateStatus');
-    var dialog = document.getElementById('recalibrateDialog');
     var area = document.getElementById('recalibrateArea');
-    var apiKey = document.getElementById('recalibrateApiKey').value.trim();
+    var apiKey = localStorage.getItem('api_key') || '';
 
-    if (!apiKey) {
-        status.textContent = 'Please enter API Key';
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        return;
-    }
-
-    // Save to localStorage for future use
-    localStorage.setItem('api_key', apiKey);
-
-    btn.disabled = true;
-    btn.textContent = 'Submitting...';
-    status.style.display = 'none';
+    area.innerHTML = '<span class="recalibrate-status"><span class="recalibrate-loader"></span>校对请求中...</span>';
 
     fetch('/api/recalibrate', {
         method: 'POST',
@@ -539,17 +1340,12 @@ function submitRecalibrate() {
     .then(function(data) {
         var taskId = data.data && data.data.task_id;
         if (!taskId) throw new Error('No task_id returned');
-        // Close dialog, show inline status on the button area
-        dialog.close();
-        area.innerHTML = '<span class="recalibrate-status">校对中... (0s)</span>';
+        // Show inline status on the fixed area
+        area.innerHTML = '<span class="recalibrate-status"><span class="recalibrate-loader"></span>校对中... (0s)</span>';
         pollTask(taskId, apiKey, area);
     })
     .catch(function(err) {
-        status.textContent = err.message;
-        status.className = 'dialog-status dialog-status-error';
-        status.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Confirm';
+        area.innerHTML = '<span class="recalibrate-status recalibrate-error">' + err.message + '</span>';
     });
 }
 
@@ -557,7 +1353,7 @@ function pollTask(taskId, apiKey, area) {
     var elapsed = 0;
     var interval = setInterval(function() {
         elapsed += 3;
-        area.innerHTML = '<span class="recalibrate-status">校对中... (' + elapsed + 's)</span>';
+        area.innerHTML = '<span class="recalibrate-status"><span class="recalibrate-loader"></span>校对中... (' + elapsed + 's)</span>';
 
         fetch('/api/task/' + taskId, {
             headers: { 'Authorization': 'Bearer ' + apiKey }
@@ -583,6 +1379,337 @@ function pollTask(taskId, apiKey, area) {
             area.innerHTML = '<span class="recalibrate-status recalibrate-error">超时，请手动刷新页面</span>';
         }
     }, 3000);
+}
+
+function decryptContentMarkToken(encoded) {
+    if (!encoded) return '';
+    try {
+        var reversed = encoded.split('').reverse().join('');
+        var decoded = decodeURIComponent(escape(atob(reversed)));
+        return decoded.replace('vta_encrypt_key_2024', '');
+    } catch (e) {
+        return encoded;
+    }
+}
+
+function getContentMarkToken() {
+    return decryptContentMarkToken(localStorage.getItem('vta_bearer_token'))
+        || localStorage.getItem('vta_api_key_persist')
+        || sessionStorage.getItem('vta_api_key')
+        || localStorage.getItem('api_key')
+        || '';
+}
+
+function setContentMarkState(marked) {
+    var btn = document.getElementById('contentMarkBtn');
+    if (!btn) return;
+    btn.dataset.marked = marked ? 'true' : 'false';
+    btn.setAttribute('aria-pressed', marked ? 'true' : 'false');
+    btn.classList.toggle('is-marked', Boolean(marked));
+    btn.textContent = marked ? '已标记精华' : '标记精华';
+    btn.title = marked ? '取消精华标记' : '把这篇解读标记为精华';
+}
+
+function fetchContentMark(method) {
+    var btn = document.getElementById('contentMarkBtn');
+    var token = getContentMarkToken();
+    if (!btn || !btn.dataset.viewToken) return Promise.reject(new Error('view token missing'));
+    if (!token) return Promise.reject(new Error('请先设置 API 令牌后再标记'));
+    return fetch('/api/marks/transcripts/' + encodeURIComponent(btn.dataset.viewToken), {
+        method: method,
+        headers: { 'Authorization': 'Bearer ' + token }
+    }).then(function(resp) {
+        return resp.json().then(function(payload) {
+            if (!resp.ok || Number(payload.code) >= 400) {
+                throw new Error(payload.detail || payload.message || '标记请求失败');
+            }
+            return payload.data || {};
+        });
+    });
+}
+
+function loadContentMarkState() {
+    var btn = document.getElementById('contentMarkBtn');
+    if (!btn) return;
+    fetchContentMark('GET')
+        .then(function(data) { setContentMarkState(Boolean(data.marked)); })
+        .catch(function() { setContentMarkState(false); });
+}
+
+function toggleContentMark() {
+    var btn = document.getElementById('contentMarkBtn');
+    if (!btn || btn.disabled) return;
+    var marked = btn.dataset.marked === 'true';
+    btn.disabled = true;
+    btn.textContent = marked ? '取消中...' : '标记中...';
+    fetchContentMark(marked ? 'DELETE' : 'POST')
+        .then(function(data) { setContentMarkState(Boolean(data.marked)); })
+        .catch(function(err) {
+            setContentMarkState(marked);
+            alert(err.message);
+        })
+        .finally(function() {
+            btn.disabled = false;
+        });
+}
+
+loadContentMarkState();
+
+function toggleExportMenu(e) {
+    e.stopPropagation();
+    var menu = document.getElementById('exportMenu');
+    setExportMenuOpen(menu && menu.style.display === 'none');
+}
+
+function setExportMenuOpen(open) {
+    var menu = document.getElementById('exportMenu');
+    var btn = document.getElementById('exportMainBtn');
+    if (!menu || !btn) return;
+    menu.style.display = open ? 'block' : 'none';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+        var firstOption = menu.querySelector('.export-scope-option');
+        if (firstOption) firstOption.focus();
+    }
+}
+document.addEventListener('click', function(e) {
+    var menu = document.getElementById('exportMenu');
+    var btn = document.getElementById('exportMainBtn');
+    if (menu && btn && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+        setExportMenuOpen(false);
+    }
+});
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var menu = document.getElementById('exportMenu');
+    if (!menu || menu.style.display === 'none') return;
+    setExportMenuOpen(false);
+    document.getElementById('exportMainBtn')?.focus();
+});
+
+var selectedExportScope = 'full';
+var exportScopeLabels = {
+    analysis: 'AI 解析',
+    calibrated: '校对文本',
+    full: '全内容'
+};
+
+function selectExportScope(scope, event) {
+    if (event) event.stopPropagation();
+    selectedExportScope = exportScopeLabels[scope] ? scope : 'full';
+    document.querySelectorAll('.export-scope-option').forEach(function(btn) {
+        var active = btn.dataset.exportScope === selectedExportScope;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+}
+
+function getExportScopeSections(scope) {
+    if (scope === 'analysis') return ['summary', 'comment_insight'];
+    if (scope === 'calibrated') return ['calibrated'];
+    return ['summary', 'comment_insight', 'calibrated', 'transcript'];
+}
+
+function escapeHtml(text) {
+    return String(text || '').replace(/[&<>"']/g, function(char) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[char];
+    });
+}
+
+function stripExportMetadata(text) {
+    return String(text || '').replace(/^---[\s\S]*?---\s*/, '').trim();
+}
+
+function ensureElementId(element, prefix, index) {
+    if (!element.id) {
+        element.id = prefix + '-' + index + '-' + Math.random().toString(36).slice(2, 8);
+    }
+    return element.id;
+}
+
+async function ensureExportTranscriptSection(viewToken) {
+    if (document.querySelector('[data-export-section="transcript"]')) return;
+
+    try {
+        var res = await fetch('/export/' + viewToken + '/transcript');
+        if (!res.ok) return;
+        var rawText = stripExportMetadata(await res.text());
+        if (!rawText) return;
+
+        var section = document.createElement('div');
+        section.className = 'section transcript-secondary-section export-transcript-section';
+        section.setAttribute('data-export-section', 'transcript');
+        section.innerHTML = '<h2>原始转录</h2><div class="content"><pre>' + escapeHtml(rawText) + '</pre></div>';
+
+        var container = document.querySelector('.page-stage > .container') || document.querySelector('.container') || document.body;
+        container.appendChild(section);
+    } catch (e) {
+        console.error('Failed to prepare transcript export section', e);
+    }
+}
+
+function updateExportVisibility(scope) {
+    var allowed = getExportScopeSections(scope);
+    document.querySelectorAll('[data-export-section]').forEach(function(section) {
+        var sectionName = section.getAttribute('data-export-section');
+        section.classList.toggle('export-hidden-for-export', allowed.indexOf(sectionName) === -1);
+    });
+}
+
+function buildExportPrintNav(scope) {
+    var existing = document.getElementById('exportPrintNav');
+    if (existing) existing.remove();
+
+    var navItems = [];
+    var visibleSections = Array.from(document.querySelectorAll('[data-export-section]')).filter(function(section) {
+        return !section.classList.contains('export-hidden-for-export');
+    });
+
+    visibleSections.forEach(function(section, sectionIndex) {
+        var sectionHeading = section.querySelector('h2');
+        if (sectionHeading) {
+            navItems.push({
+                id: ensureElementId(sectionHeading, 'export-section', sectionIndex),
+                text: sectionHeading.textContent.trim()
+            });
+        }
+
+        Array.from(section.querySelectorAll('.content h1, .content h2, .content h3')).slice(0, 60).forEach(function(heading, headingIndex) {
+            var text = heading.textContent.trim();
+            if (!text) return;
+            navItems.push({
+                id: ensureElementId(heading, 'export-heading', sectionIndex + '-' + headingIndex),
+                text: text
+            });
+        });
+    });
+
+    if (!navItems.length) return;
+
+    var nav = document.createElement('nav');
+    nav.id = 'exportPrintNav';
+    nav.className = 'export-print-nav';
+    nav.setAttribute('aria-label', '导出目录');
+    nav.innerHTML = '<h2>目录</h2><ol>' + navItems.map(function(item) {
+        return '<li><a href="#' + item.id + '">' + escapeHtml(item.text) + '</a></li>';
+    }).join('') + '</ol>';
+
+    var firstSection = visibleSections[0] || document.querySelector('.section');
+    if (firstSection && firstSection.parentNode) {
+        firstSection.parentNode.insertBefore(nav, firstSection);
+    }
+}
+
+async function prepareScopedPageExport(scope, viewToken, options) {
+    options = options || {};
+    if (scope === 'full') {
+        await ensureExportTranscriptSection(viewToken);
+    }
+    document.body.classList.add('export-document-mode');
+    document.body.setAttribute('data-export-scope', scope);
+    updateExportVisibility(scope);
+    if (options.includeNav) {
+        buildExportPrintNav(scope);
+    }
+}
+
+function resetScopedPageExport() {
+    document.body.classList.remove('export-document-mode');
+    document.body.removeAttribute('data-export-scope');
+    document.querySelectorAll('.export-hidden-for-export').forEach(function(section) {
+        section.classList.remove('export-hidden-for-export');
+    });
+    var nav = document.getElementById('exportPrintNav');
+    if (nav) nav.remove();
+    document.querySelectorAll('.export-transcript-section').forEach(function(section) {
+        section.remove();
+    });
+}
+
+function exportDownloadName(extension) {
+    return document.title + '-' + (exportScopeLabels[selectedExportScope] || exportScopeLabels.full) + '.' + extension;
+}
+
+function loadHtml2Canvas() {
+    if (window.html2canvas) return Promise.resolve();
+    return new Promise(function(resolve, reject) {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+        script.onload = resolve;
+        script.onerror = function() { reject(new Error('图片导出组件加载失败')); };
+        document.head.appendChild(script);
+    });
+}
+
+async function executeExport(format, viewToken) {
+    setExportMenuOpen(false);
+    var btn = document.getElementById('exportMainBtn');
+    var originalText = btn.innerHTML;
+    btn.innerHTML = '导出中...';
+    btn.disabled = true;
+    var cleanupAfterPrint = false;
+    var scope = selectedExportScope;
+
+    try {
+        if (format === 'markdown') {
+            var aMd = document.createElement('a');
+            aMd.href = '/export/' + viewToken + '/bundle?scope=' + encodeURIComponent(scope);
+            aMd.download = exportDownloadName('md');
+            aMd.click();
+        } else if (format === 'pdf') {
+            await prepareScopedPageExport(scope, viewToken, { includeNav: true });
+            cleanupAfterPrint = true;
+            window.addEventListener('afterprint', resetScopedPageExport, { once: true });
+            await new Promise(function(resolve) { requestAnimationFrame(resolve); });
+            window.print();
+        } else if (format === 'html') {
+            await prepareScopedPageExport(scope, viewToken, { includeNav: true });
+            var html = document.documentElement.outerHTML;
+            var blob = new Blob([html], { type: 'text/html' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = exportDownloadName('html');
+            a.click();
+            URL.revokeObjectURL(url);
+        } else if (format === 'png') {
+            await prepareScopedPageExport(scope, viewToken, { includeNav: false });
+            await loadHtml2Canvas();
+            await doExportPng();
+        }
+    } catch (e) {
+        alert('导出失败: ' + e.message);
+    } finally {
+        if (!cleanupAfterPrint) {
+            resetScopedPageExport();
+        }
+        setTimeout(function() {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 1000);
+    }
+}
+
+function doExportPng() {
+    return html2canvas(document.body, {
+        useCORS: true,
+        scale: window.devicePixelRatio || 2,
+        backgroundColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#121110' : '#f4f1eb'
+    }).then(function(canvas) {
+        var url = canvas.toDataURL('image/png');
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = exportDownloadName('png');
+        a.click();
+    }).catch(function(e) {
+        alert('生成图片失败: ' + e.message);
+    });
 }
 </script>
 {% endif %}

@@ -1,9 +1,172 @@
+import json
 import sys
 import os
 
 # 添加项目根目录到路径
 
-from src.video_transcript_api.utils.rendering import DialogRenderer, render_transcript_content
+from src.video_transcript_api.utils.rendering import (
+    DialogRenderer,
+    render_calibrated_content_smart,
+    render_transcript_content,
+)
+
+
+def test_calibrated_renderer_uses_only_calibrated_text(tmp_path):
+    """仅有校对文本时仍应渲染内容。"""
+    (tmp_path / "llm_calibrated.txt").write_text("校对后的文本", encoding="utf-8")
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "校对后的文本" in html
+
+
+def test_calibrated_renderer_uses_only_structured_text(tmp_path):
+    """仅有结构化文本时仍应渲染内容。"""
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": [{"speaker": "甲", "text": "结构化文本"}]}),
+        encoding="utf-8",
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "结构化文本" in html
+
+
+def test_calibrated_renderer_falls_back_to_funasr_for_invalid_structured_text(tmp_path):
+    """损坏的结构化数据不应遮蔽有效的 FunASR 转录。"""
+    (tmp_path / "llm_processed.json").write_text("{", encoding="utf-8")
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 回退文本"}]}), encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "FunASR 回退文本" in html
+
+
+def test_calibrated_renderer_uses_fallback_for_invalid_structured_text(tmp_path):
+    """无原始转录时，损坏的结构化数据应降级到传入文本。"""
+    (tmp_path / "llm_processed.json").write_text("{", encoding="utf-8")
+
+    html = render_calibrated_content_smart(str(tmp_path), "数据库回退文本")
+
+    assert html is not None
+    assert "数据库回退文本" in html
+
+
+def test_calibrated_renderer_uses_only_funasr_segments(tmp_path):
+    """仅有 FunASR 分段文件时应渲染分段文本。"""
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 第一段"}, {"text": "FunASR 第二段"}]}),
+        encoding="utf-8",
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "FunASR 第一段" in html
+    assert "FunASR 第二段" in html
+
+
+def test_calibrated_renderer_uses_only_capswriter_text(tmp_path):
+    """仅有 CapsWriter 文本时应渲染原始文本。"""
+    (tmp_path / "transcript_capswriter.txt").write_text(
+        "CapsWriter 原始文本", encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "CapsWriter 原始文本" in html
+
+
+def test_calibrated_renderer_falls_back_to_capswriter_for_empty_structured_text(
+    tmp_path,
+):
+    """空结构化对话不应遮蔽有效的 CapsWriter 转录。"""
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": []}), encoding="utf-8"
+    )
+    (tmp_path / "transcript_capswriter.txt").write_text(
+        "CapsWriter 回退文本", encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "CapsWriter 回退文本" in html
+
+
+def test_calibrated_renderer_uses_fallback_for_empty_structured_text(tmp_path):
+    """无原始转录时，空结构化数据应降级到传入文本。"""
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": []}), encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path), "数据库回退文本")
+
+    assert html is not None
+    assert "数据库回退文本" in html
+
+
+def test_calibrated_renderer_prioritizes_structured_text_over_funasr(tmp_path):
+    """无校对文本时，结构化文本应优先于 FunASR 转录。"""
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": [{"speaker": "甲", "text": "结构化优先文本"}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 次级文本"}]}), encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "结构化优先文本" in html
+    assert "FunASR 次级文本" not in html
+
+
+def test_calibrated_renderer_prioritizes_funasr_text_over_capswriter(tmp_path):
+    """无校对和结构化文本时，FunASR 应优先于 CapsWriter 转录。"""
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 优先文本"}]}), encoding="utf-8"
+    )
+    (tmp_path / "transcript_capswriter.txt").write_text(
+        "CapsWriter 次级文本", encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "FunASR 优先文本" in html
+    assert "CapsWriter 次级文本" not in html
+
+
+def test_calibrated_renderer_prioritizes_calibrated_text(tmp_path):
+    """校对文本应优先于结构化、FunASR 和 CapsWriter 转录。"""
+    (tmp_path / "llm_calibrated.txt").write_text("校对优先文本", encoding="utf-8")
+    (tmp_path / "llm_processed.json").write_text(
+        json.dumps({"dialogs": [{"speaker": "甲", "text": "结构化文本"}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "transcript_funasr.json").write_text(
+        json.dumps({"segments": [{"text": "FunASR 文本"}]}), encoding="utf-8"
+    )
+    (tmp_path / "transcript_capswriter.txt").write_text(
+        "CapsWriter 文本", encoding="utf-8"
+    )
+
+    html = render_calibrated_content_smart(str(tmp_path))
+
+    assert html is not None
+    assert "校对优先文本" in html
+    assert "结构化文本" not in html
+    assert "FunASR 文本" not in html
+    assert "CapsWriter 文本" not in html
+
 
 def test_dialog_detection():
     """测试对话检测功能"""

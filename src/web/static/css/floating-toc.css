@@ -16,29 +16,44 @@
     --toc-border: #475569;
     --toc-text: #f8fafc;
     --toc-text-secondary: #cbd5e1;
-    --toc-active: #06B6D4;
+    --toc-active: #E4503A;
     --toc-hover: #334155;
-    --toc-indicator-start: #06B6D4;
-    --toc-indicator-end: #3B82F6;
+    --toc-indicator-start: transparent;
+    --toc-indicator-end: transparent;
     --toc-shadow: rgba(0, 0, 0, 0.3);
 
     /* 移动端浮动按钮 */
-    --toc-mobile-btn-size: 56px;
+    --toc-mobile-btn-size: 64px;
     --toc-mobile-btn-bottom: 80px;
     --toc-mobile-btn-right: 20px;
 }
 
 /* 浅色主题 */
 [data-theme="light"] {
-    --toc-bg: rgba(255, 255, 255, 0.95);
+    --toc-bg: rgba(252, 251, 250, 0.95);
     --toc-border: #e5e7eb;
-    --toc-text: #333;
-    --toc-text-secondary: #6b7280;
-    --toc-active: #667eea;
-    --toc-hover: #f3f4f6;
-    --toc-indicator-start: #667eea;
-    --toc-indicator-end: #764ba2;
+    --toc-text: #1B1A17;
+    --toc-text-secondary: rgba(27, 26, 23, 0.5);
+    --toc-active: #E4503A;
+    --toc-hover: rgba(27, 26, 23, 0.04);
+    --toc-indicator-start: transparent;
+    --toc-indicator-end: transparent;
     --toc-shadow: rgba(0, 0, 0, 0.1);
+}
+
+@media (min-width: 769px) {
+    /* 默认收起状态下的保护性内边距，确保滚动条不遮挡 */
+    body.app-shell .page-stage {
+        box-sizing: border-box !important;
+        padding-right: calc(1.5rem + var(--toc-width-collapsed) + var(--toc-right-offset)) !important;
+        transition: none;
+    }
+    
+    /* 当目录悬停预览（Hover）或被固定（Pin）时，为右侧让出完整的目录宽度空间，避免遮挡正文 */
+    body.app-shell.toc-pinned .page-stage,
+    body.app-shell.toc-hovered .page-stage {
+        padding-right: calc(1.5rem + var(--toc-width-expanded) + var(--toc-right-offset)) !important;
+    }
 }
 
 /* ========== PC 端浮动 TOC ========== */
@@ -52,12 +67,10 @@
     border: 1px solid var(--toc-border);
     border-radius: 8px;
     box-shadow: 0 4px 12px var(--toc-shadow);
-    transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-                background 0.3s ease,
+    transition: background 0.2s ease,
                 border 0.3s ease;
     z-index: 1000;
     overflow: hidden;
-    backdrop-filter: blur(10px);
 }
 
 /* 悬停或固定时展开 */
@@ -89,14 +102,14 @@
     justify-content: center;
     gap: 8px;
     padding: 20px 0;
-    background: linear-gradient(180deg, var(--toc-indicator-start) 0%, var(--toc-indicator-end) 100%);
+    background: transparent;
     opacity: 0.6;
     transition: opacity 0.3s ease;
 }
 
 .toc-indicator-line {
     width: 4px;
-    background: white;
+    background: var(--toc-text-secondary);
     border-radius: 2px;
     transition: height 0.3s ease;
 }
@@ -141,8 +154,9 @@
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 1.1rem;
-    padding: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 6px 8px;
     border-radius: 6px;
     transition: all 0.3s ease;
     color: var(--toc-text-secondary);
@@ -150,7 +164,7 @@
     align-items: center;
     justify-content: center;
     position: relative;
-    min-width: 32px;
+    min-width: 44px;
     min-height: 32px;
 }
 
@@ -165,28 +179,28 @@
 
 /* 已固定状态 */
 .toc-pin-btn.pinned {
-    background: linear-gradient(135deg, var(--toc-indicator-start) 0%, var(--toc-indicator-end) 100%);
+    background: var(--accent, #E4503A);
     color: white;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transform: rotate(45deg);
+    transform: none;
 }
 
 .toc-pin-btn.pinned:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    transform: rotate(45deg) scale(1.05);
+    transform: scale(1.03);
 }
 
 /* Pin 按钮动画 */
 @keyframes pinRotate {
-    0% { transform: rotate(0deg); }
-    50% { transform: rotate(15deg) scale(1.1); }
-    100% { transform: rotate(45deg); }
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-1px); }
+    100% { transform: translateY(0); }
 }
 
 @keyframes unpinRotate {
-    0% { transform: rotate(45deg); }
-    50% { transform: rotate(30deg) scale(1.1); }
-    100% { transform: rotate(0deg); }
+    0% { transform: translateY(0); }
+    50% { transform: translateY(-1px); }
+    100% { transform: translateY(0); }
 }
 
 .toc-pin-btn.animating-pin {
@@ -290,7 +304,7 @@
     font-weight: 600;
     color: var(--toc-text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     transition: color 0.3s ease;
 }
 
@@ -322,10 +336,12 @@
     position: fixed;
     bottom: var(--toc-mobile-btn-bottom);
     right: var(--toc-mobile-btn-right);
-    width: var(--toc-mobile-btn-size);
+    min-width: var(--toc-mobile-btn-size);
+    width: auto;
     height: var(--toc-mobile-btn-size);
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--toc-indicator-start) 0%, var(--toc-indicator-end) 100%);
+    padding: 0 16px;
+    border-radius: 999px;
+    background: var(--accent, #E4503A);
     color: white;
     border: none;
     box-shadow: 0 4px 12px var(--toc-shadow);
@@ -333,7 +349,8 @@
     z-index: 999;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 700;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -383,7 +400,7 @@
     background: var(--toc-bg);
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -4px 20px var(--toc-shadow);
-    animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     display: flex;
     flex-direction: column;
 }

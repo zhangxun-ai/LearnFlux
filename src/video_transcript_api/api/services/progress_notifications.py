@@ -6,7 +6,15 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 
-from ..context import get_cache_manager, get_config, get_logger
+from ..context import (
+    get_cache_manager,
+    get_config,
+    get_llm_queue,
+    get_logger,
+    get_transcription_control_database,
+    get_workspace_dir,
+)
+from .post_asr import dispatch_pending_post_asr
 from ...utils.notifications import get_notification_router
 from ...utils.rendering import get_base_url
 
@@ -14,6 +22,7 @@ logger = get_logger()
 
 DEFAULT_THRESHOLDS_MINUTES = [10, 30, 60]
 DEFAULT_POLL_INTERVAL_SECONDS = 60
+DEFAULT_STALE_TASK_TIMEOUT_MINUTES = 120
 
 
 def _parse_datetime(value) -> Optional[datetime]:
@@ -154,6 +163,21 @@ def send_due_progress_reminders(
     return sent_count
 
 
+def recover_stale_tasks_if_enabled(
+    cache_manager, timeout_minutes, *, protected_task_ids=()
+) -> int:
+    """Recover stuck active tasks when heartbeat timeout is enabled."""
+    try:
+        timeout = int(timeout_minutes)
+    except (TypeError, ValueError):
+        timeout = 0
+    if timeout <= 0:
+        return 0
+    return cache_manager.recover_stale_tasks(
+        timeout, protected_task_ids=protected_task_ids
+    )
+
+
 def _get_reminder_settings():
     progress_config = get_config().get("task_progress", {})
     thresholds = progress_config.get(
@@ -164,8 +188,12 @@ def _get_reminder_settings():
         "reminder_poll_interval_seconds",
         DEFAULT_POLL_INTERVAL_SECONDS,
     )
+    stale_timeout = progress_config.get(
+        "stale_task_timeout_minutes",
+        DEFAULT_STALE_TASK_TIMEOUT_MINUTES,
+    )
     enabled = progress_config.get("feishu_reminders_enabled", True)
-    return enabled, thresholds, poll_interval
+    return enabled, thresholds, poll_interval, stale_timeout
 
 
 async def process_progress_reminders():
@@ -173,10 +201,28 @@ async def process_progress_reminders():
     logger.info("启动任务进度提醒处理器")
     while True:
         try:
-            enabled, thresholds, poll_interval = _get_reminder_settings()
+            enabled, thresholds, poll_interval, stale_timeout = _get_reminder_settings()
+            cache_manager = get_cache_manager()
+            from ...transcriber.usage_repository import UsageEventRepository
+
+            usage_repository = UsageEventRepository(
+                get_transcription_control_database(cache_manager)
+            )
+            protected_task_ids = usage_repository.list_protected_task_ids()
+            recover_stale_tasks_if_enabled(
+                cache_manager,
+                stale_timeout,
+                protected_task_ids=protected_task_ids,
+            )
+            dispatch_pending_post_asr(
+                repository=usage_repository,
+                output_dir=get_workspace_dir(),
+                cache_manager=cache_manager,
+                llm_queue=get_llm_queue(),
+            )
             if enabled:
                 send_due_progress_reminders(
-                    cache_manager=get_cache_manager(),
+                    cache_manager=cache_manager,
                     router=get_notification_router(),
                     thresholds_minutes=thresholds,
                 )

@@ -234,10 +234,29 @@ class URLExtractor {
  * API调用管理类
  */
 class APIManager {
+    static async submitStudyText(title, content) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        if (!token) throw new Error('请先设置 API 访问令牌');
+
+        const response = await fetch('/api/study/text', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ title, content })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.detail || data.message || `提交失败（HTTP ${response.status}）`);
+        }
+        return data;
+    }
+
     /**
      * 提交转录任务
      */
-    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100) {
+    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100, preserveSourceFile = false, transcriptionStrategy = 'cloud') {
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
 
         if (!token) {
@@ -248,7 +267,9 @@ class APIManager {
             url: url,
             use_speaker_recognition: useSpeakerRecognition,
             include_comments: Boolean(includeComments),
-            comment_limit: Number.parseInt(commentLimit, 10) || 100
+            comment_limit: Number.parseInt(commentLimit, 10) || 100,
+            preserve_source_file: Boolean(preserveSourceFile)
+            ,transcription_strategy: transcriptionStrategy
         };
 
         // 只有当 webhook 不为空时才添加到请求体中
@@ -296,6 +317,127 @@ class APIManager {
 
         return await response.json();
     }
+
+    static async confirmCloudQuote(taskId, quoteToken, maxCost) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}/cloud-confirm`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                quote_token: quoteToken,
+                accepted_max_cost_cny: String(maxCost)
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || '云端确认失败');
+        return data;
+    }
+
+    static async useLocalForCloudQuote(taskId) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}/cloud-use-local`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || '切换本地转录失败');
+        return data;
+    }
+
+    static async refreshCloudQuote(taskId) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}/cloud-refresh`, {
+            method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || '刷新报价失败');
+        return data;
+    }
+
+    static async getTaskSummary(viewToken) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+
+        if (!token) {
+            throw new Error('请先设置API访问令牌');
+        }
+
+        const response = await fetch(`/api/audit/summary?view_token=${encodeURIComponent(viewToken)}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: '摘要查询失败' }));
+            throw new Error(errorData.message || `HTTP ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    static async getContentMark(viewToken) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+
+        if (!token) {
+            throw new Error('请先设置API访问令牌');
+        }
+
+        const response = await fetch(`/api/marks/transcripts/${encodeURIComponent(viewToken)}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: '标记状态查询失败' }));
+            throw new Error(errorData.message || errorData.detail || `HTTP ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    static async getAuditHistory(params = {}) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+
+        if (!token) {
+            throw new Error('请先设置API访问令牌');
+        }
+
+        const query = new URLSearchParams(params);
+        const url = `/api/audit/history${query.toString() ? `?${query.toString()}` : ''}`;
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: '历史记录查询失败' }));
+            throw new Error(errorData.message || errorData.detail || `HTTP ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
+    static async deleteTask(taskId) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        if (!token) {
+            throw new Error('请先设置API访问令牌');
+        }
+
+        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.message || data.detail || `HTTP ${response.status}`);
+        }
+        return data;
+    }
 }
 
 /**
@@ -316,10 +458,16 @@ class TaskHistoryManager {
                 url: taskData.url,
                 original_text: taskData.original_text || '',
                 title: taskData.title || this.extractTitleFromURL(taskData.url),
+                author: taskData.author || '',
+                platform: taskData.platform || '',
+                description: taskData.description || '',
+                summaryPreview: taskData.summaryPreview || '',
+                summaryPreviewLoaded: Boolean(taskData.summaryPreview),
+                type: taskData.type || '',
                 timestamp: Date.now(),
                 useSpeakerRecognition: taskData.use_speaker_recognition || false,
                 includeComments: taskData.include_comments || false,
-                status: 'submitted'
+                status: taskData.status || 'submitted'
             };
 
             // 基于URL去重：相同URL只保留最新的记录
@@ -332,7 +480,6 @@ class TaskHistoryManager {
                 oldTask = history[existingUrlIndex];
                 history.splice(existingUrlIndex, 1);
                 isDuplicate = true;
-                console.log(`检测到重复URL，已移除旧记录: ${newTask.url}`);
             }
 
             // 将新任务添加到最前面
@@ -368,19 +515,20 @@ class TaskHistoryManager {
     /**
      * 删除指定任务
      */
-    static deleteTask(taskId) {
+    static async deleteTask(taskId) {
         try {
-            if (!confirm('确定要删除这个任务记录吗？')) {
+            if (!confirm('确定要删除这个任务记录及服务器缓存吗？删除后同一视频会重新转写。')) {
                 return;
             }
 
+            await APIManager.deleteTask(taskId);
             const history = this.getHistory();
             const updatedHistory = history.filter(task => task.id !== taskId);
 
             StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, updatedHistory);
             this.renderHistory();
 
-            UIManager.showStatus('success', '任务记录已删除');
+            UIManager.showStatus('success', '任务记录及服务器缓存已删除');
             setTimeout(UIManager.hideStatus, 2000);
         } catch (e) {
             console.error('删除任务记录失败:', e);
@@ -434,10 +582,15 @@ class TaskHistoryManager {
         const typeFilter = window.__histFilter || 'all';
         const statusFilter = window.__histStatus || 'all';
         const dateFilter = window.__histDate || 'all';
+        if (typeFilter === 'marked') {
+            syncMarkedHistoryFromServer();
+        }
         const filtered = allHistory
             .filter((task) => {
                 const t = histTypeOf(task);
-                const typeOk = typeFilter === 'all' || t === typeFilter;
+                const typeOk = typeFilter === 'all'
+                    || (typeFilter === 'marked' && task.is_marked)
+                    || (typeFilter !== 'marked' && t === typeFilter);
                 const sc = statusInfo(task.status, t).cls;
                 const statusOk = statusFilter === 'all'
                     || (statusFilter === 'done' && sc === 'done')
@@ -457,14 +610,17 @@ class TaskHistoryManager {
         if (pageItems.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'hist-empty';
-            empty.innerHTML = '<span class="empty-icon">🗂️</span>该筛选条件下暂无记录';
+            empty.innerHTML = '<span class="empty-icon">—</span>该筛选条件下暂无记录';
             list.appendChild(empty);
         } else {
             pageItems.forEach((task) => list.appendChild(buildHistoryCard(task)));
         }
 
         renderHistoryPagination(filtered.length, page, totalPages);
+        refreshHistoryMarks();
         refreshHistoryStatuses();
+        refreshHistoryPreviews();
+        ensureHistoryStatusPolling();
     }
 }
 
@@ -529,12 +685,12 @@ class ThemeManager {
 
         if (theme === 'dark') {
             if (themeToggle) {
-                themeToggle.textContent = '☀️';
+                themeToggle.textContent = '浅色';
                 themeToggle.title = '切换到浅色模式';
             }
         } else {
             if (themeToggle) {
-                themeToggle.textContent = '🌙';
+                themeToggle.textContent = '深色';
                 themeToggle.title = '切换到深色模式';
             }
         }
@@ -589,7 +745,7 @@ class UIManager {
     /**
      * 显示状态信息
      */
-    static showStatus(type, message, details = '') {
+    static showStatus(type, message, details = '', options = {}) {
         const container = document.getElementById('status-container');
         const content = document.getElementById('status-content');
 
@@ -599,27 +755,29 @@ class UIManager {
         let icon = '';
         switch (type) {
             case 'success':
-                icon = '✅';
+                icon = '';
                 break;
             case 'error':
-                icon = '❌';
+                icon = '';
                 break;
             case 'loading':
                 icon = '<span class="loading-spinner"></span>';
                 break;
             default:
-                icon = 'ℹ️';
+                icon = '';
         }
 
         content.innerHTML = `
             <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem;">
-                ${icon} ${message}
+                ${icon ? icon + ' ' : ''}${message}
             </div>
             ${details ? `<div style="font-size: 0.95rem; opacity: 0.8;">${details}</div>` : ''}
         `;
 
         // 滚动到状态区域
-        container.scrollIntoView({ behavior: 'smooth' });
+        if (options.scroll !== false) {
+            container.scrollIntoView({ behavior: 'smooth' });
+        }
     }
 
     /**
@@ -637,26 +795,26 @@ class UIManager {
         const btn = document.getElementById('submit-btn');
         const btnIcon = btn.querySelector('.btn-icon');
         const btnText = btn.querySelector('.btn-text');
+        const hint = document.getElementById('submit-hint');
 
         const selectedURL = getSelectedURL();
-        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
 
-        const canSubmit = selectedURL && token && !currentTask;
+        const canSubmit = selectedURL && !currentTask;
 
         btn.disabled = !canSubmit;
 
         if (currentTask) {
-            btnIcon.textContent = '⏳';
+            btnIcon.textContent = '…';
             btnText.textContent = '处理中...';
+            if (hint) hint.textContent = '当前任务处理中，请稍候。';
         } else if (!selectedURL) {
-            btnIcon.textContent = '📝';
-            btnText.textContent = '请输入包含视频链接的内容';
-        } else if (!token) {
-            btnIcon.textContent = '🔐';
-            btnText.textContent = '请在高级设置中填写 API 令牌';
+            btnIcon.textContent = '↗';
+            btnText.textContent = '开始解析';
+            if (hint) hint.textContent = '粘贴或选择一个链接后即可开始解析。';
         } else {
-            btnIcon.textContent = '🚀';
+            btnIcon.textContent = '↗';
             btnText.textContent = submitLabelForUrl(selectedURL);
+            if (hint) hint.textContent = '';
         }
     }
 
@@ -666,6 +824,7 @@ class UIManager {
     static toggleAdvancedSettings() {
         const settings = document.getElementById('advanced-settings');
         const icon = document.querySelector('.toggle-icon');
+        if (!settings || !icon) return;
 
         isAdvancedSettingsExpanded = !isAdvancedSettingsExpanded;
 
@@ -687,11 +846,11 @@ class UIManager {
 
         if (input.classList.contains('secret-masked')) {
             input.classList.remove('secret-masked');
-            btn.textContent = '🙈';
+            btn.textContent = '隐藏';
             btn.setAttribute('aria-label', '隐藏 API 令牌');
         } else {
             input.classList.add('secret-masked');
-            btn.textContent = '👁️';
+            btn.textContent = '显示';
             btn.setAttribute('aria-label', '显示 API 令牌');
         }
     }
@@ -728,7 +887,8 @@ function handleTextInput(textarea) {
     const previewContainer = document.getElementById('url-preview');
 
     if (urlResults.length === 0) {
-        previewContainer.innerHTML = '<div class="no-urls">未检测到URL</div>';
+        previewContainer.hidden = true;
+        previewContainer.innerHTML = '';
         UIManager.updateSubmitButton();
         return;
     }
@@ -750,6 +910,7 @@ function handleTextInput(textarea) {
     html += '</div>';
 
     previewContainer.innerHTML = html;
+    previewContainer.hidden = false;
 
     // 绑定选择事件
     bindURLSelection();
@@ -879,8 +1040,23 @@ function jsAttr(s) {
         .replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
+function compactText(s, maxLen) {
+    const text = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    return text.length > maxLen ? text.slice(0, maxLen - 1) + '…' : text;
+}
+
 /** 每页历史条数 */
 const HISTORY_PAGE_SIZE = 8;
+const HISTORY_PREVIEW_LOADING = new Set();
+const HISTORY_MARK_LOADING = new Set();
+const HISTORY_MARK_REFRESH_MS = 5000;
+const HISTORY_MARKED_SYNC_MS = 5000;
+const HISTORY_STATUS_POLL_MS = 5000;
+let historyStatusPollTimer = null;
+let submittedTaskPollTimer = null;
+let markedHistorySyncPromise = null;
+let markedHistoryLastSyncAt = 0;
 
 /** 日期范围判断（today / 7d / 30d / 90d / all） */
 function inDateRange(ts, rangeKey) {
@@ -899,8 +1075,22 @@ function inDateRange(ts, rangeKey) {
 }
 
 /** 构建单条历史卡片 DOM */
-// 历史条目类型：优先存储的 type；其次有 view_token 视作视频转录（有 /view 结果）；否则按 URL。
+const LOCAL_MEDIA_HISTORY_EXTENSIONS = new Set([
+    'mp3', 'm4a', 'wav', 'aac', 'flac',
+    'mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v'
+]);
+
+function isLocalMediaHistoryItem(task) {
+    const url = String(task && (task.url || task.video_url) || '');
+    if (!url.startsWith('local://')) return false;
+    const sourceName = String(task && task.title || url).split(/[?#]/, 1)[0];
+    const extension = sourceName.includes('.') ? sourceName.split('.').pop().toLowerCase() : '';
+    return LOCAL_MEDIA_HISTORY_EXTENSIONS.has(extension);
+}
+
+// 历史条目类型：本地音视频按真实扩展名纠正旧数据，再使用已存类型或 URL 推断。
 function histTypeOf(task) {
+    if (task.type === 'file' && isLocalMediaHistoryItem(task)) return 'video';
     if (task.type) return task.type;
     if (task.view_token) return 'video';
     const cls = classifyContent(task.url).type;
@@ -911,20 +1101,20 @@ function histTypeOf(task) {
 function buildHistoryCard(task) {
     const cls = classifyContent(task.url);
     const histType = histTypeOf(task);
-    // 图标按来源平台映射（展示来源，避免帖子一律显示 𝕏）
-    const PLATFORM_ICONS = {
-        twitter: '𝕏', xiaohongshu: '📕', weixin: '📰',
-        bilibili: '📺', douyin: '🎵', youtube: '▶️', xiaoyuzhou: '🎙️',
-    };
-    const icon = histType === 'file'
-        ? '📁'
-        : (PLATFORM_ICONS[cls.platform] || (histType === 'post' ? '📝' : '🎬'));
+    const icon = histType === 'file' ? '文' : (histType === 'post' ? '帖' : '视');
     const typeLabel = histType === 'post' ? '帖子' : (histType === 'file' ? '文件' : '视频');
     const st = statusInfo(task.status, histType);
     const timeStr = formatRelativeTime(task.timestamp);
+    const author = compactText(task.author || '', 36);
+    const description = compactText(task.description || '', 140);
+    const summaryPreview = compactText(task.summaryPreview || '', 180);
+    const originalPreview = compactText(task.original_text || '', 140);
 
-    let host = '链接';
-    try { host = new URL(task.url).hostname.replace(/^www\./, ''); } catch (e) { /* keep fallback */ }
+    const isLocalSource = String(task.url || '').startsWith('local://');
+    let host = isLocalSource ? (task.title || '本地文件') : '链接';
+    try {
+        if (!isLocalSource) host = new URL(task.url).hostname.replace(/^www\./, '');
+    } catch (e) { /* keep fallback */ }
 
     // 动作按状态：失败→重试（不查看失败页）；处理中→禁用；成功→查看真正的结果
     let viewBtn;
@@ -932,28 +1122,42 @@ function buildHistoryCard(task) {
         const retryHref = (cls.type === 'post')
             ? ('/post?url=' + encodeURIComponent(task.url))
             : '/add_task_by_web';
-        viewBtn = `<a class="hist-btn" href="${retryHref}">🔁 重试</a>`;
+        viewBtn = `<a class="hist-btn" href="${retryHref}">重试</a>`;
     } else if (st.cls === 'running' || st.cls === 'queued') {
-        viewBtn = `<a class="hist-btn" aria-disabled="true">⏳ 处理中</a>`;
+        viewBtn = `<a class="hist-btn" aria-disabled="true">处理中</a>`;
     } else if (task.result_id) {
         // 帖子洞察结果（已持久化到本地）→ 查看存储结果
-        viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">👁️ 查看</a>`;
+        viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">查看</a>`;
     } else if (task.view_token) {
-        viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">👁️ 查看</a>`;
+        viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">查看</a>`;
     } else if (cls.type === 'post') {
-        viewBtn = `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url)}">🔁 重新分析</a>`;
+        viewBtn = `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url)}">重新分析</a>`;
     } else {
-        viewBtn = `<a class="hist-btn" href="/add_task_by_web">🔁 重新提交</a>`;
+        viewBtn = `<a class="hist-btn" href="/add_task_by_web">重新提交</a>`;
     }
+    const studyPreviewButton = task.study_available && task.study_url
+        ? `<a class="hist-btn" href="${escapeHtml(task.study_url)}">边播边学</a>`
+        : '';
 
     const tags = [];
+    if (task.is_marked) tags.push('<span class="hist-feature-tag">精华</span>');
     if (task.useSpeakerRecognition) tags.push('<span class="hist-feature-tag">说话人识别</span>');
     if (task.includeComments) tags.push('<span class="hist-feature-tag">评论洞察</span>');
+
+    let previewText = summaryPreview || description || originalPreview;
+    if (!previewText && histType === 'video' && task.view_token && st.cls === 'done' && !task.summaryPreviewLoaded) {
+        previewText = '正在加载摘要预览...';
+    } else if (!previewText && st.cls === 'running') {
+        previewText = '任务完成后会显示内容摘要，方便回看和定位。';
+    } else if (!previewText) {
+        previewText = cls.action || '暂无内容预览';
+    }
 
     const card = document.createElement('div');
     card.className = 'hist-card fade-in';
     card.setAttribute('data-type', histType);
     if (task.id) card.setAttribute('data-task-id', task.id);
+    if (task.view_token) card.setAttribute('data-view-token', task.view_token);
     card.innerHTML = `
                 <div class="hist-icon">${icon}</div>
                 <div class="hist-body">
@@ -962,16 +1166,19 @@ function buildHistoryCard(task) {
                         <span class="status-badge s-${st.cls}">${st.text}</span>
                         <span class="hist-title" title="${escapeAttr(task.title || '')}">${escapeHtml(task.title || '未命名')}</span>
                     </div>
+                    ${author ? `<div class="hist-author">作者：${escapeHtml(author)}</div>` : ''}
+                    <div class="hist-preview">${escapeHtml(previewText)}</div>
                     <div class="hist-meta">
-                        <span class="hist-source">🔗 <a href="${escapeAttr(task.url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a></span>
+                        <span class="hist-source">${isLocalSource ? escapeHtml(host) : `<a href="${escapeAttr(task.url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a>`}</span>
                         <span class="hist-time">${timeStr}</span>
                         ${tags.join('')}
                     </div>
                 </div>
                 <div class="hist-actions">
+                    ${studyPreviewButton}
                     ${viewBtn}
-                    <button class="hist-btn" onclick="copyToClipboard('${jsAttr(task.url)}')">📋 复制</button>
-                    <button class="hist-btn danger" onclick="TaskHistoryManager.deleteTask('${jsAttr(task.id)}')">🗑️ 删除</button>
+                    <button class="hist-btn" onclick="copyToClipboard('${jsAttr(task.url)}')">复制</button>
+                    <button class="hist-btn danger" onclick="TaskHistoryManager.deleteTask('${jsAttr(task.id)}')">删除</button>
                 </div>
             `;
     return card;
@@ -989,33 +1196,410 @@ function renderHistoryPagination(total, page, totalPages) {
     `;
 }
 
+function hydrateHistoryPreview(entry, card) {
+    if (!entry || !entry.view_token) return;
+    const st = statusInfo(entry.status, histTypeOf(entry));
+    if (st.cls !== 'done' || entry.summaryPreview || entry.summaryPreviewLoaded) return;
+    const key = entry.view_token;
+    if (HISTORY_PREVIEW_LOADING.has(key)) return;
+    HISTORY_PREVIEW_LOADING.add(key);
+
+    APIManager.getTaskSummary(key).then((resp) => {
+        const raw = (resp && (resp.data || resp)) || {};
+        if (resp && resp.code === 202) return;
+
+        const history = TaskHistoryManager.getHistory();
+        const latest = history.find((t) => t && t.view_token === key);
+        if (!latest) return;
+
+        latest.summaryPreview = compactText(raw.summary || '', 300);
+        latest.summaryPreviewLoaded = true;
+        StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
+
+        const target = card && card.isConnected
+            ? card
+            : Array.from(document.querySelectorAll('.hist-card[data-view-token]'))
+                .find((node) => node.getAttribute('data-view-token') === key);
+        if (target && target.parentNode) {
+            target.replaceWith(buildHistoryCard(latest));
+        }
+    }).catch(() => {
+        /* best-effort, ignore */
+    }).finally(() => {
+        HISTORY_PREVIEW_LOADING.delete(key);
+    });
+}
+
+function isTerminalHistoryStatus(status, type) {
+    const cls = statusInfo(status, type).cls;
+    return cls === 'done' || cls === 'failed';
+}
+
+function applyTaskStatusToEntry(entry, raw) {
+    if (!entry || !raw) return false;
+    let changed = false;
+    const status = raw.status || raw.task_status || raw.state;
+    if (status) {
+        const norm = String(status).toLowerCase();
+        if (entry.status !== norm) {
+            entry.status = norm;
+            changed = true;
+        }
+    }
+    ['title', 'author', 'platform', 'view_token', 'completed_at'].forEach((key) => {
+        if (raw[key] && entry[key] !== raw[key]) {
+            entry[key] = raw[key];
+            changed = true;
+        }
+    });
+    if (raw.error_message && entry.error_message !== raw.error_message) {
+        entry.error_message = raw.error_message;
+        changed = true;
+    }
+    return changed;
+}
+
+function findVisibleHistoryCard(entry) {
+    if (!entry) return null;
+    const taskId = entry.id ? String(entry.id) : '';
+    if (taskId) {
+        const byTask = Array.from(document.querySelectorAll('.hist-card[data-task-id]'))
+            .find((node) => node.getAttribute('data-task-id') === taskId);
+        if (byTask) return byTask;
+    }
+    const viewToken = entry.view_token ? String(entry.view_token) : '';
+    if (!viewToken) return null;
+    return Array.from(document.querySelectorAll('.hist-card[data-view-token]'))
+        .find((node) => node.getAttribute('data-view-token') === viewToken) || null;
+}
+
+function replaceVisibleHistoryCard(entry, card) {
+    const target = card && card.isConnected ? card : findVisibleHistoryCard(entry);
+    if (!target || !target.parentNode) return;
+    const nextCard = buildHistoryCard(entry);
+    target.replaceWith(nextCard);
+    hydrateHistoryPreview(entry, nextCard);
+}
+
+function updateHistoryEntryFromStatus(taskId, raw, card) {
+    const history = TaskHistoryManager.getHistory();
+    const entry = history.find((t) => t && t.id === taskId);
+    if (!entry) return null;
+    const changed = applyTaskStatusToEntry(entry, raw);
+    if (changed) {
+        StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
+    }
+    replaceVisibleHistoryCard(entry, card);
+    return entry;
+}
+
+async function refreshHistoryEntryStatus(taskId, card) {
+    let token = null;
+    try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return; }
+    if (!token) return;
+    if (!taskId) return;
+    const resp = await APIManager.getTaskStatus(taskId);
+    const raw = (resp && (resp.data || resp)) || {};
+    updateHistoryEntryFromStatus(taskId, raw, card);
+}
+
 /** 历史视频任务的状态最佳努力刷新（复用既有 getTaskStatus，容错字段名） */
 function refreshHistoryStatuses() {
+    document.querySelectorAll('.hist-card[data-task-id][data-type="video"]').forEach((card) => {
+        const taskId = card.getAttribute('data-task-id');
+        refreshHistoryEntryStatus(taskId, card).catch(() => { /* best-effort, ignore */ });
+    });
+}
+
+async function refreshRunningHistoryStatuses() {
+    const history = TaskHistoryManager.getHistory();
+    const tasks = history.filter((task) => {
+        const type = histTypeOf(task);
+        return type === 'video' && task.id && !isTerminalHistoryStatus(task.status, type);
+    });
+    await Promise.all(tasks.map((task) => (
+        refreshHistoryEntryStatus(task.id).catch(() => { /* best-effort, ignore */ })
+    )));
+}
+
+function ensureHistoryStatusPolling() {
+    if (historyStatusPollTimer) {
+        clearTimeout(historyStatusPollTimer);
+        historyStatusPollTimer = null;
+    }
+    let token = null;
+    try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return; }
+    if (!token) return;
+    const hasRunningTask = TaskHistoryManager.getHistory().some((task) => {
+        const type = histTypeOf(task);
+        return type === 'video' && task.id && !isTerminalHistoryStatus(task.status, type);
+    });
+    if (!hasRunningTask) return;
+    historyStatusPollTimer = setTimeout(async () => {
+        historyStatusPollTimer = null;
+        await refreshRunningHistoryStatuses();
+        ensureHistoryStatusPolling();
+    }, HISTORY_STATUS_POLL_MS);
+}
+
+function renderSubmittedTaskStatus(taskId, viewToken, raw, entry, isDuplicate, options = {}) {
+    const status = raw && (raw.status || raw.task_status || raw.state) || (entry && entry.status) || 'processing';
+    const token = raw && raw.view_token || viewToken || (entry && entry.view_token) || '';
+    const type = histTypeOf(entry || { view_token: token });
+    const state = statusInfo(status, type);
+    const taskLink = token
+        ? `<a href="/view/${encodeURIComponent(token)}" target="_blank" style="color: #667eea; text-decoration: underline;">查看任务页面</a>`
+        : '';
+    const title = raw && raw.title || (entry && entry.title) || '';
+    const duplicateNote = isDuplicate
+        ? '<br><span style="color: #a36b20;">相同链接的旧任务记录已更新</span>'
+        : '';
+    if (status === 'awaiting_cloud_confirmation') {
+        const progress = raw && raw.progress || {};
+        const evidence = progress.evidence || {};
+        const quote = evidence.cloud_quote || progress.cloud_quote || {};
+        if (quote.quote_token && quote.max_cost_cny) {
+            const detail = `可信时长：${escapeHtml(quote.duration_seconds)} 秒<br>` +
+                `计费秒数：${escapeHtml(quote.billable_seconds)}<br>` +
+                `费用上限：¥${escapeHtml(quote.max_cost_cny)}<br>` +
+                `<button type="button" class="hist-btn" id="confirm-cloud-quote">确认云端转录</button> ` +
+                `<button type="button" class="hist-btn" id="use-local-quote">改用本地免费</button> ` +
+                `<button type="button" class="hist-btn" id="refresh-cloud-quote">刷新报价</button>`;
+            UIManager.showStatus('loading', '等待费用确认', detail, options);
+            const button = document.getElementById('confirm-cloud-quote');
+            if (button) button.onclick = async () => {
+                button.disabled = true;
+                try {
+                    await APIManager.confirmCloudQuote(taskId, quote.quote_token, quote.max_cost_cny);
+                    UIManager.showStatus('loading', '云端转录已确认', '正在提交转录任务…');
+                } catch (error) {
+                    button.disabled = false;
+                    UIManager.showStatus('error', '确认失败', escapeHtml(error.message));
+                }
+            };
+            const localButton = document.getElementById('use-local-quote');
+            if (localButton) localButton.onclick = async () => {
+                localButton.disabled = true;
+                try {
+                    await APIManager.useLocalForCloudQuote(taskId);
+                    UIManager.showStatus('loading', '已改用本地免费', '正在使用已取得的音频转录，无需重新下载…');
+                } catch (error) {
+                    localButton.disabled = false;
+                    UIManager.showStatus('error', '切换失败', escapeHtml(error.message));
+                }
+            };
+            const refreshButton = document.getElementById('refresh-cloud-quote');
+            if (refreshButton) refreshButton.onclick = async () => {
+                refreshButton.disabled = true;
+                try {
+                    await APIManager.refreshCloudQuote(taskId);
+                    await watchSubmittedTask(taskId, token, options);
+                } catch (error) {
+                    refreshButton.disabled = false;
+                    UIManager.showStatus('error', '刷新失败', escapeHtml(error.message));
+                }
+            };
+            return;
+        }
+    }
+    if (state.cls === 'done') {
+        const detail = `${title ? `内容：${escapeHtml(title)}<br>` : ''}${taskLink}`;
+        UIManager.showStatus('success', '解析完成', detail, options);
+        return;
+    }
+    if (state.cls === 'failed') {
+        const reason = raw && raw.error_message ? escapeHtml(raw.error_message) : '请打开任务页面查看失败原因';
+        const detail = `${reason}${taskLink ? `<br>${taskLink}` : ''}`;
+        UIManager.showStatus('error', '解析失败', detail, options);
+        return;
+    }
+    const detail = `任务ID: ${escapeHtml(taskId)}<br>当前页面会自动同步状态，进度页会展示实时处理进度。${duplicateNote}${taskLink ? `<br>${taskLink}` : ''}`;
+    UIManager.showStatus('loading', '任务已提交，正在解析', detail, options);
+}
+
+function watchSubmittedTask(taskId, viewToken, options = {}) {
+    if (submittedTaskPollTimer) {
+        clearTimeout(submittedTaskPollTimer);
+        submittedTaskPollTimer = null;
+    }
+
+    let showDuplicateNote = Boolean(options.isDuplicate);
+    const poll = async () => {
+        try {
+            const resp = await APIManager.getTaskStatus(taskId);
+            const raw = (resp && (resp.data || resp)) || {};
+            const entry = updateHistoryEntryFromStatus(taskId, raw);
+            renderSubmittedTaskStatus(taskId, viewToken, raw, entry, showDuplicateNote, { scroll: false });
+            showDuplicateNote = false;
+            const type = histTypeOf(entry || { view_token: viewToken });
+            const status = raw.status || raw.task_status || raw.state || (entry && entry.status);
+            if (!isTerminalHistoryStatus(status, type)) {
+                submittedTaskPollTimer = setTimeout(poll, HISTORY_STATUS_POLL_MS);
+            } else {
+                submittedTaskPollTimer = null;
+                ensureHistoryStatusPolling();
+            }
+        } catch (error) {
+            submittedTaskPollTimer = setTimeout(poll, HISTORY_STATUS_POLL_MS);
+        }
+    };
+
+    renderSubmittedTaskStatus(taskId, viewToken, { status: 'processing', view_token: viewToken }, null, showDuplicateNote);
+    submittedTaskPollTimer = setTimeout(poll, 2500);
+}
+
+function refreshHistoryPreviews() {
     let token = null;
     try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return; }
     if (!token) return;
     const history = TaskHistoryManager.getHistory();
-    document.querySelectorAll('.hist-card[data-task-id][data-type="video"]').forEach((card) => {
-        const taskId = card.getAttribute('data-task-id');
-        if (!taskId) return;
-        APIManager.getTaskStatus(taskId).then((resp) => {
-            const raw = (resp && (resp.data || resp)) || {};
-            const s = raw.status || raw.task_status || raw.state;
-            if (!s) return;
-            const norm = String(s).toLowerCase();
-            const entry = history.find((t) => t && t.id === taskId);
-            if (!entry) return;
-            // 回写真实状态（下次渲染直接正确，不再从 submitted 起跳）
-            if (entry.status !== norm) {
-                entry.status = norm;
-                StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
-            }
-            // 用最新状态重建整张卡片：徽章与动作按钮（查看/重试/处理中）保持一致
-            if (card.parentNode) {
-                card.replaceWith(buildHistoryCard(entry));
-            }
-        }).catch(() => { /* best-effort, ignore */ });
+    document.querySelectorAll('.hist-card[data-view-token]').forEach((card) => {
+        const viewToken = card.getAttribute('data-view-token');
+        const entry = history.find((t) => t && t.view_token === viewToken);
+        hydrateHistoryPreview(entry, card);
     });
+}
+
+function refreshHistoryMarks() {
+    let token = null;
+    try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return; }
+    if (!token) return;
+
+    const now = Date.now();
+    const history = TaskHistoryManager.getHistory();
+    history.forEach((entry) => {
+        if (!entry || !entry.view_token) return;
+        const checkedAt = Number(entry.markStatusCheckedAt || 0);
+        if (checkedAt && now - checkedAt < HISTORY_MARK_REFRESH_MS) return;
+
+        const key = entry.view_token;
+        if (HISTORY_MARK_LOADING.has(key)) return;
+        HISTORY_MARK_LOADING.add(key);
+
+        APIManager.getContentMark(key).then((resp) => {
+            const raw = (resp && (resp.data || resp)) || {};
+            const marked = Boolean(raw.marked);
+            const latestHistory = TaskHistoryManager.getHistory();
+            const latest = latestHistory.find((task) => task && task.view_token === key);
+            if (!latest) return;
+
+            const changed = latest.is_marked !== marked || latest.markStatusLoaded !== true;
+            latest.is_marked = marked;
+            latest.markStatusLoaded = true;
+            latest.markStatusCheckedAt = Date.now();
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, latestHistory);
+
+            if (!changed) return;
+            if ((window.__histFilter || 'all') === 'marked') {
+                TaskHistoryManager.renderHistory();
+                return;
+            }
+            replaceVisibleHistoryCard(latest);
+        }).catch(() => {
+            /* best-effort, ignore */
+        }).finally(() => {
+            HISTORY_MARK_LOADING.delete(key);
+        });
+    });
+}
+
+function historyTimestampFromAuditItem(item) {
+    const raw = String(item && item.request_time || '').trim();
+    if (!raw) return Date.now();
+    const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const parsed = Date.parse(normalized);
+    return Number.isNaN(parsed) ? Date.now() : parsed;
+}
+
+function historyTypeFromAuditItem(item) {
+    const url = String(item && item.video_url || '');
+    if (url.startsWith('local://')) return isLocalMediaHistoryItem(item) ? 'video' : 'file';
+    const platform = String(item && item.platform || '').toLowerCase();
+    if (['twitter', 'x', 'xiaohongshu', 'weixin', 'wechat'].includes(platform)) return 'post';
+    return 'video';
+}
+
+function mergeMarkedHistoryItems(items) {
+    if (!Array.isArray(items) || items.length === 0) return false;
+    const history = TaskHistoryManager.getHistory();
+    let changed = false;
+    const checkedAt = Date.now();
+
+    items.forEach((item) => {
+        if (!item || !item.view_token) return;
+        const next = {
+            id: item.task_id || item.view_token,
+            view_token: item.view_token,
+            url: item.video_url || '',
+            title: item.title || item.video_url || '未命名',
+            author: item.author || '',
+            platform: item.platform || '',
+            type: historyTypeFromAuditItem(item),
+            timestamp: historyTimestampFromAuditItem(item),
+            status: item.status || 'success',
+            is_marked: Boolean(item.is_marked),
+            markStatusLoaded: true,
+            markStatusCheckedAt: checkedAt
+        };
+        const existingIndex = history.findIndex((task) => (
+            task && (
+                task.view_token === next.view_token
+                || (next.id && task.id === next.id)
+            )
+        ));
+        if (existingIndex === -1) {
+            history.unshift(next);
+            changed = true;
+            return;
+        }
+        const current = history[existingIndex];
+        const merged = Object.assign({}, current, next, {
+            summaryPreview: current.summaryPreview || '',
+            summaryPreviewLoaded: Boolean(current.summaryPreviewLoaded)
+        });
+        history[existingIndex] = merged;
+        changed = true;
+    });
+
+    if (changed) {
+        if (history.length > APP_CONFIG.MAX_HISTORY_ITEMS) {
+            history.splice(APP_CONFIG.MAX_HISTORY_ITEMS);
+        }
+        StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, history);
+    }
+    return changed;
+}
+
+function syncMarkedHistoryFromServer(force = false) {
+    if ((window.__histFilter || 'all') !== 'marked') return Promise.resolve(false);
+
+    let token = null;
+    try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return Promise.resolve(false); }
+    if (!token) return Promise.resolve(false);
+
+    const now = Date.now();
+    if (!force && markedHistoryLastSyncAt && now - markedHistoryLastSyncAt < HISTORY_MARKED_SYNC_MS) {
+        return Promise.resolve(false);
+    }
+    if (markedHistorySyncPromise) return markedHistorySyncPromise;
+
+    markedHistorySyncPromise = APIManager.getAuditHistory({
+        marked: 'true',
+        status: 'all',
+        limit: '100'
+    }).then((resp) => {
+        markedHistoryLastSyncAt = Date.now();
+        const raw = (resp && (resp.data || resp)) || {};
+        const changed = mergeMarkedHistoryItems(raw.items || []);
+        if (changed) {
+            TaskHistoryManager.renderHistory();
+        }
+        return changed;
+    }).catch(() => false).finally(() => {
+        markedHistorySyncPromise = null;
+    });
+
+    return markedHistorySyncPromise;
 }
 
 /** 更新识别横幅 + 视频专属选项可见性 + 按钮文案 */
@@ -1047,28 +1631,119 @@ function updateDetection() {
 /** 工作台新增交互的初始化 */
 function initWorkbenchUI() {
     // 输入 Tab 切换
-    document.querySelectorAll('.input-tab').forEach((tab) => {
+    const inputTabs = Array.from(document.querySelectorAll('.input-tab'));
+    const activateInputTab = (tab, shouldFocus = false) => {
+        if (!tab) return;
+        inputTabs.forEach((item) => {
+            item.classList.remove('active');
+            item.setAttribute('aria-selected', 'false');
+            item.tabIndex = -1;
+        });
+        document.querySelectorAll('.input-panel').forEach((panel) => {
+            panel.classList.remove('active');
+            panel.hidden = true;
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+        tab.tabIndex = 0;
+        const panel = document.getElementById(tab.getAttribute('data-panel'));
+        if (panel) {
+            panel.classList.add('active');
+            panel.hidden = false;
+        }
+        if (shouldFocus) tab.focus();
+    };
+
+    inputTabs.forEach((tab) => {
         tab.addEventListener('click', () => {
-            document.querySelectorAll('.input-tab').forEach((t) => {
-                t.classList.remove('active');
-                t.setAttribute('aria-selected', 'false');
-            });
-            document.querySelectorAll('.input-panel').forEach((p) => {
-                p.classList.remove('active');
-                p.hidden = true;
-            });
-            tab.classList.add('active');
-            tab.setAttribute('aria-selected', 'true');
-            const panel = document.getElementById(tab.getAttribute('data-panel'));
-            if (panel) { panel.classList.add('active'); panel.hidden = false; }
+            activateInputTab(tab);
+        });
+        tab.addEventListener('keydown', (event) => {
+            const index = inputTabs.indexOf(tab);
+            let nextIndex = null;
+            if (event.key === 'ArrowRight') nextIndex = (index + 1) % inputTabs.length;
+            if (event.key === 'ArrowLeft') nextIndex = (index - 1 + inputTabs.length) % inputTabs.length;
+            if (event.key === 'Home') nextIndex = 0;
+            if (event.key === 'End') nextIndex = inputTabs.length - 1;
+            if (nextIndex === null) return;
+            event.preventDefault();
+            activateInputTab(inputTabs[nextIndex], true);
         });
     });
+    if (window.location.hash === '#local-video-study') {
+        const fileTab = document.getElementById('tab-file');
+        if (fileTab) fileTab.click();
+    }
+    if (window.location.hash === '#pasted-text-study') {
+        const textTab = document.getElementById('tab-text');
+        if (textTab) textTab.click();
+    }
+
+    const textForm = document.getElementById('study-text-form');
+    const textTitle = document.getElementById('study-text-title');
+    const textContent = document.getElementById('study-text-content');
+    const textSubmit = document.getElementById('study-text-submit');
+    const textStatus = document.getElementById('study-text-status');
+    if (textForm && textTitle && textContent && textSubmit && textStatus) {
+        const updateTextSubmit = () => {
+            const hasContent = Boolean(textContent.value.trim());
+            textSubmit.disabled = !hasContent;
+            textStatus.textContent = hasContent ? '' : '粘贴正文后即可开始学习。';
+        };
+        textContent.addEventListener('input', updateTextSubmit);
+        updateTextSubmit();
+        textForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const content = textContent.value.trim();
+            if (!content) return;
+            textSubmit.disabled = true;
+            textStatus.textContent = '正在创建学习内容…';
+            try {
+                const data = await APIManager.submitStudyText(textTitle.value.trim(), content);
+                if (!data.data || !data.data.view_token) {
+                    throw new Error(data.message || '未返回学习内容标识');
+                }
+                textStatus.textContent = '正在打开学习工作区…';
+                window.location.href = '/study/' + data.data.view_token;
+            } catch (error) {
+                textStatus.textContent = error && error.message ? error.message : '提交失败，请重试';
+                updateTextSubmit();
+            }
+        });
+        updateTextSubmit();
+    }
 
     // 本地文件：上传 → 转录 → 跳结果页
     const dz = document.getElementById('file-dropzone');
     const fileInput = document.getElementById('file-input');
     if (dz && fileInput) {
         const hint = document.getElementById('dropzone-hint');
+        const mediaExtensions = new Set(['mp3', 'm4a', 'wav', 'aac', 'flac', 'mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v']);
+
+        const isMediaFile = (fileObj) => {
+            const type = (fileObj.type || '').toLowerCase();
+            if (type.startsWith('audio/') || type.startsWith('video/')) return true;
+            const ext = (fileObj.name || '').split('.').pop().toLowerCase();
+            return mediaExtensions.has(ext);
+        };
+
+        const readUploadResponse = async (response) => {
+            const contentType = (response.headers.get('content-type') || '').toLowerCase();
+            if (contentType.includes('application/json')) {
+                return {
+                    status: response.status,
+                    ok: response.ok,
+                    d: await response.json().catch(() => ({})),
+                    text: '',
+                };
+            }
+            return {
+                status: response.status,
+                ok: response.ok,
+                d: {},
+                text: (await response.text().catch(() => '')).trim(),
+            };
+        };
 
         const uploadLocalFile = (fileObj) => {
             if (!fileObj) return;
@@ -1080,38 +1755,56 @@ function initWorkbenchUI() {
                 setTimeout(UIManager.hideStatus, 5000);
                 return;
             }
-            if (hint) hint.textContent = '上传中… ' + fileObj.name;
+            const mediaFile = isMediaFile(fileObj);
+            if (hint) hint.textContent = mediaFile ? '上传中… 正在解析视频内容' : '上传中… ' + fileObj.name;
             dz.classList.add('uploading');
             const fd = new FormData();
             fd.append('file', fileObj);
             fd.append('use_speaker_recognition', 'false');
-            fetch('/api/upload-transcribe', {
+            const fileStrategyEl = document.querySelector('input[name="file-transcription-strategy"]:checked');
+            const fileStrategy = fileStrategyEl ? fileStrategyEl.value : 'cloud';
+            fd.append('transcription_strategy', fileStrategy);
+            const uploadEndpoint = mediaFile && fileStrategy === 'local'
+                ? '/api/study/upload'
+                : '/api/upload-transcribe';
+            fetch(uploadEndpoint, {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + token },
                 body: fd,
-            }).then((resp) => resp.json().then((d) => ({ status: resp.status, d })))
-              .then(({ status, d }) => {
+            }).then(readUploadResponse)
+              .then(({ status, ok, d, text }) => {
                   dz.classList.remove('uploading');
                   if (status === 401 || status === 403) {
                       if (hint) hint.textContent = '令牌无效，请在高级设置重新填写';
                       return;
                   }
+                  if (!ok) {
+                      if (hint) {
+                          hint.textContent = (d && (d.detail || d.message)) || text || ('上传失败（HTTP ' + status + '）');
+                      }
+                      return;
+                  }
                   if (d && d.code === 202 && d.data && d.data.view_token) {
-                      if (hint) hint.textContent = '上传成功，正在转录…';
+                      if (hint) hint.textContent = mediaFile ? '上传成功，正在打开解析结果…' : '上传成功，正在转录…';
+                      TaskHistoryManager.addTask({
+                          task_id: d.data.task_id,
+                          view_token: d.data.view_token,
+                          url: 'local://' + fileObj.name,
+                          title: fileObj.name,
+                          type: mediaFile ? 'video' : 'file',
+                          status: 'submitted'
+                      });
                       window.location.href = '/view/' + d.data.view_token;
                   } else if (hint) {
                       hint.textContent = (d && (d.detail || d.message)) || '上传失败，请重试';
                   }
-              }).catch(() => {
+              }).catch((error) => {
                   dz.classList.remove('uploading');
-                  if (hint) hint.textContent = '网络错误，请重试';
+                  if (hint) hint.textContent = (error && error.message) || '网络错误，请重试';
               });
         };
 
         dz.addEventListener('click', () => fileInput.click());
-        dz.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
-        });
         fileInput.addEventListener('change', () => {
             if (fileInput.files && fileInput.files[0]) uploadLocalFile(fileInput.files[0]);
         });
@@ -1224,10 +1917,23 @@ async function submitTranscription(event) {
     }
 
     const selectedURL = getSelectedURL();
-    const useSpeakerRecognition = document.getElementById('speaker-recognition').checked;
-    const includeComments = document.getElementById('include-comments').checked;
-    const commentLimit = Number.parseInt(document.getElementById('comment-limit').value, 10) || 100;
-    const wechatWebhook = document.getElementById('wechat-webhook').value.trim();
+
+    const speakerRecEl = document.getElementById('speaker-recognition');
+    const useSpeakerRecognition = speakerRecEl ? speakerRecEl.checked : false;
+    const strategyEl = document.querySelector('input[name="transcription-strategy"]:checked');
+    const transcriptionStrategy = strategyEl ? strategyEl.value : 'cloud';
+
+    const preserveEl = document.getElementById('preserve-source-file');
+    const preserveSourceFile = preserveEl ? preserveEl.checked : false;
+
+    const includeCommentsEl = document.getElementById('include-comments');
+    const includeComments = includeCommentsEl ? includeCommentsEl.checked : false;
+
+    const commentLimitEl = document.getElementById('comment-limit');
+    const commentLimit = commentLimitEl ? (Number.parseInt(commentLimitEl.value, 10) || 100) : 100;
+
+    const wechatWebhookEl = document.getElementById('wechat-webhook');
+    const wechatWebhook = wechatWebhookEl ? wechatWebhookEl.value.trim() : '';
     const originalText = document.getElementById('share-content').value.trim();
 
     if (!selectedURL) {
@@ -1251,22 +1957,7 @@ async function submitTranscription(event) {
     }
 
     const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
-    if (!token) {
-        UIManager.showStatus('error', '请先设置 API 令牌', '请在高级设置中填写你的 API 访问令牌（Bearer Token）');
-        // 自动展开高级设置
-        if (!isAdvancedSettingsExpanded) {
-            UIManager.toggleAdvancedSettings();
-        }
-        // 聚焦到 token 输入框
-        setTimeout(() => {
-            const tokenInput = document.getElementById('bearer-token');
-            if (tokenInput) {
-                tokenInput.focus();
-            }
-        }, 100);
-        setTimeout(UIManager.hideStatus, 5000);
-        return;
-    }
+    // Removed strict token validation to allow global fallback configurations to handle missing tokens
 
     try {
         currentTask = { url: selectedURL };
@@ -1283,7 +1974,9 @@ async function submitTranscription(event) {
             useSpeakerRecognition,
             wechatWebhook,
             includeComments,
-            commentLimit
+            commentLimit,
+            preserveSourceFile,
+            transcriptionStrategy
         );
 
         if (response.code === 202 && response.data && response.data.task_id) {
@@ -1293,28 +1986,21 @@ async function submitTranscription(event) {
                 url: selectedURL,
                 original_text: originalText,
                 use_speaker_recognition: useSpeakerRecognition,
+                preserve_source_file: preserveSourceFile,
                 include_comments: includeComments
             };
 
             // 添加到历史记录
             const historyResult = TaskHistoryManager.addTask(taskData);
-
-            // 根据是否重复显示不同的提示
-            let statusMessage = '任务提交成功！';
-            let statusDetails = `任务ID: ${response.data.task_id}<br>转录将在后台进行，完成后会通过配置的企业微信通知您<br>`;
-
-            if (historyResult.isDuplicate) {
-                statusMessage = '任务提交成功！(检测到重复URL)';
-                statusDetails += `<span style="color: #f59e0b;">⚠️ 相同链接的旧任务记录已被更新</span><br>`;
-            }
-
-            statusDetails += `<a href="/view/${response.data.view_token}" target="_blank" style="color: #667eea; text-decoration: underline;">点击查看任务进度</a>`;
-
-            UIManager.showStatus('success', statusMessage, statusDetails);
+            watchSubmittedTask(response.data.task_id, response.data.view_token, {
+                isDuplicate: Boolean(historyResult.isDuplicate)
+            });
 
             // 清空表单
             document.getElementById('share-content').value = '';
-            document.getElementById('url-preview').innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
+            const previewContainer = document.getElementById('url-preview');
+            previewContainer.hidden = true;
+            previewContainer.innerHTML = '';
 
             // 3秒后跳转到查看页面
             setTimeout(() => {
@@ -1338,8 +2024,6 @@ async function submitTranscription(event) {
  * 页面初始化
  */
 function initializePage() {
-    console.log('初始化视频转录Web应用...');
-
     // 加载保存的设置
     const savedToken = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
     const savedWebhook = StorageManager.get(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK);
@@ -1348,24 +2032,29 @@ function initializePage() {
     const savedCommentLimit = StorageManager.get(APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT);
 
     if (savedToken) {
-        document.getElementById('bearer-token').value = savedToken;
+        const tokenEl = document.getElementById('bearer-token');
+        if (tokenEl) tokenEl.value = savedToken;
     }
 
     // 加载 webhook 地址
     if (savedWebhook) {
-        document.getElementById('wechat-webhook').value = savedWebhook;
+        const webhookEl = document.getElementById('wechat-webhook');
+        if (webhookEl) webhookEl.value = savedWebhook;
     }
 
-    if (savedSpeakerRecognition !== null) {
-        document.getElementById('speaker-recognition').checked = savedSpeakerRecognition;
+    const speakerRecEl = document.getElementById('speaker-recognition');
+    if (savedSpeakerRecognition !== null && speakerRecEl) {
+        speakerRecEl.checked = savedSpeakerRecognition;
     }
 
-    if (savedIncludeComments !== null) {
-        document.getElementById('include-comments').checked = savedIncludeComments;
+    const includeCommentsEl = document.getElementById('include-comments');
+    if (savedIncludeComments !== null && includeCommentsEl) {
+        includeCommentsEl.checked = savedIncludeComments;
     }
 
-    if (savedCommentLimit !== null) {
-        document.getElementById('comment-limit').value = String(savedCommentLimit);
+    const commentLimitEl = document.getElementById('comment-limit');
+    if (savedCommentLimit !== null && commentLimitEl) {
+        commentLimitEl.value = String(savedCommentLimit);
     }
     updateCommentLimitControl();
 
@@ -1376,10 +2065,12 @@ function initializePage() {
 
     // 确保URL预览区域初始状态正确
     const previewContainer = document.getElementById('url-preview');
-    previewContainer.innerHTML = '<div class="no-urls">请输入包含视频链接的内容</div>';
+    previewContainer.hidden = true;
+    previewContainer.innerHTML = '';
 
-    // 如果没有保存的 token，自动展开高级设置
-    if (!savedToken) {
+    // 如果没有保存的 token 且当前页面存在输入框，自动展开高级设置
+    const tokenEl = document.getElementById('bearer-token');
+    if (!savedToken && tokenEl) {
         UIManager.toggleAdvancedSettings();
     }
 
@@ -1387,54 +2078,71 @@ function initializePage() {
     form.addEventListener('submit', submitTranscription);
 
     const advancedToggle = document.getElementById('advanced-toggle');
-    advancedToggle.addEventListener('click', UIManager.toggleAdvancedSettings);
+    if (advancedToggle) {
+        advancedToggle.addEventListener('click', UIManager.toggleAdvancedSettings);
+    }
 
     const tokenToggle = document.getElementById('toggle-token-visibility');
-    tokenToggle.addEventListener('click', UIManager.toggleTokenVisibility);
+    if (tokenToggle) {
+        tokenToggle.addEventListener('click', UIManager.toggleTokenVisibility);
+    }
 
     const clearWebhookBtn = document.getElementById('clear-webhook');
-    clearWebhookBtn.addEventListener('click', UIManager.clearWebhook);
+    if (clearWebhookBtn) {
+        clearWebhookBtn.addEventListener('click', UIManager.clearWebhook);
+    }
 
     // 监听设置变化
-    document.getElementById('bearer-token').addEventListener('input', (e) => {
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN, e.target.value);
-        UIManager.updateSubmitButton();
-    });
+    if (tokenEl) {
+        tokenEl.addEventListener('input', (e) => {
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN, e.target.value);
+            UIManager.updateSubmitButton();
+        });
+    }
 
-    document.getElementById('wechat-webhook').addEventListener('input', (e) => {
-        const webhookValue = e.target.value;
+    const webhookEl = document.getElementById('wechat-webhook');
+    if (webhookEl) {
+        webhookEl.addEventListener('input', (e) => {
+            const webhookValue = e.target.value;
 
-        // 立即保存到 localStorage
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK, webhookValue);
+            // 立即保存到 localStorage
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK, webhookValue);
 
-        // 清除之前的定时器
-        if (webhookSaveTimer) {
-            clearTimeout(webhookSaveTimer);
-        }
+            // 清除之前的定时器
+            if (webhookSaveTimer) {
+                clearTimeout(webhookSaveTimer);
+            }
 
-        // 设置新的定时器：用户停止输入 1 秒后显示保存成功提示
-        if (webhookValue.trim() !== '') {
-            webhookSaveTimer = setTimeout(() => {
-                UIManager.showWebhookSaved();
-            }, 1000);
-        }
-    });
+            // 设置新的定时器：用户停止输入 1 秒后显示保存成功提示
+            if (webhookValue.trim() !== '') {
+                webhookSaveTimer = setTimeout(() => {
+                    UIManager.showWebhookSaved();
+                }, 1000);
+            }
+        });
+    }
 
-    document.getElementById('speaker-recognition').addEventListener('change', (e) => {
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, e.target.checked);
-    });
+    if (speakerRecEl) {
+        speakerRecEl.addEventListener('change', (e) => {
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, e.target.checked);
+        });
+    }
 
-    document.getElementById('include-comments').addEventListener('change', (e) => {
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS, e.target.checked);
-        updateCommentLimitControl();
-    });
+    if (includeCommentsEl) {
+        includeCommentsEl.addEventListener('change', (e) => {
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS, e.target.checked);
+            updateCommentLimitControl();
+        });
+    }
 
-    document.getElementById('comment-limit').addEventListener('change', (e) => {
-        StorageManager.set(
-            APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT,
-            Number.parseInt(e.target.value, 10) || 100
-        );
-    });
+    if (commentLimitEl) {
+        commentLimitEl.addEventListener('change', (e) => {
+            StorageManager.set(
+                APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT,
+                Number.parseInt(e.target.value, 10) || 100
+            );
+        });
+    }
 
     // 渲染任务历史
     TaskHistoryManager.renderHistory();
@@ -1445,7 +2153,6 @@ function initializePage() {
     // 初始状态更新
     UIManager.updateSubmitButton();
 
-    console.log('视频转录Web应用初始化完成');
 }
 
 // 页面加载完成后初始化

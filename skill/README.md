@@ -1,6 +1,6 @@
-# videotranscript-api skill
+# LearnFlux skill
 
-把 [VideoTranscriptAPI](../README.md) 封装为一个 **agentskills.io 标准 skill**，让下游 agent（Claude Code / OpenClaw / Hermes 等）能直接调用它做视频/播客转录、总结、历史检索。
+把 [LearnFlux](../README.md) 封装为一个 **agentskills.io 标准 skill**，让下游 agent（Claude Code / OpenClaw / Hermes 等）能直接调用它做视频/播客转录、总结、历史检索。
 
 这份 README 面向**部署 skill 的人**。skill 本身的使用逻辑在 [`SKILL.md`](./SKILL.md) 里，由 agent 自己读。
 
@@ -23,7 +23,7 @@ skill/
 ## 先决条件
 
 - **Python 3.9+**（脚本只用 stdlib，不需要 pip install 任何东西）
-- **一个可访问的 VideoTranscriptAPI 实例**（本仓库根目录的服务，跑起来后监听 `:8000`，或走你的自部署地址）
+- **一个可访问的 LearnFlux 实例**（本仓库根目录的服务，跑起来后监听 `:8000`，或走你的自部署地址）
 - **Bearer Token**：`config/config.jsonc` 的 `api.auth_token`，或多用户模式下 `config/users.json` 里某个 key
 
 ## 环境变量
@@ -44,7 +44,7 @@ skill/
 
 ### Claude Code
 
-1. 把整个 `skill/` 目录放到你的 skill 索引路径下（常见路径：`~/.claude/skills/videotranscript-api/`），或者直接保留在本仓库里用本地路径引用。
+1. 把整个 `skill/` 目录放到你的 skill 索引路径下（常见路径：`~/.claude/skills/learnflux/`），或者直接保留在本仓库里用本地路径引用。
 2. 配置环境变量（推荐方式：写入 `~/.claude/settings.json` 的 `env` 字段，跨平台通用）：
    ```json
    {
@@ -62,9 +62,9 @@ skill/
 **首次安装 prompt**（复制后把 `<...>` 占位符换成实际值）：
 
 ```
-帮我安装 videotranscript-api skill。
+帮我安装 LearnFlux skill。
 
-1. 把 https://github.com/zj1123581321/VideoTranscriptAPI.git 仓库里的 skill/ 目录复制到 ~/.claude/skills/videotranscript-api/
+1. 把 https://github.com/zhangxun-ai/LearnFlux.git 仓库里的 skill/ 目录复制到 ~/.claude/skills/learnflux/
 2. 在 ~/.claude/settings.json 中配置环境变量（跨平台通用，不依赖 shell）：
    在 JSON 顶层加一个 "env" 字段（如果已有则合并进去）：
    {
@@ -79,7 +79,7 @@ skill/
    注意：不要覆盖 settings.json 里已有的其他配置，只合并 env 部分。
 3. 验证连通性：
    - 先试 python3（macOS/Linux）或 python（Windows）运行：
-     python3 ~/.claude/skills/videotranscript-api/scripts/videotranscript.py health
+     python3 ~/.claude/skills/learnflux/scripts/videotranscript.py health
    - 如果 python 不可用，用 curl 验证：
      curl -s <API 服务地址>/health
 
@@ -89,20 +89,20 @@ skill/
 **更新 prompt**（skill 已安装，只需拉最新代码）：
 
 ```
-更新 videotranscript-api skill：从 https://github.com/zj1123581321/VideoTranscriptAPI.git 拉取最新的 skill/ 目录，覆盖到 ~/.claude/skills/videotranscript-api/。环境变量不用动。更新后跑 health 验证。
+更新 LearnFlux skill：从 https://github.com/zhangxun-ai/LearnFlux.git 拉取最新的 skill/ 目录，覆盖到 ~/.claude/skills/learnflux/。环境变量不用动。更新后跑 health 验证。
 ```
 
 ### Hermes
 
-1. 把 `skill/` 同步到 Hermes skill 目录（`~/.hermes/skills/videotranscript-api/`）。
+1. 把 `skill/` 同步到 Hermes skill 目录（`~/.hermes/skills/learnflux/`）。
 2. 环境变量写入 `~/.hermes/.env`（Hermes 的标准持久化方式，每次 skill 执行时自动注入）。也可以跑 `hermes setup`，会根据 SKILL.md frontmatter 里的 `required_environment_variables` 交互式提示填值。
 
 **首次安装 prompt**（复制后把 `<...>` 占位符换成实际值）：
 
 ```
-帮我安装 videotranscript-api skill。
+帮我安装 LearnFlux skill。
 
-1. 把 https://github.com/zj1123581321/VideoTranscriptAPI.git 仓库里的 skill/ 目录复制到 ~/.hermes/skills/videotranscript-api/
+1. 把 https://github.com/zhangxun-ai/LearnFlux.git 仓库里的 skill/ 目录复制到 ~/.hermes/skills/learnflux/
 2. 在 ~/.hermes/.env 文件中追加以下环境变量（如果文件不存在就创建，注意不要覆盖已有内容）：
    VIDEO_TRANSCRIPT_API_BASE_URL=<API 服务地址，内网优先>
    VIDEO_TRANSCRIPT_API_TOKEN=<Bearer token>
@@ -115,7 +115,7 @@ skill/
 **更新 prompt**（skill 已安装，只需拉最新代码）：
 
 ```
-更新 videotranscript-api skill：从 https://github.com/zj1123581321/VideoTranscriptAPI.git 拉取最新的 skill/ 目录，覆盖到 Hermes 的 skill 目录下的 videotranscript-api/。环境变量不用动。更新后跑 health 验证。
+更新 LearnFlux skill：从 https://github.com/zhangxun-ai/LearnFlux.git 拉取最新的 skill/ 目录，覆盖到 Hermes 的 skill 目录下的 learnflux/。环境变量不用动。更新后跑 health 验证。
 ```
 
 ### OpenClaw

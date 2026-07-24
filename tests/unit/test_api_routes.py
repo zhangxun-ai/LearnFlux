@@ -13,7 +13,7 @@ All console output must be in English only (no emoji, no Chinese).
 
 import asyncio
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -269,6 +269,33 @@ class TestTranscribeEndpoint:
         assert queued_task["include_comments"] is True
         assert queued_task["comment_limit"] == 50
 
+    def test_transcribe_enqueues_source_preservation_when_requested(
+        self, client, mock_task_queue
+    ):
+        resp = client.post(
+            "/api/transcribe",
+            json={
+                "url": "https://www.youtube.com/watch?v=abc123",
+                "preserve_source_file": True,
+            },
+        )
+
+        assert resp.status_code == 200
+        queued_task = mock_task_queue.get_nowait()
+        assert queued_task["preserve_source_file"] is True
+
+    def test_transcribe_source_preservation_defaults_to_false(
+        self, client, mock_task_queue
+    ):
+        resp = client.post(
+            "/api/transcribe",
+            json={"url": "https://www.youtube.com/watch?v=abc123"},
+        )
+
+        assert resp.status_code == 200
+        queued_task = mock_task_queue.get_nowait()
+        assert queued_task["preserve_source_file"] is False
+
     def test_transcribe_with_download_url(self, client, mock_cache_manager):
         resp = client.post(
             "/api/transcribe",
@@ -301,6 +328,80 @@ class TestTranscribeEndpoint:
             json={"url": "https://www.youtube.com/watch?v=abc123"},
         )
         assert mock_audit_logger.log_api_call.call_count >= 2
+
+
+class TestUploadTranscribeEndpoint:
+    """Tests for POST /api/upload-transcribe."""
+
+    def test_upload_transcribe_logs_task_id_for_history(
+        self, client, mock_audit_logger, tmp_path
+    ):
+        with patch(
+            "video_transcript_api.api.routes.tasks.config",
+            {"storage": {"temp_dir": str(tmp_path)}},
+        ), patch(
+            "video_transcript_api.api.routes.tasks.process_local_upload"
+        ):
+            resp = client.post(
+                "/api/upload-transcribe",
+                files={"file": ("notes.pdf", b"%PDF-1.4\ntext", "application/pdf")},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["code"] == 202
+        audit_kwargs = mock_audit_logger.log_api_call.call_args.kwargs
+        assert audit_kwargs["endpoint"] == "/api/upload-transcribe"
+        assert audit_kwargs["task_id"] == "task-abc-123"
+        assert audit_kwargs["status_code"] == 202
+
+    def test_upload_transcribe_sets_local_file_title_for_processing_view(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        with patch(
+            "video_transcript_api.api.routes.tasks.config",
+            {"storage": {"temp_dir": str(tmp_path)}},
+        ), patch(
+            "video_transcript_api.api.routes.tasks.process_local_upload"
+        ):
+            resp = client.post(
+                "/api/upload-transcribe",
+                files={"file": ("notes.md", b"# Notes", "text/markdown")},
+            )
+
+        assert resp.status_code == 200
+        mock_cache_manager.update_task_status.assert_called_once_with(
+            "task-abc-123",
+            "queued",
+            platform="generic",
+            media_id=ANY,
+            title="notes.md",
+        )
+        assert (
+            mock_cache_manager.create_task.call_args.kwargs["force_new_view_token"]
+            is True
+        )
+
+    def test_upload_transcribe_uses_content_hash_as_media_id(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        with patch(
+            "video_transcript_api.api.routes.tasks.config",
+            {"storage": {"temp_dir": str(tmp_path)}},
+        ), patch(
+            "video_transcript_api.api.routes.tasks.process_local_upload"
+        ):
+            for _ in range(2):
+                response = client.post(
+                    "/api/upload-transcribe",
+                    files={"file": ("lesson.mp4", b"same-video", "video/mp4")},
+                )
+                assert response.status_code == 200
+
+        first_call, second_call = mock_cache_manager.create_task.call_args_list[-2:]
+        first_media_id = first_call.kwargs["media_id"]
+        second_media_id = second_call.kwargs["media_id"]
+        assert first_media_id == second_media_id
+        assert first_media_id.startswith("local_")
 
 
 class TestGetTaskStatus:
@@ -396,6 +497,71 @@ class TestGetTaskStatus:
         assert body["data"]["error"] == "ASR timeout"
 
 
+class TestDeleteTask:
+    """Tests for DELETE /api/task/{task_id}."""
+
+    def test_deletes_task_and_its_cached_media(self, client, mock_cache_manager):
+        mock_cache_manager.delete_task_and_cache.return_value = {
+            "deleted_caches": 1,
+            "deleted_tasks": 2,
+        }
+
+        response = client.delete("/api/task/task-1")
+
+        assert response.status_code == 200
+        assert response.json()["data"] == {
+            "deleted_caches": 1,
+            "deleted_tasks": 2,
+        }
+        mock_cache_manager.delete_task_and_cache.assert_called_once_with("task-1")
+
+
+class TestRecalibrateEndpoint:
+    """Tests for POST /api/recalibrate."""
+
+    def test_recalibrate_can_force_summary_regeneration(
+        self, client, mock_cache_manager
+    ):
+        cursor = MagicMock()
+        mock_cache_manager._get_cursor.return_value.__enter__.return_value = cursor
+        mock_cache_manager.generate_task_id.return_value = "task-recal-1"
+        mock_cache_manager.get_cache_by_view_token.return_value = {
+            "platform": "generic",
+            "media_id": "media-1",
+            "use_speaker_recognition": False,
+            "title": "Demo",
+            "author": "Author",
+            "description": "",
+            "file_path": "/tmp/cache",
+            "transcript_type": "capswriter",
+            "transcript_data": "transcript body",
+            "task_info": {"url": "local://collection-source/media-1/Demo.mp4"},
+        }
+        llm_queue = MagicMock()
+        user_manager = MagicMock()
+        user_manager.check_permission.return_value = True
+
+        with patch(
+            "video_transcript_api.api.routes.tasks.get_user_manager",
+            return_value=user_manager,
+        ), patch(
+            "video_transcript_api.api.context.get_llm_queue",
+            return_value=llm_queue,
+        ):
+            resp = client.post(
+                "/api/recalibrate",
+                json={"view_token": "vt-1", "regenerate_summary": True},
+            )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["code"] == 202
+        queued_task = llm_queue.put.call_args.args[0]
+        assert queued_task["task_id"] == "task-recal-1"
+        assert queued_task["calibrate_only"] is True
+        assert queued_task["regenerate_summary"] is True
+
+
 class TestViewProgressEndpoint:
     """Tests for public view-token progress polling."""
 
@@ -444,10 +610,118 @@ class TestViewProgressEndpoint:
         resp = client.get("/view/vt-1")
 
         assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
         assert "progress-panel" in resp.text
         assert "/view/vt-1/progress" in resp.text
         assert "正在下载音视频" in resp.text
         assert "已处理" in resp.text
+        assert "完成后会自动打开结果页" in resp.text
+        assert "技术细节" not in resp.text
+        assert "置信度" not in resp.text
+        assert "依据" not in resp.text
+        assert "刷新页面" not in resp.text
+        assert "预计剩余" not in resp.text
+
+    def test_processing_view_uses_document_copy_for_local_markdown(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "processing",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": None,
+            "url": "local://abc/notes.md",
+            "platform": "generic",
+            "created_at": "2026-06-08T10:00:00",
+            "elapsed_display": "21 秒",
+            "progress": {
+                "stage": "calibrating",
+                "stage_label": "正在校对和总结",
+                "percent": 94,
+            },
+        }
+
+        resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert "notes.md" in resp.text
+        assert "文档解析处理中" in resp.text
+        assert "视频转录查看器" not in resp.text
+        assert "转录处理中" not in resp.text
+
+    def test_raw_summary_export_normalizes_duplicate_heading_markers(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "llm_summary.txt").write_text(
+            "#### ##### 2.1 睡前一小时\n\n正文",
+            encoding="utf-8",
+        )
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "url": "https://example.com/video",
+            "platform": "youtube",
+            "media_id": "video-1",
+            "cache_dir": str(cache_dir),
+        }
+
+        resp = client.get("/view/vt-1?raw=summary")
+
+        assert resp.status_code == 200
+        assert "#####" not in resp.text
+        assert "#### 2.1 睡前一小时" in resp.text
+
+    def test_scoped_bundle_export_returns_markdown_download(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        (cache_dir / "llm_summary.txt").write_text("AI analysis", encoding="utf-8")
+        (cache_dir / "llm_calibrated.txt").write_text("Proofread text", encoding="utf-8")
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "url": "https://example.com/video",
+            "platform": "youtube",
+            "media_id": "video-1",
+            "cache_dir": str(cache_dir),
+        }
+
+        resp = client.get("/export/vt-1/bundle?scope=analysis")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        assert "filename*=UTF-8''Demo-AI%E8%A7%A3%E6%9E%90-YouTube.md" in resp.headers[
+            "content-disposition"
+        ]
+        assert "## 内容总结" in resp.text
+        assert "AI analysis" in resp.text
+        assert "Proofread text" not in resp.text
+
+    def test_failed_view_is_not_cached(self, client, mock_cache_manager):
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "failed",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "url": "https://example.com/video",
+            "platform": "xiaohongshu",
+            "media_id": "note-1",
+            "error_message": "download failed",
+            "created_at": "2026-06-08T10:00:00",
+        }
+
+        resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
+        assert "download failed" in resp.text
 
     def test_success_view_links_preserved_local_source_file(
         self, client, mock_cache_manager, tmp_path
@@ -489,6 +763,34 @@ class TestViewProgressEndpoint:
         assert 'href="/view/vt-1/source-file"' in resp.text
         assert "local://collection-source" not in resp.text
 
+    def test_success_view_passes_database_fallback_text_to_renderer(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "url": "https://example.com/video",
+            "platform": "youtube",
+            "media_id": "video-1",
+            "summary": "",
+            "transcript": "数据库回退文本",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-06-08T10:00:00",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>数据库回退文本</p>",
+        ) as render_content:
+            resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        render_content.assert_called_once_with(str(cache_dir), "数据库回退文本")
+
     def test_view_source_file_serves_preserved_local_file(
         self, client, mock_cache_manager, tmp_path
     ):
@@ -512,6 +814,92 @@ class TestViewProgressEndpoint:
 
         assert resp.status_code == 200
         assert resp.content == b"fake video"
+
+    def test_view_source_file_serves_online_preserved_file_path(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"online video")
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "view_token": "vt-1",
+            "title": "WeChat Demo",
+            "url": "https://weixin.qq.com/sph/A1kpVPJjiX",
+            "platform": "wechat_channels",
+            "media_id": "A1kpVPJjiX",
+            "source_file_path": str(source_file),
+        }
+
+        resp = client.get("/view/vt-1/source-file")
+
+        assert resp.status_code == 200
+        assert resp.content == b"online video"
+        assert "wechat.mp4" in resp.headers.get("content-disposition", "")
+
+    def test_success_view_renders_download_and_reveal_for_online_source_file(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"online video")
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "WeChat Demo",
+            "author": "Author",
+            "url": "https://weixin.qq.com/sph/A1kpVPJjiX",
+            "platform": "wechat_channels",
+            "media_id": "A1kpVPJjiX",
+            "summary": "",
+            "transcript": "transcript",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-07-04T10:00:00",
+            "source_file_path": str(source_file),
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>transcript</p>",
+        ):
+            resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert 'href="/view/vt-1/source-file"' in resp.text
+        assert "下载源文件" in resp.text
+        assert 'data-source-reveal-url="/view/vt-1/source-file/reveal"' in resp.text
+        assert "在本机显示" in resp.text
+
+    def test_view_source_file_reveal_opens_online_preserved_file(
+        self, client, mock_cache_manager, tmp_path, monkeypatch
+    ):
+        from video_transcript_api.api.routes import views
+
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"online video")
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "view_token": "vt-1",
+            "title": "WeChat Demo",
+            "url": "https://weixin.qq.com/sph/A1kpVPJjiX",
+            "platform": "wechat_channels",
+            "media_id": "A1kpVPJjiX",
+            "source_file_path": str(source_file),
+        }
+        opened = {}
+        monkeypatch.setattr(
+            views,
+            "_reveal_path_in_file_manager",
+            lambda path: opened.setdefault("path", str(path)),
+            raising=False,
+        )
+
+        resp = client.post("/view/vt-1/source-file/reveal")
+
+        assert resp.status_code == 200
+        assert opened["path"] == str(source_file)
+        assert resp.json()["data"]["filename"] == "wechat.mp4"
 
     def test_success_view_does_not_render_broken_local_source_link(
         self, client, mock_cache_manager, tmp_path
@@ -547,7 +935,114 @@ class TestViewProgressEndpoint:
 
         assert resp.status_code == 200
         assert "local://collection-source" not in resp.text
-        assert "源视频未保存或已清理" in resp.text
+        assert "源视频未保存或已清理" not in resp.text
+
+    def test_success_view_with_missing_summary_does_not_show_processing(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-1",
+            "view_token": "vt-1",
+            "title": "Demo",
+            "author": "Author",
+            "url": "local://collection-source/media-1/Demo.mp4",
+            "platform": "generic",
+            "media_id": "media-1",
+            "summary": "",
+            "summary_missing": True,
+            "transcript": "transcript",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-06-08T10:00:00",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={
+                "storage": {"source_files_dir": str(tmp_path / "source-files")},
+                "longcut": {"enabled": False},
+            },
+        ), patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>transcript</p>",
+        ):
+            resp = client.get("/view/vt-1")
+
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
+        assert "总结未生成" in resp.text
+        assert "总结处理中" not in resp.text
+
+    def test_success_view_renders_collection_navigation(
+        self, client, mock_cache_manager, tmp_path
+    ):
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_manager.get_view_data_by_token.return_value = {
+            "status": "success",
+            "task_id": "task-2",
+            "view_token": "vt-2",
+            "title": "如何走出人生困局/2.mp4",
+            "author": "本地上传",
+            "url": "local://collection-source/media-2/如何走出人生困局/2.mp4",
+            "platform": "generic",
+            "media_id": "media-2",
+            "summary": "## 内容总结",
+            "transcript": "transcript",
+            "cache_dir": str(cache_dir),
+            "created_at": "2026-06-08T10:00:00",
+        }
+        navigation = {
+            "collection": {
+                "id": "collection-1",
+                "title": "如何走出人生困局",
+                "url": "/collections?collection_id=collection-1&source_id=source-2",
+            },
+            "items": [
+                {
+                    "id": "source-1",
+                    "title": "1.mp4",
+                    "view_url": "/view/vt-1",
+                    "is_current": False,
+                },
+                {
+                    "id": "source-2",
+                    "title": "2.mp4",
+                    "view_url": "/view/vt-2",
+                    "is_current": True,
+                },
+                {
+                    "id": "source-3",
+                    "title": "3.mp4",
+                    "view_url": "/view/vt-3",
+                    "is_current": False,
+                },
+            ],
+            "current": {"title": "2.mp4", "view_url": "/view/vt-2"},
+            "previous": {"title": "1.mp4", "view_url": "/view/vt-1"},
+            "next": {"title": "3.mp4", "view_url": "/view/vt-3"},
+            "current_number": 2,
+            "total": 3,
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.views.get_config",
+            return_value={"longcut": {"enabled": False}},
+        ), patch(
+            "video_transcript_api.api.routes.views.render_calibrated_content_smart",
+            return_value="<p>transcript</p>",
+        ), patch(
+            "video_transcript_api.api.routes.views._build_collection_navigation",
+            return_value=navigation,
+        ) as build_navigation:
+            resp = client.get("/view/vt-2")
+
+        assert resp.status_code == 200
+        build_navigation.assert_called_once_with("vt-2")
+        assert "<h1>2</h1>" in resp.text
+        assert "如何走出人生困局/2.mp4" not in resp.text
 
     def test_view_progress_returns_minimal_progress_payload(
         self, client, mock_cache_manager

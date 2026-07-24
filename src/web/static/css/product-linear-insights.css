@@ -1,0 +1,159 @@
+/* Insight tools: post analysis, trend radar and IP benchmarking. */
+
+body.product-linear.page-post .post-entry {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 48px 24px 36px;
+    border-color: var(--product-line);
+}
+body.product-linear.page-post .post-entry input[type="text"] {
+    min-height: 48px;
+    border-color: var(--product-line-strong);
+    border-radius: var(--product-radius-md);
+    background: var(--product-surface);
+    box-shadow: none;
+}
+
+body.product-linear.page-post .btn-analyze {
+    min-height: 48px;
+    border-color: var(--product-accent);
+    border-radius: var(--product-radius-md);
+    background: var(--product-accent);
+    color: var(--product-on-accent);
+    box-shadow: none;
+}
+
+body.product-linear.page-post .btn-analyze:hover {
+    background: var(--product-accent-hover);
+    transform: none;
+}
+
+body.product-linear.page-post .insight-card,
+body.product-linear.page-post .result-card,
+body.product-linear.page-post .loading-card,
+body.product-linear.page-post .error-card {
+    border: 1px solid var(--product-line);
+    border-radius: var(--product-radius-lg);
+    background: var(--product-surface);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear.page-post .insight-card:hover {
+    border-color: var(--product-line-strong);
+    transform: none;
+}
+
+body.product-linear.page-trend .radar-shell {
+    width: 100%;
+    max-width: 1376px;
+    margin: 0 auto;
+    color: var(--product-ink);
+}
+
+body.product-linear.page-trend .dashboard-header,
+body.product-linear.page-trend .summary-strip,
+body.product-linear.page-trend .panel,
+body.product-linear.page-trend .run-panel {
+    border-color: var(--product-line);
+    border-radius: var(--product-radius-lg);
+    background: var(--product-surface);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear.page-trend .page-title-block h1 {
+    font-family: var(--shell-font-ui);
+    font-weight: 730;
+    letter-spacing: -0.035em;
+}
+
+body.product-linear.page-trend .run-button,
+body.product-linear.page-trend .primary-action {
+    border-color: var(--product-accent);
+    border-radius: var(--product-radius-md);
+    background: var(--product-accent);
+    color: var(--product-on-accent);
+    box-shadow: none;
+}
+
+body.product-linear.page-trend .trend-item:hover,
+body.product-linear.page-trend .history-card:hover {
+    border-color: var(--product-line-strong);
+    transform: none;
+}
+
+body.product-linear.page-trend .trend-item.is-active {
+    border-color: var(--product-accent);
+    background: var(--product-accent-soft);
+}
+
+body.product-linear.page-flywheel .wrap {
+    max-width: 1120px;
+}
+
+body.product-linear.page-flywheel .nav {
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--product-line);
+    border-radius: var(--product-radius-md);
+    background: var(--product-surface-muted);
+}
+
+body.product-linear.page-flywheel .nav button.active {
+    border: 1px solid var(--product-line);
+    background: var(--product-surface);
+    color: var(--product-ink);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear.page-flywheel .hero h1,
+body.product-linear.page-flywheel .head h2 {
+    font-family: var(--shell-font-ui);
+    font-weight: 720;
+    letter-spacing: -0.03em;
+}
+
+body.product-linear.page-flywheel .card,
+body.product-linear.page-flywheel .loading-card,
+body.product-linear.page-flywheel .result,
+body.product-linear.page-flywheel .draft-panel {
+    border-color: var(--product-line);
+    border-radius: var(--product-radius-lg);
+    background: var(--product-surface);
+    box-shadow: var(--product-shadow-sm);
+}
+
+body.product-linear.page-flywheel .url-row input,
+body.product-linear.page-flywheel .filter input,
+body.product-linear.page-flywheel .filter select,
+body.product-linear.page-flywheel textarea {
+    border-color: var(--product-line-strong);
+    border-radius: var(--product-radius-md);
+    background: var(--product-surface);
+    color: var(--product-ink);
+}
+
+body.product-linear.page-flywheel .go,
+body.product-linear.page-flywheel .primary {
+    border-color: var(--product-accent);
+    background: var(--product-accent);
+    color: var(--product-on-accent);
+    box-shadow: none;
+}
+
+@media (max-width: 700px) {
+    body.product-linear.page-post .post-entry .entry-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.product-linear.page-trend .radar-bento,
+    body.product-linear.page-trend .radar-layout,
+    body.product-linear.page-trend .support-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.product-linear.page-flywheel .url-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}

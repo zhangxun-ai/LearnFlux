@@ -30,6 +30,15 @@ CANONICAL_URL = (
     "&xsec_token=AB3QEOb5z9P0yoHf_sTyqtJjdG8FkMi8sipAXf2xvoS6o="
     "&xsec_source=pc_share"
 )
+SHORT_SHARE_TEXT = (
+    "韩红站台被骂背后的商业大洗牌 最近韩红给冯小刚站台... "
+    "http://xhslink.com/o/3NQcpZvI5GG \n"
+    "戳进【小红书】看看这篇好文！"
+)
+SHORT_CANONICAL_URL = (
+    "https://www.xiaohongshu.com/discovery/item/6a2fd6d1000000001702f4b6"
+    "?xsec_token=tok123"
+)
 
 
 @pytest.mark.unit
@@ -38,6 +47,43 @@ def test_normalize_note_url_extracts_url_from_share_text():
     assert normalize_note_url is not None
     assert normalize_note_url(SHARE_TEXT) == CANONICAL_URL
     assert normalize_note_url(CANONICAL_URL) == CANONICAL_URL
+
+
+@pytest.mark.unit
+def test_fetch_note_detail_resolves_xhslink_share_text(monkeypatch):
+    def fake_resolve(url):
+        assert url == "http://xhslink.com/o/3NQcpZvI5GG"
+        return SHORT_CANONICAL_URL
+
+    calls = []
+
+    def fake_api_request(endpoint, params):
+        calls.append((endpoint, params))
+        return {
+            "code": 0,
+            "data": [{
+                "note_list": [{
+                    "title": "韩红站台被骂背后的商业大洗牌",
+                    "desc": "正文",
+                    "type": "normal",
+                    "user": {"nickname": "作者"},
+                }],
+            }],
+        }
+
+    monkeypatch.setattr(text_acquisition, "_resolve_short_url", fake_resolve, raising=False)
+
+    detail = text_acquisition.fetch_note_detail(
+        SHORT_SHARE_TEXT,
+        api_request=fake_api_request,
+    )
+
+    assert detail.note_id == "6a2fd6d1000000001702f4b6"
+    assert detail.title == "韩红站台被骂背后的商业大洗牌"
+    assert calls[0] == (
+        "/api/v1/xiaohongshu/web_v3/fetch_note_detail",
+        {"note_id": "6a2fd6d1000000001702f4b6", "xsec_token": "tok123"},
+    )
 
 
 @pytest.mark.unit
@@ -125,6 +171,12 @@ def test_flywheel_page_exposes_prompt_editor():
     assert "恢复默认提示词" in html
     assert "result-toc" in html
     assert "source-text" in html
+    assert "智能生成新帖" in html
+    assert "/api/flywheel/content/'+contentId+'/draft" in html
+    assert "复制全文" in html
+    assert "选题机会" in html
+    assert "v-opportunities" in html
+    assert "/api/flywheel/opportunities" in html
 
 
 @pytest.mark.unit
@@ -147,26 +199,33 @@ def test_frontend_module_names_keep_workflows_separate():
     from pathlib import Path
 
     project_root = Path(__file__).resolve().parents[2]
-    nav = (project_root / "src/web/static/js/site-nav.js").read_text(encoding="utf-8")
     workbench = (project_root / "src/web/static/index.html").read_text(encoding="utf-8")
     collections = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
     flywheel = (project_root / "src/web/templates/flywheel.html").read_text(encoding="utf-8")
+    shell_css = (project_root / "src/web/static/css/app-shell.css").read_text(encoding="utf-8")
 
-    assert "单篇深度学习" in nav
-    assert "系列深度学习" in nav
-    assert "帖子洞察" in nav
-    assert "IP 对标" in nav
-    assert "历史" in nav
-    assert "/static/history.html" in nav
-    assert "单个解析" not in nav
-    assert "学做小红书" not in nav
+    shell_sources = "\n".join([workbench, collections, flywheel])
+    assert "body.app-shell" in shell_css
+    assert '<aside class="sidebar"' in shell_sources
+    assert '<main class="main-area"' in shell_sources
+    assert "单篇深度学习" in shell_sources
+    assert "系列深度学习" in shell_sources
+    assert "帖子洞察" in shell_sources
+    assert "IP 对标" in shell_sources
+    assert "机会雷达" not in shell_sources
+    assert "/flywheel#opportunities" not in shell_sources
+    assert "历史" in shell_sources
+    assert "/static/history.html" in shell_sources
+    assert "单个解析" not in shell_sources
+    assert "学做小红书" not in shell_sources
 
-    assert "视频/文档深度学习" in workbench
+    assert '<span class="topbar-page-title">单篇深度学习</span>' in workbench
     assert 'id="share-content"' in workbench
     assert 'name="deep-learning-source-content"' in workbench
-    assert 'id="bearer-token"' in workbench
-    assert 'type="password"' not in workbench
-    assert 'autocomplete="new-password"' in workbench
     assert "系列深度学习" in collections
     assert "IP 对标工作台" in flywheel
+    assert "选题机会" in flywheel
+    assert "IP 设置" in flywheel
+    assert "location.hash" in flywheel
+    assert "机会雷达" not in flywheel
     assert "学做小红书" not in flywheel

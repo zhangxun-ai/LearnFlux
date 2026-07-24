@@ -5,9 +5,11 @@
 
 状态机:
     queued ──► processing ──► calibrating ──► success
+       │            │              │
+       └────────────┴──────────────┴──► canceled
                     │              │
                     └──► failed ◄──┘
-    (success / failed 为终态,具备黏性,除 recalibrate 显式重置外不被覆写)
+    (success / failed / canceled 为终态,具备黏性,除 recalibrate 显式重置外不被覆写)
 
 HTTP 映射:
     queued / processing / calibrating → 202 (处理中,继续轮询)
@@ -31,16 +33,25 @@ class TaskStatus(StrEnum):
     QUEUED = "queued"
     PROCESSING = "processing"
     CALIBRATING = "calibrating"
+    AWAITING_CLOUD_CONFIRMATION = "awaiting_cloud_confirmation"
     SUCCESS = "success"
     FAILED = "failed"
+    CANCELED = "canceled"
 
 
 # 终态:任务生命周期结束,不应再被非显式流程覆写
-TERMINAL_STATUSES = frozenset({TaskStatus.SUCCESS, TaskStatus.FAILED})
+TERMINAL_STATUSES = frozenset(
+    {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELED}
+)
 
 # 非终态:仍在处理中,崩溃后可被启动恢复扫描标记为 failed
 NON_TERMINAL_STATUSES = frozenset(
-    {TaskStatus.QUEUED, TaskStatus.PROCESSING, TaskStatus.CALIBRATING}
+    {
+        TaskStatus.QUEUED,
+        TaskStatus.PROCESSING,
+        TaskStatus.CALIBRATING,
+        TaskStatus.AWAITING_CLOUD_CONFIRMATION,
+    }
 )
 
 
@@ -53,7 +64,7 @@ def http_code_for_status(status: str) -> int:
     Returns:
         202(处理中) / 200(完成或未知兜底) / 500(失败)
     """
-    if status in NON_TERMINAL_STATUSES:
+    if status in NON_TERMINAL_STATUSES or status == TaskStatus.AWAITING_CLOUD_CONFIRMATION:
         return 202
     if status == TaskStatus.FAILED:
         return 500

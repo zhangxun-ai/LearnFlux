@@ -74,6 +74,15 @@ def test_collection_repository_rejects_mixed_source_type(tmp_path):
         raise AssertionError("Expected mixed source type to be rejected")
 
 
+def test_collection_service_classifies_html_as_document_source():
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    service = LearningCollectionService.__new__(LearningCollectionService)
+
+    assert service.source_type_for_filename("slides.html") == "document"
+    assert service.source_type_for_filename("slides.htm") == "document"
+
+
 def test_collection_summary_requires_all_sources_ready(tmp_path):
     from video_transcript_api.collections.repository import LearningCollectionRepository
     from video_transcript_api.collections.service import LearningCollectionService
@@ -114,6 +123,293 @@ def test_collection_summary_requires_all_sources_ready(tmp_path):
         assert "all sources" in str(exc)
     else:
         raise AssertionError("Expected collection summary to wait for parsed sources")
+
+
+def test_collection_summary_prompt_builds_full_series_interpretation():
+    from video_transcript_api.collections.service import build_collection_summary_prompt
+
+    prompt = build_collection_summary_prompt(
+        {
+            "title": "如何走出人生困局",
+            "collection_type": "video_course",
+            "goal": "先建立全局视角，再选择性深度学习",
+        },
+        [
+            {
+                "title": "01 开篇.mp4",
+                "source_type": "video",
+                "position": 1,
+                "single_summary": "第一节说明困局要先拆出可控变量。",
+                "transcript": "原文A" * 400,
+            },
+            {
+                "title": "02 行动.mp4",
+                "source_type": "video",
+                "position": 2,
+                "single_summary": "",
+                "transcript": "第二节用行动闭环把判断变成实践。",
+            },
+        ],
+    )
+
+    assert "全系列解读" in prompt
+    assert "课前导览" in prompt
+    assert "课后复习" in prompt
+    assert "这个系列解决什么问题" in prompt
+    assert "为什么值得学" in prompt
+    assert "全系列主线" in prompt
+    assert "章节地图" in prompt
+    assert "核心框架" in prompt
+    assert "复习索引" in prompt
+    assert "第一节说明困局要先拆出可控变量。" in prompt
+    assert "原文补充" in prompt
+    assert "不要使用 ```" in prompt
+    assert len(prompt) < 18000
+
+
+def test_collection_summary_prompt_keeps_all_sources_in_long_series():
+    from video_transcript_api.collections.service import build_collection_summary_prompt
+
+    sources = [
+        {
+            "title": f"{index:02d} 创业中的 100 件事.mp4",
+            "source_type": "video",
+            "position": index,
+            "single_summary": f"第 {index} 节讲创业关键问题。" * 80,
+            "transcript": f"第 {index} 节原文补充。" * 120,
+        }
+        for index in range(1, 76)
+    ]
+
+    prompt = build_collection_summary_prompt(
+        {
+            "title": "创业中的 100 件事",
+            "collection_type": "video_course",
+            "goal": "先建立创业知识全局视角，再选择性复习具体章节",
+        },
+        sources,
+    )
+
+    assert "## Source 1: 01 创业中的 100 件事.mp4" in prompt
+    assert "## Source 75: 75 创业中的 100 件事.mp4" in prompt
+    assert "位置: 75" in prompt
+    assert len(prompt) < 65000
+
+
+def test_collection_summary_llm_uses_full_source_content_for_small_collection(monkeypatch):
+    from video_transcript_api.collections import service as collection_service
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    calls = []
+
+    def fake_call_llm_api(**kwargs):
+        calls.append(kwargs)
+        return "# 全系列解读\n\n## 章节地图\n第 1 节：完整覆盖。"
+
+    monkeypatch.setattr(collection_service, "call_llm_api", fake_call_llm_api)
+    service = LearningCollectionService(
+        repository=None,
+        cache_manager=None,
+        llm_config={"model": "fake", "collection_direct_char_limit": 10000},
+    )
+
+    markdown = service._generate_summary_with_llm(
+        {"title": "小合集", "collection_type": "video_course"},
+        [
+            {
+                "title": "01 小课.mp4",
+                "source_type": "video",
+                "position": 1,
+                "single_summary": "短摘要",
+                "transcript": "完整源内容开头。FULL_SOURCE_TAIL",
+            }
+        ],
+    )
+
+    assert markdown.startswith("# 全系列解读")
+    assert [call["task_type"] for call in calls] == ["collection_summary"]
+    assert "FULL_SOURCE_TAIL" in calls[0]["prompt"]
+
+
+def test_collection_summary_defaults_to_direct_until_model_context_is_exceeded(monkeypatch):
+    from video_transcript_api.collections import service as collection_service
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    calls = []
+
+    def fake_call_llm_api(**kwargs):
+        calls.append(kwargs)
+        positions = "、".join(str(index) for index in range(1, 76))
+        return f"# 全系列解读\n\n## 章节地图\n第 {positions} 节：默认直接处理。"
+
+    monkeypatch.setattr(collection_service, "call_llm_api", fake_call_llm_api)
+    service = LearningCollectionService(
+        repository=None,
+        cache_manager=None,
+        llm_config={"collection_summary_model": "deepseek-v4-pro"},
+    )
+    sources = [
+        {
+            "title": f"{index:02d} 创业课.mp4",
+            "source_type": "video",
+            "position": index,
+            "single_summary": f"第 {index} 节摘要",
+            "transcript": f"FULL_CONTEXT_SOURCE_{index} " * 120,
+        }
+        for index in range(1, 76)
+    ]
+
+    service._generate_summary_with_llm(
+        {"title": "创业中的 100 件事", "collection_type": "video_course"},
+        sources,
+    )
+
+    assert [call["task_type"] for call in calls] == ["collection_summary"]
+    assert calls[0]["model"] == "deepseek-v4-pro"
+    assert "FULL_CONTEXT_SOURCE_75" in calls[0]["prompt"]
+
+
+def test_collection_summary_llm_layers_large_collection_with_full_module_sources(monkeypatch):
+    from video_transcript_api.collections import service as collection_service
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    class FakeStructuredResult:
+        def __init__(self, data):
+            self.success = True
+            self.data = data
+            self.error = None
+
+    calls = []
+
+    def fake_call_llm_api(**kwargs):
+        calls.append(kwargs)
+        task_type = kwargs["task_type"]
+        if task_type == "collection_module_plan":
+            return FakeStructuredResult(
+                {
+                    "mainline": "先校准认知，再进入方法。",
+                    "modules": [
+                        {
+                            "title": "认知校准",
+                            "role": "建立创业底层判断",
+                            "rationale": "前 3 节都在校准创业认知。",
+                            "source_numbers": [1, 2, 3],
+                        },
+                        {
+                            "title": "方法展开",
+                            "role": "进入具体行动方法",
+                            "rationale": "后 3 节开始讲验证和行动。",
+                            "source_numbers": [4, 5, 6],
+                        },
+                    ],
+                }
+            )
+        if task_type == "collection_module_summary":
+            return f"模块解读：{kwargs['prompt'].split('模块名称：', 1)[1].splitlines()[0]}"
+        if task_type == "collection_summary":
+            return "# 全系列解读\n\n## 章节地图\n第 1、2、3、4、5、6 节：全部纳入模块。"
+        raise AssertionError(f"Unexpected task type: {task_type}")
+
+    monkeypatch.setattr(collection_service, "call_llm_api", fake_call_llm_api)
+    service = LearningCollectionService(
+        repository=None,
+        cache_manager=None,
+        llm_config={
+            "model": "fake",
+            "collection_direct_char_limit": 10,
+            "collection_module_source_char_limit": 10000,
+        },
+    )
+    sources = [
+        {
+            "title": f"{index:02d} 创业课.mp4",
+            "source_type": "video",
+            "position": index,
+            "single_summary": f"第 {index} 节摘要",
+            "transcript": f"FULL_TRANSCRIPT_{index} " * 20,
+        }
+        for index in range(1, 7)
+    ]
+
+    markdown = service._generate_summary_with_llm(
+        {"title": "创业中的 100 件事", "collection_type": "video_course"},
+        sources,
+    )
+
+    assert "第 1、2、3、4、5、6 节" in markdown
+    assert [call["task_type"] for call in calls] == [
+        "collection_module_plan",
+        "collection_module_summary",
+        "collection_module_summary",
+        "collection_summary",
+    ]
+    module_prompts = [
+        call["prompt"] for call in calls if call["task_type"] == "collection_module_summary"
+    ]
+    assert "FULL_TRANSCRIPT_1" in module_prompts[0]
+    assert "FULL_TRANSCRIPT_6" in module_prompts[1]
+
+
+def test_collection_summary_llm_repairs_missing_source_coverage(monkeypatch):
+    from video_transcript_api.collections import service as collection_service
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    class FakeStructuredResult:
+        success = True
+        error = None
+        data = {
+            "mainline": "从认知到行动。",
+            "modules": [
+                {
+                    "title": "完整模块",
+                    "role": "覆盖全部章节",
+                    "rationale": "三节共同构成一个小闭环。",
+                    "source_numbers": [1, 2, 3],
+                }
+            ],
+        }
+
+    calls = []
+
+    def fake_call_llm_api(**kwargs):
+        calls.append(kwargs)
+        task_type = kwargs["task_type"]
+        if task_type == "collection_module_plan":
+            return FakeStructuredResult()
+        if task_type == "collection_module_summary":
+            return "模块解读：覆盖 1-3 节。"
+        if task_type == "collection_summary":
+            return "# 全系列解读\n\n## 章节地图\n第 1 节：只写了开头。"
+        if task_type == "collection_summary_repair":
+            return "# 全系列解读\n\n## 章节地图\n第 1、2、3 节：修正后全部覆盖。"
+        raise AssertionError(f"Unexpected task type: {task_type}")
+
+    monkeypatch.setattr(collection_service, "call_llm_api", fake_call_llm_api)
+    service = LearningCollectionService(
+        repository=None,
+        cache_manager=None,
+        llm_config={"model": "fake", "collection_direct_char_limit": 10},
+    )
+    sources = [
+        {
+            "title": f"{index:02d} 创业课.mp4",
+            "source_type": "video",
+            "position": index,
+            "single_summary": f"第 {index} 节摘要",
+            "transcript": f"FULL_TRANSCRIPT_{index} " * 20,
+        }
+        for index in range(1, 4)
+    ]
+
+    markdown = service._generate_summary_with_llm(
+        {"title": "创业中的 100 件事", "collection_type": "video_course"},
+        sources,
+    )
+
+    assert "修正后全部覆盖" in markdown
+    assert calls[-1]["task_type"] == "collection_summary_repair"
+    assert "第 2 节" in calls[-1]["prompt"]
+    assert "FULL_TRANSCRIPT_3" in calls[-1]["prompt"]
 
 
 def test_collection_source_detail_returns_content_and_timing(tmp_path):
@@ -177,6 +473,150 @@ def test_collection_source_detail_returns_content_and_timing(tmp_path):
     assert detail["source_access"]["view_url"].startswith("/view/")
 
 
+def test_collection_source_detail_exposes_failure_reason(tmp_path):
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task_info = cache_manager.create_task(
+        url="local://collection-source/local_hash/15.m4a",
+        use_speaker_recognition=False,
+        platform="generic",
+        media_id="local_hash",
+    )
+    cache_manager.update_task_status(
+        task_info["task_id"],
+        "failed",
+        error_message="本地转录失败: 音频解码失败",
+    )
+
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
+    collection = service.create_collection("千里挑一之生涯规划课", "屠龙胭脂井", "video_course")
+    source = service.add_existing_source(
+        collection_id=collection["id"],
+        task_id=task_info["task_id"],
+        view_token=task_info["view_token"],
+        title="15.令人心动的offer还是令人心梗的offer.m4a",
+        source_type="video",
+        position=15,
+    )
+
+    detail = service.get_source_detail(collection["id"], source["id"])
+
+    assert detail["task_status"] == "failed"
+    assert detail["error_message"] == "本地转录失败: 音频解码失败"
+
+
+def test_collection_source_retry_requeues_failed_local_source(tmp_path, monkeypatch):
+    from video_transcript_api.api.routes import collections
+    from video_transcript_api.api.services.transcription import verify_token
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    source_dir = tmp_path / "source-files"
+    source_dir.mkdir()
+    source_file = source_dir / "local_hash.m4a"
+    source_file.write_bytes(b"fake-audio")
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    failed_task = cache_manager.create_task(
+        url="local://collection-source/local_hash/15.m4a",
+        use_speaker_recognition=False,
+        platform="generic",
+        media_id="local_hash",
+    )
+    cache_manager.update_task_status(
+        failed_task["task_id"],
+        "failed",
+        error_message="本地转录失败: 音频解码失败",
+    )
+
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    service = LearningCollectionService(
+        repository=repo,
+        cache_manager=cache_manager,
+        source_file_dir=str(source_dir),
+    )
+    collection = service.create_collection("千里挑一之生涯规划课", "屠龙胭脂井", "video_course")
+    source = service.add_existing_source(
+        collection_id=collection["id"],
+        task_id=failed_task["task_id"],
+        view_token=failed_task["view_token"],
+        title="15.令人心动的offer还是令人心梗的offer.m4a",
+        source_type="video",
+        position=15,
+    )
+
+    scheduled = {}
+
+    def fake_process_local_upload(*args):
+        scheduled["args"] = args
+
+    monkeypatch.setattr(collections, "get_collection_service", lambda: service)
+    monkeypatch.setattr(collections, "process_local_upload", fake_process_local_upload)
+
+    app = FastAPI()
+    app.include_router(collections.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "u1", "api_key": "test"}
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/collections/{collection['id']}/sources/{source['id']}/retry"
+    )
+
+    assert response.status_code == 202
+    data = response.json()["data"]
+    assert data["source"]["task_status"] == "queued"
+    assert data["source"]["error_message"] is None
+    assert data["source"]["task_id"] != failed_task["task_id"]
+    assert scheduled["args"] == (
+        data["source"]["task_id"],
+        str(source_file),
+        "15.令人心动的offer还是令人心梗的offer.m4a",
+        "local://collection-source/local_hash/15.m4a",
+        "local_hash",
+        False,
+        True,
+    )
+
+
+def test_collection_source_navigation_by_view_token(tmp_path):
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
+    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    sources = []
+    for index in range(1, 4):
+        sources.append(
+            service.add_existing_source(
+                collection_id=collection["id"],
+                task_id=f"task-{index}",
+                view_token=f"view-{index}",
+                title=f"如何走出人生困局/{index}.mp4",
+                source_type="video",
+                position=index,
+            )
+        )
+
+    navigation = service.get_source_navigation_by_view_token("view-2")
+
+    assert navigation["collection"]["title"] == "如何走出人生困局"
+    assert navigation["collection"]["url"] == (
+        f"/collections?collection_id={collection['id']}&source_id={sources[1]['id']}"
+    )
+    assert navigation["current_number"] == 2
+    assert navigation["total"] == 3
+    assert navigation["current"]["title"] == "2"
+    assert navigation["previous"]["view_url"] == "/view/view-1"
+    assert navigation["next"]["view_url"] == "/view/view-3"
+    assert [item["is_current"] for item in navigation["items"]] == [False, True, False]
+    assert service.get_source_navigation_by_view_token("missing") is None
+
+
 def test_collection_source_detail_exposes_preserved_local_source_file(tmp_path):
     from video_transcript_api.collections.repository import LearningCollectionRepository
     from video_transcript_api.collections.service import LearningCollectionService
@@ -199,7 +639,7 @@ def test_collection_source_detail_exposes_preserved_local_source_file(tmp_path):
         use_speaker_recognition=False,
         transcript_data="第一节说明困局要先拆出可控变量。",
         transcript_type="capswriter",
-        title="1.mp4",
+        title="课程目录/1.mp4",
         author="本地上传",
         description="",
     )
@@ -223,14 +663,17 @@ def test_collection_source_detail_exposes_preserved_local_source_file(tmp_path):
         collection_id=collection["id"],
         task_id=task_info["task_id"],
         view_token=task_info["view_token"],
-        title="1.mp4",
+        title="课程目录/1.mp4",
         source_type="video",
         position=1,
     )
 
     detail = service.get_source_detail(collection["id"], source["id"])
 
+    assert detail["title"] == "课程目录/1.mp4"
+    assert detail["display_title"] == "1"
     assert detail["source_access"]["kind"] == "local_file"
+    assert detail["source_access"]["filename"] == "课程目录/1.mp4"
     assert detail["source_access"]["url"].endswith(f"/sources/{source['id']}/file")
     assert detail["source_access"]["reveal_url"].endswith(f"/sources/{source['id']}/reveal")
     assert service.get_source_file_path(collection["id"], source["id"]).endswith("local_hash.mp4")
@@ -912,10 +1355,232 @@ def test_collection_upload_reuses_cached_local_file(tmp_path, monkeypatch):
     assert source["task_id"] == task_info["task_id"]
 
 
+def test_collection_upload_appends_after_existing_sources(tmp_path, monkeypatch):
+    from video_transcript_api.api.routes import collections
+    from video_transcript_api.api.services.transcription import verify_token
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
+    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    existing = cache_manager.create_task(
+        url="local://collection-source/existing/01.mp4",
+        use_speaker_recognition=False,
+        platform="generic",
+        media_id="existing",
+    )
+    service.add_existing_source(
+        collection_id=collection["id"],
+        task_id=existing["task_id"],
+        view_token=existing["view_token"],
+        title="01.mp4",
+        source_type="video",
+        position=1,
+    )
+
+    monkeypatch.setattr(collections, "cache_manager", cache_manager)
+    monkeypatch.setattr(collections, "get_collection_service", lambda: service)
+    monkeypatch.setattr(collections, "_source_files_dir", lambda: tmp_path / "source-files")
+    monkeypatch.setattr(collections, "process_local_upload", lambda *args, **kwargs: None)
+
+    app = FastAPI()
+    app.include_router(collections.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "u1", "api_key": "test"}
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/collections/{collection['id']}/sources/upload",
+        files=[
+            ("files", ("课程目录/02.mp4", b"second video bytes", "video/mp4")),
+            ("files", ("课程目录/03.mp4", b"third video bytes", "video/mp4")),
+        ],
+    )
+
+    assert response.status_code == 202
+    detail = service.get_collection_detail(collection["id"])
+    assert [(source["title"], source["position"]) for source in detail["sources"]] == [
+        ("01.mp4", 1),
+        ("02.mp4", 2),
+        ("03.mp4", 3),
+    ]
+    assert [source["display_title"] for source in detail["sources"]] == ["01", "02", "03"]
+
+
+def test_collection_upload_inserts_numbered_source_by_filename_prefix(tmp_path, monkeypatch):
+    from video_transcript_api.api.routes import collections
+    from video_transcript_api.api.services.transcription import verify_token
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
+    collection = service.create_collection("创业中的 100 件事", "屠龙胭脂井", "video_course")
+    for position, title in [
+        (35, "35-黑子与流量游戏.mp4"),
+        (36, "37-重新建立新型组织.mp4"),
+        (37, "38-三种领域数字.mp4"),
+    ]:
+        task = cache_manager.create_task(
+            url=f"local://collection-source/existing/{title}",
+            use_speaker_recognition=False,
+            platform="generic",
+            media_id=f"existing-{position}",
+        )
+        service.add_existing_source(
+            collection_id=collection["id"],
+            task_id=task["task_id"],
+            view_token=task["view_token"],
+            title=title,
+            source_type="video",
+            position=position,
+        )
+
+    monkeypatch.setattr(collections, "cache_manager", cache_manager)
+    monkeypatch.setattr(collections, "get_collection_service", lambda: service)
+    monkeypatch.setattr(collections, "_source_files_dir", lambda: tmp_path / "source-files")
+    monkeypatch.setattr(collections, "process_local_upload", lambda *args, **kwargs: None)
+
+    app = FastAPI()
+    app.include_router(collections.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "u1", "api_key": "test"}
+    client = TestClient(app)
+
+    response = client.post(
+        f"/api/collections/{collection['id']}/sources/upload",
+        files=[
+            (
+                "files",
+                (
+                    "36-我卖不出去是我的问题，我卖出去了是全公司的问题.mp4",
+                    b"missing lesson bytes",
+                    "video/mp4",
+                ),
+            )
+        ],
+    )
+
+    assert response.status_code == 202
+    detail = service.get_collection_detail(collection["id"])
+    assert [(source["position"], source["title"]) for source in detail["sources"]] == [
+        (35, "35-黑子与流量游戏.mp4"),
+        (36, "36-我卖不出去是我的问题，我卖出去了是全公司的问题.mp4"),
+        (37, "37-重新建立新型组织.mp4"),
+        (38, "38-三种领域数字.mp4"),
+    ]
+
+
+def test_cancel_collection_processing_only_cancels_unfinished_sources(tmp_path, monkeypatch):
+    from video_transcript_api.api.routes import collections
+    from video_transcript_api.api.services.transcription import verify_token
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+    from video_transcript_api.collections.service import LearningCollectionService
+    from video_transcript_api.utils.task_status import TaskStatus
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
+    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    task_ids = []
+    for index, status in enumerate(
+        [TaskStatus.SUCCESS, TaskStatus.PROCESSING, TaskStatus.QUEUED],
+        start=1,
+    ):
+        task = cache_manager.create_task(
+            url=f"local://collection-source/media-{index}/{index}.mp4",
+            use_speaker_recognition=False,
+            platform="generic",
+            media_id=f"media-{index}",
+        )
+        cache_manager.update_task_status(task["task_id"], status)
+        task_ids.append(task["task_id"])
+        service.add_existing_source(
+            collection_id=collection["id"],
+            task_id=task["task_id"],
+            view_token=task["view_token"],
+            title=f"{index}.mp4",
+            source_type="video",
+            position=index,
+        )
+
+    monkeypatch.setattr(collections, "get_collection_service", lambda: service)
+
+    app = FastAPI()
+    app.include_router(collections.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "u1", "api_key": "test"}
+    client = TestClient(app)
+
+    response = client.post(f"/api/collections/{collection['id']}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["canceled_count"] == 2
+    assert cache_manager.get_task_by_id(task_ids[0])["status"] == "success"
+    assert cache_manager.get_task_by_id(task_ids[1])["status"] == "canceled"
+    assert cache_manager.get_task_by_id(task_ids[2])["status"] == "canceled"
+
+
+def test_collection_workflow_status_is_stopped_after_cancel(tmp_path):
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+    from video_transcript_api.collections.service import LearningCollectionService
+    from video_transcript_api.utils.task_status import TaskStatus
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
+    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    task = cache_manager.create_task(
+        url="local://collection-source/media-1/1.mp4",
+        use_speaker_recognition=False,
+        platform="generic",
+        media_id="media-1",
+    )
+    cache_manager.update_task_status(task["task_id"], TaskStatus.PROCESSING)
+    service.add_existing_source(
+        collection_id=collection["id"],
+        task_id=task["task_id"],
+        view_token=task["view_token"],
+        title="1.mp4",
+        source_type="video",
+        position=1,
+    )
+
+    service.cancel_collection_processing(collection["id"])
+
+    assert service.get_collection_detail(collection["id"])["workflow_status"] == "stopped"
+    assert service.list_collections(status="stopped")[0]["id"] == collection["id"]
+
+
+def test_collections_import_uses_one_primary_choice_and_collapsed_history():
+    project_root = Path(__file__).resolve().parents[2]
+    html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
+    js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+
+    intro = html[html.index('class="lc-intro-strip"') : html.index('class="lc-import-card"')]
+    import_card = html[html.index('class="lc-import-card"') : html.index('class="lc-history')]
+    import_files = js[js.index("async function importFiles(") : js.index("async function appendFilesToCurrentCollection(")]
+
+    assert "lc-eyebrow" not in intro
+    assert "lc-points" not in intro
+    assert '<div class="lc-drop" id="drop-action"' in import_card
+    assert "dropAction.addEventListener('click'" not in js
+    assert 'class="lc-btn primary" id="pick-files"' in import_card
+    assert import_card.count("lc-btn primary") == 1
+    busy_guard = import_files[import_files.index("if (busy)") : import_files.index("const files = normalizeFiles")]
+    assert "return;" in busy_guard
+    assert '<details class="lc-history lc-history-panel"' in html
+    assert '<summary class="lc-history-summary">' in html
+    assert '<details class="lc-history lc-history-panel" open' not in html
+    assert "formData.append('files', file, file.name);" in js
+    assert "displaySourceTitle(source)" in js
+
+
 def test_collections_page_restores_existing_collections():
     project_root = Path(__file__).resolve().parents[2]
     html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
     js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+    css = (project_root / "src/web/static/css/collections.css").read_text(encoding="utf-8")
 
     assert "collection-history-list" in html
     assert "collection-creator" in html
@@ -938,21 +1603,184 @@ def test_collections_page_restores_existing_collections():
     assert "map-zoom-in" in html
     assert "map-fit" in html
     assert "open-source-file" in html
+    assert "append-folder" in html
+    assert "append-files" in html
+    assert "cancel-collection" in html
     assert "map-related-sources" in html
-    assert "学习提纲" in html
+    assert "全系列解读" in html
+    assert "grid-template-rows: auto minmax(0, 1fr)" in css
+    assert "top: 16px" in css
+    assert "max-height: none" in css
+    assert "学习提纲" not in html
+    assert "学习提纲" not in js
+    assert "collection-summary-text" in html
+    assert "collection-summary-visual" in html
+    assert "collection-summary-text-panel" in html
+    assert "collection-summary-visual-panel" in html
+    assert "collection-summary-article" in html
+    assert "collection-summary-visual-root" in html
+    assert "阅读全文" in html
+    assert "沉浸阅读全文" not in html
+    assert "collectionSummaryArticle" in js
+    assert "collectionSummaryVisualRoot" in js
+    assert "renderCollectionSummaryArticle" in js
+    assert "focusCollectionSummaryArticle" in js
+    assert "renderInlineSummaryVisual" in js
+    assert "setCollectionSummaryMode" in js
+    assert "summaryToc" in js
+    assert "summaryStructured" in js
+    assert "summary-reader" in html
+    assert "summary-toc" in html
+    assert "summary-structured" in html
+    assert "summary-dialog" in html
+    assert 'data-summary-card="problem"' not in html
+    assert "renderSummaryReader" in js
+    assert "openSummaryDialog" in js
+    assert "buildSummarySections" in js
+    assert "renderSummaryToc" in js
+    assert "renderStructuredSummaryBlocks" in js
+    assert "splitInlineNumberedItems" in js
+    assert "data-summary-anchor" in js
+    assert "aria-disabled" in js
+    assert ".lc-summary-reader-head" in css
+    assert ".lc-summary-reader-actions" in css
+    assert ".lc-summary-inline-article" in css
+    assert ".lc-summary-inline-visual" in css
+    assert ".lc-summary-dialog" in css
+    assert ".lc-summary-reader" in css
+    assert ".lc-summary-toc" in css
+    assert ".lc-summary-article" in css
+    assert ".lc-inline-numbered" in css
+    assert "grid-template-columns: minmax(0, 1fr) 220px" in css
+    assert "normalizeMarkdownForPreview" in js
+    assert "summarizeMarkdownSection" in js
+    assert "startSummaryProgress" in js
+    assert "summaryProgressByCollection" in js
+    assert "function isSummaryGenerating(collectionId)" in js
+    assert "startSummaryProgress(collectionId)" in js
+    assert "stopSummaryProgress(collectionId" in js
+    assert "currentCollection.id === collectionId" in js
+    generate_summary_body = js[
+        js.index("async function generateSummary()") : js.index("async function exportMarkdown()")
+    ]
+    assert "setBusy(true);" not in generate_summary_body
+    assert "lc-btn-progress" in html
+    assert "summary-progress-text" in html
+    assert "文字版" in html
+    assert "图解版" in html
+    assert "内容总结" in html
     assert "源内容" in html
-    assert "导出笔记" in html
     assert ">Markdown<" not in html
     assert "markdown-rendered" in html
     assert "markdown-preview-mode" in html
     assert "markdown-source-mode" in html
     assert "source-summary-preview" in html
     assert "source-summary-source" in html
+    assert "regenerate-source-summary" in html
+    assert "retry-source" in html
+    assert "重新解析" in html
+    assert "source-error" in html
     assert "当前 source" not in html
     assert "loadCollections" in js
     assert "loadFilterOptions" in js
     assert "selectedHistoryFilters" in js
     assert "selectCollection" in js
+    assert "loadCollections().catch((error) => {\n                    showToast(error.message || '历史专题筛选失败');" in js
+
+
+def test_collections_page_exposes_immersive_text_visual_reader():
+    project_root = Path(__file__).resolve().parents[2]
+    html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
+    js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+    css = (project_root / "src/web/static/css/collections.css").read_text(encoding="utf-8")
+
+    assert '/static/css/visual-learning.css?v=__ASSET_VERSION__' in html
+    assert '/static/js/visual-learning.js?v=__ASSET_VERSION__' in html
+    assert 'data-view="visual"' not in html
+    assert 'data-view="summary"' in html
+    assert "图解版" in html
+    for element_id in (
+        "visual-view",
+        "collection-visual-root",
+        "collection-visual-overview-status",
+        "collection-visual-overview-retry",
+        "collection-visual-full-note-status",
+        "collection-visual-full-note-retry",
+        "collection-visual-theme",
+        "collection-visual-export",
+        "collection-visual-print",
+        "collection-visual-open",
+        "collection-summary-text",
+        "collection-summary-visual",
+        "collection-summary-text-panel",
+        "collection-summary-visual-panel",
+        "collection-summary-article",
+        "collection-summary-reader-open",
+        "collection-immersive-reader",
+    ):
+        assert f'id="{element_id}"' in html
+
+    assert "function activateCollectionVisuals()" in js
+    assert "currentView !== 'visual'" in js
+    assert "document_type=${encodeURIComponent(documentType)}" in js
+    assert "document_type: documentType" in js
+    assert "'overview'" in js
+    assert "'full_note'" in js
+    assert "window.VisualLearning.renderImmersiveReader" in js
+    assert "window.VisualLearning.createReaderState" in js
+    assert "function openCollectionReader(" in js
+    assert "function openCollectionSummaryReader(" in js
+    assert "function closeCollectionReader(" in js
+    summary_tab_branch = js[
+        js.index("els.tabs.forEach((tab) => {") : js.index("if (els.collectionVisualOverviewRetry)")
+    ]
+    assert "currentView === 'summary'" in summary_tab_branch
+    assert "openCollectionReader('text', tab)" not in summary_tab_branch
+    assert "openCollectionReader('visual', tab)" not in summary_tab_branch
+    assert "requestedView === 'visual'" in summary_tab_branch
+    assert "setCollectionSummaryMode('text', false)" in summary_tab_branch
+    assert "setCollectionSummaryMode('visual', true)" in summary_tab_branch
+    assert "ensureCollectionVisualLayer('overview', false)" in js
+    assert "function renderInlineSummaryVisual()" in js
+    assert "function setCollectionSummaryMode(" in js
+    assert "function renderCollectionSummaryArticle(" in js
+    assert "function focusCollectionSummaryArticle(" in js
+    assert "renderCollectionSummaryArticle(markdown, waitingText)" in js
+    assert "visualScope: 'global'" in js
+    assert "onExportText: exportMarkdown" in js
+    assert "fullNote: null" in js
+    assert "合集全局图解" in html
+    assert "子内容图解请进入对应内容页独立查看" in js
+    assert "readerGeneration" in js
+    assert ".accepts(" in js
+    assert "window.VisualLearning.activeDiagram" in js
+    assert "function retryCollectionVisual(documentType)" in js
+    assert "function parseCollectionVisualRef(" in js
+    assert "function visualSummarySections()" in js
+    assert "function collectionReaderTextSections(" in js
+    assert "focusCollectionSummaryArticle('')" in js
+    assert "openCollectionReader('text', els.collectionSummaryReaderOpen)" not in js
+    assert "openCollectionReader('visual', els.collectionVisualOpen)" not in js
+    assert "openSummaryDialog(`card:${card.dataset.summaryCard || 'problem'}`, card)" not in js
+    assert 'data-summary-section="${escapeHTML(section.id)}"' in js
+    visual_navigation = js[
+        js.index("async function navigateCollectionVisualRef(") : js.index("function exportCollectionVisualSvg(")
+    ]
+    assert ".find((section) => section.id === target.sectionId)" in visual_navigation
+    assert "focusCollectionSummaryArticle(readerSection ? readerSection.id : '')" in visual_navigation
+    assert "openCollectionReader('text'" not in visual_navigation
+    assert "openSummaryDialog(" not in visual_navigation
+    assert ".find((section) => section.title.trim()" not in visual_navigation
+    assert "collection:${collectionId}:source:" in js
+    assert "collection:${collectionId}:summary:section:" in js
+    assert "ensureSourceDetail(sourceId)" in js
+    assert "resetCollectionVisualState" in js
+    assert "window.clearInterval(collectionVisual.pollTimers.overview)" in js
+    assert "window.clearInterval(collectionVisual.pollTimers.full_note)" in js
+    assert "@media print" in css
+    assert ".lc-visual-view" in css
+    assert "overflow: visible" in css
+    assert "loadCollections({ selectLatest: false }).catch((error) => {\n                    showToast(error.message || '历史专题筛选失败');" not in js
     assert "renderKnowledgeMap" in js
     assert "loadKnowledgeMap" in js
     assert "generateKnowledgeMap" in js
@@ -960,6 +1788,9 @@ def test_collections_page_restores_existing_collections():
     assert "renderWrappedSvgText" in js
     assert "makeMapNodeDraggable" in js
     assert "openSourceFile" in js
+    assert "appendFilesToCurrentCollection" in js
+    assert "cancelCurrentCollection" in js
+    assert "/cancel" in js
     assert "mapLinksVisible" in js
     assert "openRelatedSource" in js
     assert "openSourceAccess" in js
@@ -967,6 +1798,12 @@ def test_collections_page_restores_existing_collections():
     assert "markdownToHTML" in js
     assert "renderMarkdownExport" in js
     assert "sourceSummaryDisplayMode" in js
+    assert "regenerateSourceSummary" in js
+    assert "/api/recalibrate" in js
+    assert "regenerate_summary: true" in js
+    assert "retrySelectedSource" in js
+    assert "/retry" in js
+    assert "renderSourceError" in js
 
 
 def test_collection_repository_filters_and_options(tmp_path):

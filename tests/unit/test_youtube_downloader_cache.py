@@ -127,6 +127,38 @@ class TestYoutubeDownloaderCache:
             # Verify results are identical
             assert result1 == result2
 
+    def test_metadata_falls_back_to_ytdlp_when_tikhub_rejects_video(
+        self, downloader
+    ):
+        """A valid YouTube page must not become ``watch / Unknown``."""
+        url = "https://www.youtube.com/watch?v=test123&t=33s"
+        ytdlp_info = {
+            "video_id": "test123",
+            "video_title": "Real Video Title",
+            "author": "Real Channel",
+            "description": "Real description",
+            "download_url": "https://example.com/audio.m4a",
+            "filename": "youtube_test123.m4a",
+            "platform": "youtube",
+            "subtitle_info": None,
+        }
+
+        with patch.object(
+            downloader,
+            "get_video_info",
+            side_effect=ValueError("tikhub_rejected_video"),
+        ), patch.object(
+            downloader,
+            "_get_video_info_with_ytdlp",
+            return_value=ytdlp_info,
+        ) as ytdlp:
+            metadata = downloader.get_metadata(url)
+
+        ytdlp.assert_called_once_with(url)
+        assert metadata.title == "Real Video Title"
+        assert metadata.author == "Real Channel"
+        assert downloader._cached_video_info["test123"] == ytdlp_info
+
     def test_get_subtitle_reuses_cache(self, downloader):
         """Test _get_subtitle_with_tikhub_api reuses cached video_info"""
         url = "https://www.youtube.com/watch?v=test123"

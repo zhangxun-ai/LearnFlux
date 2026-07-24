@@ -5,6 +5,7 @@ from .bilibili import BilibiliDownloader
 from .xiaohongshu import XiaohongshuDownloader
 from .youtube import YoutubeDownloader
 from .xiaoyuzhou import XiaoyuzhouDownloader
+from .wechat_channels import WeChatChannelsDownloader
 from .generic import GenericDownloader
 from .factory import create_downloader
 
@@ -17,6 +18,7 @@ __all__ = [
     "XiaohongshuDownloader",
     "YoutubeDownloader",
     "XiaoyuzhouDownloader",
+    "WeChatChannelsDownloader",
     "GenericDownloader",
     "create_downloader"
 ] 

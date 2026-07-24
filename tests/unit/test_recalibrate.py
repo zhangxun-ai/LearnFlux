@@ -124,6 +124,29 @@ class TestSaveLLMResultsSummaryBackfill:
         assert summary_calls[0].kwargs["platform"] == "youtube"
         assert summary_calls[0].kwargs["media_id"] == "abc"
 
+    def test_backfill_normalizes_duplicate_heading_markers(self, monkeypatch):
+        """Saved summaries should not preserve duplicated heading markers."""
+        from video_transcript_api.api.services.llm_ops import _save_llm_results
+
+        mock_cm = self._patch_cache_manager(monkeypatch)
+
+        _save_llm_results(
+            task_id="t2b",
+            platform="youtube",
+            media_id="abc",
+            use_speaker_recognition=False,
+            result_dict=self._make_result_dict("#### ##### 2.1 标题\n\n正文"),
+            calibrate_only=True,
+            summary_backfill=True,
+        )
+
+        summary_calls = [
+            c for c in mock_cm.save_llm_result.call_args_list
+            if c.kwargs.get("llm_type") == "summary"
+        ]
+        assert len(summary_calls) == 1
+        assert summary_calls[0].kwargs["content"] == "#### 2.1 标题\n\n正文"
+
     def test_backfill_with_none_summary_skips_write(self, monkeypatch):
         """summary_backfill=True but summary failed -> no summary file written."""
         from video_transcript_api.api.services.llm_ops import _save_llm_results

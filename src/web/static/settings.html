@@ -1,103 +1,318 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
+        <script>
+        (function() {
+            try {
+                var theme = localStorage.getItem('vta_theme_preference');
+                if (theme) {
+                    var parsedTheme = theme;
+                    try { parsedTheme = JSON.parse(theme); } catch(e) {}
+                    document.documentElement.setAttribute('data-theme', parsedTheme);
+                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                }
+            } catch(e) {}
+        })();
+    </script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex">
-    <title>设置 - 内容解析工作台</title>
-    <link rel="icon" type="image/svg+xml" href="/static/icon/logo.svg">
-    <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <title>设置 - LearnFlux</title>
+    <meta name="theme-color" content="#F6F7F9">
+    <meta name="application-name" content="LearnFlux">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="LearnFlux">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/manifest.webmanifest">
+            <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
+    <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
+    <script src="/static/js/ui-features.js?v=__ASSET_VERSION__" defer></script>
+    <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-            background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
-            min-height: 100vh; color: var(--text-primary);
-        }
-        .st-page { max-width: 720px; margin: 0 auto; padding: 26px 20px 80px; }
-        .st-head h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 1.9rem; }
-        .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-            padding: 18px 20px; margin-top: 16px; box-shadow: var(--shadow); }
-        .card h2 { font-size: 1.05rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .card .card-sub { color: var(--text-tertiary); font-size: 0.82rem; margin: 4px 0 14px; }
-        .adv-block { padding-top: 14px; margin-top: 14px; border-top: 1px dashed var(--line); }
-        .adv-block:first-of-type { border-top: none; margin-top: 6px; }
-        .adv-block h3 { font-size: 0.95rem; margin-bottom: 2px; }
-        .field { margin-bottom: 13px; }
-        .field:last-child { margin-bottom: 0; }
-        .field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
-        .field input[type=text], .field input[type=password], .field input[type=number], .field select {
-            width: 100%; padding: 9px 11px; border: 1.5px solid var(--border-primary);
-            border-radius: 9px; font-size: 0.92rem; background: var(--bg-primary);
-            color: var(--text-primary); font-family: inherit; }
-        .field input:focus, .field select:focus { outline: none; border-color: var(--border-focus); }
-        .field .hint { font-size: 0.78rem; color: var(--text-tertiary); margin-top: 5px; }
-        .key-row { display: flex; gap: 8px; align-items: center; }
-        .key-row input { flex: 1; }
-        .key-link { white-space: nowrap; font-size: 0.82rem; color: var(--accent-primary); text-decoration: none;
-            border: 1px solid var(--accent-primary); border-radius: 8px; padding: 8px 10px; }
-        .key-link:hover { background: var(--accent-soft); }
-        .combo { position: relative; }
-        .combo input[type=text] { padding-right: 36px; }
-        .combo-toggle { position: absolute; top: 0; right: 0; height: 100%; width: 32px;
-            border: none; background: transparent; color: var(--text-tertiary);
-            cursor: pointer; font-size: 0.7rem; line-height: 1; }
-        .combo-menu { position: absolute; z-index: 60; left: 0; right: 0; top: calc(100% + 4px);
-            max-height: 220px; overflow-y: auto; margin: 0; padding: 4px; list-style: none;
-            background: var(--bg-primary); border: 1.5px solid var(--border-primary);
-            border-radius: 9px; box-shadow: var(--shadow); }
-        .combo-menu[hidden] { display: none; }
-        .combo-menu li { padding: 8px 10px; border-radius: 6px; font-size: 0.9rem; cursor: pointer; }
-        .combo-menu li.combo-item:hover, .combo-menu li.combo-item.active { background: var(--accent-soft); color: var(--accent-primary); }
-        .combo-empty { color: var(--text-tertiary); cursor: default; font-size: 0.82rem; }
-        .toggle-row { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.85rem; }
-        .toggle-row input { width: auto; }
-        .btn { border: none; border-radius: 9px; padding: 9px 18px; font-size: 0.9rem; font-weight: 600;
-            cursor: pointer; background: var(--accent-primary); color: #fff; transition: background .15s; }
-        .btn:hover { background: var(--accent-secondary); }
-        .btn:disabled { opacity: .5; cursor: not-allowed; }
-        .btn-ghost { background: transparent; color: var(--accent-primary); border: 1px solid var(--accent-primary); }
-        .btn-ghost:hover { background: var(--accent-soft); }
-        .auth-status { font-size: 0.82rem; padding: 3px 10px; border-radius: 999px; }
-        .auth-status.ok { background: var(--success-bg); color: var(--success-text); }
-        .auth-status.err { background: var(--error-bg); color: var(--error-text); }
-        .badge-set { font-size: 0.72rem; color: var(--success-text); font-weight: 600; }
-        .help-q { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px;
-            border-radius: 50%; border: 1px solid var(--text-tertiary); color: var(--text-tertiary);
-            font-size: 0.72rem; font-weight: 700; cursor: help; vertical-align: middle; position: relative; }
-        .help-q:focus { outline: none; border-color: var(--accent-primary); color: var(--accent-primary); }
-        .help-q[data-tip]:hover::after, .help-q[data-tip]:focus::after {
-            content: attr(data-tip); position: absolute; left: -4px; top: calc(100% + 9px);
-            width: 300px; max-width: 78vw; white-space: normal; text-align: left;
-            background: var(--ink, #1f2933); color: var(--paper, #fff);
-            padding: 10px 12px; border-radius: 9px; font-size: 0.76rem; font-weight: 400;
-            line-height: 1.6; letter-spacing: .01em; z-index: 200;
-            box-shadow: 0 10px 30px rgba(0,0,0,.22); pointer-events: none; }
-        .help-q[data-tip]:hover::before, .help-q[data-tip]:focus::before {
-            content: ''; position: absolute; left: 3px; top: calc(100% + 3px);
-            border: 6px solid transparent; border-bottom-color: var(--ink, #1f2933);
-            z-index: 201; pointer-events: none; }
-        details.card > summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; list-style: none; color: var(--text-secondary); }
-        details.card > summary::-webkit-details-marker { display: none; }
-        details.card > summary::before { content: '▸ '; color: var(--text-tertiary); }
-        details.card[open] > summary::before { content: '▾ '; }
-        .save-bar { position: sticky; bottom: 0; margin-top: 20px; padding: 14px 0;
-            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-            background: linear-gradient(to top, var(--bg-gradient-end) 60%, transparent); }
-        .save-hint { font-size: 0.8rem; color: var(--text-tertiary); }
-        code { background: var(--bg-tertiary); padding: 1px 5px; border-radius: 5px; font-size: 0.88em; }
-        .toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px);
-            background: var(--ink); color: var(--paper); padding: 10px 18px; border-radius: 10px;
-            font-size: 0.88rem; opacity: 0; pointer-events: none; transition: .25s; z-index: 2000; }
-        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-        @media (max-width: 600px) { .st-page { padding: 16px 14px 64px; } .key-row { flex-wrap: wrap; } }
-    </style>
-</head>
-<body>
-    <div id="site-nav"></div>
-    <script src="/static/js/site-nav.js?v=__ASSET_VERSION__"></script>
 
-    <main class="st-page">
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root, [data-theme="light"], [data-theme="dark"] {
+            --st-accent: var(--accent-primary);
+            --st-accent-hover: var(--accent-hover);
+            --st-accent-soft: var(--accent-soft);
+            --st-card: var(--bg-primary);
+            --st-card-secondary: var(--bg-secondary);
+            --st-border: var(--border-primary);
+            --st-border-hover: var(--border-strong);
+            --st-shadow: var(--shadow-sm);
+            --st-shadow-hover: var(--shadow);
+            --st-radius: 12px;
+            --st-radius-lg: 16px;
+        }
+        body {
+            min-height: 100vh; color: var(--ink);
+        }
+        .st-page { max-width: 900px; margin: 0 auto; padding: 40px 24px 100px; }
+        .st-head { margin-bottom: 32px; }
+        .st-head h1 { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 2.2rem; color: var(--text-primary); }
+        .st-head p { margin-top: 8px; color: var(--text-secondary); font-size: 1.05rem; }
+        
+        .card { 
+            background: var(--card); 
+            border: 1px solid rgba(27, 26, 23, 0.08); 
+            border-radius: var(--radius-card);
+            padding: 28px 32px; 
+            margin-top: 24px; 
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover { transform: translateY(-2px); }
+        .card h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; font-weight: 600; }
+        .card .card-sub { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 24px; }
+        
+        .adv-block { padding-top: 20px; margin-top: 20px; border-top: 1px dashed var(--st-border); }
+        .adv-block:first-of-type { border-top: none; margin-top: 8px; }
+        .adv-block h3 { font-size: 1rem; margin-bottom: 16px; font-weight: 600; color: var(--text-primary); }
+        
+        .field { margin-bottom: 20px; }
+        .field:last-child { margin-bottom: 0; }
+        .field label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; color: var(--text-primary); }
+        .field input[type=text], .field input[type=password], .field input[type=number], .field select {
+            width: 100%; padding: 12px 16px; border: 1px solid var(--line);
+            border-radius: var(--radius-control); font-size: 0.95rem; background: var(--card-translucent-light);
+            color: var(--ink); font-family: inherit; transition: all 0.2s; box-shadow: inset 0 1px 2px rgba(27, 26, 23, 0.02);
+        }
+        .field input:focus, .field select:focus { 
+            outline: none; border-color: var(--accent); 
+            box-shadow: 0 0 0 3px var(--accent-soft); 
+            background: var(--card);
+        }
+        .field .hint { font-size: 0.85rem; color: var(--text-tertiary); margin-top: 8px; }
+        
+        .key-row { display: flex; gap: 12px; align-items: center; }
+        .key-row input { flex: 1; }
+        .key-link { 
+            white-space: nowrap; font-size: 0.9rem; font-weight: 500; color: var(--st-accent); 
+            text-decoration: none; border: 1.5px solid rgba(228,80,58,0.3); border-radius: var(--st-radius); 
+            padding: 10px 16px; transition: all 0.2s; 
+        }
+        .key-link:hover { background: var(--st-accent-soft); border-color: var(--st-accent); }
+        
+        .combo { position: relative; }
+        .combo input[type=text] { padding-right: 44px; }
+        .combo-toggle { 
+            position: absolute; top: 0; right: 0; height: 100%; width: 44px;
+            border: none; background: transparent; color: var(--text-secondary);
+            cursor: pointer; font-size: 0.85rem; transition: color 0.2s; 
+        }
+        .combo-toggle:hover { color: var(--st-accent); }
+        
+        .combo-menu { 
+            position: absolute; z-index: 100; left: 0; right: 0; top: calc(100% + 8px);
+            max-height: 280px; overflow-y: auto; margin: 0; padding: 8px; list-style: none;
+            background: var(--st-card); border: 1px solid var(--st-border);
+            border-radius: var(--st-radius); box-shadow: 0 12px 40px rgba(0,0,0,0.12); 
+        }
+        [data-theme="dark"] .combo-menu { box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+        .combo-menu[hidden] { display: none; }
+        .combo-menu li { padding: 10px 14px; border-radius: 8px; font-size: 0.95rem; cursor: pointer; transition: all 0.15s; }
+        .combo-menu li.combo-item:hover, .combo-menu li.combo-item.active { 
+            background: var(--st-accent-soft); color: var(--st-accent); font-weight: 500; 
+        }
+        .combo-empty { color: var(--text-tertiary); cursor: default; font-size: 0.9rem; text-align: center; padding: 16px; }
+        
+        .toggle-row { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 0.95rem; cursor: pointer; }
+        .toggle-row input { width: 18px; height: 18px; accent-color: var(--st-accent); cursor: pointer; }
+        
+        .btn { 
+            border: 1px solid var(--accent); border-radius: var(--radius-control); padding: 12px 28px; font-size: 1rem; font-weight: 600;
+            cursor: pointer; background: var(--accent); 
+            color: #fff; transition: all 0.2s; box-shadow: 0 10px 18px -16px rgba(228, 80, 58, 0.8);
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 14px 22px -18px rgba(194, 58, 38, 0.9); background: var(--accent-ink); border-color: var(--accent-ink); }
+        .btn:active { transform: scale(0.97); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; background: var(--text-secondary); border-color: var(--text-secondary); }
+        
+        .btn-ghost { background: transparent; color: var(--st-accent); border: 1.5px solid var(--st-accent); box-shadow: none; }
+        .btn-ghost:hover { background: var(--st-accent-soft); color: var(--st-accent); box-shadow: none; }
+        
+        .auth-status { font-size: 0.85rem; padding: 4px 12px; border-radius: 999px; font-weight: 600; }
+        .auth-status.ok { background: rgba(16, 185, 129, 0.1); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.2); }
+        .auth-status.err { background: rgba(239, 68, 68, 0.1); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+        
+        .badge-set { font-size: 0.75rem; color: #10B981; font-weight: 600; padding: 2px 8px; background: rgba(16,185,129,0.1); border-radius: 6px; }
+        
+        .help-q { 
+            display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+            border-radius: 50%; border: 1.5px solid var(--text-tertiary); color: var(--text-tertiary);
+            font-size: 0.8rem; font-weight: 700; cursor: help; vertical-align: middle; position: relative; transition: 0.2s;
+        }
+        .help-q:hover, .help-q:focus { outline: none; border-color: var(--st-accent); color: var(--st-accent); background: var(--st-accent-soft); }
+        
+        .help-q[data-tip]:hover::after, .help-q[data-tip]:focus::after {
+            content: attr(data-tip); position: absolute; left: 50%; top: calc(100% + 12px); transform: translateX(-50%);
+            width: max-content; max-width: 320px; white-space: normal; text-align: left;
+            background: var(--bg-tertiary); border: 1px solid var(--st-border); color: var(--text-primary);
+            padding: 12px 16px; border-radius: var(--st-radius); font-size: 0.85rem; font-weight: 400;
+            line-height: 1.6; z-index: 200; box-shadow: 0 12px 30px rgba(0,0,0,0.15); pointer-events: none;
+        }
+        .help-q[data-tip]:hover::before, .help-q[data-tip]:focus::before {
+            content: ''; position: absolute; left: 50%; top: calc(100% + 5px); transform: translateX(-50%);
+            border: 7px solid transparent; border-bottom-color: var(--bg-tertiary);
+            z-index: 201; pointer-events: none;
+        }
+        
+        details.card > summary { cursor: pointer; font-weight: 600; font-size: 1.05rem; list-style: none; color: var(--text-primary); outline: none; padding-bottom: 4px; }
+        details.card > summary::-webkit-details-marker { display: none; }
+        details.card > summary::before { content: '▸ '; color: var(--st-accent); display: inline-block; width: 20px; transition: transform 0.2s; }
+        details.card[open] > summary::before { content: '▾ '; }
+        
+        .save-bar { 
+            position: sticky; bottom: 0; margin-top: 32px; padding: 24px 0;
+            display: flex; align-items: center; justify-content: flex-end; gap: 16px; flex-wrap: wrap;
+            background: linear-gradient(to top, var(--bg-secondary) 70%, transparent); 
+            z-index: 10;
+        }
+        .save-hint { font-size: 0.9rem; color: var(--text-tertiary); }
+        code { background: var(--bg-tertiary); padding: 2px 6px; border-radius: 6px; font-size: 0.85em; border: 1px solid var(--st-border); }
+        
+        .toast { 
+            position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%) translateY(20px) scale(0.95);
+            background: var(--text-primary); color: var(--bg-primary); padding: 12px 24px; border-radius: 12px;
+            font-size: 0.95rem; font-weight: 500; opacity: 0; pointer-events: none; 
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 2000;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+        
+        body.has-app-shell .st-page { width: min(100%, 1000px); max-width: none; padding: 2rem 2.5rem 6rem; }
+        body.has-app-shell .st-head { margin-bottom: 2rem; }
+        body.has-app-shell .st-head h1 { font-family: var(--font-display); font-size: 2.2rem; }
+        body.has-app-shell #groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+        body.has-app-shell #groups .card { margin-top: 0; }
+        body.has-app-shell #groups details.card { grid-column: 1 / -1; }
+        body.has-app-shell .save-bar { background: linear-gradient(to top, var(--bg-primary) 70%, transparent); padding-right: 24px; }
+        
+        @media (max-width: 900px) { 
+            body.has-app-shell #groups { grid-template-columns: 1fr; gap: 20px; } 
+            body.has-app-shell .st-page { padding: 1.5rem 1.5rem 5rem; }
+        }
+        @media (max-width: 600px) { 
+            .st-page { padding: 24px 16px 80px; } 
+            .key-row { flex-direction: column; align-items: stretch; } 
+            .card { padding: 20px 24px; }
+        }
+
+    </style>
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=__ASSET_VERSION__">
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
+    <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+</head>
+<body class="app-shell has-app-shell product-linear page-settings">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <aside class="sidebar" aria-label="应用导航">
+        <div class="sidebar-brand">
+            <a class="brand-link" href="/" aria-label="LearnFlux 首页">
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-text">LearnFlux</span>
+            </a>
+        </div>
+        <!-- PRODUCT_NAV_START: generated by scripts/sync_product_navigation.py -->
+        <nav class="sidebar-nav" aria-label="主导航">
+            <section class="nav-group" data-group="core" aria-labelledby="nav-core-label">
+                <button class="nav-group-toggle" id="nav-core-label" type="button" data-group="core" aria-expanded="true" aria-controls="nav-core-items">
+                    <span class="nav-group-label">核心工具</span>
+                    <span class="nav-group-current" aria-hidden="true"></span>
+                    <svg class="nav-group-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                </button>
+                <div class="nav-group-items" id="nav-core-items">
+                    <a class="nav-item" href="/add_task_by_web" data-aliases="/,/view">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m13 2-2 9h9l-9 11 2-9H4l9-11z"/></svg></span>
+                        <span class="nav-label">单篇深度学习</span>
+                    </a>
+                    <a class="nav-item" href="/collections" data-feature="collections" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="21" y2="9"/></svg></span>
+                        <span class="nav-label">系列深度学习</span>
+                    </a>
+                    <a class="nav-item" href="/visual-learning" data-feature="visual_learning" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
+                        <span class="nav-label">图解生成</span>
+                    </a>
+                    <a class="nav-item" href="/study" data-feature="study_player" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
+                        <span class="nav-label">边播边学</span>
+                    </a>
+                </div>
+            </section>
+            <section class="nav-group" data-group="flow" aria-labelledby="nav-flow-label">
+                <button class="nav-group-toggle" id="nav-flow-label" type="button" data-group="flow" aria-expanded="true" aria-controls="nav-flow-items">
+                    <span class="nav-group-label">心流空间</span>
+                    <span class="nav-group-current" aria-hidden="true"></span>
+                    <svg class="nav-group-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                </button>
+                <div class="nav-group-items" id="nav-flow-items">
+                    <a class="nav-item" href="/reading" data-feature="reading" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+                        <span class="nav-label">心流阅读</span>
+                    </a>
+                    <a class="nav-item" href="/static/focus-studio.html" data-feature="focus_studio" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></span>
+                        <span class="nav-label">心流写作</span>
+                    </a>
+                </div>
+            </section>
+            <section class="nav-group" data-group="insight" aria-labelledby="nav-insight-label">
+                <button class="nav-group-toggle" id="nav-insight-label" type="button" data-group="insight" aria-expanded="true" aria-controls="nav-insight-items">
+                    <span class="nav-group-label">洞察与分析</span>
+                    <span class="nav-group-current" aria-hidden="true"></span>
+                    <svg class="nav-group-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                </button>
+                <div class="nav-group-items" id="nav-insight-items">
+                    <a class="nav-item" href="/post" data-feature="post_insight" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h10"/></svg></span>
+                        <span class="nav-label">帖子洞察</span>
+                    </a>
+                    <a class="nav-item" href="/trend-radar" data-feature="trend_radar" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+                        <span class="nav-label">趋势雷达</span>
+                    </a>
+                    <a class="nav-item" href="/flywheel" data-feature="flywheel" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg></span>
+                        <span class="nav-label">IP 对标</span>
+                    </a>
+                </div>
+            </section>
+            <section class="nav-group nav-group-bottom" data-group="system" aria-labelledby="nav-system-label">
+                <button class="nav-group-toggle" id="nav-system-label" type="button" data-group="system" aria-expanded="true" aria-controls="nav-system-items">
+                    <span class="nav-group-label">系统</span>
+                    <span class="nav-group-current" aria-hidden="true"></span>
+                    <svg class="nav-group-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                </button>
+                <div class="nav-group-items" id="nav-system-items">
+                    <a class="nav-item" href="/static/history.html" data-feature="history" hidden>
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                        <span class="nav-label">历史记录</span>
+                    </a>
+                    <a class="nav-item is-active" href="/settings" aria-current="page">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82.33V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-2.82-1.18l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3.09 14H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.27 7.18l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.18l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.91 10H21a2 2 0 0 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15z"/></svg></span>
+                        <span class="nav-label">系统设置</span>
+                    </a>
+                </div>
+            </section>
+        </nav>
+        <!-- PRODUCT_NAV_END -->
+    </aside>
+    <main class="main-area" id="main-content">
+        <header class="topbar" aria-label="页面导航栏">
+            <div class="topbar-title"><span class="topbar-page-title">系统设置</span></div>
+        </header>
+        <section class="page-stage">
+
+    <section class="st-page">
         <header class="st-head"><h1>设置</h1></header>
 
         <!-- 管理口令：加载 / 保存配置的钥匙（全站唯一一处） -->
@@ -118,8 +333,10 @@
 
         <div class="save-bar">
             <button class="btn" id="save-btn">保存配置</button>
-            <span class="save-hint">保存后重启服务生效</span>
+            <span class="save-hint">并发设置立即生效，其它设置重启后生效</span>
         </div>
+    </section>
+        </section>
     </main>
 
     <div class="toast" id="toast"></div>
@@ -127,7 +344,10 @@
     <script>
     (function () {
         var TOKEN_KEY = 'vta_settings_token';
+        var WORKBENCH_TOKEN_KEY = 'vta_bearer_token';
+        var ENCRYPTION_KEY = 'vta_encrypt_key_2024';
         var providers = [];
+        var lastServerGroups = null;
 
         function $(id) { return document.getElementById(id); }
         function q(key) { return document.querySelector('[data-key="' + key + '"]'); }
@@ -135,6 +355,15 @@
         function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); }, 2400); }
         function getToken() { return $('token').value.trim(); }
         function authHeaders() { return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }; }
+        function encryptToken(text) {
+            if (!text) return '';
+            try {
+                var encoded = btoa(unescape(encodeURIComponent(text + ENCRYPTION_KEY)));
+                return encoded.split('').reverse().join('');
+            } catch (e) {
+                return text;
+            }
+        }
 
         function fieldHTML(f) {
             var key = esc(f.key);
@@ -144,7 +373,9 @@
             }
             var badge = (f.type === 'secret') ? ' <span class="badge-set" style="display:none;">已配置</span>' : '';
             var control;
-            if (f.type === 'select') {
+            if (f.control === 'select') {
+                control = '<select data-key="' + key + '" disabled></select>';
+            } else if (f.type === 'select') {
                 control = '<select data-key="' + key + '">' + (f.options || []).map(function (o) { return '<option value="' + esc(o) + '">' + esc(o) + '</option>'; }).join('') + '</select>';
             } else if (f.type === 'model') {
                 control = '<div class="combo"><input type="text" data-key="' + key + '" autocomplete="off" placeholder="选择或手动输入模型名">' +
@@ -169,7 +400,7 @@
             return '<div class="field"><label for="provider">服务商</label>' +
                 '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
                 '<select id="provider" style="flex:1; min-width:200px;">' + providers.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select>' +
-                '<button type="button" class="btn btn-ghost" id="fetch-models-btn" title="用当前 API Key 从服务商实时拉取可用模型（模型在迭代，离线候选仅作兜底）">🔄 拉取可用模型</button>' +
+                '<button type="button" class="btn btn-ghost" id="fetch-models-btn" title="用当前 API Key 从服务商实时拉取可用模型（模型在迭代，离线候选仅作兜底）">拉取可用模型</button>' +
                 '</div></div>';
         }
 
@@ -245,7 +476,7 @@
                     toast(json.message || json.detail || '拉取失败，已保留离线候选');
                 }
             } catch (e) { toast('网络错误，拉取失败'); }
-            finally { if (btn) { btn.disabled = false; btn.textContent = '🔄 拉取可用模型'; } }
+            finally { if (btn) { btn.disabled = false; btn.textContent = '拉取可用模型'; } }
         }
 
         // 选择/初始化服务商：填 Base URL、模型候选、获取链接
@@ -294,6 +525,30 @@
             }
         }
 
+        function setConcurrencyOptions(limits) {
+            [
+                ['concurrent.local_asr_workers', limits.local_asr_workers],
+                ['concurrent.cloud_asr_workers', limits.cloud_asr_workers]
+            ].forEach(function (entry) {
+                var el = q(entry[0]);
+                var max = Number(entry[1]);
+                if (!el || !Number.isInteger(max) || max < 1) return;
+                var options = [];
+                for (var value = 1; value <= max; value += 1) {
+                    options.push('<option value="' + value + '">' + value + '</option>');
+                }
+                el.innerHTML = options.join('');
+                el.disabled = false;
+            });
+        }
+
+        function setConcurrencyDisabled(disabled) {
+            ['concurrent.local_asr_workers', 'concurrent.cloud_asr_workers'].forEach(function (key) {
+                var el = q(key);
+                if (el) el.disabled = disabled;
+            });
+        }
+
         function showAuth(ok, text) { var el = $('auth-status'); el.style.display = ''; el.textContent = text; el.className = 'auth-status ' + (ok ? 'ok' : 'err'); }
 
         async function init() {
@@ -316,8 +571,11 @@
                 if (json.code !== 200) { showAuth(false, json.message || '加载失败'); return; }
                 showAuth(true, '已加载');
                 providers = json.data.providers || providers;
+                setConcurrencyOptions(json.data.concurrency_limits || {});
                 fillValues(json.data.groups || []);
+                lastServerGroups = json.data.groups || [];
                 localStorage.setItem(TOKEN_KEY, getToken());
+                localStorage.setItem(WORKBENCH_TOKEN_KEY, encryptToken(getToken()));
             } catch (e) { showAuth(false, '网络错误'); }
         }
 
@@ -328,13 +586,25 @@
                 payload[el.getAttribute('data-key')] = (el.type === 'checkbox') ? el.checked : el.value;
             });
             $('save-btn').disabled = true;
+            setConcurrencyDisabled(true);
             try {
                 var resp = await fetch('/api/settings', { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
                 var json = await resp.json();
-                if (resp.ok && json.code === 200) { toast('保存成功，重启服务后生效'); providers = json.data.providers || providers; fillValues(json.data.groups || []); }
-                else { toast(json.detail || json.message || '保存失败'); }
-            } catch (e) { toast('网络错误，保存失败'); }
-            finally { $('save-btn').disabled = false; }
+                if (resp.ok && json.code === 200) {
+                    toast('并发设置已立即生效；其它设置重启后生效');
+                    providers = json.data.providers || providers;
+                    setConcurrencyOptions(json.data.concurrency_limits || {});
+                    fillValues(json.data.groups || []);
+                    lastServerGroups = json.data.groups || [];
+                } else {
+                    if (lastServerGroups) fillValues(lastServerGroups);
+                    toast(json.detail || json.message || '保存失败');
+                }
+            } catch (e) {
+                if (lastServerGroups) fillValues(lastServerGroups);
+                toast('网络错误，保存失败');
+            }
+            finally { $('save-btn').disabled = false; setConcurrencyDisabled(false); }
         }
 
         // 组合框交互：▾ 展开全部候选 / 输入实时过滤 / 点选填入 / 点击外部或 Esc 关闭

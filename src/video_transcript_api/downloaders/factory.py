@@ -3,6 +3,7 @@ from .bilibili import BilibiliDownloader
 from .xiaohongshu import XiaohongshuDownloader
 from .youtube import YoutubeDownloader
 from .xiaoyuzhou import XiaoyuzhouDownloader
+from .wechat_channels import WeChatChannelsDownloader
 from .generic import GenericDownloader
 from ..utils.logging import setup_logger
 
@@ -25,7 +26,8 @@ def create_downloader(url):
         BilibiliDownloader(),
         XiaohongshuDownloader(),
         YoutubeDownloader(),
-        XiaoyuzhouDownloader()
+        XiaoyuzhouDownloader(),
+        WeChatChannelsDownloader()
     ]
     
     # 先尝试平台特定的下载器

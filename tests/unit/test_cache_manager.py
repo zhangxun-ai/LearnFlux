@@ -6,6 +6,7 @@ with tmp_path fixtures and no side effects.
 """
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -119,6 +120,49 @@ class TestSaveCache:
         assert data["compat"] is True
 
 
+class TestTaskSourceFilePath:
+    """Tests for optional preserved source file metadata on tasks."""
+
+    def test_update_task_status_persists_source_file_path(self, cm, tmp_path):
+        task = cm.create_task(
+            url="https://weixin.qq.com/sph/A1kpVPJjiX",
+            platform="wechat_channels",
+            media_id="A1kpVPJjiX",
+        )
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"video")
+
+        cm.update_task_status(
+            task["task_id"],
+            "calibrating",
+            source_file_path=str(source_file),
+        )
+
+        row = cm.get_task_by_id(task["task_id"])
+        assert row["source_file_path"] == str(source_file)
+
+    def test_view_data_includes_source_file_path(self, cm, tmp_path):
+        task = cm.create_task(
+            url="https://weixin.qq.com/sph/A1kpVPJjiX",
+            platform="wechat_channels",
+            media_id="A1kpVPJjiX",
+        )
+        _save_sample_capswriter(cm, media_id="A1kpVPJjiX", platform="wechat_channels")
+        source_file = tmp_path / "wechat.mp4"
+        source_file.write_bytes(b"video")
+        cm.update_task_status(
+            task["task_id"],
+            "success",
+            platform="wechat_channels",
+            media_id="A1kpVPJjiX",
+            source_file_path=str(source_file),
+        )
+
+        view_data = cm.get_view_data_by_token(task["view_token"])
+
+        assert view_data["source_file_path"] == str(source_file)
+
+
 # ---------------------------------------------------------------------------
 # get_cache
 # ---------------------------------------------------------------------------
@@ -162,6 +206,62 @@ class TestGetCache:
         assert result["title"] == "Test Video"
         assert result["author"] == "Author"
         assert result["platform"] == "youtube"
+
+    def test_can_require_exact_speaker_setting(self, cm):
+        for speaker_mode in (False, True):
+            cm.save_cache(
+                platform="generic",
+                url="local://same/video.mp4",
+                media_id="same-video",
+                use_speaker_recognition=speaker_mode,
+                transcript_data="transcript",
+                transcript_type="capswriter",
+            )
+
+        exact = cm.get_cache(
+            platform="generic",
+            media_id="same-video",
+            use_speaker_recognition=False,
+            exact_speaker_match=True,
+        )
+
+        assert exact["use_speaker_recognition"] == 0
+
+
+class TestDeleteTaskAndCache:
+    """Tests for invalidating a completed task's shared media cache."""
+
+    def test_removes_media_cache_and_all_associated_tasks(self, cm):
+        media_id = "douyin-video"
+        cache_result = _save_sample_capswriter(
+            cm, media_id=media_id, platform="douyin"
+        )
+        first = cm.create_task(
+            url="https://v.douyin.com/example/",
+            platform="douyin",
+            media_id=media_id,
+        )
+        second = cm.create_task(
+            url="https://www.douyin.com/video/example",
+            platform="douyin",
+            media_id=media_id,
+        )
+        for task in (first, second):
+            cm.update_task_status(
+                task["task_id"],
+                "success",
+                platform="douyin",
+                media_id=media_id,
+            )
+        cache_path = Path(cache_result["transcript_file"]).parent
+
+        deleted = cm.delete_task_and_cache(first["task_id"])
+
+        assert deleted == {"deleted_caches": 1, "deleted_tasks": 2}
+        assert not cache_path.exists()
+        assert cm.get_cache(platform="douyin", media_id=media_id) is None
+        assert cm.get_task_by_id(first["task_id"]) is None
+        assert cm.get_task_by_id(second["task_id"]) is None
 
 
 # ---------------------------------------------------------------------------
@@ -629,6 +729,104 @@ class TestTaskProgress:
         assert view_data["progress"]["stage"] == "transcribing"
         assert view_data["progress"]["percent"] == 46
 
+    def test_view_token_prefers_success_over_older_failed_task(self, cm):
+        url = "https://www.xiaohongshu.com/discovery/item/note123?xsec_token=tok"
+        failed_task = cm.create_task(
+            url=url,
+            platform="xiaohongshu",
+            media_id="note123",
+        )
+        cm.update_task_status(
+            failed_task["task_id"],
+            "failed",
+            platform="xiaohongshu",
+            media_id="note123",
+            error_message="old download failed",
+        )
+        _save_sample_capswriter(cm, media_id="note123", platform="xiaohongshu")
+        success_task = cm.create_task(
+            url=url,
+            platform="xiaohongshu",
+            media_id="note123",
+        )
+        assert success_task["view_token"] == failed_task["view_token"]
+        cm.update_task_status(
+            success_task["task_id"],
+            "success",
+            platform="xiaohongshu",
+            media_id="note123",
+            title="人生怎么作弊",
+            author="苏越越",
+        )
+
+        task_info = cm.get_task_by_view_token(failed_task["view_token"])
+        view_data = cm.get_view_data_by_token(failed_task["view_token"])
+
+        assert task_info["task_id"] == success_task["task_id"]
+        assert task_info["status"] == "success"
+        assert view_data["status"] == "success"
+        assert view_data["media_id"] == "note123"
+
+    @pytest.mark.parametrize(
+        "active_status",
+        ["calibrating", "awaiting_cloud_confirmation"],
+    )
+    def test_view_token_prefers_active_task_over_older_failed_task(
+        self, cm, active_status
+    ):
+        url = "local://study-source/media/lesson.mp4"
+        failed_task = cm.create_task(
+            url=url,
+            platform="generic",
+            media_id="media",
+        )
+        cm.update_task_status(
+            failed_task["task_id"],
+            "failed",
+            error_message="old attempt failed",
+        )
+        active_task = cm.create_task(
+            url=url,
+            platform="generic",
+            media_id="media",
+        )
+        cm.update_task_status(active_task["task_id"], active_status)
+
+        selected = cm.get_task_by_view_token(failed_task["view_token"])
+
+        assert active_task["view_token"] == failed_task["view_token"]
+        assert selected["task_id"] == active_task["task_id"]
+        assert selected["status"] == active_status
+
+    def test_processing_view_data_recovers_when_final_cache_exists(self, cm):
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="final calibrated transcript",
+        )
+        task = cm.create_task(
+            url="https://example.com/vid1",
+            platform="youtube",
+            media_id="vid1",
+        )
+        cm.update_task_status(
+            task["task_id"],
+            "calibrating",
+            platform="youtube",
+            media_id="vid1",
+        )
+
+        view_data = cm.get_view_data_by_token(task["view_token"])
+        task_info = cm.get_task_by_id(task["task_id"])
+
+        assert view_data["status"] == "success"
+        assert view_data["transcript"] == "final calibrated transcript"
+        assert task_info["status"] == "success"
+        assert task_info["progress"]["basis"] == "task_completed"
+
     def test_progress_reminder_markers_are_persisted(self, cm):
         task = cm.create_task(url="https://example.com/progress-reminder")
         cm.update_task_status(task["task_id"], "processing")
@@ -662,3 +860,64 @@ class TestTaskProgress:
         assert view_data["platform"] == "youtube"
         assert view_data["media_id"] == "vid1"
         assert view_data["completed_at"]
+
+    def test_success_view_data_marks_missing_summary(self, cm):
+        _save_sample_capswriter(cm)
+        cm.save_llm_result(
+            platform="youtube",
+            media_id="vid1",
+            use_speaker_recognition=False,
+            llm_type="calibrated",
+            content="calibrated body",
+        )
+        task = cm.create_task(
+            url="https://example.com/vid1",
+            platform="youtube",
+            media_id="vid1",
+        )
+        cm.update_task_status(
+            task["task_id"],
+            "success",
+            platform="youtube",
+            media_id="vid1",
+        )
+
+        view_data = cm.get_view_data_by_token(task["view_token"])
+
+        assert view_data["status"] == "success"
+        assert view_data["summary"] == ""
+        assert view_data["summary_missing"] is True
+def test_terminal_progress_preserves_explicit_evidence(tmp_path):
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    success = manager.create_task(
+        url="local://study-source/doc/guide.pdf",
+        platform="generic",
+        media_id="doc",
+    )
+    evidence = {
+        "analysis_mode": "document_fast",
+        "visual_ready": True,
+        "quality": {"mode": "fast", "reasons": [], "metrics": {}},
+    }
+    manager.update_task_status(
+        success["task_id"], "success", terminal_evidence=evidence
+    )
+
+    failed = manager.create_task(
+        url="local://study-source/bad/bad.pdf",
+        platform="generic",
+        media_id="bad",
+    )
+    manager.update_task_status(
+        failed["task_id"],
+        "failed",
+        error_message="invalid document",
+        terminal_evidence={"analysis_mode": "document_fallback"},
+    )
+
+    assert manager.get_task_by_id(success["task_id"])["progress"]["evidence"] == evidence
+    assert manager.get_task_by_id(failed["task_id"])["progress"]["evidence"] == {
+        "analysis_mode": "document_fallback"
+    }

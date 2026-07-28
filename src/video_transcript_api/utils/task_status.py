@@ -35,13 +35,19 @@ class TaskStatus(StrEnum):
     CALIBRATING = "calibrating"
     AWAITING_CLOUD_CONFIRMATION = "awaiting_cloud_confirmation"
     SUCCESS = "success"
+    NO_TRANSCRIPT = "no_transcript"
     FAILED = "failed"
     CANCELED = "canceled"
 
 
 # 终态:任务生命周期结束,不应再被非显式流程覆写
 TERMINAL_STATUSES = frozenset(
-    {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELED}
+    {
+        TaskStatus.SUCCESS,
+        TaskStatus.NO_TRANSCRIPT,
+        TaskStatus.FAILED,
+        TaskStatus.CANCELED,
+    }
 )
 
 # 非终态:仍在处理中,崩溃后可被启动恢复扫描标记为 failed

@@ -87,21 +87,21 @@ class CloudASRDispatcher:
             for task_id in queued:
                 if self._stop_event.is_set():
                     return
-                self._dispatch_one(task_id)
+                if not self._dispatch_one(task_id):
+                    self._wait_for_work(now)
+                    break
 
-    def _dispatch_one(self, task_id: str) -> None:
+    def _dispatch_one(self, task_id: str) -> bool:
         nonce = uuid4().hex
         claim_owner = f"claim:{nonce}"
         slot_owner = f"continuation:{nonce}"
-        if not self.controller.acquire(
-            "cloud", slot_owner, cancelled=self._stop_event.is_set
-        ):
-            return
+        if not self.controller.try_acquire("cloud", slot_owner):
+            return False
         try:
             self.quote_repository.claim_queued(task_id, claim_owner)
         except CloudQuoteConflict:
             self._release_slot(slot_owner)
-            return
+            return True
         try:
             self.executor.submit(
                 self._run_claimed,
@@ -113,6 +113,7 @@ class CloudASRDispatcher:
             self.quote_repository.requeue_claim(task_id, claim_owner)
             self._submit_failed_tasks.add(task_id)
             self._release_slot(slot_owner)
+        return True
 
     def _run_claimed(
         self, task_id: str, claim_owner: str, slot_owner: str

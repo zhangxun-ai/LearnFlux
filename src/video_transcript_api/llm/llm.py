@@ -22,6 +22,8 @@ from llm_compat.providers import (
     detect_provider,
 )
 
+from .multi_endpoint import MultiEndpointSyncLLMClient, build_endpoint_clients
+
 
 # ============================================================
 # 全局默认配置 + SyncLLMClient 生命周期
@@ -97,22 +99,46 @@ def set_default_config(config: Optional[Dict[str, Any]]) -> None:
     # 从 risk_control 配置加载敏感词库，传给 llm-compat SensitiveDetector 做 pre-scan
     sensitive_detector = _build_sensitive_detector(config)
 
-    _sync_client = SyncLLMClient(
-        base_url=base_url,
-        api_key=api_key,
-        max_retries=llm_cfg.get("max_retries", 3),
-        total_timeout=float(llm_cfg.get("total_timeout", llm_cfg.get("timeout", DEFAULT_LLM_TIMEOUT))),
-        content_fallbacks=llm_cfg.get("content_fallbacks"),
-        collector_url=llm_cfg.get("collector_url"),
-        collector_project=llm_cfg.get("collector_project", ""),
-        collector_api_key=llm_cfg.get("collector_api_key", ""),
-        refusal_keywords_url=llm_cfg.get("refusal_keywords_url"),
+    max_retries = llm_cfg.get("max_retries", 3)
+    total_timeout = float(
+        llm_cfg.get("total_timeout", llm_cfg.get("timeout", DEFAULT_LLM_TIMEOUT))
+    )
+    endpoint_clients = build_endpoint_clients(
+        llm_cfg,
+        max_retries=max_retries,
+        total_timeout=total_timeout,
         sensitive_detector=sensitive_detector,
     )
-    if sensitive_detector:
-        logger.info(f"[LLM] SyncLLMClient initialized with SensitiveDetector ({len(sensitive_detector._words)} words)")
+    model_endpoints = llm_cfg.get("model_endpoints") or {}
+    client_kwargs = {
+        "base_url": base_url,
+        "api_key": api_key,
+        "max_retries": max_retries,
+        "total_timeout": total_timeout,
+        "content_fallbacks": llm_cfg.get("content_fallbacks"),
+        "collector_url": llm_cfg.get("collector_url"),
+        "collector_project": llm_cfg.get("collector_project", ""),
+        "collector_api_key": llm_cfg.get("collector_api_key", ""),
+        "refusal_keywords_url": llm_cfg.get("refusal_keywords_url"),
+        "sensitive_detector": sensitive_detector,
+    }
+    if endpoint_clients or model_endpoints:
+        _sync_client = MultiEndpointSyncLLMClient(
+            endpoint_clients=endpoint_clients,
+            model_endpoints=model_endpoints,
+            **client_kwargs,
+        )
+        logger.info(
+            f"[LLM] MultiEndpointSyncLLMClient initialized "
+            f"(secondary={sorted(endpoint_clients.keys())})"
+        )
     else:
-        logger.info("[LLM] SyncLLMClient initialized (no sensitive detector)")
+        _sync_client = SyncLLMClient(**client_kwargs)
+        logger.info("[LLM] SyncLLMClient initialized")
+    if sensitive_detector:
+        logger.info(
+            f"[LLM] SensitiveDetector enabled ({len(sensitive_detector._words)} words)"
+        )
 
 
 def get_default_config() -> Optional[Dict[str, Any]]:

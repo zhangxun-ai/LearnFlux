@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import json
+import re
 import sqlite3
 from collections.abc import Collection
 from contextlib import closing
@@ -65,6 +66,8 @@ class UsageEvent:
     materialization_status: str
     elapsed_seconds: str | None
     error_code: str | None
+    provider_error_code: str | None
+    provider_request_id: str | None
     owner_key: str
     sample_sha256: str
     platform: str
@@ -128,6 +131,8 @@ _ALLOWED_ERROR_CODES = {
     "reported_usage_exceeds_reservation",
     "closed_unreconciled",
 }
+_PROVIDER_ERROR_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,127}$")
+_PROVIDER_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,127}$")
 
 
 def _decimal_text(value: Decimal | str | int) -> str:
@@ -227,6 +232,8 @@ class UsageEventRepository:
                     materialization_status TEXT NOT NULL,
                     elapsed_seconds TEXT,
                     error_code TEXT,
+                    provider_error_code TEXT,
+                    provider_request_id TEXT,
                     owner_key TEXT NOT NULL,
                     provider_task_id TEXT,
                     sample_sha256 TEXT NOT NULL,
@@ -244,6 +251,18 @@ class UsageEventRepository:
                 )
                 """
             )
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(usage_events)")
+            }
+            if "provider_error_code" not in columns:
+                connection.execute(
+                    "ALTER TABLE usage_events ADD COLUMN provider_error_code TEXT"
+                )
+            if "provider_request_id" not in columns:
+                connection.execute(
+                    "ALTER TABLE usage_events ADD COLUMN provider_request_id TEXT"
+                )
             connection.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS ux_usage_events_task_attempt
@@ -359,6 +378,21 @@ class UsageEventRepository:
         if error_code is not None and error_code not in _ALLOWED_ERROR_CODES:
             raise UsageRepositoryError("invalid_error_code")
 
+    @staticmethod
+    def _validate_provider_diagnostics(
+        provider_error_code: str | None, provider_request_id: str | None
+    ) -> None:
+        if provider_error_code is not None and (
+            not isinstance(provider_error_code, str)
+            or not _PROVIDER_ERROR_CODE_PATTERN.fullmatch(provider_error_code)
+        ):
+            raise UsageRepositoryError("invalid_provider_error_code")
+        if provider_request_id is not None and (
+            not isinstance(provider_request_id, str)
+            or not _PROVIDER_REQUEST_ID_PATTERN.fullmatch(provider_request_id)
+        ):
+            raise UsageRepositoryError("invalid_provider_request_id")
+
     def record_remote_failure(
         self,
         event_id: str,
@@ -366,9 +400,14 @@ class UsageEventRepository:
         *,
         now: datetime,
         error_code: str | None,
+        provider_error_code: str | None = None,
+        provider_request_id: str | None = None,
     ) -> bool:
         """Record a claimed remote failure while its lease is still active."""
         self._validate_error_code(error_code)
+        self._validate_provider_diagnostics(
+            provider_error_code, provider_request_id
+        )
         now_text = _time_text(now)
         with closing(self._connect()) as connection:
             cursor = connection.execute(
@@ -376,14 +415,23 @@ class UsageEventRepository:
                 UPDATE usage_events
                 SET remote_status = 'failed',
                     materialization_status = 'not_applicable',
-                    error_code = ?, lease_owner = NULL,
+                    error_code = ?, provider_error_code = ?,
+                    provider_request_id = ?, lease_owner = NULL,
                     lease_expires_at = NULL, lease_heartbeat_at = NULL,
                     updated_at = ?
                 WHERE id = ?
                     AND remote_status IN ('submitting', 'submitted', 'polling_unknown')
                     AND lease_owner = ? AND lease_expires_at > ?
                 """,
-                (error_code, now_text, event_id, lease_owner, now_text),
+                (
+                    error_code,
+                    provider_error_code,
+                    provider_request_id,
+                    now_text,
+                    event_id,
+                    lease_owner,
+                    now_text,
+                ),
             )
             return cursor.rowcount == 1
 
@@ -478,6 +526,34 @@ class UsageEventRepository:
     ) -> bool:
         """Backward-compatible alias for the generic lease heartbeat."""
         return self.heartbeat_lease(event_id, lease_owner, now=now)
+
+    def reclaim_lease(
+        self, event_id: str, lease_owner: str, *, now: datetime
+    ) -> bool:
+        """Renew an expired lease only when its original owner is unchanged."""
+        now_text = _time_text(now)
+        expires_text = _time_text(now + timedelta(seconds=60))
+        with closing(self._connect()) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE usage_events
+                SET lease_expires_at = ?, lease_heartbeat_at = ?, updated_at = ?
+                WHERE id = ?
+                    AND remote_status IN (
+                        'submitting', 'submitted', 'polling_unknown'
+                    )
+                    AND lease_owner = ? AND lease_expires_at <= ?
+                """,
+                (
+                    expires_text,
+                    now_text,
+                    now_text,
+                    event_id,
+                    lease_owner,
+                    now_text,
+                ),
+            )
+            return cursor.rowcount == 1
 
     def record_submitted(
         self,
@@ -721,6 +797,49 @@ class UsageEventRepository:
                 (now_text, now_text),
             )
             return cursor.rowcount
+
+    def finalize_known_upload_failures(self, *, now: datetime) -> list[str]:
+        """Close expired pre-submit rows already diagnosed as upload failures."""
+        now_text = _time_text(now)
+        connection = self._connect()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                """
+                SELECT usage_events.id
+                FROM usage_events
+                JOIN task_status
+                    ON task_status.task_id = usage_events.task_id
+                WHERE usage_events.remote_status = 'submitting'
+                    AND usage_events.provider_task_id IS NULL
+                    AND usage_events.lease_expires_at <= ?
+                    AND task_status.status = 'failed'
+                    AND task_status.error_message LIKE '%upload_failed%'
+                """,
+                (now_text,),
+            ).fetchall()
+            event_ids = [row["id"] for row in rows]
+            if event_ids:
+                placeholders = ",".join("?" for _ in event_ids)
+                connection.execute(
+                    f"""UPDATE usage_events
+                    SET remote_status='failed',
+                        materialization_status='not_applicable',
+                        error_code='upload_failed',
+                        lease_owner=NULL, lease_expires_at=NULL,
+                        lease_heartbeat_at=NULL, updated_at=?
+                    WHERE remote_status='submitting'
+                        AND id IN ({placeholders})""",
+                    (now_text, *event_ids),
+                )
+            connection.commit()
+            return event_ids
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def freeze_claimed_submission_unknown(
         self,

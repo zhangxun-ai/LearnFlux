@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import os
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TextIO
 
@@ -47,6 +47,7 @@ from ..transcriber.cloud_runtime import (
     reconcile_stale_local_queued,
     resume_quote_backed_reserved_attempt,
 )
+from ..reading.service import ReadingService
 from .services.post_asr import dispatch_pending_post_asr, dispatch_post_asr
 from .services.progress_notifications import process_progress_reminders
 from .routes import (
@@ -58,6 +59,7 @@ from .routes import (
     marks,
     obsidian,
     post_insight,
+    reading,
     settings,
     study,
     tasks,
@@ -74,6 +76,11 @@ from .services.transcription import (
 
 
 _CLOUD_RECOVERY_SHUTDOWN_JOIN_SECONDS = 1.0
+
+
+def external_access_debug_enabled(config: dict) -> bool:
+    """Return whether detailed external-access diagnostics are explicitly enabled."""
+    return config.get("log", {}).get("external_access_debug") is True
 
 
 def _acquire_runtime_lock(cache_dir: Path) -> TextIO | None:
@@ -159,9 +166,33 @@ def _run_source_file_cleanup(cache_manager, storage_config: dict, logger) -> Non
         )
 
 
+def _recover_reading_deletions(
+    cache_manager, storage_config: dict, logger
+) -> None:
+    source_root, _ = _source_cleanup_paths(storage_config)
+    service = ReadingService(
+        db_path=cache_manager.db_path,
+        source_root=source_root,
+    )
+    try:
+        recovered = service.recover_deletion_jobs()
+        if recovered:
+            logger.info(f"Reading deletion cleanup completed: count={recovered}")
+        recovered_ocr = service.recover_interrupted_ocr(
+            older_than=datetime.now(UTC) - timedelta(minutes=15)
+        )
+        if recovered_ocr:
+            logger.warning(
+                f"Reading OCR recovery made retryable: count={recovered_ocr}"
+            )
+    finally:
+        service.close()
+
+
 def create_app() -> FastAPI:
     config = get_config()
     logger = get_logger()
+    external_access_debug = external_access_debug_enabled(config)
 
     app = FastAPI(
         title="LearnFlux",
@@ -186,7 +217,7 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def log_external_access(request: Request, call_next):
         path = request.url.path
-        if "/view/" in path or "/export/" in path:
+        if external_access_debug and ("/view/" in path or "/export/" in path):
             query = str(request.url.query)
             ua = request.headers.get("user-agent", "N/A")[:200]
             cf_ip = request.headers.get("cf-connecting-ip", "N/A")
@@ -220,6 +251,7 @@ def create_app() -> FastAPI:
     app.include_router(post_insight.router)
     app.include_router(flywheel.router)
     app.include_router(trend_radar.router)
+    app.include_router(reading.router)
     app.include_router(settings.router)
 
     @app.on_event("startup")
@@ -294,6 +326,15 @@ def create_app() -> FastAPI:
                 logger.exception("启动恢复扫描失败: %s", exc)
 
             try:
+                _recover_reading_deletions(
+                    cache_manager,
+                    config.get("storage", {}) or {},
+                    logger,
+                )
+            except Exception as exc:
+                logger.exception("Reading deletion recovery failed: %s", exc)
+
+            try:
                 _run_source_file_cleanup(
                     cache_manager,
                     config.get("storage", {}) or {},
@@ -310,6 +351,16 @@ def create_app() -> FastAPI:
             )
             app.state.cloud_recovery = None
             controller = get_transcription_concurrency_controller()
+            finalize_uploads = getattr(
+                usage_repository, "finalize_known_upload_failures", None
+            )
+            if callable(finalize_uploads):
+                finalized_uploads = finalize_uploads(now=datetime.now(UTC))
+                if finalized_uploads:
+                    logger.warning(
+                        "Recovered {} expired cloud upload failures",
+                        len(finalized_uploads),
+                    )
             for event_id in usage_repository.list_remote_capacity_attempt_ids():
                 controller.reserve_recovered_cloud(f"usage:{event_id}")
 

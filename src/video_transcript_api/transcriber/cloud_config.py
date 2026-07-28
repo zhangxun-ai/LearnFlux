@@ -1,4 +1,4 @@
-"""Configuration used only when submitting a new cloud ASR task."""
+"""Configuration used when preparing and submitting cloud ASR tasks."""
 
 from dataclasses import dataclass
 from datetime import date
@@ -15,7 +15,6 @@ _SAFE_ERROR_CODES = frozenset(
     {
         "invalid_cloud_asr_config",
         "cloud_asr_disabled",
-        "invalid_max_cny_per_task",
         "invalid_provider",
         "invalid_model",
         "invalid_price",
@@ -23,13 +22,12 @@ _SAFE_ERROR_CODES = frozenset(
         "invalid_poll_interval",
         "invalid_poll_timeout",
         "invalid_audio_seconds",
-        "budget_exceeded",
     }
 )
 
 
 class CloudASRConfigError(ValueError):
-    """A safe configuration or pre-submission budget error."""
+    """A safe cloud-ASR configuration error."""
 
     def __init__(self, code: str) -> None:
         if code not in _SAFE_ERROR_CODES:
@@ -45,7 +43,6 @@ class NewCloudSubmissionSettings:
     provider: str
     model: str
     region: str
-    max_cny_per_task: Decimal
     price_cny_per_second: Decimal
     price_verified_at: date
     poll_interval_seconds: int
@@ -73,9 +70,6 @@ class NewCloudSubmissionSettings:
             provider=PROVIDER,
             model=MODEL,
             region=REGION,
-            max_cny_per_task=_nonnegative_decimal(
-                cloud_asr.get("max_cny_per_task"), "invalid_max_cny_per_task"
-            ),
             price_cny_per_second=_fixed_price(cloud_asr.get("price_cny_per_second")),
             price_verified_at=_verified_price_date(
                 cloud_asr.get("price_verified_at"), today
@@ -98,11 +92,8 @@ class NewCloudSubmissionSettings:
         return seconds.to_integral_value(rounding=ROUND_CEILING) * self.price_cny_per_second
 
     def reserve_estimate(self, audio_seconds: Decimal | float | int | str) -> Decimal:
-        """Return a new-submission estimate after enforcing its per-task budget."""
-        estimate = self.estimated_cost(audio_seconds)
-        if estimate > self.max_cny_per_task:
-            raise CloudASRConfigError("budget_exceeded")
-        return estimate
+        """Return an estimate; user confirmation is the spending boundary."""
+        return self.estimated_cost(audio_seconds)
 
 
 def _positive_decimal(value: object, code: str) -> Decimal:

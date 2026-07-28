@@ -102,7 +102,11 @@ class TestLlmTerminalWriteback:
         assert row["status"] == "failed"
         assert "boom" in (row["error_message"] or "")
 
-    def test_normal_task_missing_required_summary_sets_db_failed(self, cm):
+    def test_normal_task_missing_required_summary_still_succeeds_with_pending(self, cm):
+        """Transcript artifacts must complete even when summary generation fails.
+
+        Collection progress should not stay stuck on AI summary forever.
+        """
         task_id = _calibrating_task(cm)
         coordinator = MagicMock()
         coordinator.config.min_summary_threshold = 500
@@ -123,8 +127,17 @@ class TestLlmTerminalWriteback:
                 c.stop()
 
         row = cm.get_task_by_id(task_id)
-        assert row["status"] == "failed"
-        assert "summary generation returned empty" in (row["error_message"] or "")
+        assert row["status"] == "success"
+        progress = row.get("progress") or {}
+        if isinstance(progress, str):
+            import json
+
+            progress = json.loads(progress)
+        evidence = progress.get("evidence") or {}
+        assert evidence.get("summary_pending") is True
+        assert "summary generation returned empty" in (
+            evidence.get("summary_error") or ""
+        )
 
     def test_recalibrate_regenerate_summary_forces_summary_backfill(self, cm):
         task_id = _calibrating_task(cm)

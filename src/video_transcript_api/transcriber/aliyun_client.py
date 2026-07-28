@@ -35,7 +35,7 @@ MODEL = "fun-asr-2025-11-07"
 _UPLOAD_POLICY_URL = "https://dashscope.aliyuncs.com/api/v1/uploads"
 _DEFAULT_TIMEOUTS = {
     "upload_policy": 30,
-    "upload": 120,
+    "upload": 600,
     "submit": 30,
     "poll": 30,
     "download": 30,
@@ -44,6 +44,8 @@ _KNOWN_STATUSES = frozenset(
     {"PENDING", "RUNNING", "SUCCEEDED", "FAILED", "CANCELED"}
 )
 _ACTIVE_STATUSES = frozenset({"PENDING", "RUNNING"})
+_PROVIDER_ERROR_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,127}$")
+_PROVIDER_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,127}$")
 
 
 class AliyunASRError(RuntimeError):
@@ -55,10 +57,14 @@ class AliyunASRError(RuntimeError):
         http_status: int | None = None,
         *,
         usage_seconds: int | float | None = None,
+        provider_error_code: str | None = None,
+        provider_request_id: str | None = None,
     ) -> None:
         self.code = code if code in _SAFE_ERROR_CODES else "invalid_response"
         self.http_status = http_status
         self.usage_seconds = usage_seconds
+        self.provider_error_code = _safe_provider_error_code(provider_error_code)
+        self.provider_request_id = _safe_provider_request_id(provider_request_id)
         super().__init__(self.code)
 
 
@@ -72,6 +78,18 @@ class PotentiallyAcceptedError(AliyunASRError):
 
 class PollTimeoutError(AliyunASRError):
     """Polling ended locally and may resume only the same provider task."""
+
+
+def _safe_provider_error_code(value: object) -> str | None:
+    if isinstance(value, str) and _PROVIDER_ERROR_CODE_PATTERN.fullmatch(value):
+        return value
+    return None
+
+
+def _safe_provider_request_id(value: object) -> str | None:
+    if isinstance(value, str) and _PROVIDER_REQUEST_ID_PATTERN.fullmatch(value):
+        return value
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,7 +299,12 @@ class AliyunASRClient:
             if status not in _KNOWN_STATUSES:
                 raise AliyunASRError("invalid_response", _status_code(response))
             if status in {"FAILED", "CANCELED"}:
-                raise AliyunASRError("provider_failed", _status_code(response))
+                raise AliyunASRError(
+                    "provider_failed",
+                    _status_code(response),
+                    provider_error_code=output.get("code"),
+                    provider_request_id=payload.get("request_id"),
+                )
             if status not in _ACTIVE_STATUSES:
                 return self._terminal_result(task_id, payload, output)
 

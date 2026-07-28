@@ -167,6 +167,45 @@ def test_local_whisper_rejects_empty_transcript(tmp_path, monkeypatch):
         provider.transcribe(str(tmp_path / "audio.mp3"), "result")
 
 
+def test_local_whisper_rejects_uniform_high_compression_transcript(
+    tmp_path, monkeypatch
+):
+    binary_path = tmp_path / "mlx_whisper"
+    binary_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    provider = LocalWhisperProvider(_local_config(binary_path), str(tmp_path))
+
+    def fake_run(*args, **kwargs):
+        repeated = "Ooh, " * 120
+        (tmp_path / "result.json").write_text(
+            json.dumps(
+                {
+                    "text": repeated,
+                    "segments": [
+                        {
+                            "start": 0,
+                            "end": 30,
+                            "text": repeated,
+                            "compression_ratio": 29.3,
+                        },
+                        {
+                            "start": 30,
+                            "end": 60,
+                            "text": repeated,
+                            "compression_ratio": 29.1,
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="low_quality_local_transcript"):
+        provider.transcribe(str(tmp_path / "audio.mp3"), "result")
+
+
 def test_capswriter_preserves_client_config_and_generated_files(tmp_path, monkeypatch):
     """CapsWriter configuration and artifact parsing must remain unchanged."""
     audio_path = tmp_path / "lesson.mp3"

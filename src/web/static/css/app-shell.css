@@ -3,7 +3,8 @@
 :root {
     --shell-sidebar: 280px;
     --shell-sidebar-collapsed: 72px;
-    --shell-topbar: 64px;
+    /* Desktop: no topbar chrome — sidebar already shows the current page. */
+    --shell-topbar: 0px;
     --shell-current-sidebar: var(--shell-sidebar);
     --shell-bg: #F6F8FB;
     --shell-sidebar-bg: #EEF2F7;
@@ -440,7 +441,8 @@ body.sidebar-collapsed .nav-item:focus-visible::after {
     top: 0;
     z-index: 20;
     min-height: var(--shell-topbar);
-    display: flex;
+    /* Desktop: hide the nav-title echo; mobile restores display:flex. */
+    display: none;
     align-items: center;
     justify-content: space-between;
     gap: 20px;

@@ -221,6 +221,8 @@ class CloudASRRecoveryCoordinator:
                         lease_owner,
                         now=self.clock(),
                         error_code="provider_failed",
+                        provider_error_code=exc.provider_error_code,
+                        provider_request_id=exc.provider_request_id,
                     )
                     self._cleanup_event_attempt(event)
                     self._notify_attempt_state(event.id)

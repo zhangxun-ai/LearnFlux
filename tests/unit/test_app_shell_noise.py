@@ -58,8 +58,10 @@ def test_shared_shell_uses_consistent_desktop_and_compact_mobile_bars():
     ).read_text(encoding="utf-8")
 
     desktop, mobile = css.split("@media (max-width: 900px)", maxsplit=1)
-    assert "--shell-topbar: 64px" in desktop
-    assert re.search(r"\.topbar\s*\{[^}]*display:\s*flex", desktop, re.DOTALL)
+    # Desktop hides the topbar page-title echo (sidebar already shows location).
+    assert "--shell-topbar: 0px" in desktop
+    assert re.search(r"\.topbar\s*\{[^}]*display:\s*none", desktop, re.DOTALL)
+    # Mobile keeps a compact topbar as the navigation/location anchor.
     assert "--shell-topbar: 56px" in mobile
     assert re.search(r"\.topbar\s*\{[^}]*display:\s*flex", mobile, re.DOTALL)
     assert re.search(r"\.sr-only\s*\{", css)

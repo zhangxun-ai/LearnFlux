@@ -31,6 +31,7 @@ def test_collection_repository_persists_filters_and_backfills_owner(tmp_path):
     assert repository.get_filter_options(owner_user_id="user-a") == {
         "creator_names": ["Alice"],
         "titles": ["Course A"],
+        "titles_by_creator": {"Alice": ["Course A"]},
     }
 
     repository.assign_unowned_collections("legacy_user")

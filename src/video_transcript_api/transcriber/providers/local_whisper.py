@@ -1,6 +1,7 @@
 """Local MLX Whisper transcription provider."""
 
 import json
+import math
 import os
 import subprocess
 import time
@@ -105,6 +106,26 @@ class LocalWhisperProvider:
 
         if not transcript:
             raise RuntimeError(f"本地 mlx-whisper 转录结果为空: {json_path}")
+
+        nonempty_segments = [
+            segment
+            for segment in whisper_data.get("segments", [])
+            if isinstance(segment, dict)
+            and (segment.get("text") or "").strip()
+        ]
+        compression_ratios = [
+            float(segment["compression_ratio"])
+            for segment in nonempty_segments
+            if not isinstance(segment.get("compression_ratio"), bool)
+            and isinstance(segment.get("compression_ratio"), (int, float))
+            and math.isfinite(float(segment["compression_ratio"]))
+        ]
+        if (
+            len(nonempty_segments) >= 2
+            and len(compression_ratios) == len(nonempty_segments)
+            and min(compression_ratios) >= 10
+        ):
+            raise RuntimeError("low_quality_local_transcript")
 
         with open(txt_path, "w", encoding="utf-8") as file:
             file.write(transcript)

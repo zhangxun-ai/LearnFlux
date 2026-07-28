@@ -45,6 +45,8 @@ llm_coordinator = get_llm_coordinator()
 llm_task_queue = get_llm_queue()
 llm_executor = get_llm_executor()
 
+_SUMMARY_RETRY_DELAYS_SECONDS = (60, 300, 1800)
+
 
 class _PostprocessHeartbeat:
     """Keep one durable postprocess claim alive while LLM work blocks."""
@@ -140,6 +142,165 @@ def _is_cloud_postprocess_terminal(task_id: str) -> bool:
         TaskStatus.FAILED,
         TaskStatus.SUCCESS,
     }
+
+
+def _schedule_summary_retry(llm_task: dict, attempt: int) -> int | None:
+    """Enqueue one bounded summary-only retry after the configured delay."""
+    if attempt < 1 or attempt > len(_SUMMARY_RETRY_DELAYS_SECONDS):
+        return None
+
+    delay = _SUMMARY_RETRY_DELAYS_SECONDS[attempt - 1]
+    retry_task = {
+        **llm_task,
+        "summary_only_retry": True,
+        "summary_retry_attempt": attempt,
+        "skip_notification": True,
+    }
+    for transient_key in (
+        "perf_tracker",
+        "usage_event_id",
+        "postprocess_key",
+    ):
+        retry_task.pop(transient_key, None)
+
+    def _enqueue() -> None:
+        try:
+            llm_task_queue.put(retry_task)
+            logger.info(
+                f"summary retry enqueued: {retry_task.get('task_id')}, "
+                f"attempt={attempt}"
+            )
+        except Exception as exc:
+            logger.error(
+                f"summary retry enqueue failed: {retry_task.get('task_id')}, "
+                f"attempt={attempt}, error={exc}"
+            )
+
+    timer = threading.Timer(delay, _enqueue)
+    timer.daemon = True
+    timer.start()
+    logger.info(
+        f"summary retry scheduled: {llm_task.get('task_id')}, "
+        f"attempt={attempt}, delay={delay}s"
+    )
+    return delay
+
+
+def _existing_progress_evidence(task_id: str) -> dict:
+    task_info = cache_manager.get_task_by_id(task_id) or {}
+    progress = task_info.get("progress") or {}
+    evidence = progress.get("evidence") or {}
+    return dict(evidence) if isinstance(evidence, dict) else {}
+
+
+def _handle_summary_only_retry(llm_task: dict) -> None:
+    """Retry only summary generation from the saved calibrated transcript."""
+    task_id = llm_task["task_id"]
+    platform = llm_task.get("platform")
+    media_id = llm_task.get("media_id")
+    use_speaker_recognition = bool(
+        llm_task.get("use_speaker_recognition", False)
+    )
+    attempt = int(llm_task.get("summary_retry_attempt") or 1)
+    cache_snapshot = (
+        cache_manager.get_cache(
+            platform,
+            media_id,
+            use_speaker_recognition=use_speaker_recognition,
+        )
+        if platform and media_id
+        else None
+    ) or {}
+    calibrated_text = str(cache_snapshot.get("llm_calibrated") or "").strip()
+    summary_text = None
+    summary_error = None
+
+    if not calibrated_text:
+        summary_error = "saved calibrated transcript is unavailable"
+    else:
+        try:
+            summary_text = llm_coordinator.summary_processor.process(
+                text=calibrated_text,
+                title=llm_task.get("video_title") or "",
+                author=llm_task.get("author") or "",
+                description=llm_task.get("description") or "",
+                speaker_count=2 if use_speaker_recognition else 0,
+                transcription_data=None,
+                selected_models=llm_coordinator.config.get_models(),
+            )
+            if not summary_text:
+                summary_error = "summary generation returned empty"
+        except Exception as exc:
+            summary_error = str(exc)
+            logger.exception(
+                f"summary-only retry failed: {task_id}, attempt={attempt}"
+            )
+
+    evidence = _existing_progress_evidence(task_id)
+    if summary_text and platform and media_id:
+        summary_saved = cache_manager.save_llm_result(
+            platform=platform,
+            media_id=media_id,
+            use_speaker_recognition=use_speaker_recognition,
+            llm_type="summary",
+            content=normalize_markdown_text(summary_text),
+        )
+        if summary_saved:
+            evidence.update(
+                {
+                    "summary_pending": False,
+                    "summary_fallback_exhausted": False,
+                    "summary_retry_scheduled": False,
+                    "summary_retry_attempt": attempt,
+                }
+            )
+            cache_manager.update_task_status(
+                task_id,
+                TaskStatus.SUCCESS,
+                platform=platform,
+                media_id=media_id,
+                title=llm_task.get("video_title") or "",
+                author=llm_task.get("author") or "",
+                terminal_evidence=evidence,
+                stage_label="AI 解读已恢复",
+                force=True,
+            )
+            logger.info(
+                f"summary-only retry succeeded: {task_id}, attempt={attempt}"
+            )
+            return
+        summary_error = "summary persistence failed"
+
+    next_attempt = attempt + 1
+    retry_delay = _schedule_summary_retry(llm_task, next_attempt)
+    evidence.update(
+        {
+            "summary_pending": True,
+            "summary_error": summary_error or "summary retry failed",
+            "summary_fallback_exhausted": True,
+            "summary_retry_scheduled": retry_delay is not None,
+            "summary_retry_attempt": next_attempt if retry_delay else attempt,
+        }
+    )
+    if retry_delay is not None:
+        evidence["summary_retry_in_seconds"] = retry_delay
+    else:
+        evidence.pop("summary_retry_in_seconds", None)
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.SUCCESS,
+        platform=platform,
+        media_id=media_id,
+        title=llm_task.get("video_title") or "",
+        author=llm_task.get("author") or "",
+        terminal_evidence=evidence,
+        stage_label=(
+            "AI 解读失败，等待自动重试"
+            if retry_delay is not None
+            else "AI 解读失败（自动重试已用尽）"
+        ),
+        force=True,
+    )
 
 
 def process_llm_queue():
@@ -257,6 +418,10 @@ def _handle_llm_task(llm_task: dict):
             logger.info(f"开始处理LLM任务: {task_id}, 标题: {video_title}")
 
             try:
+                if llm_task.get("summary_only_retry"):
+                    _handle_summary_only_retry(llm_task)
+                    return
+
                 # 通用下载器无标题时使用 LLM 生成
                 video_title = _generate_title_if_needed(llm_task, video_title, transcript)
                 llm_task["video_title"] = video_title
@@ -448,11 +613,22 @@ def _handle_llm_task(llm_task: dict):
                     calibrate_only=calibrate_only,
                     summary_backfill=summary_backfill,
                 )
+                # Summary failure must not block transcript delivery or collection progress.
+                # Model problems are handled by immediate in-request fallback models;
+                # if the whole chain fails, keep calibrated artifacts and mark pending.
                 if summary_error_message:
-                    raise RuntimeError(summary_error_message)
+                    summary_retry_delay = _schedule_summary_retry(llm_task, 1)
+                    result_dict["summary_success"] = False
+                    result_dict["summary_pending"] = True
+                    result_dict["summary_error"] = summary_error_message
+                    logger.warning(
+                        "summary generation failed after in-request model fallbacks; "
+                        "marking summary pending without failing the task: "
+                        f"{task_id}, error={summary_error_message}"
+                    )
 
                 # 发送通知（多渠道）
-                if not calibrate_only:
+                if not calibrate_only and not llm_task.get("skip_notification"):
                     _send_notification(
                         task_id=task_id,
                         video_title=video_title,
@@ -471,6 +647,31 @@ def _handle_llm_task(llm_task: dict):
                 # LLM 阶段拥有终态：产物已通过 _save_llm_results 落盘，此时才置 success
                 # （对所有任务生效，不再仅限 calibrate_only；终态由本阶段统一写回）
                 done_message = "重新校对完成" if calibrate_only else "校对完成"
+                if summary_error_message:
+                    done_message = "校对完成（AI 解读失败，已尝试备用模型）"
+                terminal_evidence = _terminal_evidence(llm_task) or {}
+                if summary_error_message:
+                    terminal_evidence = {
+                        **terminal_evidence,
+                        "summary_pending": True,
+                        "summary_error": summary_error_message,
+                        "summary_fallback_exhausted": True,
+                        "summary_retry_scheduled": summary_retry_delay is not None,
+                        "summary_retry_attempt": 1,
+                    }
+                    if summary_retry_delay is not None:
+                        terminal_evidence["summary_retry_in_seconds"] = (
+                            summary_retry_delay
+                        )
+                elif result_dict.get("内容总结"):
+                    terminal_evidence = {
+                        **terminal_evidence,
+                        "summary_pending": False,
+                        "summary_fallback_exhausted": False,
+                    }
+                success_stage_label = None
+                if summary_error_message:
+                    success_stage_label = "AI 解读失败（已切换备用模型）"
                 cache_manager.update_task_status(
                     task_id,
                     TaskStatus.SUCCESS,
@@ -478,7 +679,8 @@ def _handle_llm_task(llm_task: dict):
                     media_id=media_id,
                     title=video_title,
                     author=llm_task.get("author", ""),
-                    terminal_evidence=_terminal_evidence(llm_task),
+                    terminal_evidence=terminal_evidence or None,
+                    stage_label=success_stage_label,
                 )
 
                 # Complete the durable outbox only after artifacts and the
@@ -500,22 +702,26 @@ def _handle_llm_task(llm_task: dict):
                 logger.exception(f"LLM任务处理异常: {task_id}, 错误: {exc}")
                 # LLM 处理失败时输出已记录的性能摘要
                 tracker.log_summary()
-                task_notifier.send_text(f"【LLM API调用异常】{exc}")
+                if not llm_task.get("skip_notification"):
+                    task_notifier.send_text(f"【LLM API调用异常】{exc}")
 
                 # 终态由 LLM 阶段统一写回（对所有任务生效，修复普通任务 LLM 失败被静默的问题）
+                # Always write failed, including cloud postprocess paths; otherwise the
+                # task can remain stuck in calibrating/"AI 处理中".
                 fail_message = (
                     f"重新校对失败: {exc}" if llm_task.get("calibrate_only")
                     else f"LLM处理失败: {exc}"
                 )
-                if postprocess_repository is None:
-                    try:
-                        cache_manager.update_task_status(
-                            task_id, TaskStatus.FAILED, error_message=fail_message,
-                            terminal_evidence=_terminal_evidence(llm_task),
-                        )
-                        logger.info(f"任务状态已更新为 failed: {task_id} ({fail_message})")
-                    except Exception:
-                        pass
+                try:
+                    cache_manager.update_task_status(
+                        task_id, TaskStatus.FAILED, error_message=fail_message,
+                        terminal_evidence=_terminal_evidence(llm_task),
+                    )
+                    logger.info(f"任务状态已更新为 failed: {task_id} ({fail_message})")
+                except Exception:
+                    logger.exception(
+                        f"failed to persist failed terminal state: {task_id}"
+                    )
     finally:
         if postprocess_heartbeat is not None:
             postprocess_heartbeat.stop()

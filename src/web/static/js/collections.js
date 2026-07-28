@@ -6,6 +6,9 @@
     const POLL_MS = 2500;
     const DEFAULT_MAP_ZOOM = 1.16;
     const VISUAL_DOCUMENT_TYPES = ['overview', 'full_note'];
+    // Upload large video folders in small batches so sources appear progressively
+    // and the UI can show real progress (a single 90-file request looks frozen).
+    const UPLOAD_BATCH_SIZE = 3;
     const TRANSCRIPTION_LIMITS = {
         local: { min: 1, max: 3, defaultValue: 1 },
         cloud: { min: 1, max: 10, defaultValue: 5 }
@@ -39,6 +42,9 @@
         dropSubtitle: document.getElementById('drop-subtitle'),
         pickFolder: document.getElementById('pick-folder'),
         pickFiles: document.getElementById('pick-files'),
+        importLocalPath: document.getElementById('import-local-path'),
+        browseLocalPath: document.getElementById('browse-local-path'),
+        localImportPath: document.getElementById('local-import-path'),
         appendFolder: document.getElementById('append-folder'),
         appendFiles: document.getElementById('append-files'),
         folderInput: document.getElementById('folder-input'),
@@ -57,6 +63,16 @@
         actionDialogClose: document.getElementById('collection-action-dialog-close'),
         actionDialogCancel: document.getElementById('collection-action-dialog-cancel'),
         actionDialogSubmit: document.getElementById('collection-action-dialog-submit'),
+        pathPickerDialog: document.getElementById('local-path-picker-dialog'),
+        pathPickerTitle: document.getElementById('local-path-picker-title'),
+        pathPickerClose: document.getElementById('local-path-picker-close'),
+        pathPickerCancel: document.getElementById('local-path-picker-cancel'),
+        pathPickerConfirm: document.getElementById('local-path-picker-confirm'),
+        pathPickerUp: document.getElementById('local-path-picker-up'),
+        pathPickerCurrent: document.getElementById('local-path-picker-current'),
+        pathPickerRoots: document.getElementById('local-path-picker-roots'),
+        pathPickerList: document.getElementById('local-path-picker-list'),
+        pathPickerMeta: document.getElementById('local-path-picker-meta'),
         importPreview: document.getElementById('import-preview'),
         collectionHistoryList: document.getElementById('collection-history-list'),
         collectionHistoryCount: document.getElementById('collection-history-count'),
@@ -163,8 +179,10 @@
         collectionVisualExport: document.getElementById('collection-visual-export'),
         collectionVisualPrint: document.getElementById('collection-visual-print'),
         collectionVisualOpen: document.getElementById('collection-visual-open'),
-        collectionSummaryReaderOpen: document.getElementById('collection-summary-reader-open'),
         collectionImmersiveReader: document.getElementById('collection-immersive-reader'),
+        collectionBoard: document.getElementById('collection-board'),
+        collectionSources: document.getElementById('collection-sources'),
+        sourcesPanelToggle: document.getElementById('sources-panel-toggle'),
         toast: document.getElementById('toast')
     };
 
@@ -173,7 +191,7 @@
     let filterOptions = { creator_names: [], titles: [] };
     let currentCollection = null;
     let selectedSourceId = null;
-    let currentView = 'map';
+    let currentView = 'summary';
     let knowledgeMapScope = 'collection';
     let selectedMapNodeId = null;
     let knowledgeMaps = { collection: null, sources: {} };
@@ -190,9 +208,14 @@
     let markdownDisplayMode = 'preview';
     let summaryMode = 'guide';
     let collectionSummaryMode = 'text';
+    let sourcesExpandedInSummary = false;
     let lastSummaryTrigger = null;
     const sourceDetailRequests = new Map();
     let busy = false;
+    // { phase, total, uploaded, percent, message } while create/upload is in flight.
+    let importStatus = null;
+    // Sticky failure message so a failed bulk upload is not lost after toast dismisses.
+    let lastImportError = '';
     const summaryProgressByCollection = new Map();
     let pendingImportMethod = 'local_files';
     let selectedCandidateCount = 0;
@@ -293,9 +316,10 @@
 
     function setBusy(nextBusy) {
         busy = nextBusy;
-        [els.pickFolder, els.pickFiles, els.appendFolder, els.appendFiles, els.cancelCollection, els.continueCollection].forEach((button) => {
+        [els.pickFolder, els.pickFiles, els.importLocalPath, els.appendFolder, els.appendFiles, els.cancelCollection, els.continueCollection].forEach((button) => {
             if (button) button.disabled = busy;
         });
+        if (els.localImportPath) els.localImportPath.disabled = busy;
         if (els.dropAction) {
             els.dropAction.setAttribute('aria-busy', busy ? 'true' : 'false');
             els.dropAction.classList.toggle('is-busy', busy);
@@ -310,6 +334,81 @@
             els.generateSummary.disabled = true;
             els.exportMarkdown.disabled = true;
             if (els.mapGenerate) els.mapGenerate.disabled = true;
+        }
+    }
+
+    function setImportStatus(nextStatus) {
+        importStatus = nextStatus
+            ? {
+                phase: nextStatus.phase || 'uploading',
+                total: Number(nextStatus.total) || 0,
+                uploaded: Number(nextStatus.uploaded) || 0,
+                percent: Math.max(0, Math.min(100, Math.round(Number(nextStatus.percent) || 0))),
+                message: nextStatus.message || ''
+            }
+            : null;
+        renderImportStatus();
+    }
+
+    function clearImportStatus() {
+        importStatus = null;
+        if (els.importPreview) {
+            els.importPreview.classList.remove('is-uploading');
+        }
+        if (els.dropAction) {
+            els.dropAction.classList.remove('is-uploading');
+        }
+        // Restore drop-zone copy for the current content type.
+        if (els.dropTitle && els.dropSubtitle) {
+            const config = typeConfig(activeType);
+            els.dropTitle.textContent = config.title;
+            els.dropSubtitle.textContent = config.subtitle;
+        }
+    }
+
+    function renderImportStatus() {
+        if (!importStatus) return;
+        const { total, uploaded, percent, message, phase } = importStatus;
+        const detail = total
+            ? `${uploaded}/${total} · ${percent}%`
+            : `${percent}%`;
+        if (els.importPreview) {
+            els.importPreview.classList.add('is-uploading');
+            els.importPreview.innerHTML = (
+                `<strong>${escapeHTML(message || '正在处理…')}</strong>`
+                + `<span>${escapeHTML(detail)}</span>`
+            );
+        }
+        if (els.dropAction) {
+            els.dropAction.classList.add('is-uploading');
+        }
+        if (els.dropTitle) {
+            els.dropTitle.textContent = phase === 'creating'
+                ? '正在创建专题…'
+                : (phase === 'finalizing' ? '上传完成，正在启动解析…' : '正在上传文件…');
+        }
+        if (els.dropSubtitle) {
+            els.dropSubtitle.textContent = total
+                ? `已处理 ${uploaded}/${total} 个文件，请勿关闭或刷新页面`
+                : '请勿关闭或刷新页面';
+        }
+        if (els.workspaceSubtitle) {
+            els.workspaceSubtitle.textContent = message || els.dropTitle.textContent;
+        }
+        if (els.progressValue) {
+            els.progressValue.textContent = `${percent}%`;
+        }
+        if (els.progressFill) {
+            els.progressFill.style.width = `${percent}%`;
+        }
+        if (els.sourceList && !(currentCollection && (currentCollection.sources || []).length)) {
+            const emptyHint = total
+                ? `正在上传 ${uploaded}/${total} 个文件…上传完成后会在这里逐个显示解析进度。`
+                : '正在上传文件…上传完成后会在这里逐个显示解析进度。';
+            els.sourceList.innerHTML = `<div class="lc-empty lc-empty-uploading">${escapeHTML(emptyHint)}</div>`;
+            if (els.sourceCount) {
+                els.sourceCount.textContent = uploaded ? `${uploaded} 个待解析` : '上传中';
+            }
         }
     }
 
@@ -349,7 +448,35 @@
 
     function isSummaryGenerating(collectionId) {
         const state = summaryProgressState(collectionId);
-        return Boolean(state && state.active);
+        if (state && state.active) return true;
+        const status = currentCollection
+            && currentCollection.id === collectionId
+            && String(currentCollection.summary_status || '');
+        return status === 'processing';
+    }
+
+    function summaryGenerationStorageKey(collectionId) {
+        return `vta_collection_summary_generating:${collectionId || ''}`;
+    }
+
+    function rememberSummaryGenerating(collectionId, active) {
+        const key = summaryGenerationStorageKey(collectionId);
+        if (!key.endsWith(':')) {
+            try {
+                if (active) sessionStorage.setItem(key, String(Date.now()));
+                else sessionStorage.removeItem(key);
+            } catch (error) {
+                /* ignore quota / private mode */
+            }
+        }
+    }
+
+    function wasSummaryGenerating(collectionId) {
+        try {
+            return Boolean(sessionStorage.getItem(summaryGenerationStorageKey(collectionId)));
+        } catch (error) {
+            return false;
+        }
     }
 
     function renderVisibleSummaryProgress() {
@@ -389,7 +516,9 @@
             label: ''
         };
         state.active = true;
-        state.percent = Math.max(0, Math.min(100, percent || 0));
+        if (percent != null && percent !== '') {
+            state.percent = Math.max(0, Math.min(100, Number(percent) || 0));
+        }
         if (label) state.label = label;
         summaryProgressByCollection.set(key, state);
         if (selectedCollectionKey() === key) renderVisibleSummaryProgress();
@@ -470,15 +599,15 @@
         if (type === 'document_topic') {
             return {
                 accept: DOC_EXTS.join(','),
-                title: '拖放专题文档到这里',
-                subtitle: '也可以使用下方按钮选择文件或文件夹。',
+                title: '填写本机文档文件夹路径',
+                subtitle: '只登记路径，不复制文档；解析后打开源文件定位原路径。',
                 goal: '从同一专题文档中提炼知识结构、判断标准和可执行清单。'
             };
         }
         return {
             accept: VIDEO_EXTS.join(','),
-            title: '拖放课程视频到这里',
-            subtitle: '也可以使用下方按钮选择文件或文件夹。',
+            title: '填写本机课程文件夹路径',
+            subtitle: '只登记路径，不复制视频；解析后打开源文件会直接定位原路径。',
             goal: '从同一视频课程中提炼整体主题、章节关系和可复用方法论。'
         };
     }
@@ -559,14 +688,27 @@
     }
 
     function previewFiles(files) {
+        if (els.importPreview) {
+            els.importPreview.classList.remove('is-uploading', 'is-error');
+        }
         if (!files.length) {
-            els.importPreview.innerHTML = '<strong>尚未选择文件</strong><span>选择后会按文件名顺序逐个解析</span>';
+            els.importPreview.innerHTML = '<strong>尚未指定本机路径</strong><span>导入后按文件名顺序解析，不额外占用原视频空间</span>';
             return;
         }
 
         const first = files[0].webkitRelativePath || files[0].name;
         const last = files[files.length - 1].webkitRelativePath || files[files.length - 1].name;
         els.importPreview.innerHTML = `<strong>${escapeHTML(files.length)} 个文件</strong><span>${escapeHTML(first)}${files.length > 1 ? ' - ' + escapeHTML(last) : ''}</span>`;
+    }
+
+    function previewLocalPath(directory) {
+        if (els.importPreview) {
+            els.importPreview.classList.remove('is-uploading', 'is-error');
+            els.importPreview.innerHTML = (
+                `<strong>本机路径（零拷贝）</strong>`
+                + `<span>${escapeHTML(directory)}</span>`
+            );
+        }
     }
 
     function escapeHTML(value) {
@@ -639,6 +781,7 @@
 
     function importMethodLabel(method) {
         const labels = {
+            local_path: '本机路径（零拷贝）',
             local_folder: '本地文件夹',
             local_files: '本地多文件',
             link_batch: '链接合集'
@@ -752,10 +895,32 @@
     }
 
     function renderInlineMarkdown(value) {
-        return escapeHTML(value)
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Protect inline code first so * / _ inside `code` are not re-parsed as emphasis.
+        // Then **bold**, then single * / _ emphasis. Trim mild LLM quirks like "*第 1 节 *".
+        const placeholders = [];
+        const protect = (html) => {
+            const token = `\u0000MD${placeholders.length}\u0000`;
+            placeholders.push(html);
+            return token;
+        };
+        let html = escapeHTML(value)
+            .replace(/`([^`]+)`/g, (_, code) => protect(`<code>${code}</code>`))
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/__(.+?)__/g, '<strong>$1</strong>');
+            .replace(/__(.+?)__/g, '<strong>$1</strong>')
+            .replace(/\*([^*\n]+?)\*/g, (match, inner) => {
+                const text = String(inner || '').trim();
+                return text ? `<em>${text}</em>` : match;
+            })
+            .replace(/_([^_\n]+?)_/g, (match, inner) => {
+                const text = String(inner || '').trim();
+                // Skip snake_case / identifiers like model_name.
+                if (!text || /^[\w.-]+$/.test(text)) return match;
+                return `<em>${text}</em>`;
+            });
+        placeholders.forEach((chunk, index) => {
+            html = html.replace(`\u0000MD${index}\u0000`, chunk);
+        });
+        return html;
     }
 
     function splitInlineNumberedItems(value) {
@@ -981,17 +1146,104 @@
         return payload.data;
     }
 
+    function uploadFileBatch(collectionId, files, onProgress) {
+        return new Promise((resolve, reject) => {
+            const token = getToken();
+            if (!token) {
+                reject(new Error('请先在工作台设置 API 令牌'));
+                return;
+            }
+            const formData = new FormData();
+            files.forEach((file) => {
+                formData.append('files', file, file.name);
+            });
+            formData.append('transcription_strategy', selectedTranscriptionStrategy());
+            formData.append('transcription_concurrency', String(selectedTranscriptionConcurrency()));
+
+            const request = new XMLHttpRequest();
+            request.open('POST', `/api/collections/${encodeURIComponent(collectionId)}/sources/upload`);
+            request.setRequestHeader('Authorization', `Bearer ${token}`);
+            request.upload.onprogress = (event) => {
+                if (!event.lengthComputable || typeof onProgress !== 'function') return;
+                onProgress(event.loaded, event.total);
+            };
+            request.onerror = () => reject(new Error('上传失败，请检查网络后重试'));
+            request.onload = () => {
+                let payload = {};
+                try {
+                    payload = JSON.parse(request.responseText || '{}');
+                } catch (error) {
+                    payload = {};
+                }
+                if (request.status < 200 || request.status >= 300) {
+                    const raw = payload && (payload.detail || payload.message);
+                    let detail = raw;
+                    if (Array.isArray(raw)) {
+                        detail = raw.map((item) => (item && (item.msg || item.message)) || String(item)).join('；');
+                    } else if (raw && typeof raw === 'object') {
+                        detail = raw.msg || raw.message || JSON.stringify(raw);
+                    }
+                    reject(new Error((typeof detail === 'string' && detail) || `上传失败（HTTP ${request.status}）`));
+                    return;
+                }
+                resolve(payload);
+            };
+            request.send(formData);
+        });
+    }
+
     async function uploadFiles(collectionId, files) {
-        const formData = new FormData();
-        files.forEach((file) => {
-            formData.append('files', file, file.name);
-        });
-        formData.append('transcription_strategy', selectedTranscriptionStrategy());
-        formData.append('transcription_concurrency', String(selectedTranscriptionConcurrency()));
-        return apiJSON(`/api/collections/${collectionId}/sources/upload`, {
-            method: 'POST',
-            body: formData
-        });
+        const total = files.length;
+        if (!total) return { data: { sources: [] } };
+
+        let uploaded = 0;
+        let lastPayload = null;
+        for (let offset = 0; offset < total; offset += UPLOAD_BATCH_SIZE) {
+            const batch = files.slice(offset, offset + UPLOAD_BATCH_SIZE);
+            const batchStart = uploaded;
+            const batchEnd = Math.min(batchStart + batch.length, total);
+            setImportStatus({
+                phase: 'uploading',
+                total,
+                uploaded: batchStart,
+                percent: Math.round((batchStart / total) * 100),
+                message: `正在上传第 ${batchStart + 1}-${batchEnd} / ${total} 个文件`
+            });
+
+            lastPayload = await uploadFileBatch(collectionId, batch, (loaded, totalBytes) => {
+                const fraction = totalBytes > 0 ? loaded / totalBytes : 0;
+                const overall = batchStart + fraction * batch.length;
+                setImportStatus({
+                    phase: 'uploading',
+                    total,
+                    uploaded: batchStart,
+                    percent: Math.min(99, Math.round((overall / total) * 100)),
+                    message: `正在上传第 ${batchStart + 1}-${batchEnd} / ${total} 个文件`
+                });
+            });
+
+            uploaded = batchEnd;
+            setImportStatus({
+                phase: 'uploading',
+                total,
+                uploaded,
+                percent: Math.round((uploaded / total) * 100),
+                message: uploaded < total
+                    ? `已上传 ${uploaded}/${total} 个，继续上传剩余文件…`
+                    : `已上传全部 ${total} 个文件`
+            });
+
+            // Refresh after each batch so Sources fill in progressively instead of
+            // staying empty/gray for the whole multi-GB upload.
+            try {
+                await refreshCollection(collectionId);
+                startPolling();
+            } catch (error) {
+                // Keep uploading; a temporary refresh failure should not abort the batch.
+                console.warn('refresh after upload batch failed', error);
+            }
+        }
+        return lastPayload || { data: { sources: [] } };
     }
 
     async function loadFilterOptions() {
@@ -1040,6 +1292,7 @@
             const payload = await apiJSON(query ? `/api/collections?${query}` : '/api/collections');
             collections = (payload.data && payload.data.collections) || [];
             renderHistory();
+            applyInitialPanelLayoutOnce();
             // Only open a history item when explicitly requested. Auto-selecting
             // the latest collection used to prefill IP/topic and caused bad imports.
             if (opts.selectLatest === true && !currentCollection && collections.length) {
@@ -1068,7 +1321,7 @@
         customMapPositions = {};
         mapZoom = DEFAULT_MAP_ZOOM;
         mapFocused = false;
-        currentView = opts.sourceId ? 'source' : 'map';
+        currentView = opts.sourceId ? 'source' : 'summary';
         knowledgeMapScope = opts.sourceId ? 'source' : 'collection';
         selectedMapNodeId = null;
         await refreshCollection(collectionId);
@@ -1078,9 +1331,411 @@
         if (!opts.silent) showToast('已打开历史专题');
     }
 
+    async function importSourcesFromLocalPath(collectionId, directory) {
+        return apiJSON(`/api/collections/${encodeURIComponent(collectionId)}/sources/from-local-paths`, {
+            method: 'POST',
+            body: JSON.stringify({
+                directory,
+                transcription_strategy: selectedTranscriptionStrategy(),
+                transcription_concurrency: selectedTranscriptionConcurrency()
+            })
+        });
+    }
+
+    function readLocalImportDirectory() {
+        const directory = (els.localImportPath && els.localImportPath.value || '').trim();
+        if (!directory) {
+            if (els.localImportPath) els.localImportPath.focus();
+            throw new Error('请先选择本机课程/文档文件夹');
+        }
+        return directory;
+    }
+
+    // ---- Local folder picker (replaces browser prompt) ----
+    let pathPickerMode = 'import'; // import | append
+    let pathPickerState = {
+        path: '',
+        parent: null,
+        entries: [],
+        roots: [],
+        media_count: 0,
+        video_count: 0,
+        document_count: 0
+    };
+
+    function closeLocalPathPicker() {
+        if (els.pathPickerDialog && els.pathPickerDialog.open) {
+            els.pathPickerDialog.close();
+        }
+    }
+
+    function renderLocalPathPicker() {
+        if (els.pathPickerCurrent) {
+            els.pathPickerCurrent.value = pathPickerState.path || '';
+        }
+        if (els.pathPickerUp) {
+            els.pathPickerUp.disabled = !pathPickerState.parent;
+        }
+        if (els.pathPickerRoots) {
+            const roots = pathPickerState.roots || [];
+            els.pathPickerRoots.innerHTML = roots.map((root) => {
+                const active = root.path === pathPickerState.path ? ' active' : '';
+                return `<button type="button" class="lc-path-root-chip${active}" data-path="${escapeHTML(root.path)}">${escapeHTML(root.name)}</button>`;
+            }).join('');
+            els.pathPickerRoots.querySelectorAll('[data-path]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    loadLocalPathPicker(button.getAttribute('data-path') || '').catch((error) => {
+                        showToast(error.message || '无法打开该位置');
+                    });
+                });
+            });
+        }
+        if (els.pathPickerList) {
+            const entries = pathPickerState.entries || [];
+            const media = Number(pathPickerState.media_count || 0);
+            if (!entries.length) {
+                if (media > 0) {
+                    els.pathPickerList.innerHTML = (
+                        `<div class="lc-path-empty">`
+                        + `当前就是课包目录（含 ${media} 个媒体文件，没有子文件夹）。`
+                        + `<br>直接点击下方「使用此文件夹」即可。`
+                        + `</div>`
+                    );
+                } else {
+                    els.pathPickerList.innerHTML = '<div class="lc-path-empty">此目录下没有子文件夹</div>';
+                }
+            } else {
+                els.pathPickerList.innerHTML = entries.map((entry) => (
+                    `<button type="button" class="lc-path-item" role="option" data-path="${escapeHTML(entry.path)}">`
+                    + `<span class="lc-path-item-icon" aria-hidden="true">📁</span>`
+                    + `<strong title="${escapeHTML(entry.name)}">${escapeHTML(entry.name)}</strong>`
+                    + `</button>`
+                )).join('');
+                els.pathPickerList.querySelectorAll('[data-path]').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        loadLocalPathPicker(button.getAttribute('data-path') || '').catch((error) => {
+                            showToast(error.message || '无法打开该文件夹');
+                        });
+                    });
+                    button.addEventListener('dblclick', () => {
+                        loadLocalPathPicker(button.getAttribute('data-path') || '').catch((error) => {
+                            showToast(error.message || '无法打开该文件夹');
+                        });
+                    });
+                });
+            }
+        }
+        if (els.pathPickerMeta) {
+            const videos = Number(pathPickerState.video_count || 0);
+            const docs = Number(pathPickerState.document_count || 0);
+            const media = Number(pathPickerState.media_count || 0);
+            if (media > 0) {
+                els.pathPickerMeta.textContent = (
+                    `当前文件夹可导入媒体：${media} 个`
+                    + (videos ? `（视频 ${videos}` : '')
+                    + (docs ? `${videos ? ' · ' : '（'}文档 ${docs}` : '')
+                    + (videos || docs ? '）' : '')
+                    + '。点击「使用此文件夹」开始导入。'
+                );
+            } else {
+                els.pathPickerMeta.textContent = '当前文件夹未直接包含媒体文件，可进入子文件夹继续选择。';
+            }
+        }
+        if (els.pathPickerConfirm) {
+            els.pathPickerConfirm.disabled = !pathPickerState.path;
+        }
+    }
+
+    async function loadLocalPathPicker(path) {
+        const query = path ? `?path=${encodeURIComponent(path)}` : '';
+        const payload = await apiJSON(`/api/local-fs/browse${query}`);
+        pathPickerState = Object.assign({
+            path: '',
+            parent: null,
+            entries: [],
+            roots: [],
+            media_count: 0,
+            video_count: 0,
+            document_count: 0
+        }, payload.data || {});
+        renderLocalPathPicker();
+    }
+
+    async function pickFolderWithNativeDialog(promptLabel) {
+        // Native Finder/Explorer dialog on the API host (same machine for local use).
+        showToast(promptLabel || '请在系统弹窗中选择文件夹…');
+        const payload = await apiJSON('/api/local-fs/pick-folder', { method: 'POST' });
+        return (payload.data && payload.data.path) || '';
+    }
+
+    async function openLocalPathPicker(options) {
+        const opts = options || {};
+        pathPickerMode = opts.mode === 'append' ? 'append' : 'import';
+
+        // Prefer OS-native folder chooser for real local navigation UX.
+        if (opts.preferNative !== false) {
+            try {
+                const nativePath = await pickFolderWithNativeDialog(
+                    pathPickerMode === 'append'
+                        ? '请在系统弹窗中选择要追加的文件夹…'
+                        : '请在系统弹窗中选择课程文件夹…'
+                );
+                if (!nativePath) {
+                    throw new Error('未选择文件夹');
+                }
+                if (pathPickerMode === 'append') {
+                    await appendLocalDirectoryToCurrentCollection(nativePath, 'local_path');
+                } else if (els.localImportPath) {
+                    els.localImportPath.value = nativePath;
+                    previewLocalPath(nativePath);
+                    showToast('已选择文件夹，可点击「扫描路径并导入」');
+                }
+                return;
+            } catch (error) {
+                const message = error && error.message ? String(error.message) : '';
+                if (message.includes('取消')) {
+                    showToast('已取消选择文件夹');
+                    return;
+                }
+                // Fall through to in-app browser when native dialog is unavailable.
+                if (!message.includes('无法打开系统') && !message.includes('501') && error.status !== 501) {
+                    // Still fall back for other failures so user can continue.
+                }
+                showToast('系统选择器不可用，已切换到应用内目录浏览');
+            }
+        }
+
+        if (els.pathPickerTitle) {
+            els.pathPickerTitle.textContent = pathPickerMode === 'append'
+                ? '选择要追加的本机文件夹'
+                : '选择本机课程文件夹';
+        }
+        if (!els.pathPickerDialog) {
+            throw new Error('路径选择器不可用');
+        }
+        if (typeof els.pathPickerDialog.showModal === 'function') {
+            els.pathPickerDialog.showModal();
+        } else {
+            els.pathPickerDialog.setAttribute('open', 'open');
+        }
+        const startPath = (opts.startPath || (els.localImportPath && els.localImportPath.value) || '').trim();
+        try {
+            await loadLocalPathPicker(startPath);
+        } catch (error) {
+            // Fallback to home/default if stored path is gone.
+            await loadLocalPathPicker('');
+            if (startPath) {
+                showToast(error.message || '上次路径不可用，已回到默认位置');
+            }
+        }
+    }
+
+    function confirmLocalPathPicker() {
+        const directory = (pathPickerState.path || '').trim();
+        if (!directory) {
+            showToast('请先选择一个文件夹');
+            return;
+        }
+        closeLocalPathPicker();
+        if (pathPickerMode === 'append') {
+            appendLocalDirectoryToCurrentCollection(directory, 'local_path').catch((error) => {
+                showToast(error.message || '追加失败');
+            });
+            return;
+        }
+        if (els.localImportPath) {
+            els.localImportPath.value = directory;
+        }
+        previewLocalPath(directory);
+        showToast('已选择文件夹，可点击「扫描路径并导入」');
+    }
+
+    function bindLocalPathPickerEvents() {
+        if (els.browseLocalPath) {
+            els.browseLocalPath.addEventListener('click', () => {
+                openLocalPathPicker({
+                    mode: 'import',
+                    startPath: (els.localImportPath && els.localImportPath.value) || ''
+                }).catch((error) => showToast(error.message || '无法打开文件夹选择器'));
+            });
+        }
+        if (els.pathPickerClose) {
+            els.pathPickerClose.addEventListener('click', closeLocalPathPicker);
+        }
+        if (els.pathPickerCancel) {
+            els.pathPickerCancel.addEventListener('click', closeLocalPathPicker);
+        }
+        if (els.pathPickerConfirm) {
+            els.pathPickerConfirm.addEventListener('click', confirmLocalPathPicker);
+        }
+        if (els.pathPickerUp) {
+            els.pathPickerUp.addEventListener('click', () => {
+                if (!pathPickerState.parent) return;
+                loadLocalPathPicker(pathPickerState.parent).catch((error) => {
+                    showToast(error.message || '无法返回上级目录');
+                });
+            });
+        }
+        if (els.pathPickerDialog) {
+            els.pathPickerDialog.addEventListener('click', (event) => {
+                if (event.target === els.pathPickerDialog) closeLocalPathPicker();
+            });
+            els.pathPickerDialog.addEventListener('cancel', (event) => {
+                event.preventDefault();
+                closeLocalPathPicker();
+            });
+        }
+    }
+
+    async function beginCollectionImport(prepareSources) {
+        let identity;
+        try {
+            identity = readImportIdentity();
+        } catch (error) {
+            showToast(error.message || '请先填写 IP 名称和专题名称');
+            return;
+        }
+
+        cloudQuoteFeedbackVisible = true;
+        cloudQuoteAutoOpenRequested = selectedTranscriptionStrategy() === 'cloud';
+        lastImportError = '';
+        setBusy(true);
+        setImportStatus({
+            phase: 'creating',
+            total: 0,
+            uploaded: 0,
+            percent: 0,
+            message: '正在创建专题…'
+        });
+        try {
+            const collection = await createCollection();
+            currentCollection = collection;
+            resetCollectionVisualState(collection.id);
+            selectedSourceId = null;
+            knowledgeMapScope = 'collection';
+            selectedMapNodeId = null;
+            sourceDetails = {};
+            knowledgeMaps = { collection: null, sources: {} };
+            knowledgeMapErrors.clear();
+            knowledgeMapLoading = false;
+            knowledgeMapRequests.clear();
+            knowledgeMapLoadedKeys = new Set();
+            customMapPositions = {};
+            mapZoom = DEFAULT_MAP_ZOOM;
+            mapFocused = false;
+            render();
+            setImportStatus({
+                phase: 'uploading',
+                total: 0,
+                uploaded: 0,
+                percent: 8,
+                message: '专题已创建，正在登记本机文件…'
+            });
+            const payload = await prepareSources(collection);
+            const count = Number(
+                (payload && payload.data && (payload.data.candidate_count || payload.data.pending_count))
+                || selectedCandidateCount
+                || 0
+            );
+            selectedCandidateCount = count || selectedCandidateCount;
+            setImportStatus({
+                phase: 'finalizing',
+                total: count,
+                uploaded: count,
+                percent: 100,
+                message: count
+                    ? `已按本机路径登记 ${count} 个文件（未复制），开始解析…`
+                    : '登记完成，开始解析…'
+            });
+            lastImportError = '';
+            if (collection.reused) {
+                showToast(count ? `已复用同名专题并追加 ${count} 个本机文件` : '已复用同名专题');
+            } else {
+                showToast(count ? `已创建专题并开始解析 ${count} 个本机文件` : '已创建专题并开始解析');
+            }
+            await refreshCollection(collection.id);
+            clearImportIdentityFields();
+            await loadFilterOptions();
+            await loadCollections({ selectLatest: false });
+            startPolling();
+        } catch (error) {
+            lastImportError = error.message || '导入失败';
+            showToast(lastImportError);
+            if (els.importPreview) {
+                els.importPreview.classList.remove('is-uploading');
+                els.importPreview.classList.add('is-error');
+                els.importPreview.innerHTML = (
+                    `<strong>导入失败</strong>`
+                    + `<span>${escapeHTML(lastImportError)}</span>`
+                );
+            }
+        } finally {
+            clearImportStatus();
+            setBusy(false);
+            render();
+            if (els.folderInput) els.folderInput.value = '';
+            if (els.filesInput) els.filesInput.value = '';
+        }
+    }
+
+    async function importFromLocalDirectory(importMethod) {
+        if (busy) {
+            showToast('当前导入正在处理中');
+            return;
+        }
+        let directory;
+        try {
+            directory = readLocalImportDirectory();
+        } catch (error) {
+            showToast(error.message || '请填写本机路径');
+            return;
+        }
+        pendingImportMethod = importMethod || 'local_path';
+        previewLocalPath(directory);
+        selectedCandidateCount = 0;
+        updateTranscriptionControls({ applyDefault: selectedTranscriptionStrategy() === 'cloud' });
+
+        let identity;
+        try {
+            identity = readImportIdentity();
+        } catch (error) {
+            showToast(error.message || '请先填写 IP 名称和专题名称');
+            return;
+        }
+        const confirmed = window.confirm(
+            `确认按本机路径导入（不复制文件）？\n\n`
+            + `IP 名称：${identity.creatorName}\n`
+            + `专题名称：${identity.title}\n`
+            + `本机路径：${directory}\n\n`
+            + `服务端只会登记路径并直接读取原文件，不会再拷贝一份视频。`
+        );
+        if (!confirmed) {
+            showToast('已取消导入');
+            return;
+        }
+
+        await beginCollectionImport(async (collection) => {
+            setImportStatus({
+                phase: 'uploading',
+                total: 0,
+                uploaded: 0,
+                percent: 20,
+                message: '正在扫描本机路径并计算文件指纹（不复制）…'
+            });
+            return importSourcesFromLocalPath(collection.id, directory);
+        });
+    }
+
     async function importFiles(fileList, importMethod) {
         if (busy) {
             showToast('当前导入正在处理中');
+            return;
+        }
+        // Video courses should use zero-copy path import. Browser multipart upload
+        // duplicates every file under data/source_files and can fill the disk.
+        if (activeType === 'video_course') {
+            showToast('视频课程请填写本机文件夹路径并点「扫描路径并导入」，避免重复占用磁盘');
+            if (els.localImportPath) els.localImportPath.focus();
             return;
         }
         const files = normalizeFiles(fileList);
@@ -1101,62 +1756,102 @@
             return;
         }
         const confirmed = window.confirm(
-            `确认新建专题并开始解析？\n\n`
+            `确认新建专题并上传文档副本？\n\n`
             + `IP 名称：${identity.creatorName}\n`
             + `专题名称：${identity.title}\n`
             + `文件数量：${files.length}\n\n`
-            + `请核对后再确认，避免沿用历史默认信息。`
+            + `文档体积通常较小；视频课程请改用本机路径导入。`
         );
         if (!confirmed) {
             showToast('已取消导入');
             return;
         }
 
+        await beginCollectionImport(async (collection) => {
+            setImportStatus({
+                phase: 'uploading',
+                total: files.length,
+                uploaded: 0,
+                percent: 0,
+                message: `正在上传 ${files.length} 个文档…`
+            });
+            await uploadFiles(collection.id, files);
+            return {
+                data: {
+                    candidate_count: files.length,
+                    pending_count: files.length
+                }
+            };
+        });
+    }
+
+    async function appendLocalDirectoryToCurrentCollection(directory, importMethod) {
+        if (!currentCollection) {
+            showToast('请先打开或创建一个专题');
+            return;
+        }
+        const path = (directory || '').trim();
+        if (!path) {
+            showToast('请填写本机文件夹路径');
+            return;
+        }
+        pendingImportMethod = importMethod || 'local_path';
+        previewLocalPath(path);
         cloudQuoteFeedbackVisible = true;
         cloudQuoteAutoOpenRequested = selectedTranscriptionStrategy() === 'cloud';
+        lastImportError = '';
         setBusy(true);
+        setImportStatus({
+            phase: 'uploading',
+            total: 0,
+            uploaded: 0,
+            percent: 15,
+            message: '正在按本机路径追加文件（不复制）…'
+        });
         try {
-            const collection = await createCollection();
-            currentCollection = collection;
-            resetCollectionVisualState(collection.id);
-            selectedSourceId = null;
-            knowledgeMapScope = 'collection';
-            selectedMapNodeId = null;
-            sourceDetails = {};
-            knowledgeMaps = { collection: null, sources: {} };
-            knowledgeMapErrors.clear();
-            knowledgeMapLoading = false;
-            knowledgeMapRequests.clear();
-            knowledgeMapLoadedKeys = new Set();
-            customMapPositions = {};
-            mapZoom = DEFAULT_MAP_ZOOM;
-            mapFocused = false;
-            render();
-            await uploadFiles(collection.id, files);
-            if (collection.reused) {
-                showToast('已复用同名专题并追加文件，开始解析');
-            } else {
-                showToast('已创建专题并开始解析');
-            }
-            await refreshCollection(collection.id);
-            // Clear identity fields after a successful create so the next import starts blank.
-            clearImportIdentityFields();
+            const payload = await importSourcesFromLocalPath(currentCollection.id, path);
+            const count = Number(
+                (payload && payload.data && (payload.data.candidate_count || payload.data.pending_count)) || 0
+            );
+            selectedCandidateCount = count;
+            setImportStatus({
+                phase: 'finalizing',
+                total: count,
+                uploaded: count,
+                percent: 100,
+                message: `已追加 ${count} 个本机文件（未复制），开始解析…`
+            });
+            lastImportError = '';
+            showToast(`已追加 ${count} 个本机 source（零拷贝）`);
+            await refreshCollection(currentCollection.id);
             await loadFilterOptions();
             await loadCollections({ selectLatest: false });
             startPolling();
         } catch (error) {
-            showToast(error.message || '导入失败');
+            lastImportError = error.message || '追加失败';
+            showToast(lastImportError);
+            if (els.importPreview) {
+                els.importPreview.classList.remove('is-uploading');
+                els.importPreview.classList.add('is-error');
+                els.importPreview.innerHTML = (
+                    `<strong>追加失败</strong>`
+                    + `<span>${escapeHTML(lastImportError)}</span>`
+                );
+            }
         } finally {
+            clearImportStatus();
             setBusy(false);
             render();
-            els.folderInput.value = '';
-            els.filesInput.value = '';
         }
     }
 
     async function appendFilesToCurrentCollection(fileList, importMethod) {
         if (!currentCollection) {
             showToast('请先打开或创建一个专题');
+            return;
+        }
+        if ((currentCollection.collection_type || activeType) === 'video_course') {
+            showToast('视频课程请用「追加文件夹」并填写本机路径，避免重复存储');
             return;
         }
         const files = normalizeFiles(fileList);
@@ -1170,17 +1865,43 @@
 
         cloudQuoteFeedbackVisible = true;
         cloudQuoteAutoOpenRequested = selectedTranscriptionStrategy() === 'cloud';
+        lastImportError = '';
         setBusy(true);
+        setImportStatus({
+            phase: 'uploading',
+            total: files.length,
+            uploaded: 0,
+            percent: 0,
+            message: `正在追加上传 ${files.length} 个文件…`
+        });
         try {
             await uploadFiles(currentCollection.id, files);
-            showToast('已追加 source，开始解析新增内容');
+            setImportStatus({
+                phase: 'finalizing',
+                total: files.length,
+                uploaded: files.length,
+                percent: 100,
+                message: `追加完成（${files.length} 个），正在启动解析…`
+            });
+            lastImportError = '';
+            showToast(`已追加 ${files.length} 个 source，开始解析新增内容`);
             await refreshCollection(currentCollection.id);
             await loadFilterOptions();
             await loadCollections({ selectLatest: false });
             startPolling();
         } catch (error) {
-            showToast(error.message || '追加失败');
+            lastImportError = error.message || '追加失败';
+            showToast(lastImportError);
+            if (els.importPreview) {
+                els.importPreview.classList.remove('is-uploading');
+                els.importPreview.classList.add('is-error');
+                els.importPreview.innerHTML = (
+                    `<strong>追加失败</strong>`
+                    + `<span>${escapeHTML(lastImportError)}</span>`
+                );
+            }
         } finally {
+            clearImportStatus();
             setBusy(false);
             render();
             if (els.appendFolderInput) els.appendFolderInput.value = '';
@@ -1493,7 +2214,90 @@
         if (!selectedSourceId && currentCollection.sources && currentCollection.sources.length) {
             selectedSourceId = currentCollection.sources[0].id;
         }
+        syncSummaryGenerationFromCollection(currentCollection);
         render();
+    }
+
+    function syncSummaryGenerationFromCollection(collection) {
+        if (!collection || !collection.id) return;
+        const status = String(collection.summary_status || '');
+        const hasMarkdown = Boolean(collection.summary_markdown);
+        if (status === 'processing' || (wasSummaryGenerating(collection.id) && !hasMarkdown && status !== 'failed')) {
+            rememberSummaryGenerating(collection.id, true);
+            if (!isSummaryGenerating(collection.id) || !summaryProgressState(collection.id)) {
+                startSummaryProgress(collection.id);
+            }
+            updateSummaryProgress(collection.id, null, 'AI 生成中（可离开页面，完成后自动显示）');
+            startSummaryStatusPolling(collection.id);
+            return;
+        }
+        if (status === 'success' && hasMarkdown) {
+            rememberSummaryGenerating(collection.id, false);
+            stopSummaryProgress(collection.id, '生成完成');
+            stopSummaryStatusPolling(collection.id);
+            return;
+        }
+        if (status === 'failed') {
+            rememberSummaryGenerating(collection.id, false);
+            stopSummaryProgress(collection.id, '生成失败');
+            stopSummaryStatusPolling(collection.id);
+        }
+    }
+
+    let summaryPollTimer = null;
+    let summaryPollCollectionId = '';
+
+    function stopSummaryStatusPolling(collectionId) {
+        if (collectionId && summaryPollCollectionId && collectionId !== summaryPollCollectionId) {
+            return;
+        }
+        if (summaryPollTimer) {
+            window.clearInterval(summaryPollTimer);
+            summaryPollTimer = null;
+        }
+        summaryPollCollectionId = '';
+    }
+
+    function startSummaryStatusPolling(collectionId) {
+        const key = String(collectionId || '');
+        if (!key) return;
+        if (summaryPollTimer && summaryPollCollectionId === key) return;
+        stopSummaryStatusPolling();
+        summaryPollCollectionId = key;
+        summaryPollTimer = window.setInterval(async () => {
+            if (!currentCollection || currentCollection.id !== key) return;
+            try {
+                const payload = await apiJSON(`/api/collections/${key}`);
+                const detail = payload.data || {};
+                currentCollection = {
+                    ...currentCollection,
+                    ...detail,
+                    sources: detail.sources || currentCollection.sources
+                };
+                const status = String(detail.summary_status || '');
+                if (status === 'success' && detail.summary_markdown) {
+                    rememberSummaryGenerating(key, false);
+                    stopSummaryProgress(key, '生成完成');
+                    stopSummaryStatusPolling(key);
+                    currentView = 'summary';
+                    showToast('全系列解读已生成');
+                    render();
+                    return;
+                }
+                if (status === 'failed') {
+                    rememberSummaryGenerating(key, false);
+                    stopSummaryProgress(key, '生成失败');
+                    stopSummaryStatusPolling(key);
+                    showToast('全系列解读生成失败，请重试');
+                    render();
+                    return;
+                }
+                updateSummaryProgress(key, null, 'AI 生成中（可离开页面，完成后自动显示）');
+                renderVisibleSummaryProgress();
+            } catch (error) {
+                /* keep polling; transient network blips are expected */
+            }
+        }, 4000);
     }
 
     function collectionStatusLabel(collection) {
@@ -1582,14 +2386,20 @@
                 });
             });
         });
+    }
 
-        if (!currentCollection && collections.length > 0) {
-            const historyDetails = document.querySelector('.lc-history.lc-history-panel');
-            if (historyDetails) historyDetails.open = true;
-            
-            const importDetails = document.querySelector('.lc-import-wrap');
-            if (importDetails) importDetails.open = false;
-        }
+    // One-shot default layout for returning users with history and no selection.
+    // Must NOT run inside renderHistory(): render() rebuilds history often (and
+    // previously ran on every IP/title keystroke), which collapsed the import form mid-input.
+    let didApplyInitialPanelLayout = false;
+    function applyInitialPanelLayoutOnce() {
+        if (didApplyInitialPanelLayout) return;
+        didApplyInitialPanelLayout = true;
+        if (currentCollection || !collections.length) return;
+        const historyDetails = document.querySelector('.lc-history.lc-history-panel');
+        if (historyDetails) historyDetails.open = true;
+        const importDetails = document.querySelector('.lc-import-wrap');
+        if (importDetails) importDetails.open = false;
     }
 
     function startPolling() {
@@ -2225,7 +3035,7 @@
             knowledgeMapScope = 'source';
             selectedMapNodeId = null;
             setKnowledgeMapError(currentMapKey(), '');
-            currentView = 'map';
+            currentView = 'source';
             render();
             return;
         }
@@ -2275,6 +3085,29 @@
         els.sourceCount.textContent = sources.length ? `${sources.length} 个 source` : '0 个';
 
         if (!sources.length) {
+            if (importStatus) {
+                renderImportStatus();
+                return;
+            }
+            if (lastImportError) {
+                els.sourceList.innerHTML = (
+                    `<div class="lc-empty lc-empty-error">`
+                    + `<strong>导入失败，尚未写入任何 source</strong>`
+                    + `<span>${escapeHTML(lastImportError)}</span>`
+                    + `<span>请清理磁盘空间后，使用右上角「追加文件夹」重新上传。</span>`
+                    + `</div>`
+                );
+                return;
+            }
+            if (currentCollection) {
+                els.sourceList.innerHTML = (
+                    `<div class="lc-empty">`
+                    + `该专题还没有 source。请用右上角「追加文件夹 / 追加文件」导入视频，`
+                    + `成功后这里会显示每个视频的解析状态。`
+                    + `</div>`
+                );
+                return;
+            }
             els.sourceList.innerHTML = '<div class="lc-empty">导入专题文件后，这里会显示每个 source 的解析状态。</div>';
             return;
         }
@@ -2305,13 +3138,18 @@
                 knowledgeMapScope = 'source';
                 selectedMapNodeId = null;
                 setKnowledgeMapError(currentMapKey(), '');
-                currentView = currentView === 'source' ? 'source' : 'map';
+                currentView = 'source';
                 render();
             });
         });
     }
 
     function renderProgress() {
+        // Prefer explicit import/upload progress while files are still going up.
+        if (importStatus) {
+            renderImportStatus();
+            return;
+        }
         const sources = currentCollection ? (currentCollection.sources || []) : [];
         const done = sources.filter((source) => ['success', 'no_transcript'].includes(source.task_status)).length;
         const percent = sources.length
@@ -2320,9 +3158,13 @@
         els.progressValue.textContent = `${percent}%`;
         els.progressFill.style.width = `${percent}%`;
         if (!sources.length) {
-            els.workspaceSubtitle.textContent = currentCollection
-                ? '选择一个专题文件夹，开始逐个解析。'
-                : '请在上方展开「历史专题」并点击课程进行学习，或新建导入新专题。';
+            if (lastImportError && currentCollection) {
+                els.workspaceSubtitle.textContent = `导入失败：${lastImportError}`;
+            } else {
+                els.workspaceSubtitle.textContent = currentCollection
+                    ? '该专题尚无 source。请用「追加文件夹」导入视频后开始解析。'
+                    : '请在上方展开「历史专题」并点击课程进行学习，或新建导入新专题。';
+            }
             return;
         }
         const metrics = currentCollection.metrics || {};
@@ -2695,10 +3537,27 @@
         const complete = sources.length > 0 && sources.every((source) => ['success', 'no_transcript'].includes(source.task_status));
         const ready = complete && sources.some((source) => source.task_status === 'success');
 
-        els.summaryStatus.textContent = markdown ? '全系列解读已生成' : '等待生成全系列解读';
-        els.summaryDescription.textContent = markdown
-            ? '已从课前导览和课后复习两个场景提炼全集主线、章节作用和复习路径。'
-            : (ready ? '所有源内容已解析完成，点击“生成全系列解读”建立全集视角。' : (complete ? '没有可用于生成全系列解读的逐字稿。' : '导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。'));
+        const summaryStatus = String((currentCollection && currentCollection.summary_status) || '');
+        const generating = summaryStatus === 'processing' || isSummaryGenerating(currentCollection && currentCollection.id);
+        if (markdown) {
+            els.summaryStatus.textContent = '全系列解读已生成';
+        } else if (generating) {
+            els.summaryStatus.textContent = '全系列解读生成中…';
+        } else if (summaryStatus === 'failed') {
+            els.summaryStatus.textContent = '全系列解读生成失败';
+        } else {
+            els.summaryStatus.textContent = '等待生成全系列解读';
+        }
+        if (els.summaryView) {
+            els.summaryView.classList.toggle('is-ready', Boolean(markdown));
+        }
+        if (els.summaryDescription) {
+            els.summaryDescription.textContent = markdown
+                ? '已从课前导览和课后复习两个场景提炼全集主线、章节作用和复习路径。'
+                : (generating
+                    ? '生成通常需要几分钟。可以离开本页，稍后再回来查看结果。'
+                    : (ready ? '所有源内容已解析完成，点击“生成全系列解读”建立全集视角。' : (complete ? '没有可用于生成全系列解读的逐字稿。' : '导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。')));
+        }
         const waitingText = ready ? '点击生成后展示。' : '解析完成后生成。';
         renderSummaryCard(els.summaryProblem, markdown ? summarizeMarkdownSection(markdown, ['这个系列解决什么问题', '解决什么问题', '中心问题'], 2) : [], waitingText);
         renderSummaryCard(els.summaryValue, markdown ? summarizeMarkdownSection(markdown, ['为什么值得学', '值得学', '学习价值'], 2) : [], waitingText);
@@ -2715,6 +3574,13 @@
         const collectionId = currentCollection && currentCollection.id;
         els.generateSummary.disabled = busy || !ready || isSummaryGenerating(collectionId);
         els.exportMarkdown.disabled = busy || !markdown;
+        // Before generation: "生成" is the primary CTA. After: keep "导出" as primary.
+        if (els.generateSummary) {
+            els.generateSummary.classList.toggle('primary', !markdown);
+        }
+        if (els.exportMarkdown) {
+            els.exportMarkdown.classList.toggle('primary', Boolean(markdown));
+        }
     }
 
     function cleanSummaryLine(line) {
@@ -3704,15 +4570,45 @@
         window.VisualLearning.exportSvg(diagram, `${title}-visual.svg`);
     }
 
+    function sourceCountLabel() {
+        const count = currentCollection && Array.isArray(currentCollection.sources)
+            ? currentCollection.sources.length
+            : 0;
+        return count > 0 ? `Sources · ${count}` : 'Sources';
+    }
+
+    function updateSummaryReadingLayout() {
+        const isSummary = currentView === 'summary';
+        if (els.collectionBoard) {
+            els.collectionBoard.classList.toggle('is-summary-reading', isSummary);
+            els.collectionBoard.classList.toggle('sources-expanded', isSummary && sourcesExpandedInSummary);
+        }
+        if (els.sourcesPanelToggle) {
+            els.sourcesPanelToggle.hidden = !isSummary;
+            els.sourcesPanelToggle.setAttribute('aria-expanded', sourcesExpandedInSummary ? 'true' : 'false');
+            els.sourcesPanelToggle.textContent = sourcesExpandedInSummary
+                ? '收起 Sources'
+                : sourceCountLabel();
+        }
+    }
+
     function renderTabs() {
+        // Knowledge map UI is retired; never surface the map tab/view.
+        if (currentView === 'map' || currentView === 'visual') {
+            currentView = 'summary';
+        }
         els.tabs.forEach((tab) => {
             tab.classList.toggle('active', tab.dataset.view === currentView);
         });
-        els.mapView.classList.toggle('hidden', currentView !== 'map');
+        if (els.mapView) {
+            els.mapView.classList.add('hidden');
+            els.mapView.hidden = true;
+        }
         els.visualView.classList.toggle('hidden', currentView !== 'visual');
         els.summaryView.classList.toggle('hidden', currentView !== 'summary');
         els.sourceView.classList.toggle('hidden', currentView !== 'source');
         els.markdownView.classList.toggle('hidden', currentView !== 'markdown');
+        updateSummaryReadingLayout();
     }
 
     function renderMetadata() {
@@ -3763,18 +4659,18 @@
         }
         const collectionId = currentCollection.id;
         const collectionTitle = currentCollection.title || '当前合集';
-        if (isSummaryGenerating(collectionId)) {
-            showToast('这个合集正在生成全系列解读');
+        if (isSummaryGenerating(collectionId) && String(currentCollection.summary_status || '') === 'processing') {
+            showToast('这个合集正在生成全系列解读，离开页面也不会中断');
+            startSummaryStatusPolling(collectionId);
             return;
         }
 
         startSummaryProgress(collectionId);
+        rememberSummaryGenerating(collectionId, true);
         try {
-            showToast(`正在生成「${collectionTitle}」全系列解读`);
+            showToast(`已开始生成「${collectionTitle}」全系列解读，可离开页面稍后回来查看`);
             const payload = await apiJSON(`/api/collections/${collectionId}/summary`, { method: 'POST' });
-            updateSummaryProgress(collectionId, 96, '正在渲染结果...');
-            const updatedCollection = payload.data;
-            stopSummaryProgress(collectionId, '生成完成');
+            const updatedCollection = payload.data || {};
             collections = collections.map((collection) => (
                 collection.id === collectionId
                     ? {
@@ -3788,14 +4684,27 @@
                     : collection
             ));
             if (currentCollection && currentCollection.id === collectionId) {
-                currentCollection = updatedCollection;
-                currentView = 'markdown';
-            } else {
-                renderHistory();
+                currentCollection = {
+                    ...currentCollection,
+                    ...updatedCollection,
+                    sources: updatedCollection.sources || currentCollection.sources
+                };
+                currentView = 'summary';
             }
-            showToast(`「${updatedCollection.title || collectionTitle}」全系列解读已生成`);
+            // Background job may still be running; poll until success/failed.
+            if (String(updatedCollection.summary_status || '') === 'success' && updatedCollection.summary_markdown) {
+                rememberSummaryGenerating(collectionId, false);
+                stopSummaryProgress(collectionId, '生成完成');
+                stopSummaryStatusPolling(collectionId);
+                showToast(`「${updatedCollection.title || collectionTitle}」全系列解读已生成`);
+            } else {
+                updateSummaryProgress(collectionId, 20, 'AI 生成中（可离开页面，完成后自动显示）');
+                startSummaryStatusPolling(collectionId);
+            }
         } catch (error) {
+            rememberSummaryGenerating(collectionId, false);
             stopSummaryProgress(collectionId, '生成失败');
+            stopSummaryStatusPolling(collectionId);
             showToast(error.message || `「${collectionTitle}」全系列解读失败`);
         } finally {
             render();
@@ -3844,9 +4753,14 @@
             els.transcriptionConcurrency.addEventListener('change', () => updateTranscriptionControls());
         }
 
+        // Only refresh workspace chrome while typing. Full render() rebuilds the
+        // history list and used to re-collapse the import <details> panel.
         [els.creator, els.title].forEach((field) => {
             field.addEventListener('input', () => {
-                if (!currentCollection) render();
+                if (currentCollection) return;
+                const title = (els.title && els.title.value.trim()) || '尚未选择专题';
+                if (els.workspaceTitle) els.workspaceTitle.textContent = title;
+                renderMetadata();
             });
         });
 
@@ -3905,13 +4819,59 @@
             render();
         });
 
-        els.pickFolder.addEventListener('click', () => els.folderInput.click());
-        els.pickFiles.addEventListener('click', () => els.filesInput.click());
+        if (els.importLocalPath) {
+            els.importLocalPath.addEventListener('click', () => {
+                importFromLocalDirectory('local_path').catch((error) => {
+                    showToast(error.message || '本机路径导入失败');
+                });
+            });
+        }
+        if (els.localImportPath) {
+            els.localImportPath.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (els.importLocalPath) els.importLocalPath.click();
+                }
+            });
+        }
+        if (els.pickFolder) {
+            els.pickFolder.addEventListener('click', () => {
+                if (els.localImportPath) els.localImportPath.focus();
+                else if (els.folderInput) els.folderInput.click();
+            });
+        }
+        if (els.pickFiles) {
+            els.pickFiles.addEventListener('click', () => {
+                if (activeType === 'video_course') {
+                    showToast('视频请用本机路径导入；上传副本会重复占磁盘');
+                    if (els.localImportPath) els.localImportPath.focus();
+                    return;
+                }
+                els.filesInput.click();
+            });
+        }
+        bindLocalPathPickerEvents();
         if (els.appendFolder) {
-            els.appendFolder.addEventListener('click', () => els.appendFolderInput.click());
+            els.appendFolder.addEventListener('click', () => {
+                if (!currentCollection) {
+                    showToast('请先打开一个专题');
+                    return;
+                }
+                openLocalPathPicker({
+                    mode: 'append',
+                    startPath: (els.localImportPath && els.localImportPath.value) || ''
+                }).catch((error) => showToast(error.message || '无法打开文件夹选择器'));
+            });
         }
         if (els.appendFiles) {
-            els.appendFiles.addEventListener('click', () => els.appendFilesInput.click());
+            els.appendFiles.addEventListener('click', () => {
+                if ((currentCollection && currentCollection.collection_type) === 'video_course'
+                    || (!currentCollection && activeType === 'video_course')) {
+                    showToast('视频请用「追加文件夹」选择本机路径');
+                    return;
+                }
+                els.appendFilesInput.click();
+            });
         }
         if (els.cancelCollection) {
             els.cancelCollection.addEventListener('click', cancelCurrentCollection);
@@ -3934,8 +4894,12 @@
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && els.actionDialog && els.actionDialog.open) closeActionDialog();
         });
-        els.folderInput.addEventListener('change', () => importFiles(els.folderInput.files, 'local_folder'));
-        els.filesInput.addEventListener('change', () => importFiles(els.filesInput.files, 'local_files'));
+        if (els.folderInput) {
+            els.folderInput.addEventListener('change', () => importFiles(els.folderInput.files, 'local_folder'));
+        }
+        if (els.filesInput) {
+            els.filesInput.addEventListener('change', () => importFiles(els.filesInput.files, 'local_files'));
+        }
         if (els.appendFolderInput) {
             els.appendFolderInput.addEventListener('change', () => appendFilesToCurrentCollection(els.appendFolderInput.files, 'local_folder'));
         }
@@ -3943,19 +4907,32 @@
             els.appendFilesInput.addEventListener('change', () => appendFilesToCurrentCollection(els.appendFilesInput.files, 'local_files'));
         }
 
-        ['dragenter', 'dragover'].forEach((eventName) => {
-            els.dropAction.addEventListener(eventName, (event) => {
-                event.preventDefault();
-                els.dropAction.classList.add('dragging');
+        if (els.dropAction) {
+            els.dropAction.addEventListener('click', () => {
+                if (els.localImportPath) els.localImportPath.focus();
             });
-        });
-        ['dragleave', 'drop'].forEach((eventName) => {
-            els.dropAction.addEventListener(eventName, (event) => {
-                event.preventDefault();
-                els.dropAction.classList.remove('dragging');
+            ['dragenter', 'dragover'].forEach((eventName) => {
+                els.dropAction.addEventListener(eventName, (event) => {
+                    event.preventDefault();
+                    els.dropAction.classList.add('dragging');
+                });
             });
-        });
-        els.dropAction.addEventListener('drop', (event) => importFiles(event.dataTransfer.files, 'local_files'));
+            ['dragleave', 'drop'].forEach((eventName) => {
+                els.dropAction.addEventListener(eventName, (event) => {
+                    event.preventDefault();
+                    els.dropAction.classList.remove('dragging');
+                });
+            });
+            els.dropAction.addEventListener('drop', (event) => {
+                event.preventDefault();
+                if (activeType === 'video_course') {
+                    showToast('视频课程请粘贴本机文件夹路径后导入，拖放上传会复制整份视频');
+                    if (els.localImportPath) els.localImportPath.focus();
+                    return;
+                }
+                importFiles(event.dataTransfer.files, 'local_files');
+            });
+        }
 
         els.mapScopeCollection.addEventListener('click', () => {
             knowledgeMapScope = 'collection';
@@ -4031,8 +5008,14 @@
 
         els.tabs.forEach((tab) => {
             tab.addEventListener('click', () => {
-                const requestedView = tab.dataset.view || 'map';
-                currentView = requestedView === 'visual' ? 'summary' : requestedView;
+                const requestedView = tab.dataset.view || 'summary';
+                // Map UI is hidden; redirect any map/visual requests to summary.
+                let nextView = requestedView;
+                if (nextView === 'map' || nextView === 'visual') nextView = 'summary';
+                if (nextView !== 'summary') {
+                    sourcesExpandedInSummary = false;
+                }
+                currentView = nextView;
                 render();
                 if (requestedView === 'visual') {
                     setCollectionSummaryMode('visual', true);
@@ -4044,6 +5027,13 @@
                 }
             });
         });
+        if (els.sourcesPanelToggle) {
+            els.sourcesPanelToggle.addEventListener('click', () => {
+                if (currentView !== 'summary') return;
+                sourcesExpandedInSummary = !sourcesExpandedInSummary;
+                updateSummaryReadingLayout();
+            });
+        }
         if (els.collectionSummaryText) {
             els.collectionSummaryText.addEventListener('click', () => setCollectionSummaryMode('text', false));
         }
@@ -4070,11 +5060,6 @@
                 currentView = 'summary';
                 render();
                 setCollectionSummaryMode('visual', true);
-            });
-        }
-        if (els.collectionSummaryReaderOpen) {
-            els.collectionSummaryReaderOpen.addEventListener('click', () => {
-                focusCollectionSummaryArticle('');
             });
         }
         if (els.collectionVisualExport) {

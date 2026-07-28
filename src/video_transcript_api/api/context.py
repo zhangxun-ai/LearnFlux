@@ -28,6 +28,7 @@ from ..transcriber.control_store import (
 )
 from ..transcriber.online_runtime import OnlineRuntimeSettings
 from ..transcriber.object_store import LocalObjectStore, S3ObjectStore
+from ..transcriber.submission_guard import CloudSubmissionGuard
 
 # Lazy initialized runtime resources
 _task_queue: asyncio.Queue | None = None
@@ -37,6 +38,7 @@ _cloud_asr_executor: concurrent.futures.ThreadPoolExecutor | None = None
 _transcription_concurrency_controller: TranscriptionConcurrencyController | None = None
 _cloud_asr_dispatcher: Any | None = None
 _cloud_asr_dispatcher_guard = threading.Lock()
+_cloud_submission_guard: CloudSubmissionGuard | None = None
 _llm_task_queue: queue.Queue | None = None
 _llm_executor: concurrent.futures.ThreadPoolExecutor | None = None
 _templates: Jinja2Templates | None = None
@@ -201,6 +203,14 @@ def get_cloud_asr_executor() -> concurrent.futures.ThreadPoolExecutor:
     return _cloud_asr_executor
 
 
+def get_cloud_submission_guard() -> CloudSubmissionGuard:
+    """Return the process-wide serialized cloud upload guard."""
+    global _cloud_submission_guard
+    if _cloud_submission_guard is None:
+        _cloud_submission_guard = CloudSubmissionGuard()
+    return _cloud_submission_guard
+
+
 def set_cloud_asr_dispatcher(dispatcher: Any | None) -> None:
     """Publish or clear the active cloud dispatcher without exposing config."""
     global _cloud_asr_dispatcher
@@ -273,6 +283,8 @@ def get_templates() -> Jinja2Templates:
                 static_dir / "css" / "product-linear-insights.css",
                 static_dir / "css" / "product-linear-system.css",
                 static_dir / "js" / "pwa-register.js",
+                static_dir / "js" / "ui-features.js",
+                static_dir / "js" / "app-shell.js",
                 static_dir / "js" / "floating-toc.js",
                 static_dir / "js" / "visual-learning.js",
                 static_dir / "js" / "transcript-visual-reader.js",

@@ -67,7 +67,32 @@ class LearningCollectionService:
         import_method: str = "",
         tags: str = "",
         owner_user_id: str = "",
+        transcription_strategy: str = "local",
+        transcription_concurrency: int = 1,
+        reuse_if_exists: bool = True,
     ) -> Dict[str, Any]:
+        """Create a collection, or reuse the same identity when one already exists.
+
+        Identity is (owner_user_id, creator_name, title) after normalization.
+        Reuse is the default so repeated imports append into one collection
+        instead of spawning history duplicates.
+        """
+        if collection_type == "document_topic":
+            transcription_strategy = "local"
+            transcription_concurrency = 1
+
+        if not reuse_if_exists:
+            existing = self.repository.find_collection_by_identity(
+                creator_name=creator_name,
+                title=title,
+                owner_user_id=owner_user_id or "",
+            )
+            if existing:
+                raise ValueError(
+                    f"同名专题已存在：{creator_name} / {title}。"
+                    "请到历史专题中打开，或修改名称后再导入，避免重复。"
+                )
+
         return self.repository.create_collection(
             title=title,
             creator_name=creator_name,
@@ -77,6 +102,8 @@ class LearningCollectionService:
             import_method=import_method,
             tags=tags,
             owner_user_id=owner_user_id,
+            transcription_strategy=transcription_strategy,
+            transcription_concurrency=transcription_concurrency,
         )
 
     def list_collections(
@@ -104,7 +131,7 @@ class LearningCollectionService:
             ]
         return decorated
 
-    def get_filter_options(self, owner_user_id: Optional[str] = None) -> Dict[str, List[str]]:
+    def get_filter_options(self, owner_user_id: Optional[str] = None) -> Dict[str, Any]:
         return self.repository.get_filter_options(owner_user_id=owner_user_id)
 
     def list_study_collections(
@@ -335,21 +362,226 @@ class LearningCollectionService:
             raise ValueError(f"{detail['collection_type']} expects {expected} files")
         return source_type
 
-    def generate_summary(self, collection_id: str) -> Dict[str, Any]:
+    def resolve_local_import_paths(
+        self,
+        collection_id: str,
+        *,
+        directory: str = "",
+        paths: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Build source candidates from existing local files without copying them.
+
+        The returned ``file_path`` is the caller's original absolute path. Callers
+        must keep that path stable for re-parse and open-in-finder.
+        """
+        detail = self.repository.get_collection_detail(collection_id)
+        if not detail:
+            raise ValueError("collection not found")
+
+        file_paths = self._collect_local_import_files(
+            directory=directory,
+            paths=paths or [],
+            collection_type=detail["collection_type"],
+        )
+        if not file_paths:
+            raise ValueError("未找到可导入的本地文件（请检查路径与内容类型）")
+
+        existing_positions = [
+            int(source.get("position") or 0) for source in detail.get("sources", [])
+        ]
+        next_position = (max(existing_positions) if existing_positions else 0) + 1
+        candidates: List[Dict[str, Any]] = []
+        for file_path in file_paths:
+            filename = os.path.basename(file_path)
+            source_type = self.validate_source_type_for_collection(collection_id, filename)
+            position = self._source_position_from_filename(filename) or next_position
+            next_position = max(next_position, position + 1)
+            file_hash, size = self._hash_local_file(file_path)
+            media_id = f"local_{file_hash[:32]}"
+            candidates.append(
+                {
+                    "file_path": file_path,
+                    "original_name": filename,
+                    "display_url": f"local://collection-source/{media_id}/{filename}",
+                    "media_id": media_id,
+                    "content_sha256": file_hash,
+                    "source_type": source_type,
+                    "position": position,
+                    "size": size,
+                    "path_referenced": True,
+                }
+            )
+        return candidates
+
+    def _collect_local_import_files(
+        self,
+        *,
+        directory: str,
+        paths: List[str],
+        collection_type: str,
+    ) -> List[str]:
+        allowed = VIDEO_EXTS if collection_type == "video_course" else DOCUMENT_EXTS
+        discovered: List[str] = []
+        seen: set[str] = set()
+
+        def _add(path_str: str) -> None:
+            resolved = self._normalize_existing_local_file(path_str)
+            if not resolved:
+                return
+            key = os.path.normcase(resolved)
+            if key in seen:
+                return
+            ext = os.path.splitext(resolved)[1].lower()
+            if ext not in allowed:
+                return
+            seen.add(key)
+            discovered.append(resolved)
+
+        for raw in paths or []:
+            _add(raw)
+
+        directory = (directory or "").strip()
+        if directory:
+            root = self._normalize_existing_local_dir(directory)
+            if not root:
+                raise ValueError(f"本机目录不存在或不可访问：{directory}")
+            for dirpath, _dirnames, filenames in os.walk(root):
+                # Skip common noise folders.
+                base = os.path.basename(dirpath)
+                if base.startswith(".") or base in {"__MACOSX", "node_modules"}:
+                    continue
+                for name in filenames:
+                    if name.startswith("."):
+                        continue
+                    _add(os.path.join(dirpath, name))
+
+        def _natural_key(path: str):
+            return [
+                int(part) if part.isdigit() else part
+                for part in re.split(r"(\d+)", path.lower())
+            ]
+
+        discovered.sort(key=_natural_key)
+        return discovered
+
+    @staticmethod
+    def _normalize_existing_local_file(path_str: str) -> Optional[str]:
+        raw = (path_str or "").strip()
+        if not raw:
+            return None
+        path = Path(raw).expanduser()
+        if not path.is_absolute():
+            path = path.resolve()
+        else:
+            path = path.resolve()
+        if not path.is_file():
+            return None
+        # Refuse to treat our own managed upload tree as "original user media"
+        # only when it is a symlink escape? Keep simple: any readable file is OK.
+        return str(path)
+
+    @staticmethod
+    def _normalize_existing_local_dir(path_str: str) -> Optional[str]:
+        raw = (path_str or "").strip()
+        if not raw:
+            return None
+        path = Path(raw).expanduser().resolve()
+        if not path.is_dir():
+            return None
+        return str(path)
+
+    @staticmethod
+    def _hash_local_file(file_path: str) -> tuple[str, int]:
+        import hashlib
+
+        digest = hashlib.sha256()
+        size = 0
+        with open(file_path, "rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                digest.update(chunk)
+        if size <= 0:
+            raise ValueError(f"文件为空：{file_path}")
+        return digest.hexdigest(), size
+
+    @staticmethod
+    def _source_position_from_filename(filename: str) -> Optional[int]:
+        basename = os.path.basename(filename or "")
+        match = re.match(r"^\s*(\d{1,4})(?=[\s._\-－—、])", basename)
+        if not match:
+            return None
+        value = int(match.group(1))
+        return value if value > 0 else None
+
+    def begin_summary_generation(self, collection_id: str) -> Dict[str, Any]:
+        """Validate readiness and mark summary as processing (durable across reloads).
+
+        Returns detail with ``summary_enqueue`` True only when a new job should start.
+        """
         detail = self.get_collection_detail(collection_id)
-        if any(source.get("task_status") != "success" for source in detail["sources"]):
+        status = (detail.get("summary_status") or "").strip()
+        if status == "processing":
+            detail["summary_enqueue"] = False
+            return detail
+
+        completed_statuses = {TaskStatus.SUCCESS, TaskStatus.NO_TRANSCRIPT}
+        if any(
+            source.get("task_status") not in completed_statuses
+            for source in detail["sources"]
+        ):
             raise ValueError("all sources must be parsed before collection summary")
         sources = self._load_ready_sources(detail["sources"])
         if not sources:
             raise ValueError("no parsed sources available")
 
-        if self.summary_generator:
-            markdown = self.summary_generator(detail, sources)
-        else:
-            markdown = self._generate_summary_with_llm(detail, sources)
-        description = _derive_collection_description(markdown)
-        self.repository.save_summary(collection_id, markdown, description=description)
-        return self.get_collection_detail(collection_id)
+        self.repository.mark_summary_processing(collection_id)
+        detail = self.get_collection_detail(collection_id)
+        detail["summary_enqueue"] = True
+        return detail
+
+    def generate_summary(self, collection_id: str) -> Dict[str, Any]:
+        """Generate and persist full-series interpretation (safe to run in a worker/thread)."""
+        detail = self.get_collection_detail(collection_id)
+        completed_statuses = {TaskStatus.SUCCESS, TaskStatus.NO_TRANSCRIPT}
+        if any(
+            source.get("task_status") not in completed_statuses
+            for source in detail["sources"]
+        ):
+            raise ValueError("all sources must be parsed before collection summary")
+        sources = self._load_ready_sources(detail["sources"])
+        if not sources:
+            raise ValueError("no parsed sources available")
+
+        # Ensure reloads can show "generating" even for sync callers.
+        if (detail.get("summary_status") or "").strip() != "processing":
+            self.repository.mark_summary_processing(collection_id)
+            detail = self.get_collection_detail(collection_id)
+
+        try:
+            if self.summary_generator:
+                markdown = self.summary_generator(detail, sources)
+            else:
+                markdown = self._generate_summary_with_llm(detail, sources)
+            description = _derive_collection_description(markdown)
+            self.repository.save_summary(collection_id, markdown, description=description)
+            return self.get_collection_detail(collection_id)
+        except Exception as exc:
+            self.repository.mark_summary_failed(collection_id, str(exc))
+            raise
+
+    def generate_summary_job(self, collection_id: str) -> None:
+        """Background entrypoint: never raise into the ASGI worker after response."""
+        try:
+            self.generate_summary(collection_id)
+        except Exception as exc:
+            logger.exception(
+                "collection summary generation failed: collection={} error={}",
+                collection_id,
+                exc,
+            )
 
     def get_export_markdown(self, collection_id: str) -> str:
         detail = self.repository.get_collection_detail(collection_id)
@@ -402,6 +634,9 @@ class LearningCollectionService:
             use_speaker_recognition=use_speaker_recognition,
             platform="generic",
             media_id=media_id,
+            source_file_path=file_path,
+            force_new_view_token=True,
+            owner_user_id=detail.get("owner_user_id") or None,
         )
         self.repository.update_source_task(
             source_id=source_id,
@@ -422,6 +657,7 @@ class LearningCollectionService:
             "display_url": display_url,
             "media_id": media_id,
             "use_speaker_recognition": use_speaker_recognition,
+            "transcription_strategy": detail.get("transcription_strategy") or "local",
         }
 
     def get_knowledge_map(
@@ -518,12 +754,32 @@ class LearningCollectionService:
     ) -> str:
         if collection.get("summary_status") == "success":
             return "summarized"
+        resumable_canceled = [
+            source
+            for source in sources
+            if source.get("task_status") == "canceled"
+            and ((source.get("progress") or {}).get("evidence") or {}).get(
+                "collection_resume_allowed"
+            )
+            is True
+        ]
+        if resumable_canceled and any(
+            source.get("task_status") in NON_TERMINAL_STATUSES for source in sources
+        ):
+            return "stopping"
+        if resumable_canceled:
+            return "stopped"
         if any(source.get("task_status") == "failed" for source in sources):
             return "failed"
-        if sources and all(source.get("task_status") == "success" for source in sources):
+        completed_statuses = {TaskStatus.SUCCESS, TaskStatus.NO_TRANSCRIPT}
+        if sources and all(
+            source.get("task_status") in completed_statuses for source in sources
+        ) and any(source.get("task_status") == TaskStatus.SUCCESS for source in sources):
             return "ready"
-        if any(source.get("task_status") == "canceled" for source in sources):
-            return "stopped"
+        if sources and all(
+            source.get("task_status") in completed_statuses for source in sources
+        ):
+            return "completed_without_transcript"
         if sources:
             return "processing"
         return "draft"
@@ -586,15 +842,27 @@ class LearningCollectionService:
         task_info: Dict[str, Any],
     ) -> Optional[str]:
         raw_url = task_info.get("url") or ""
+        if not raw_url.startswith("local://"):
+            return None
+        saved_path = task_info.get("source_file_path")
+        if saved_path:
+            path = Path(str(saved_path))
+            if path.exists():
+                return str(path)
         media_id = task_info.get("media_id") or _media_id_from_local_url(raw_url)
-        if not media_id or not raw_url.startswith("local://"):
+        if not media_id:
             return None
         ext = os.path.splitext(source.get("title") or raw_url)[1][:10] or ".bin"
         path = self.source_file_dir / f"{media_id}{ext}"
         return str(path) if path.exists() else None
 
     def _build_metrics(self, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
-        completed = [source for source in sources if source.get("task_status") == "success"]
+        completed = [
+            source
+            for source in sources
+            if source.get("task_status")
+            in {TaskStatus.SUCCESS, TaskStatus.NO_TRANSCRIPT}
+        ]
         started_values = [source.get("created_at") for source in sources if source.get("created_at")]
         completed_values = [
             source.get("completed_at") for source in completed if source.get("completed_at")

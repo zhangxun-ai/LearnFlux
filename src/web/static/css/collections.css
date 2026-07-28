@@ -279,7 +279,23 @@ select:focus-visible,
 }
 
 .lc-drop.is-busy {
-    opacity: 0.58;
+    opacity: 0.88;
+    pointer-events: none;
+}
+
+.lc-drop.is-uploading {
+    opacity: 1;
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.lc-drop.is-uploading .lc-plus {
+    animation: lc-upload-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes lc-upload-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(0.92); opacity: 0.72; }
 }
 
 .lc-plus {
@@ -317,6 +333,179 @@ select:focus-visible,
     margin: 10px 0;
 }
 
+.lc-local-path-field {
+    display: grid;
+    gap: 6px;
+    margin: 10px 0 4px;
+}
+
+.lc-local-path-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.lc-local-path-field .lc-input {
+    width: 100%;
+}
+
+.lc-path-dialog {
+    border: none;
+    padding: 0;
+    background: transparent;
+    max-width: min(720px, calc(100vw - 32px));
+    width: 100%;
+}
+
+.lc-path-dialog::backdrop {
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+}
+
+.lc-path-dialog-panel {
+    background: var(--paper, #fff);
+    border: 1px solid var(--line, #e5e7eb);
+    border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+    padding: 18px 18px 16px;
+    color: var(--ink, #0f172a);
+}
+
+.lc-path-dialog-panel > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.lc-path-dialog-panel h3 {
+    margin: 0 0 4px;
+    font-size: 1.15rem;
+}
+
+.lc-path-dialog-sub {
+    margin: 0;
+    color: var(--muted, #64748b);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.lc-path-toolbar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.lc-path-roots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.lc-path-root-chip {
+    border: 1px solid var(--line, #e5e7eb);
+    background: var(--paper, #f8fafc);
+    color: var(--ink-soft, #334155);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.lc-path-root-chip:hover,
+.lc-path-root-chip.active {
+    border-color: var(--accent, #3b82f6);
+    background: var(--accent-soft, rgba(59, 130, 246, 0.08));
+    color: var(--ink, #0f172a);
+}
+
+.lc-path-list {
+    border: 1px solid var(--line, #e5e7eb);
+    border-radius: 14px;
+    min-height: 240px;
+    max-height: min(42vh, 360px);
+    overflow: auto;
+    background: #fbfcfe;
+}
+
+.lc-path-item {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    background: transparent;
+    text-align: left;
+    padding: 10px 12px;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.lc-path-item:last-child {
+    border-bottom: 0;
+}
+
+.lc-path-item:hover,
+.lc-path-item:focus-visible {
+    background: rgba(59, 130, 246, 0.08);
+    outline: none;
+}
+
+.lc-path-item.is-current {
+    background: rgba(59, 130, 246, 0.12);
+    font-weight: 700;
+}
+
+.lc-path-item-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: rgba(15, 23, 42, 0.06);
+    font-size: 14px;
+}
+
+.lc-path-item strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-path-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--muted, #64748b);
+    font-size: 13px;
+}
+
+.lc-path-meta {
+    margin: 10px 0 14px;
+    color: var(--muted, #64748b);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.lc-path-dialog-panel > footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.lc-btn.compact {
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
 .lc-import-preview {
     display: flex;
     align-items: center;
@@ -335,6 +524,49 @@ select:focus-visible,
 
 .lc-import-preview span {
     text-align: right;
+}
+
+.lc-import-preview.is-uploading {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    background: var(--accent-soft);
+    color: var(--ink);
+}
+
+.lc-import-preview.is-uploading strong {
+    color: var(--ink);
+}
+
+.lc-import-preview.is-error {
+    border-color: color-mix(in srgb, #ef4444 45%, var(--line));
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--ink);
+}
+
+.lc-import-preview.is-error strong {
+    color: #b91c1c;
+}
+
+.lc-empty-uploading {
+    color: var(--ink-soft) !important;
+    font-weight: 600;
+}
+
+.lc-empty-error {
+    display: grid;
+    gap: 6px;
+    color: var(--ink-soft) !important;
+    font-weight: 600;
+    text-align: left;
+}
+
+.lc-empty-error strong {
+    color: #b91c1c;
+}
+
+.lc-empty-error span {
+    display: block;
+    font-weight: 500;
+    line-height: 1.45;
 }
 
 .lc-transcription-policy {
@@ -713,6 +945,20 @@ select:focus-visible,
     grid-template-columns: 330px minmax(0, 1fr);
     gap: 14px;
     align-items: start;
+    transition: grid-template-columns 0.2s ease;
+}
+
+/* Mainline summary reading: free width by collapsing Sources by default. */
+.lc-board.is-summary-reading:not(.sources-expanded) {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.lc-board.is-summary-reading:not(.sources-expanded) .lc-sources {
+    display: none;
+}
+
+.lc-board.is-summary-reading.sources-expanded {
+    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
 }
 
 .lc-sources,
@@ -730,6 +976,25 @@ select:focus-visible,
     min-height: 0;
     padding: 14px;
     box-shadow: none;
+}
+
+.lc-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.lc-detail-head .lc-tabs {
+    margin-bottom: 0;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+#sources-panel-toggle {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .lc-panel-head {
@@ -1361,41 +1626,90 @@ select:focus-visible,
     line-height: 1.25;
 }
 
-.lc-summary-reader-head {
+/* Compact single toolbar for summary reading (replaces dual head + status rows). */
+.lc-summary-toolbar {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 18px;
-    padding-bottom: 18px;
+    gap: 16px;
+    padding-bottom: 14px;
     border-bottom: 1px solid var(--line);
 }
 
-.lc-summary-reader-head span {
+.lc-summary-toolbar-meta {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.lc-summary-kicker {
     display: block;
     color: var(--muted);
     font-size: 12px;
     font-weight: 900;
+    letter-spacing: 0.02em;
 }
 
-.lc-summary-reader-head h3 {
-    margin: 5px 0 8px;
-    color: var(--ink);
-    font-size: 28px;
-    line-height: 1.2;
+.lc-summary-toolbar-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 12px;
+    margin-top: 4px;
 }
 
-.lc-summary-reader-head p {
-    max-width: 62ch;
+.lc-summary-toolbar-title {
     margin: 0;
-    color: var(--muted);
-    line-height: 1.65;
+    color: var(--ink);
+    font-size: 20px;
+    font-weight: 850;
+    line-height: 1.25;
 }
 
-.lc-summary-reader-tools {
+.lc-summary-toolbar-title-row > #summary-status {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.lc-summary-toolbar-desc {
+    max-width: 62ch;
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+/* Hide helper copy once full-series summary is ready — free vertical space. */
+#summary-view.is-ready .lc-summary-toolbar-desc {
+    display: none;
+}
+
+.lc-summary-toolbar-actions {
     display: flex;
     flex: 0 0 auto;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Make the generate CTA a bit larger/heavier than neighboring toolbar controls. */
+#generate-summary.lc-btn.primary {
+    min-height: 42px;
+    padding: 0 18px;
+    font-size: 14px;
+    font-weight: 750;
+    letter-spacing: 0.01em;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 6px 16px rgba(37, 99, 235, 0.18);
+}
+
+#generate-summary.lc-btn.primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1), 0 10px 22px rgba(37, 99, 235, 0.22);
+}
+
+#generate-summary.lc-btn.generating {
+    box-shadow: none;
 }
 
 .lc-summary-reader-actions {
@@ -1427,20 +1741,11 @@ select:focus-visible,
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
 }
 
+/* Legacy selectors kept for any residual references / older snapshots. */
+.lc-summary-reader-head,
+.lc-summary-reader-tools,
 .lc-summary-status-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--line);
-}
-
-.lc-summary-status-row > strong {
-    margin-right: auto;
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 900;
+    display: none;
 }
 
 .lc-summary-view-panel[hidden] {
@@ -1448,12 +1753,17 @@ select:focus-visible,
 }
 
 .lc-summary-inline-article {
-    width: min(100%, 88ch);
+    width: min(100%, 72ch);
     margin: 0 auto;
-    padding: 34px 0 48px;
+    padding: 28px 0 56px;
     color: var(--ink);
-    font-size: 20px;
-    line-height: 1.9;
+    font-size: 19px;
+    line-height: 1.88;
+}
+
+/* Wider reading column when Sources is collapsed. */
+.lc-board.is-summary-reading:not(.sources-expanded) .lc-summary-inline-article {
+    width: min(100%, 76ch);
 }
 
 .lc-summary-inline-article h1,
@@ -2244,6 +2554,13 @@ select:focus-visible,
     border-radius: 4px;
 }
 
+/* Single-asterisk emphasis: no italic slant (poor CJK readability), use weight instead. */
+.lc-markdown-preview em {
+    color: var(--ink);
+    font-style: normal;
+    font-weight: 650;
+}
+
 .lc-markdown-preview code {
     padding: 2px 5px;
     border-radius: 6px;
@@ -2615,15 +2932,19 @@ body.vl-reader-open {
         gap: 12px;
     }
 
-    .lc-summary-reader-head,
-    .lc-summary-reader-tools,
-    .lc-summary-status-row {
+    .lc-detail-head {
         align-items: stretch;
         flex-direction: column;
     }
 
-    .lc-summary-reader-head h3 {
-        font-size: 25px;
+    .lc-summary-toolbar,
+    .lc-summary-toolbar-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .lc-summary-toolbar-title {
+        font-size: 18px;
     }
 
     .lc-summary-reader-actions {
@@ -2634,8 +2955,8 @@ body.vl-reader-open {
         flex: 1 1 0;
     }
 
-    .lc-summary-status-row > strong {
-        margin-right: 0;
+    .lc-board.is-summary-reading.sources-expanded {
+        grid-template-columns: 1fr;
     }
 
     .lc-summary-structured,

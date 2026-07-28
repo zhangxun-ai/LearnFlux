@@ -960,7 +960,8 @@ class CacheManager:
                     download_url: str = None, platform: str = None,
                     media_id: str = None,
                     force_new_view_token: bool = False,
-                    owner_user_id: str = None) -> Dict[str, str]:
+                    owner_user_id: str = None,
+                    source_file_path: str = None) -> Dict[str, str]:
         """
         创建新任务，相同URL或相同(platform, media_id)会复用view_token
 
@@ -987,6 +988,7 @@ class CacheManager:
                 media_id=media_id,
                 force_new_view_token=force_new_view_token,
                 owner_user_id=owner_user_id,
+                source_file_path=source_file_path,
             )
         task_id = self.generate_task_id()
 
@@ -1027,11 +1029,12 @@ class CacheManager:
                     INSERT INTO task_status
                     (task_id, view_token, url, download_url, use_speaker_recognition,
                      status, platform, media_id, progress_json, progress_reminders_json,
-                     last_heartbeat_at, owner_user_id)
-                    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                     source_file_path, last_heartbeat_at, owner_user_id)
+                    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
                 ''', (task_id, view_token, url, download_url, use_speaker_recognition,
                       platform, media_id, json.dumps(queued_progress, ensure_ascii=False),
-                      json.dumps([], ensure_ascii=False), owner_user_id))
+                      json.dumps([], ensure_ascii=False), source_file_path,
+                      owner_user_id))
 
             logger.info(f"任务创建成功: {task_id}, view_token: {view_token}, download_url: {download_url}")
             return {
@@ -1042,12 +1045,75 @@ class CacheManager:
             logger.error(f"创建任务失败: {e}")
             raise
 
+    def create_cache_alias_task(
+        self,
+        *,
+        url: str,
+        reusable_view_token: str,
+        use_speaker_recognition: bool = False,
+        platform: str = None,
+        media_id: str = None,
+        owner_user_id: str = None,
+    ) -> Dict[str, str]:
+        """Create a new owner task that explicitly reuses a successful view."""
+        if (
+            not isinstance(reusable_view_token, str)
+            or not reusable_view_token.strip()
+        ):
+            raise ValueError("invalid_reusable_view_token")
+        if self._task_status_repository is not None:
+            return self._task_status_repository.create_cache_alias_task(
+                url=url,
+                reusable_view_token=reusable_view_token,
+                use_speaker_recognition=use_speaker_recognition,
+                platform=platform,
+                media_id=media_id,
+                owner_user_id=owner_user_id,
+            )
+
+        task_id = self.generate_task_id()
+        queued_progress = build_progress(
+            stage="queued",
+            basis="task_created",
+            confidence="high",
+        )
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO task_status
+                    (task_id, view_token, url, use_speaker_recognition, status,
+                     platform, media_id, progress_json, progress_reminders_json,
+                     last_heartbeat_at, owner_user_id)
+                    VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                    """,
+                    (
+                        task_id,
+                        reusable_view_token,
+                        url,
+                        use_speaker_recognition,
+                        platform,
+                        media_id,
+                        json.dumps(queued_progress, ensure_ascii=False),
+                        json.dumps([], ensure_ascii=False),
+                        owner_user_id,
+                    ),
+                )
+            return {
+                "task_id": task_id,
+                "view_token": reusable_view_token,
+            }
+        except Exception as e:
+            logger.error(f"创建缓存别名任务失败: {e}")
+            raise
+
     def update_task_status(self, task_id: str, status: str, platform: str = None,
                           media_id: str = None, title: str = None, author: str = None,
                           cache_id: int = None, download_url: str = None,
                           force: bool = False, error_message: str = None,
                           source_file_path: str = None,
-                          terminal_evidence: Dict[str, Any] = None):
+                          terminal_evidence: Dict[str, Any] = None,
+                          stage_label: str = None):
         """
         更新任务状态
 
@@ -1066,6 +1132,7 @@ class CacheManager:
             download_url: 实际下载地址
             force: 是否绕过终态黏性保护(recalibrate 显式重置时为 True)
             source_file_path: 可选，本地保存的源内容文件路径
+            stage_label: 可选，终态 progress 自定义文案
         """
         if self._task_status_repository is not None:
             return self._task_status_repository.update_task_status(
@@ -1081,6 +1148,7 @@ class CacheManager:
                 error_message=error_message,
                 source_file_path=source_file_path,
                 terminal_evidence=terminal_evidence,
+                stage_label=stage_label,
             )
         try:
             # 将空字符串转换为 None，避免存储无意义的空字符串
@@ -1123,6 +1191,7 @@ class CacheManager:
                     if status == TaskStatus.SUCCESS:
                         progress = build_progress(
                             stage="completed",
+                            stage_label=stage_label,
                             basis="task_completed",
                             confidence="high",
                             evidence=terminal_evidence,
@@ -1130,15 +1199,25 @@ class CacheManager:
                     elif status == TaskStatus.CANCELED:
                         progress = build_progress(
                             stage="canceled",
-                            stage_label="任务已取消",
+                            stage_label=stage_label or "任务已取消",
                             basis="task_canceled",
                             confidence="high",
                             evidence=terminal_evidence,
                             message=error_message or "用户已取消任务",
                         )
+                    elif status == TaskStatus.NO_TRANSCRIPT:
+                        progress = build_progress(
+                            stage="no_transcript",
+                            stage_label=stage_label or "未检测到可转录语音",
+                            basis="no_transcribable_speech",
+                            confidence="high",
+                            evidence=terminal_evidence,
+                            message=error_message or "未检测到可转录语音",
+                        )
                     else:
                         progress = build_progress(
                             stage="failed",
+                            stage_label=stage_label,
                             basis="task_failed",
                             confidence="high",
                             evidence=terminal_evidence,
@@ -1169,6 +1248,43 @@ class CacheManager:
         except Exception as e:
             logger.error(f"更新任务状态失败: {e}")
             raise
+
+    def cancel_task_if_queued(
+        self, task_id: str, *, error_message: str
+    ) -> bool:
+        """Atomically cancel a task only while it remains queued."""
+        if self._task_status_repository is not None:
+            return bool(
+                self._task_status_repository.cancel_task_if_queued(
+                    task_id,
+                    error_message=error_message,
+                )
+            )
+        progress = build_progress(
+            stage="canceled",
+            stage_label="任务已取消",
+            basis="task_canceled",
+            confidence="high",
+            message=error_message,
+        )
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE task_status
+                SET status = ?, error_message = ?, progress_json = ?,
+                    completed_at = CURRENT_TIMESTAMP,
+                    last_heartbeat_at = CURRENT_TIMESTAMP
+                WHERE task_id = ? AND status = ?
+                """,
+                (
+                    TaskStatus.CANCELED,
+                    error_message,
+                    json.dumps(progress, ensure_ascii=False),
+                    task_id,
+                    TaskStatus.QUEUED,
+                ),
+            )
+            return cursor.rowcount == 1
 
     def update_task_progress(
         self,
@@ -1213,12 +1329,13 @@ class CacheManager:
                     UPDATE task_status
                     SET progress_json = ?,
                         last_heartbeat_at = CURRENT_TIMESTAMP
-                    WHERE task_id = ? AND status NOT IN (?, ?, ?)
+                    WHERE task_id = ? AND status NOT IN (?, ?, ?, ?)
                     """,
                     (
                         json.dumps(progress, ensure_ascii=False),
                         task_id,
                         TaskStatus.SUCCESS,
+                        TaskStatus.NO_TRANSCRIPT,
                         TaskStatus.FAILED,
                         TaskStatus.CANCELED,
                     ),
@@ -1290,6 +1407,52 @@ class CacheManager:
         except Exception as e:
             logger.error(f"查询本地源文件引用失败: {e}")
             return []
+
+    def clear_ephemeral_source_file_paths(self, prefixes: List[str] | None = None) -> int:
+        """Clear source_file_path for rows that point into managed staging trees.
+
+        Path-referenced user originals (outside prefixes) are left intact so
+        open-in-finder continues to work after path-based import.
+        """
+        prefixes = [str(item or "").strip() for item in (prefixes or []) if str(item or "").strip()]
+        if not prefixes:
+            return 0
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id, source_file_path
+                    FROM task_status
+                    WHERE source_file_path IS NOT NULL
+                      AND TRIM(source_file_path) != ''
+                    """
+                )
+                rows = [dict(row) for row in cursor.fetchall()]
+                cleared = 0
+                for row in rows:
+                    path = str(row.get("source_file_path") or "")
+                    if not path:
+                        continue
+                    abs_path = os.path.abspath(path)
+                    if not any(
+                        abs_path == os.path.abspath(prefix)
+                        or abs_path.startswith(os.path.abspath(prefix) + os.sep)
+                        for prefix in prefixes
+                    ):
+                        continue
+                    cursor.execute(
+                        """
+                        UPDATE task_status
+                        SET source_file_path = NULL
+                        WHERE task_id = ?
+                        """,
+                        (row["task_id"],),
+                    )
+                    cleared += 1
+                return cleared
+        except Exception as e:
+            logger.error(f"清理托管 source_file_path 引用失败: {e}")
+            return 0
 
     def recover_stale_tasks(
         self,
@@ -1611,6 +1774,13 @@ class CacheManager:
                             task_info['view_token']
                         )
 
+                    progress = task_info.get('progress') or {}
+                    progress_evidence = progress.get('evidence') or {}
+                    summary_pending = bool(
+                        summary_missing
+                        and progress_evidence.get('summary_pending') is True
+                    )
+
                     return {
                         'status': 'success',
                         'task_id': task_info.get('task_id'),
@@ -1621,6 +1791,7 @@ class CacheManager:
                         'url': display_url,
                         'summary': summary,
                         'summary_missing': summary_missing,
+                        'summary_pending': summary_pending,
                         'transcript': transcript,
                         'source_transcript': cache_data.get('source_transcript'),
                         'source_language': cache_data.get('source_language'),
@@ -1796,6 +1967,12 @@ class CacheManager:
         # 参数校验：platform 或 media_id 为 None 时跳过查询
         if not platform or not media_id:
             return None
+        if self._task_status_repository is not None:
+            return self._task_status_repository.get_existing_task_by_media(
+                platform,
+                media_id,
+                use_speaker_recognition,
+            )
 
         try:
             with self._get_cursor() as cursor:

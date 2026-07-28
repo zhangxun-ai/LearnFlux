@@ -208,6 +208,7 @@ def build_aliyun_provider(
         get_temp_manager,
         get_transcription_control_store,
         get_transcription_concurrency_controller,
+        get_cloud_submission_guard,
     )
 
     temp_manager = get_temp_manager()
@@ -293,6 +294,7 @@ def build_aliyun_provider(
         client_factory=create_client,
         attempt_reserver=attempt_reserver,
         prepared_media_cleanup=cleanup_prepared_media,
+        submission_guard=get_cloud_submission_guard(),
         capacity_transfer_callback=transfer_capacity,
         attempt_state_callback=update_capacity,
     )

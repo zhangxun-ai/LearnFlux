@@ -20,7 +20,6 @@ def cloud_config():
             "enabled": True,
             "provider": "aliyun",
             "model": "fun-asr-2025-11-07",
-            "max_cny_per_task": "1",
             "price_cny_per_second": "0.00022",
             "price_verified_at": "2026-07-21",
             "poll_interval_seconds": 1,
@@ -34,6 +33,7 @@ def _prepared_media(
     *,
     task_hash: str = "a" * 64,
     candidate: str = "quote-candidate",
+    duration_seconds: Decimal = Decimal("15.01"),
 ) -> PreparedASRMedia:
     media_path = temp_root / "cloud_quotes" / task_hash / candidate / "input.m4a"
     media_path.parent.mkdir(parents=True)
@@ -41,7 +41,7 @@ def _prepared_media(
     return PreparedASRMedia(
         path=media_path,
         media_format="m4a",
-        duration_seconds=Decimal("15.01"),
+        duration_seconds=duration_seconds,
         size_bytes=media_path.stat().st_size,
         sha256=hashlib.sha256(media_path.read_bytes()).hexdigest(),
         preparation="demuxed",
@@ -76,6 +76,25 @@ def test_quote_uses_prepared_media_identity_without_second_probe(
     assert quote.media_sha256 == prepared.sha256
     assert prepared.path.exists()
     assert CloudQuoteRepository(tmp_path / "cache.db").get("task-preflight").status == "pending"
+
+
+def test_quote_keeps_long_video_for_batch_confirmation_even_above_legacy_task_cap(
+    tmp_path,
+):
+    temp_root = tmp_path / "temp"
+    prepared = _prepared_media(temp_root, duration_seconds=Decimal("5400"))
+
+    quote = transcription._prepare_cloud_quote(
+        task_id="task-long-video",
+        prepared_media=prepared,
+        continuation_json='{"version":1}',
+        config=cloud_config(),
+        db_path=tmp_path / "cache.db",
+        temp_root=temp_root,
+    )
+
+    assert quote.billable_seconds == 5400
+    assert quote.max_cost == Decimal("1.18800")
 
 def test_quote_repository_failure_cleans_unowned_candidate(tmp_path, monkeypatch):
     temp_root = tmp_path / "temp"
@@ -208,6 +227,9 @@ def test_quote_conflict_keeps_only_database_referenced_media(
             cleanup_calls.append(prepared)
 
     class Cache:
+        def get_task_by_id(self, task_id):
+            return None
+
         def update_task_progress(self, *args, **kwargs):
             return None
 

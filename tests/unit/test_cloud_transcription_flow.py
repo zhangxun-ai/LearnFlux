@@ -37,6 +37,33 @@ from video_transcript_api.transcriber.usage_repository import (
 )
 
 
+def test_cloud_provider_error_messages_name_the_failed_stage():
+    assert (
+        transcription_service._cloud_provider_error_message("upload_failed")
+        == "音频上传至云端失败（upload_failed）"
+    )
+    assert (
+        transcription_service._cloud_provider_error_message("provider_failed")
+        == "云端转录服务处理失败（provider_failed）"
+    )
+    assert (
+        transcription_service._cloud_provider_error_message("unknown_code")
+        == "云端转录失败（unknown_code）"
+    )
+
+
+def test_no_transcribable_speech_is_a_completed_non_failure_state():
+    status, message = transcription_service._cloud_provider_terminal_state(
+        CloudProviderError(
+            "provider_failed",
+            provider_error_code="ASR_RESPONSE_HAVE_NO_WORDS",
+        )
+    )
+
+    assert status == transcription_service.TaskStatus.NO_TRANSCRIPT
+    assert message == "未检测到可转录语音"
+
+
 NOW = datetime(2026, 7, 21, 8, 0, tzinfo=UTC)
 
 
@@ -366,6 +393,73 @@ def test_live_and_recovered_results_use_the_same_post_asr_seam(tmp_path):
     assert len(queue.items) == 2
 
 
+def test_recovered_success_overrides_stale_local_lease_failure(tmp_path):
+    continuation_json = build_cloud_continuation(
+        task_id="task-1",
+        url="https://example.com/watch/1",
+        display_url="https://example.com/watch/1",
+        platform="youtube",
+        media_id="video-1",
+        video_title="Lesson",
+        author="Author",
+        description="",
+        is_generic=False,
+        include_comments=False,
+        comment_limit=100,
+    )
+    repository = UsageEventRepository(tmp_path / "cache.db")
+    event = _materialized(repository, continuation_json)
+    result = TranscriptionResult(
+        transcript="recovered",
+        txt_path=str(tmp_path / "lesson.txt"),
+        funasr_json_data={"segments": []},
+        generated_files=(Path(tmp_path / "lesson.txt"),),
+        provider="aliyun",
+        usage_event_id=event.id,
+    )
+
+    class Cache:
+        def __init__(self):
+            self.saved = []
+            self.updated = []
+
+        def get_task_by_id(self, task_id):
+            return {
+                "status": "failed",
+                "error_message": "云端转录失败（lease_lost）",
+            }
+
+        def save_cache(self, **kwargs):
+            self.saved.append(kwargs)
+            return True
+
+        def update_task_status(self, *args, **kwargs):
+            self.updated.append((args, kwargs))
+            return True
+
+    class Queue:
+        def __init__(self):
+            self.items = []
+
+        def put(self, item):
+            self.items.append(item)
+
+    cache = Cache()
+    queue = Queue()
+
+    assert dispatch_post_asr(
+        result,
+        continuation_json,
+        cache_manager=cache,
+        llm_queue=queue,
+        repository=repository,
+    )
+    assert cache.saved
+    assert queue.items
+    assert cache.updated[-1][1]["force"] is True
+    assert cache.updated[-1][1]["error_message"] == ""
+
+
 def test_private_snapshot_protection_has_a_thirty_day_upper_bound(tmp_path):
     continuation_json = build_cloud_continuation(
         task_id="task-1",
@@ -506,8 +600,11 @@ def test_cloud_upload_preparation_failure_stops_before_all_downstream_work(
             prepare_calls.append((source_path, task_id))
             raise MediaPreparationError("media_probe_failed")
 
+    updates = []
+
     class Cache:
         def update_task_status(self, *args, **kwargs):
+            updates.append((args, kwargs))
             return None
 
         def get_task_by_id(self, task_id):
@@ -567,6 +664,7 @@ def test_cloud_upload_preparation_failure_stops_before_all_downstream_work(
     assert result == {"status": "failed", "message": "media_probe_failed"}
     assert prepare_calls == [(str(source), "task-prepare-failed")]
     assert downstream_calls == []
+    assert updates[-1][1]["error_message"] == "云端报价准备失败: media_probe_failed"
 
 
 def test_confirmed_quote_rehydrates_prepared_media_before_provider(

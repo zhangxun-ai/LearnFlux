@@ -32,6 +32,9 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
         lambda **kwargs: trace.append("orphan") or 0
     )
     source_cleanup = MagicMock()
+    reading_cleanup = MagicMock(
+        side_effect=lambda *args, **kwargs: trace.append("reading_cleanup")
+    )
 
     temp_manager = MagicMock()
     temp_manager.get_temp_dir.return_value = tmp_path / "temp"
@@ -137,6 +140,9 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
     monkeypatch.setattr(app_module, "log_llm_stats", lambda: None)
     monkeypatch.setattr(app_module, "YtdlpConfigBuilder", FakeYtdlpConfigBuilder)
     monkeypatch.setattr(app_module, "cleanup_old_source_files", source_cleanup)
+    monkeypatch.setattr(
+        app_module, "_recover_reading_deletions", reading_cleanup
+    )
     monkeypatch.setattr(app_module, "process_task_queue", no_op_async)
     monkeypatch.setattr(app_module, "process_progress_reminders", no_op_async)
     monkeypatch.setattr(app_module, "process_llm_queue", lambda: None)
@@ -223,6 +229,7 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
     )
     assert temp_manager.clean_up_old_files.call_count == 1
     assert source_cleanup.call_count == 1
+    assert reading_cleanup.call_count == 1
     assert trace.index("quote_reconcile") < trace.index("identify_reserved")
     assert trace.index("identify_reserved") < trace.index("reserved_recovery")
     assert trace.index("protected_roots") < trace.index("temp_cleanup")
@@ -231,6 +238,7 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
     ]
     assert trace.index("reserved_recovery") < trace.index("temp_cleanup")
     assert trace.index("temp_cleanup") < trace.index("orphan")
+    assert trace.index("orphan") < trace.index("reading_cleanup")
     assert trace.index("orphan") < trace.index("cloud_recovery")
     assert trace.index("cloud_recovery") < trace.index("reserved_enqueue")
     assert trace.index("reserved_enqueue") < trace.index("dispatcher")

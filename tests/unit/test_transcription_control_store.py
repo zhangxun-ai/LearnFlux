@@ -187,3 +187,22 @@ def test_cache_manager_uses_explicit_task_store_without_changing_local_default(
     assert task_by_view is not None
     assert task_by_view["task_id"] == created["task_id"]
     assert task_by_view["progress_json"]["stage"] == "acquiring_content"
+
+
+def test_no_transcript_is_terminal_in_the_explicit_task_store(tmp_path) -> None:
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    manager.set_task_status_repository(_store(tmp_path))
+    task = manager.create_task(
+        url="local://collection-source/media-1/silent.mp4",
+        platform="generic",
+        media_id="media-1",
+    )
+
+    manager.update_task_status(
+        task["task_id"], "no_transcript", error_message="未检测到可转录语音"
+    )
+    manager.update_task_progress(task["task_id"], stage="processing")
+
+    stored = manager.get_task_by_id(task["task_id"])
+    assert stored["status"] == "no_transcript"
+    assert stored["progress_json"]["stage"] == "no_transcript"

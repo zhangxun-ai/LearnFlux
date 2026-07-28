@@ -306,6 +306,81 @@ def test_completed_video_upload_reuses_cache_before_asr_or_cloud_quote(
     )
 
 
+def test_explicit_reparse_skips_completed_cache_and_prepares_fresh_cloud_quote(
+    monkeypatch, tmp_path
+):
+    import queue
+
+    from video_transcript_api.api.services import transcription
+    from video_transcript_api.cache.cache_manager import CacheManager
+
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    media_id = "local_reparse_video"
+    display_url = f"local://study-source/{media_id}/lesson.mp4"
+    completed = manager.create_task(
+        url=display_url,
+        platform="generic",
+        media_id=media_id,
+    )
+    manager.save_cache(
+        platform="generic",
+        url=display_url,
+        media_id=media_id,
+        use_speaker_recognition=False,
+        transcript_data="old transcript",
+        transcript_type="capswriter",
+        title="lesson.mp4",
+        author="本地上传",
+    )
+    manager.save_llm_result(
+        "generic", media_id, False, "summary", "old summary"
+    )
+    manager.update_task_status(
+        completed["task_id"],
+        "success",
+        platform="generic",
+        media_id=media_id,
+    )
+    current = manager.create_task(
+        url=display_url,
+        platform="generic",
+        media_id=media_id,
+        force_new_view_token=True,
+    )
+    source = tmp_path / "lesson.mp4"
+    source.write_bytes(b"same video")
+    quote_calls = []
+
+    monkeypatch.setattr(transcription, "cache_manager", manager)
+    monkeypatch.setattr(transcription, "llm_task_queue", queue.Queue())
+    monkeypatch.setattr(
+        transcription,
+        "_pause_for_cloud_confirmation",
+        lambda **kwargs: quote_calls.append(kwargs)
+        or {"status": "awaiting_cloud_confirmation"},
+    )
+
+    try:
+        result = transcription.process_local_upload(
+            current["task_id"],
+            str(source),
+            "lesson.mp4",
+            display_url,
+            media_id,
+            preserve_source_file=True,
+            transcription_strategy="cloud",
+            cloud_confirmation_required=True,
+            skip_cache=True,
+        )
+        current_task = manager.get_task_by_id(current["task_id"])
+    finally:
+        manager.close()
+
+    assert result == {"status": "awaiting_cloud_confirmation"}
+    assert len(quote_calls) == 1
+    assert current_task["status"] == "processing"
+
+
 def test_canceled_upload_does_not_block_a_fresh_parse(monkeypatch, tmp_path):
     import queue
 

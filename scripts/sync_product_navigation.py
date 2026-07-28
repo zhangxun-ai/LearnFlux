@@ -220,13 +220,16 @@ def _planned_files() -> dict[Path, str]:
         source = _ensure_feature_script(source, "{{ asset_ver }}")
         planned[path] = source
 
+    # Root `/` is a marketing landing page without the product shell sidebar.
+    # Only rewrite views.py when a navigation block is still present (legacy).
     views_source = VIEWS_PATH.read_text(encoding="utf-8")
-    views_source = _replace_navigation(
-        views_source,
-        _render_navigation(navigation, active_id="single_study", jinja=False),
-    )
-    views_source = _ensure_feature_script(views_source, feature_hash)
-    planned[VIEWS_PATH] = views_source
+    if MARKED_NAV_RE.search(views_source) or NAV_RE.search(views_source):
+        views_source = _replace_navigation(
+            views_source,
+            _render_navigation(navigation, active_id="single_study", jinja=False),
+        )
+        views_source = _ensure_feature_script(views_source, feature_hash)
+        planned[VIEWS_PATH] = views_source
     return planned
 
 

@@ -222,14 +222,15 @@ class TestNavigationMarkup:
                 assert f'aria-controls="nav-{group_id}-items"' in html, filename
                 assert f'id="nav-{group_id}-items"' in html, filename
 
-    def test_root_home_shell_uses_the_same_generated_contract(self):
+    def test_root_home_is_marketing_landing_without_product_shell(self):
         from video_transcript_api.api.routes.views import _HOME_HTML
 
-        assert _HOME_HTML.count("PRODUCT_NAV_START") == 1
-        assert _HOME_HTML.count("PRODUCT_NAV_END") == 1
-        assert _HOME_HTML.index("ui-features.js") < _HOME_HTML.index("app-shell.js")
-        assert 'data-feature="trend_radar"' in _HOME_HTML
-        assert 'data-feature="flywheel"' in _HOME_HTML
+        # Marketing home stays outside the product shell navigation contract.
+        assert "PRODUCT_NAV_START" not in _HOME_HTML
+        assert "sidebar-nav" not in _HOME_HTML
+        assert "marketing-home" in _HOME_HTML
+        assert 'href="#features"' in _HOME_HTML
+        assert 'href="/add_task_by_web"' in _HOME_HTML
 
     def test_navigation_generator_reports_no_drift(self):
         result = subprocess.run(
@@ -405,29 +406,29 @@ class TestProductDesignSystem:
 
 
 class TestFeatureEntryCoverage:
-    def test_home_product_cards_use_the_same_fail_closed_feature_ids(self):
+    def test_home_marketing_cards_link_core_product_surfaces(self):
         from video_transcript_api.api.routes.views import _HOME_HTML
 
-        expected = {
-            "/collections": "collections",
-            "/post": "post_insight",
-            "/flywheel": "flywheel",
-        }
-        for href, feature_id in expected.items():
-            matches = re.findall(
-                rf'<a\b[^>]*href="{re.escape(href)}"[^>]*>',
-                _HOME_HTML,
-            )
-            assert matches, href
-            assert all(f'data-feature="{feature_id}"' in tag for tag in matches)
-            assert all(" hidden" in tag for tag in matches)
+        # Marketing cards are public discovery links, not fail-closed shell nav.
+        for href in (
+            "/add_task_by_web",
+            "/add_task_by_web#local-video-study",
+            "/collections",
+            "/visual-learning",
+            "/reading",
+            "/flywheel",
+            "/study",
+        ):
+            assert f'href="{href}"' in _HOME_HTML, href
 
-    def test_root_home_uses_versioned_product_shell_assets(self):
+    def test_root_home_is_self_contained_marketing_page(self):
         from video_transcript_api.api.routes.views import _HOME_HTML
 
-        assert 'class="app-shell has-app-shell product-linear page-home"' in _HOME_HTML
-        assert '/static/css/product-linear.css?v=__ASSET_VERSION__' in _HOME_HTML
-        assert '/static/js/app-shell.js?v=__ASSET_VERSION__' in _HOME_HTML
+        assert 'class="page-home marketing-home"' in _HOME_HTML
+        assert "/static/images/landing/01-single-study.png" in _HOME_HTML
+        assert "/static/icon/learnflux-icon-256.png" in _HOME_HTML
+        assert "app-shell.js" not in _HOME_HTML
+        assert "product-linear.css" not in _HOME_HTML
 
     def test_secondary_feature_links_are_fail_closed_too(self):
         coverage = (

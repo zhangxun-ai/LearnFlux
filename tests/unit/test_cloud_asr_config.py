@@ -21,7 +21,6 @@ def _valid_config() -> dict[str, object]:
             "enabled": True,
             "provider": "aliyun",
             "model": "fun-asr-2025-11-07",
-            "max_cny_per_task": "1.00",
             "price_cny_per_second": "0.00022",
             "price_verified_at": "2026-07-20",
         }
@@ -35,7 +34,6 @@ def test_builds_fixed_new_submission_settings_and_estimates_with_decimal() -> No
                 "enabled": True,
                 "provider": "aliyun",
                 "model": "fun-asr-2025-11-07",
-                "max_cny_per_task": "0.00066",
                 "price_cny_per_second": "0.00022",
                 "price_verified_at": "2026-07-20",
             }
@@ -57,8 +55,6 @@ def test_builds_fixed_new_submission_settings_and_estimates_with_decimal() -> No
     ("field", "value", "code"),
     [
         ("enabled", False, "cloud_asr_disabled"),
-        ("max_cny_per_task", None, "invalid_max_cny_per_task"),
-        ("max_cny_per_task", "NaN", "invalid_max_cny_per_task"),
         ("provider", "unexpected-provider", "invalid_provider"),
         ("model", "unexpected-model", "invalid_model"),
         ("price_cny_per_second", None, "invalid_price"),
@@ -102,23 +98,17 @@ def test_rejects_price_that_differs_from_fixed_verified_price() -> None:
     assert str(exc_info.value) == "invalid_price"
 
 
-def test_reserve_estimate_allows_equal_budget_and_blocks_larger_new_submission() -> None:
+def test_quote_estimate_has_no_hidden_per_task_budget_cap() -> None:
     config = _valid_config()
     cloud_asr = config["cloud_asr"]
     assert isinstance(cloud_asr, dict)
-    cloud_asr["max_cny_per_task"] = "0.00066"
+    cloud_asr.pop("max_cny_per_task", None)
     settings = NewCloudSubmissionSettings.from_config(config, today=date(2026, 7, 21))
 
-    assert settings.reserve_estimate(Decimal("2.1")) == Decimal("0.00066")
-
-    with pytest.raises(CloudASRConfigError) as exc_info:
-        settings.reserve_estimate(Decimal("3.1"))
-
-    assert exc_info.value.code == "budget_exceeded"
-    assert str(exc_info.value) == "budget_exceeded"
+    assert settings.reserve_estimate(Decimal("5400")) == Decimal("1.18800")
 
 
-def test_zero_budget_builds_but_blocks_any_positive_duration_reservation() -> None:
+def test_legacy_per_task_budget_setting_does_not_block_a_quoted_submission() -> None:
     config = _valid_config()
     cloud_asr = config["cloud_asr"]
     assert isinstance(cloud_asr, dict)
@@ -126,11 +116,7 @@ def test_zero_budget_builds_but_blocks_any_positive_duration_reservation() -> No
 
     settings = NewCloudSubmissionSettings.from_config(config, today=date(2026, 7, 21))
 
-    with pytest.raises(CloudASRConfigError) as exc_info:
-        settings.reserve_estimate(Decimal("1"))
-
-    assert exc_info.value.code == "budget_exceeded"
-    assert str(exc_info.value) == "budget_exceeded"
+    assert settings.reserve_estimate(Decimal("1")) == Decimal("0.00022")
 
 
 @pytest.mark.parametrize("audio_seconds", [Decimal("NaN"), Decimal("0")])
@@ -152,7 +138,7 @@ def test_settings_are_immutable() -> None:
     )
 
     with pytest.raises(FrozenInstanceError):
-        settings.max_cny_per_task = Decimal("2.00")
+        settings.price_cny_per_second = Decimal("0.00023")
 
 
 class _ExplodingEnvironment:

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Callable, Collection, Iterator, Mapping
+from typing import Callable, Collection, Iterator, Mapping, Sequence
 
 from psycopg import IntegrityError as PostgresIntegrityError
 
@@ -54,6 +54,15 @@ class CloudQuote:
     lease_expires_at: datetime | None = None
     attempt_no: int | None = None
     continuation_json: str | None = None
+
+
+@dataclass(frozen=True)
+class CloudQuoteConfirmation:
+    """One exact user acceptance for a persisted cloud quote."""
+
+    task_id: str
+    token: str
+    accepted_max_cost: Decimal
 
 
 def _utc_now() -> datetime:
@@ -243,6 +252,96 @@ class CloudQuoteRepository:
             "SELECT * FROM cloud_quotes WHERE task_id=?", (task_id,)
         ).fetchone()
         return self._from_row(row), created
+
+    def confirm_many_and_queue(
+        self,
+        confirmations: Sequence[CloudQuoteConfirmation],
+        *,
+        scope_validator: Callable[[object, tuple[CloudQuoteConfirmation, ...]], None]
+        | None = None,
+    ) -> tuple[tuple[CloudQuote, ...], bool]:
+        """Atomically confirm one complete collection quote list.
+
+        ``scope_validator`` runs inside the same database transaction so callers
+        can lock and validate the owning collection before any quote is changed.
+        """
+        requested = tuple(confirmations)
+        self._validate_many_confirmations(requested)
+        now = self.clock()
+        with self.database.transaction() as connection:
+            if scope_validator is not None:
+                scope_validator(connection, requested)
+            rows = self._locked_quote_rows(connection, requested)
+            for confirmation, row in zip(requested, rows, strict=True):
+                self._verify(
+                    row,
+                    confirmation.token,
+                    confirmation.accepted_max_cost,
+                    now=now,
+                )
+
+            statuses = {row["status"] for row in rows}
+            if statuses == {"pending"}:
+                task_ids = tuple(confirmation.task_id for confirmation in requested)
+                placeholders = ",".join("?" for _ in task_ids)
+                connection.execute(
+                    f"""UPDATE cloud_quotes
+                    SET status='confirmed_queued', lease_owner=NULL,
+                        lease_expires_at=NULL, updated_at=?
+                    WHERE status='pending' AND task_id IN ({placeholders})""",
+                    (_iso(now), *task_ids),
+                )
+                created = True
+            elif statuses == {"confirmed_queued"}:
+                created = False
+            else:
+                raise CloudQuoteConflict("collection_cloud_quote_changed")
+
+            confirmed_rows = self._locked_quote_rows(connection, requested)
+        return tuple(self._from_row(row) for row in confirmed_rows), created
+
+    def _locked_quote_rows(
+        self,
+        connection,
+        confirmations: Sequence[CloudQuoteConfirmation],
+    ) -> tuple[Mapping[str, object], ...]:
+        suffix = " FOR UPDATE" if self.database.dialect == "postgres" else ""
+        rows: list[Mapping[str, object]] = []
+        for confirmation in confirmations:
+            row = connection.execute(
+                "SELECT * FROM cloud_quotes WHERE task_id=?" + suffix,
+                (confirmation.task_id,),
+            ).fetchone()
+            if row is None:
+                raise CloudQuoteConflict("quote_not_found")
+            rows.append(row)
+        return tuple(rows)
+
+    @staticmethod
+    def _validate_many_confirmations(
+        confirmations: Sequence[CloudQuoteConfirmation],
+    ) -> None:
+        if not confirmations:
+            raise CloudQuoteConflict("collection_cloud_quote_changed")
+        task_ids: set[str] = set()
+        for confirmation in confirmations:
+            if not isinstance(confirmation, CloudQuoteConfirmation):
+                raise CloudQuoteConflict("collection_cloud_quote_changed")
+            if (
+                not isinstance(confirmation.task_id, str)
+                or not confirmation.task_id
+                or confirmation.task_id in task_ids
+            ):
+                raise CloudQuoteConflict("collection_cloud_quote_changed")
+            if not isinstance(confirmation.token, str) or not confirmation.token:
+                raise CloudQuoteConflict("quote_token_mismatch")
+            if (
+                not isinstance(confirmation.accepted_max_cost, Decimal)
+                or not confirmation.accepted_max_cost.is_finite()
+                or confirmation.accepted_max_cost < 0
+            ):
+                raise CloudQuoteConflict("quote_amount_mismatch")
+            task_ids.add(confirmation.task_id)
 
     def claim_queued(
         self, task_id: str, owner: str, *, lease_seconds: int = 60

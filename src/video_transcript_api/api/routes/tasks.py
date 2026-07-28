@@ -570,6 +570,7 @@ async def get_task_status(
             TaskStatus.CALIBRATING: "转录完成，校对/总结生成中",
             TaskStatus.AWAITING_CLOUD_CONFIRMATION: "等待确认云端转录费用",
             TaskStatus.SUCCESS: "任务已完成",
+            TaskStatus.NO_TRANSCRIPT: "未检测到可转录语音",
             TaskStatus.FAILED: "任务处理失败",
             TaskStatus.CANCELED: "任务已取消",
         }

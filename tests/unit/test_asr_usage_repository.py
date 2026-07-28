@@ -139,7 +139,12 @@ def test_new_paid_attempt_requires_an_explicit_terminal_predecessor(tmp_path):
         "worker-1",
         now=now + timedelta(seconds=1),
         error_code="provider_failed",
+        provider_error_code="ASR_RESPONSE_HAVE_NO_WORDS",
+        provider_request_id="request-123",
     )
+    failed = repository.get_event(first.id)
+    assert failed.provider_error_code == "ASR_RESPONSE_HAVE_NO_WORDS"
+    assert failed.provider_request_id == "request-123"
     with pytest.raises(UsageRepositoryError) as retry_error:
         repository.reserve_attempt(make_attempt())
     assert retry_error.value.code == "new_paid_attempt_required"
@@ -182,6 +187,33 @@ def test_expired_submission_is_frozen_instead_of_resubmitted(tmp_path):
         "submission_unknown",
         "not_applicable",
     )
+
+
+def test_expired_upload_failure_is_terminal_before_capacity_recovery(tmp_path):
+    repository = UsageEventRepository(tmp_path / "cache.sqlite3")
+    event = repository.reserve_attempt(make_attempt(task_id="upload-task"))
+    started = datetime(2026, 7, 21, 8, 0, tzinfo=UTC)
+    assert repository.claim_submission(event.id, "worker-1", now=started)
+    with sqlite3.connect(repository.db_path) as connection:
+        connection.execute(
+            """CREATE TABLE task_status (
+                task_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                error_message TEXT
+            )"""
+        )
+        connection.execute(
+            "INSERT INTO task_status VALUES (?, 'failed', ?)",
+            ("upload-task", "云端转录失败（upload_failed）"),
+        )
+
+    finalized = repository.finalize_known_upload_failures(
+        now=started + timedelta(seconds=61)
+    )
+
+    assert finalized == [event.id]
+    assert repository.get_event(event.id).remote_status == "failed"
+    assert repository.list_remote_capacity_attempt_ids() == []
 
     stale_event = repository.reserve_attempt(make_attempt(task_id="stale-task"))
     assert repository.claim_submission(stale_event.id, "worker-1", now=started)

@@ -190,6 +190,7 @@ class _TranscriptionControlStore:
         media_id: str | None = None,
         force_new_view_token: bool = False,
         owner_user_id: str | None = None,
+        source_file_path: str | None = None,
     ) -> dict[str, str]:
         del force_new_view_token
         task_id = str(uuid.uuid4())
@@ -199,8 +200,9 @@ class _TranscriptionControlStore:
             connection.execute(
                 """INSERT INTO task_status
                 (task_id, view_token, url, owner_user_id, status, platform,
-                 media_id, use_speaker_recognition, download_url, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)""",
+                 media_id, use_speaker_recognition, download_url, source_file_path,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     task_id,
                     view_token,
@@ -210,11 +212,57 @@ class _TranscriptionControlStore:
                     media_id,
                     int(use_speaker_recognition),
                     download_url,
+                    source_file_path,
                     _iso(now),
                     _iso(now),
                 ),
             )
         return {"task_id": task_id, "view_token": view_token}
+
+    def create_cache_alias_task(
+        self,
+        *,
+        url: str,
+        reusable_view_token: str,
+        use_speaker_recognition: bool = False,
+        platform: str | None = None,
+        media_id: str | None = None,
+        owner_user_id: str | None = None,
+    ) -> dict[str, str]:
+        """Create a distinct task that explicitly shares a successful view."""
+        if (
+            not isinstance(reusable_view_token, str)
+            or not reusable_view_token.strip()
+        ):
+            raise ValueError("invalid_reusable_view_token")
+        task_id = str(uuid.uuid4())
+        now = _iso(datetime.now(UTC))
+        progress = build_progress(
+            stage="queued",
+            basis="task_created",
+            confidence="high",
+        )
+        with self.database.transaction() as connection:
+            connection.execute(
+                """INSERT INTO task_status
+                (task_id, view_token, url, owner_user_id, status, platform,
+                 media_id, use_speaker_recognition, progress_json,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)""",
+                (
+                    task_id,
+                    reusable_view_token,
+                    url,
+                    owner_user_id,
+                    platform,
+                    media_id,
+                    int(use_speaker_recognition),
+                    json.dumps(progress, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+        return {"task_id": task_id, "view_token": reusable_view_token}
 
     def update_task_status(self, task_id: str, status: str, **fields) -> None:
         allowed = {
@@ -227,24 +275,95 @@ class _TranscriptionControlStore:
             "error_message",
             "source_file_path",
         }
+        now = _iso(datetime.now(UTC))
         assignments = ["status=?", "updated_at=?"]
-        parameters: list[object] = [status, _iso(datetime.now(UTC))]
+        parameters: list[object] = [status, now]
         for name in allowed:
             value = fields.get(name)
             if value is not None:
                 assignments.append(f"{name}=?")
                 parameters.append(value)
-        if status in {"success", "failed", "canceled"}:
+        if status in {"success", "no_transcript", "failed", "canceled"}:
             assignments.append("completed_at=?")
-            parameters.append(_iso(datetime.now(UTC)))
+            parameters.append(now)
+            terminal_evidence = fields.get("terminal_evidence")
+            error_message = fields.get("error_message")
+            stage_label = fields.get("stage_label")
+            if status == "success":
+                progress = build_progress(
+                    stage="completed",
+                    stage_label=stage_label,
+                    basis="task_completed",
+                    confidence="high",
+                    evidence=terminal_evidence,
+                )
+            elif status == "canceled":
+                progress = build_progress(
+                    stage="canceled",
+                    stage_label=stage_label or "任务已取消",
+                    basis="task_canceled",
+                    confidence="high",
+                    evidence=terminal_evidence,
+                    message=error_message or "用户已取消任务",
+                )
+            elif status == "no_transcript":
+                progress = build_progress(
+                    stage="no_transcript",
+                    stage_label=stage_label or "未检测到可转录语音",
+                    basis="no_transcribable_speech",
+                    confidence="high",
+                    evidence=terminal_evidence,
+                    message=error_message or "未检测到可转录语音",
+                )
+            else:
+                progress = build_progress(
+                    stage="failed",
+                    stage_label=stage_label,
+                    basis="task_failed",
+                    confidence="high",
+                    evidence=terminal_evidence,
+                    message=error_message,
+                )
+            assignments.append("progress_json=?")
+            parameters.append(json.dumps(progress, ensure_ascii=False))
         parameters.append(task_id)
         force = bool(fields.get("force", False))
-        terminal_guard = "" if force else " AND status NOT IN ('success','failed','canceled')"
+        terminal_guard = "" if force else " AND status NOT IN ('success','no_transcript','failed','canceled')"
         with self.database.transaction() as connection:
             connection.execute(
                 f"UPDATE task_status SET {', '.join(assignments)} WHERE task_id=?{terminal_guard}",
                 tuple(parameters),
             )
+
+    def cancel_task_if_queued(
+        self, task_id: str, *, error_message: str
+    ) -> bool:
+        """Atomically cancel one not-yet-started task."""
+        now = _iso(datetime.now(UTC))
+        progress = build_progress(
+            stage="canceled",
+            stage_label="任务已取消",
+            basis="task_canceled",
+            confidence="high",
+            message=error_message,
+        )
+        with self.database.transaction() as connection:
+            updated = connection.execute(
+                """
+                UPDATE task_status
+                SET status='canceled', error_message=?, progress_json=?,
+                    completed_at=?, updated_at=?
+                WHERE task_id=? AND status='queued'
+                """,
+                (
+                    error_message,
+                    json.dumps(progress, ensure_ascii=False),
+                    now,
+                    now,
+                    task_id,
+                ),
+            )
+            return updated.rowcount == 1
 
     def get_task_by_id(self, task_id: str) -> dict[str, object] | None:
         return self.get_task(task_id)
@@ -276,7 +395,7 @@ class _TranscriptionControlStore:
         with self.database.transaction() as connection:
             connection.execute(
                 """UPDATE task_status SET progress_json=?, updated_at=?
-                WHERE task_id=? AND status NOT IN ('success','failed','canceled')""",
+                WHERE task_id=? AND status NOT IN ('success','no_transcript','failed','canceled')""",
                 (json.dumps(progress, ensure_ascii=False), now, task_id),
             )
         return progress
@@ -297,6 +416,31 @@ class _TranscriptionControlStore:
                     created_at DESC
                 LIMIT 1""",
                 (view_token,),
+            ).fetchone()
+        finally:
+            connection.close()
+        return self._task_from_row(row) if row is not None else None
+
+    def get_existing_task_by_media(
+        self,
+        platform: str,
+        media_id: str,
+        use_speaker_recognition: bool = False,
+    ) -> dict[str, object] | None:
+        """Return the preferred task for one semantic media identity."""
+        connection = self.database.connect()
+        try:
+            row = connection.execute(
+                """SELECT * FROM task_status
+                WHERE platform=? AND media_id=? AND use_speaker_recognition=?
+                ORDER BY CASE status
+                    WHEN 'success' THEN 1
+                    WHEN 'processing' THEN 2
+                    WHEN 'queued' THEN 3
+                    ELSE 4 END,
+                    created_at DESC
+                LIMIT 1""",
+                (platform, media_id, int(use_speaker_recognition)),
             ).fetchone()
         finally:
             connection.close()

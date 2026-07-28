@@ -3,12 +3,20 @@ def test_home_page_exposes_local_video_study_entry():
 
     assert "本地视频学习" in _HOME_HTML
     assert "/add_task_by_web#local-video-study" in _HOME_HTML
+    assert "单篇深度学习" in _HOME_HTML
+    assert "边播边学" in _HOME_HTML
+    assert "/static/images/landing/01-single-study.png" in _HOME_HTML
+    assert "/static/icon/learnflux-icon-256.png" in _HOME_HTML
+    assert _HOME_HTML.count("开始深度学习") >= 3
+    assert "请在此处替换" not in _HOME_HTML
+    assert "数据不用于模型训练" not in _HOME_HTML
 
 
 def test_home_page_keeps_opportunity_entry_inside_flywheel():
     from video_transcript_api.api.routes.views import _HOME_HTML
 
     assert "选题机会" in _HOME_HTML
+    assert 'href="/flywheel"' in _HOME_HTML
     assert "机会雷达" not in _HOME_HTML
     assert "/flywheel#opportunities" not in _HOME_HTML
 
@@ -226,8 +234,8 @@ def test_transcription_strategy_and_cloud_quote_controls_are_public():
     html = (project_root / "src/web/static/index.html").read_text(encoding="utf-8")
     app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
 
-    assert "本地免费" in html
-    assert "云端付费" in html
+    assert "本地转录 (免费)" in html
+    assert "云端转录 (极速)" in html
     assert html.count('value="cloud" checked') == 2
     assert 'value="local" checked' not in html
     assert "transcriptionStrategy = 'cloud'" in app_js

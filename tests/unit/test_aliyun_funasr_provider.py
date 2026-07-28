@@ -22,6 +22,7 @@ from video_transcript_api.transcriber.media_preparer import PreparedASRMedia
 from video_transcript_api.transcriber.providers.aliyun_funasr import (
     AliyunFunASRProvider,
     CloudProviderError,
+    LeaseHeartbeat,
 )
 from video_transcript_api.transcriber.providers import aliyun_funasr as provider_module
 from video_transcript_api.transcriber.media_snapshot import SnapshotError
@@ -32,12 +33,11 @@ from video_transcript_api.transcriber.usage_repository import UsageEventReposito
 NOW = datetime(2026, 7, 21, 8, 0, tzinfo=UTC)
 
 
-def _settings(max_cny: str = "1", accepted_cny: str | None = None) -> NewCloudSubmissionSettings:
+def _settings(accepted_cny: str | None = None) -> NewCloudSubmissionSettings:
     return NewCloudSubmissionSettings(
         provider="aliyun",
         model="fun-asr-2025-11-07",
         region="cn-beijing",
-        max_cny_per_task=Decimal(max_cny),
         price_cny_per_second=Decimal("0.00022"),
         price_verified_at=date(2026, 7, 21),
         poll_interval_seconds=1,
@@ -46,7 +46,9 @@ def _settings(max_cny: str = "1", accepted_cny: str | None = None) -> NewCloudSu
     )
 
 
-def _prepared_media(root: Path, task_id: str) -> PreparedASRMedia:
+def _prepared_media(
+    root: Path, task_id: str, *, duration_seconds: Decimal = Decimal("2.1")
+) -> PreparedASRMedia:
     content = b"audio"
     path = (
         root
@@ -60,7 +62,7 @@ def _prepared_media(root: Path, task_id: str) -> PreparedASRMedia:
     return PreparedASRMedia(
         path=path,
         media_format="m4a",
-        duration_seconds=Decimal("2.1"),
+        duration_seconds=duration_seconds,
         size_bytes=len(content),
         sha256=sha256(content).hexdigest(),
         preparation="reused",
@@ -111,6 +113,45 @@ def test_accepted_quote_ceiling_blocks_before_usage_and_credentials(tmp_path):
     assert "promote_copy" not in events
     assert "credentials" not in events
     assert "cleanup_quote" not in events
+
+
+def test_accepted_long_quote_can_exceed_legacy_task_cap_before_reserving(
+    tmp_path,
+):
+    prepared = _prepared_media(
+        tmp_path, "task-long-quote", duration_seconds=Decimal("5400")
+    )
+    reserved = []
+
+    def stop_after_reservation(attempt):
+        reserved.append(attempt)
+        raise RuntimeError("stop_after_reservation")
+
+    provider = AliyunFunASRProvider(
+        settings=_settings(),
+        repository=SimpleNamespace(),
+        snapshotter=SimpleNamespace(),
+        output_dir=tmp_path / "outputs",
+        credential_loader=lambda: pytest.fail("credentials must not be read"),
+        client_factory=lambda credentials: pytest.fail("client must not be created"),
+        attempt_reserver=stop_after_reservation,
+        prepared_media_cleanup=lambda media: None,
+    )
+
+    with pytest.raises(RuntimeError, match="stop_after_reservation"):
+        provider.transcribe(
+            str(tmp_path / "audio.wav"),
+            "output",
+            context=TranscriptionContext(
+                "task-long-quote",
+                "generic",
+                "media-long-quote",
+                accepted_max_cost=Decimal("1.18800"),
+                prepared_media=prepared,
+            ),
+        )
+
+    assert reserved[0].estimated_cost == Decimal("1.18800")
 
 
 class _Snapshotter:
@@ -266,6 +307,84 @@ class _Client:
                 }
             ],
         }
+
+
+class _SubmissionGuard:
+    @contextmanager
+    def hold(self):
+        self.events.append("submission_guard_enter")
+        try:
+            yield
+        finally:
+            self.events.append("submission_guard_exit")
+
+    def __init__(self, events):
+        self.events = events
+
+
+def test_lease_heartbeat_reclaims_same_owner_after_sleep():
+    calls = []
+
+    class Repository:
+        def heartbeat_lease(self, event_id, lease_owner, *, now):
+            calls.append(("heartbeat", event_id, lease_owner))
+            return False
+
+        def reclaim_lease(self, event_id, lease_owner, *, now):
+            calls.append(("reclaim", event_id, lease_owner))
+            return True
+
+    heartbeat = LeaseHeartbeat(
+        Repository(),
+        "event-1",
+        "owner-1",
+        clock=lambda: NOW,
+        interval_seconds=60,
+    )
+
+    heartbeat.start()
+    heartbeat.ensure_owned()
+    heartbeat.stop()
+
+    assert calls == [
+        ("heartbeat", "event-1", "owner-1"),
+        ("reclaim", "event-1", "owner-1"),
+    ]
+
+
+def test_submission_guard_wraps_upload_and_task_id_persistence(tmp_path):
+    events = []
+    delegate = UsageEventRepository(tmp_path / "usage.sqlite3")
+    repository = _Repository(delegate, events)
+    snapshotter = _Snapshotter(tmp_path / "snapshots", events)
+    prepared = _prepared_media(tmp_path / "prepared", "task-guard")
+    provider = AliyunFunASRProvider(
+        settings=_settings(),
+        repository=repository,
+        snapshotter=snapshotter,
+        output_dir=tmp_path / "outputs",
+        credential_loader=lambda: events.append("credentials") or object(),
+        client_factory=lambda credentials: _Client(events),
+        clock=lambda: NOW,
+        monotonic=lambda: 10.0,
+        submission_guard=_SubmissionGuard(events),
+        **_attempt_dependencies(repository),
+    )
+
+    provider.transcribe(
+        str(tmp_path / "source.mp3"),
+        "lesson",
+        context=TranscriptionContext(
+            "task-guard",
+            "generic",
+            "media-guard",
+            prepared_media=prepared,
+        ),
+    )
+
+    assert events.index("submission_guard_enter") < events.index("upload")
+    assert events.index("record_submitted") < events.index("submission_guard_exit")
+    assert events.index("submission_guard_exit") < events.index("poll")
 
 
 def test_success_orders_one_submission_settlement_and_atomic_artifacts(tmp_path):

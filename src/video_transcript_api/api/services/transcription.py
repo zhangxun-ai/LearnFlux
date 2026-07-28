@@ -76,6 +76,7 @@ from .asr_continuations import (
     submit_local_asr_continuation,
 )
 from ...transcriber.providers.aliyun_funasr import CloudProviderError
+from ...utils.source_file_cleanup import should_preserve_local_media_path
 
 logger = get_logger()
 config = get_config()
@@ -92,6 +93,33 @@ _CLOUD_RECOVERY_PENDING_CODES = {
     "polling_unknown",
     "submission_unknown",
 }
+
+_CLOUD_PROVIDER_ERROR_MESSAGES = {
+    "local_preflight_failed": "本地音频预处理失败",
+    "upload_failed": "音频上传至云端失败",
+    "provider_failed": "云端转录服务处理失败",
+    "invalid_response": "云端返回结果格式异常",
+    "result_expired": "云端转录结果已过期",
+    "materialization_failed": "保存云端转录结果失败",
+    "media_identity_mismatch": "报价后待转录音频发生变化",
+}
+
+
+def _cloud_provider_error_message(code: str) -> str:
+    message = _CLOUD_PROVIDER_ERROR_MESSAGES.get(code, "云端转录失败")
+    return f"{message}（{code}）"
+
+
+def _cloud_provider_terminal_state(
+    error: CloudProviderError,
+) -> tuple[TaskStatus, str] | None:
+    """Translate known provider terminal outcomes into user-facing task states."""
+    if (
+        error.code == "provider_failed"
+        and error.provider_error_code == "ASR_RESPONSE_HAVE_NO_WORDS"
+    ):
+        return TaskStatus.NO_TRANSCRIPT, "未检测到可转录语音"
+    return None
 
 
 def _sha256_file(path: Path) -> str:
@@ -249,7 +277,9 @@ def _prepare_cloud_quote(
         config, today=datetime.date.today()
     )
     billable_seconds = int(duration.to_integral_value(rounding=ROUND_CEILING))
-    max_cost = settings.reserve_estimate(duration)
+    # A quote is not a charge. The user's later signed confirmation is the
+    # budget boundary for this path, so long videos must remain quotable.
+    max_cost = settings.estimated_cost(duration)
     repository = CloudQuoteRepository(db_path)
     return repository.create(
         NewCloudQuote(
@@ -278,6 +308,9 @@ def _pause_for_cloud_confirmation(
     except Exception:
         preparer.cleanup(prepared_media)
         raise
+    if _is_task_canceled(task_id):
+        preparer.cleanup(prepared_media)
+        return {"status": "canceled", "message": "任务已取消"}
     try:
         quote = _prepare_cloud_quote(
             task_id=task_id,
@@ -311,6 +344,12 @@ def _pause_for_cloud_confirmation(
             if persisted_quote.media_ref != candidate_ref:
                 preparer.cleanup(prepared_media)
         raise
+    if _is_task_canceled(task_id):
+        CloudQuoteRepository(db_path).cancel(task_id)
+        _cleanup_retained_quote_media(quote.media_ref)
+        if quote.media_ref != candidate_ref:
+            preparer.cleanup(prepared_media)
+        return {"status": "canceled", "message": "任务已取消"}
     if quote.media_ref != candidate_ref:
         preparer.cleanup(prepared_media)
     quote_payload = {
@@ -428,11 +467,18 @@ def resume_confirmed_cloud_quote(
                 task_id, TaskStatus.AWAITING_CLOUD_CONFIRMATION, force=True
             )
             return {"status": "refresh_required", "message": exc.code}
+        terminal_state = _cloud_provider_terminal_state(exc)
+        if terminal_state:
+            status, message = terminal_state
+            cache_manager.update_task_status(
+                task_id, status, error_message=message, force=True
+            )
+            return {"status": str(status), "message": message}
         if exc.code not in _CLOUD_RECOVERY_PENDING_CODES:
             cache_manager.update_task_status(
                 task_id,
                 TaskStatus.FAILED,
-                error_message=f"云端转录失败（{exc.code}）",
+                error_message=_cloud_provider_error_message(exc.code),
                 force=True,
             )
         raise
@@ -628,7 +674,7 @@ def refresh_cloud_quote(task_id: str):
             media_sha256=current.media_sha256, duration_seconds=duration,
             billable_seconds=int(duration.to_integral_value(rounding=ROUND_CEILING)),
             model=settings.model, unit_price=settings.price_cny_per_second,
-            max_cost=settings.reserve_estimate(duration),
+            max_cost=settings.estimated_cost(duration),
             continuation_json=current.continuation_json,
         )
     )
@@ -932,17 +978,32 @@ def process_local_upload(
     *,
     transcription_strategy: str | None = None,
     cloud_confirmation_required: bool = False,
+    skip_cache: bool = False,
 ) -> Dict[str, Any]:
     """处理本地上传的音视频或文档，复用 LLM 后处理与结果页。
 
     音视频：本地 mlx-whisper 转写（先抽小音频省空间）。文档(txt/md/html/pdf/docx)：直接提取文本。
-    两者都与平台字幕路径同构地 save_cache + 入 LLM 队列；/view/<view_token> 查看；临时文件用后即删。
+    两者都与平台字幕路径同构地 save_cache + 入 LLM 队列；/view/<view_token> 查看。
+
+    优先级：功能与体验 > 效率 > 省存储。
+    - 源媒体（本机路径引用，或上传后用于打开/重试的持久副本）在 preserve 时保留
+    - 抽音频等中间产物写 temp，任务结束后删除
     """
     tracker = PerfTracker(task_id=task_id)
     audio_path = None
     structured_transcript = None
     document_quality = None
     media_handed_off = False
+    storage_cfg = get_config().get("storage", {}) or {}
+    # UX first: when caller asks to preserve source, keep it for open/re-parse.
+    keep_source = should_preserve_local_media_path(
+        file_path,
+        preserve_source_file=preserve_source_file,
+        temp_dir=storage_cfg.get("temp_dir") or "./data/temp",
+        collection_source_dir=(
+            storage_cfg.get("source_files_dir") or "./data/source_files/collection_uploads"
+        ),
+    )
     try:
         if transcription_strategy is not None and use_speaker_recognition:
             raise ValueError("strategy_conflicts_with_speaker_mode")
@@ -965,7 +1026,7 @@ def process_local_upload(
         )
         completed_task = (
             completed_task_lookup("generic", media_id, use_speaker_recognition)
-            if callable(completed_task_lookup)
+            if callable(completed_task_lookup) and not skip_cache
             else None
         )
         cached_result = None
@@ -1093,25 +1154,31 @@ def process_local_upload(
                     return {"status": "failed", "message": "postprocess_blocked"}
                 return {"status": "success", "message": "云端转录成功"}
 
-            # 音视频：默认省空间，先抽 16kHz 单声道小音频并删除原视频。
-            # 学习集合需要后续打开源文件时，会传 preserve_source_file=True。
+            # 先抽 16kHz 小音频提升 ASR 效率；音频是中间产物，写 temp，结束后删除。
+            # 源媒体（原路径或持久副本）在 keep_source 时一律保留，保证打开源文件/重试。
             _safe_update_progress(
                 task_id, stage="transcribing", stage_label="正在提取音频",
                 basis="local_upload", confidence="high",
             )
+            audio_out_dir = os.path.join(
+                storage_cfg.get("temp_dir") or "./data/temp",
+                "collection_audio",
+            )
+            os.makedirs(audio_out_dir, exist_ok=True)
             audio_path = _extract_audio_to_file(
                 file_path,
-                os.path.dirname(file_path),
+                audio_out_dir,
                 f"{media_id}_{task_id}",
             )
             transcribe_target = file_path
             if audio_path:
                 transcribe_target = audio_path
-                if not preserve_source_file:
+                if not keep_source:
+                    # Only when caller did not ask to preserve (true throwaway upload).
                     try:
                         os.remove(file_path)
                         logger.info(
-                            f"已抽音频并删除原文件，省空间: task={task_id}, audio={os.path.basename(audio_path)}"
+                            f"已抽音频并删除非保留源文件: task={task_id}, audio={os.path.basename(audio_path)}"
                         )
                     except OSError:
                         pass
@@ -1126,10 +1193,11 @@ def process_local_upload(
             _lw = upload_cfg.setdefault("local_whisper", {})
             _lw["timeout"] = max(int(_lw.get("timeout") or 1800), 14400)
             if transcription_strategy != "cloud":
+                # Never put preserved source media into cleanup_paths.
                 cleanup_paths = tuple(
                     Path(path)
                     for path in dict.fromkeys((file_path, audio_path))
-                    if path and not (preserve_source_file and path == file_path)
+                    if path and not (keep_source and path == file_path)
                 )
                 output_base = task_id
 
@@ -1313,17 +1381,22 @@ def process_local_upload(
             and _is_cloud_recovery_pending(exc)
         ):
             return {"status": "processing", "message": exc.code}
-        logger.exception(f"本地上传转录失败: {task_id}, error={exc}")
+        stage = (
+            "云端报价准备"
+            if transcription_strategy == "cloud" and cloud_confirmation_required
+            else ("云端转录" if transcription_strategy == "cloud" else "本地转录")
+        )
+        logger.exception(f"{stage}失败: {task_id}, error={exc}")
         if not _is_task_canceled(task_id):
             cache_manager.update_task_status(
-                task_id, TaskStatus.FAILED, error_message=f"本地转录失败: {exc}"
+                task_id, TaskStatus.FAILED, error_message=f"{stage}失败: {exc}"
             )
         return {"status": "failed", "message": str(exc)}
     finally:
-        # 默认清理全部临时文件；学习集合会保留原 source 文件用于后续打开。
+        # 清理中间产物（抽音频等）；保留源媒体以保证打开源文件/重试等体验。
         if not media_handed_off:
             for _p in (file_path, audio_path):
-                if preserve_source_file and _p == file_path:
+                if keep_source and _p == file_path:
                     continue
                 if _p and os.path.exists(_p):
                     try:

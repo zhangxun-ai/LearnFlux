@@ -18,6 +18,7 @@ class TestTaskStatusValues:
         assert TaskStatus.QUEUED == "queued"
         assert TaskStatus.PROCESSING == "processing"
         assert TaskStatus.CALIBRATING == "calibrating"
+        assert TaskStatus.NO_TRANSCRIPT == "no_transcript"
         assert TaskStatus.SUCCESS == "success"
         assert TaskStatus.FAILED == "failed"
         assert TaskStatus.CANCELED == "canceled"
@@ -36,6 +37,7 @@ class TestStatusGroups:
         assert TaskStatus.SUCCESS in TERMINAL_STATUSES
         assert TaskStatus.FAILED in TERMINAL_STATUSES
         assert TaskStatus.CANCELED in TERMINAL_STATUSES
+        assert TaskStatus.NO_TRANSCRIPT in TERMINAL_STATUSES
         assert TaskStatus.CALIBRATING not in TERMINAL_STATUSES
 
     def test_non_terminal_set(self):
@@ -69,6 +71,9 @@ class TestHttpCodeMapping:
 
     def test_canceled_maps_to_200(self):
         assert http_code_for_status(TaskStatus.CANCELED) == 200
+
+    def test_no_transcript_maps_to_200(self):
+        assert http_code_for_status(TaskStatus.NO_TRANSCRIPT) == 200
 
     def test_accepts_plain_strings(self):
         assert http_code_for_status("calibrating") == 202

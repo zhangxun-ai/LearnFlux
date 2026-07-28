@@ -500,7 +500,7 @@ _HOME_HTML = """\
             max-width:560px;margin:0 auto 40px;padding:0 8px;
         }
 
-        .workflow-section,.features-section{max-width:1120px;margin:0 auto 96px;padding:0 24px}
+        .workflow-section,.features-section{max-width:1120px;margin:0 auto 80px;padding:0 24px}
         .workflow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
         .step-card{
             background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:28px;
@@ -526,26 +526,54 @@ _HOME_HTML = """\
         .feature-card h3{font-size:1.2rem;font-weight:600;margin-bottom:10px;color:#111827}
         .feature-card p{color:#4B5563;font-size:0.98rem;line-height:1.65}
 
-        .trust-section{background:#111827;color:#fff;padding:80px 24px;text-align:center}
-        .trust-inner{max-width:760px;margin:0 auto}
+        /* Soft closing band — light wash, no hard dark cut (NotebookLM-inspired) */
+        .trust-section{
+            position:relative;
+            color:#0F172A;
+            text-align:center;
+            padding:88px 24px 72px;
+            overflow:hidden;
+            background:
+                radial-gradient(ellipse 70% 55% at 50% 0%, rgba(37,99,235,0.10), transparent 68%),
+                radial-gradient(ellipse 42% 48% at 12% 88%, rgba(99,102,241,0.07), transparent 62%),
+                radial-gradient(ellipse 40% 46% at 88% 78%, rgba(56,189,248,0.07), transparent 60%),
+                linear-gradient(180deg, #F9FAFB 0%, #F4F7FC 28%, #EEF3FB 72%, #E9EFF8 100%);
+        }
+        .trust-section::before{
+            content:"";
+            position:absolute;left:50%;top:18%;
+            width:min(720px, 92vw);height:280px;
+            transform:translateX(-50%);
+            background:radial-gradient(ellipse at center, rgba(255,255,255,0.72), transparent 70%);
+            pointer-events:none;
+        }
+        .trust-inner{position:relative;z-index:1;max-width:760px;margin:0 auto}
         .trust-inner h2{
             font-size:clamp(1.6rem, 4vw, 2.25rem);font-weight:700;
-            margin-bottom:16px;letter-spacing:-0.02em;overflow-wrap:anywhere;
+            margin-bottom:16px;letter-spacing:-0.02em;overflow-wrap:anywhere;color:#0F172A;
         }
-        .trust-inner > p{color:#9CA3AF;font-size:1.05rem;margin-bottom:32px;line-height:1.7}
-        .tags-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:36px}
+        .trust-inner > p{color:#64748B;font-size:1.05rem;margin-bottom:32px;line-height:1.7}
+        .tags-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:36px}
         .tag{
-            background:rgba(255,255,255,0.08);padding:8px 14px;border-radius:8px;
-            font-size:0.9rem;color:#E5E7EB;display:inline-flex;align-items:center;gap:8px;
+            background:rgba(255,255,255,0.78);
+            border:1px solid rgba(148,163,184,0.28);
+            box-shadow:0 1px 2px rgba(15,23,42,0.04);
+            backdrop-filter:blur(8px);
+            padding:8px 14px;border-radius:999px;
+            font-size:0.9rem;color:#334155;display:inline-flex;align-items:center;gap:8px;
         }
-        .tag span{color:#34D399;font-weight:700}
+        .tag span{color:#2563EB;font-weight:700}
+        .trust-section .btn-primary{
+            box-shadow:0 8px 22px rgba(37,99,235,0.18);
+        }
 
         .footer{
-            text-align:center;padding:28px 20px;color:#6B7280;font-size:0.88rem;
-            background:#111827;border-top:1px solid rgba(255,255,255,0.08);
+            text-align:center;padding:28px 20px;color:#94A3B8;font-size:0.88rem;
+            background:#E9EFF8;
+            border-top:1px solid rgba(15,23,42,0.05);
         }
-        .footer a{color:#9CA3AF}
-        .footer a:hover{color:#fff}
+        .footer a{color:#64748B}
+        .footer a:hover{color:#2563EB}
 
         @media (max-width:900px){
             .shot-grid{grid-template-columns:1fr;max-width:520px}
@@ -557,9 +585,9 @@ _HOME_HTML = """\
             .hero{padding:36px 16px 28px}
             .demo-container,.workflow-section,.features-section,.shot-grid{padding-left:16px;padding-right:16px}
             .demo-container{margin-bottom:48px}
-            .workflow-section,.features-section{margin-bottom:64px}
+            .workflow-section,.features-section{margin-bottom:56px}
             .feature-card,.step-card{padding:22px}
-            .trust-section{padding:56px 16px}
+            .trust-section{padding:64px 16px 56px}
             .btn{width:100%;max-width:320px}
             .cta-row{flex-direction:column;align-items:center}
         }

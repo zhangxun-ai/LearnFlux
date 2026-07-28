@@ -129,11 +129,13 @@ def dispatch_post_asr(
     if _stop_requested(stop_event):
         return False
     terminal_status = task.get("status")
-    if terminal_status in {
-        TaskStatus.FAILED,
-        TaskStatus.CANCELED,
-        TaskStatus.SUCCESS,
-    }:
+    recovered_lease_failure = (
+        terminal_status == TaskStatus.FAILED
+        and "lease_lost" in str(task.get("error_message") or "")
+    )
+    if terminal_status in {TaskStatus.CANCELED, TaskStatus.SUCCESS} or (
+        terminal_status == TaskStatus.FAILED and not recovered_lease_failure
+    ):
         owner = uuid4().hex
         now = datetime.now(UTC)
         if repository.claim_postprocess(event.id, owner, now=now):
@@ -204,6 +206,8 @@ def dispatch_post_asr(
         media_id=payload["media_id"],
         title=payload["video_title"],
         author=payload["author"],
+        force=recovered_lease_failure,
+        error_message="" if recovered_lease_failure else None,
     )
     return True
 

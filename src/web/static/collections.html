@@ -143,10 +143,11 @@
         <section class="page-stage">
 
     <section class="lc-page">
-        <section class="lc-intro-strip" aria-label="系列深度学习说明">
+        <section class="lc-intro-strip" aria-label="系列深度学习说明" style="background: transparent; border: none; padding: 0 0 16px 0; margin-bottom: 24px; box-shadow: none;">
             <div>
-                <h1>导入一个系列，生成可复用的方法论</h1>
-                <p>适合连续课程、专题视频或文档合集，按顺序解析后沉淀为 Obsidian 笔记。</p>
+                <p style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent-primary, #E4503A); margin: 0 0 8px 0;">CORE TOOLS · COLLECTIONS</p>
+                <h1 style="font-size: 2rem; font-weight: 700; margin: 0 0 12px 0; color: var(--text-primary); letter-spacing: -0.01em;">系列深度学习</h1>
+                <p style="font-size: 1.1rem; color: var(--text-secondary); margin: 0; line-height: 1.5;">导入连续课程或文档合集，按顺序解析沉淀为可复用的笔记体系。</p>
             </div>
         </section>
 
@@ -194,23 +195,32 @@
 
             <div class="lc-drop" id="drop-action" role="group" aria-labelledby="drop-title" aria-describedby="drop-subtitle">
                 <span class="lc-plus">+</span>
-                <strong id="drop-title">拖放课程视频到这里</strong>
-                <span id="drop-subtitle">也可以使用下方按钮选择文件或文件夹。</span>
+                <strong id="drop-title">填写本机课程文件夹路径</strong>
+                <span id="drop-subtitle">只登记路径，不复制视频；解析后打开源文件会直接定位原路径。</span>
+            </div>
+
+            <div class="lc-local-path-field">
+                <span class="lc-label">本机文件夹路径</span>
+                <div class="lc-local-path-row">
+                    <input id="local-import-path" class="lc-input" type="text" name="lf-local-import-path" placeholder="选择或粘贴本机课程文件夹路径" autocomplete="off" spellcheck="false">
+                    <button class="lc-btn" id="browse-local-path" type="button">选择文件夹</button>
+                </div>
             </div>
 
             <div class="lc-import-actions">
-                <button class="lc-btn" id="pick-folder" type="button">选择文件夹</button>
-                <button class="lc-btn primary" id="pick-files" type="button">选择多个文件</button>
+                <button class="lc-btn primary" id="import-local-path" type="button">扫描路径并导入</button>
+                <button class="lc-btn" id="pick-files" type="button" title="仅适合小体积文档；视频请用上方本机路径导入">上传文件副本（不推荐）</button>
             </div>
-
+            <!-- Kept for append actions / legacy document upload; folder pick no longer copies videos. -->
             <input id="folder-input" type="file" webkitdirectory multiple hidden>
             <input id="files-input" type="file" multiple hidden>
             <input id="append-folder-input" type="file" webkitdirectory multiple hidden>
             <input id="append-files-input" type="file" multiple hidden>
+            <input id="append-local-path" type="hidden">
 
             <div class="lc-import-preview" id="import-preview">
-                <strong>尚未选择文件</strong>
-                <span>选择后会按文件名顺序逐个解析</span>
+                <strong>尚未指定本机路径</strong>
+                <span>导入后按文件名顺序解析，不额外占用原视频空间</span>
             </div>
                 </section>
             </div>
@@ -296,8 +306,8 @@
                 </div>
             </details>
 
-            <div class="lc-board">
-                <aside class="lc-sources">
+            <div class="lc-board" id="collection-board">
+                <aside class="lc-sources" id="collection-sources">
                     <div class="lc-panel-head">
                         <h3>Sources</h3>
                         <span id="source-count">0 个</span>
@@ -308,14 +318,18 @@
                 </aside>
 
                 <section class="lc-detail">
-                    <div class="lc-tabs">
-                        <button class="lc-tab active" data-view="map" type="button">知识地图</button>
-                        <button class="lc-tab" data-view="summary" type="button">主线总结</button>
-                        <button class="lc-tab" data-view="markdown" type="button" style="display: none;">导出笔记</button>
-                        <button class="lc-tab" data-view="source" type="button">源内容</button>
+                    <div class="lc-detail-head">
+                        <div class="lc-tabs">
+                            <!-- 知识地图入口已隐藏：功能鸡肋，保留 DOM 以免破坏旧脚本/测试结构 -->
+                            <button class="lc-tab hidden" data-view="map" type="button" hidden aria-hidden="true">知识地图</button>
+                            <button class="lc-tab active" data-view="summary" type="button">主线总结</button>
+                            <button class="lc-tab" data-view="markdown" type="button" style="display: none;">导出笔记</button>
+                            <button class="lc-tab" data-view="source" type="button">源内容</button>
+                        </div>
+                        <button class="lc-btn compact" id="sources-panel-toggle" type="button" hidden aria-controls="collection-sources" aria-expanded="false">Sources</button>
                     </div>
 
-                    <article class="lc-card lc-map-card" id="map-view">
+                    <article class="lc-card lc-map-card hidden" id="map-view" hidden aria-hidden="true">
                         <div class="lc-map-head">
                             <div>
                                 <span class="lc-map-kicker">结构导航</span>
@@ -424,27 +438,26 @@
                     </article>
 
                     <article class="lc-card hidden" id="summary-view">
-                        <div class="lc-summary-reader-head">
-                            <div>
-                                <span>主线解读</span>
-                                <h3>内容总结</h3>
-                                <p id="summary-description">导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。</p>
+                        <div class="lc-summary-toolbar">
+                            <div class="lc-summary-toolbar-meta">
+                                <span class="lc-summary-kicker">主线解读</span>
+                                <div class="lc-summary-toolbar-title-row">
+                                    <h3 class="lc-summary-toolbar-title">内容总结</h3>
+                                    <strong id="summary-status">等待生成全系列解读</strong>
+                                </div>
+                                <p id="summary-description" class="lc-summary-toolbar-desc">导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。</p>
                             </div>
-                            <div class="lc-summary-reader-tools">
-                                <button class="lc-btn primary" id="export-markdown" type="button">一键导出</button>
+                            <div class="lc-summary-toolbar-actions">
+                                <button class="lc-btn primary" id="generate-summary" type="button">
+                                    <span id="summary-progress-text">生成全系列解读</span>
+                                    <span class="lc-btn-progress" aria-hidden="true"><span id="summary-progress-fill"></span></span>
+                                </button>
+                                <button class="lc-btn" id="export-markdown" type="button">一键导出</button>
                                 <div class="lc-summary-reader-actions" role="tablist" aria-label="全系列解读视图">
                                     <button class="active" id="collection-summary-text" type="button" role="tab" aria-selected="true" aria-controls="collection-summary-text-panel">文字版</button>
                                     <button id="collection-summary-visual" type="button" role="tab" aria-selected="false" aria-controls="collection-summary-visual-panel">图解版</button>
                                 </div>
                             </div>
-                        </div>
-                        <div class="lc-summary-status-row">
-                            <strong id="summary-status">等待生成全系列解读</strong>
-                            <button class="lc-btn" id="generate-summary" type="button">
-                                <span id="summary-progress-text">生成全系列解读</span>
-                                <span class="lc-btn-progress" aria-hidden="true"><span id="summary-progress-fill"></span></span>
-                            </button>
-                            <button class="lc-btn" id="collection-summary-reader-open" type="button">阅读全文</button>
                         </div>
                         <div class="lc-summary-view-panel is-active" id="collection-summary-text-panel" role="tabpanel" aria-labelledby="collection-summary-text">
                             <div class="lc-preview-container">
@@ -564,6 +577,29 @@
             <footer>
                 <button class="lc-btn ghost" id="collection-action-dialog-cancel" type="button">取消</button>
                 <button class="lc-btn primary" id="collection-action-dialog-submit" type="button">确认</button>
+            </footer>
+        </div>
+    </dialog>
+
+    <dialog class="lc-path-dialog" id="local-path-picker-dialog" aria-labelledby="local-path-picker-title">
+        <div class="lc-path-dialog-panel">
+            <header>
+                <div>
+                    <h3 id="local-path-picker-title">选择本机文件夹</h3>
+                    <p class="lc-path-dialog-sub">只登记路径，不复制视频。解析后可直接打开原文件。</p>
+                </div>
+                <button class="lc-icon-btn" id="local-path-picker-close" type="button" aria-label="关闭" title="关闭"><span aria-hidden="true">×</span></button>
+            </header>
+            <div class="lc-path-toolbar">
+                <button class="lc-btn ghost compact" id="local-path-picker-up" type="button">上级目录</button>
+                <input id="local-path-picker-current" class="lc-input" type="text" readonly aria-label="当前路径">
+            </div>
+            <div class="lc-path-roots" id="local-path-picker-roots" aria-label="常用位置"></div>
+            <div class="lc-path-list" id="local-path-picker-list" role="listbox" aria-label="子文件夹"></div>
+            <div class="lc-path-meta" id="local-path-picker-meta">选择一个包含课程视频的文件夹</div>
+            <footer>
+                <button class="lc-btn ghost" id="local-path-picker-cancel" type="button">取消</button>
+                <button class="lc-btn primary" id="local-path-picker-confirm" type="button">使用此文件夹</button>
             </footer>
         </div>
     </dialog>

@@ -550,8 +550,9 @@ def test_collection_source_retry_requeues_failed_local_source(tmp_path, monkeypa
 
     scheduled = {}
 
-    def fake_process_local_upload(*args):
+    def fake_process_local_upload(*args, **kwargs):
         scheduled["args"] = args
+        scheduled["kwargs"] = kwargs
 
     monkeypatch.setattr(collections, "get_collection_service", lambda: service)
     monkeypatch.setattr(collections, "process_local_upload", fake_process_local_upload)
@@ -578,7 +579,13 @@ def test_collection_source_retry_requeues_failed_local_source(tmp_path, monkeypa
         "local_hash",
         False,
         True,
+        True,
     )
+    assert scheduled["kwargs"] == {
+        "transcription_strategy": "local",
+        "cloud_confirmation_required": False,
+        "skip_cache": True,
+    }
 
 
 def test_collection_source_navigation_by_view_token(tmp_path):
@@ -1200,8 +1207,14 @@ def test_collection_api_create_generate_and_export_markdown(tmp_path, monkeypatc
 
     generated = client.post(f"/api/collections/{collection_id}/summary")
     assert generated.status_code == 200
-    assert "找可控变量" in generated.json()["data"]["summary_markdown"]
-    assert generated.json()["data"]["sources"][0]["task_status"] == "success"
+    assert generated.json()["data"]["summary_status"] == "processing"
+
+    # BackgroundTasks run after the response; detail should then contain markdown.
+    detail = client.get(f"/api/collections/{collection_id}")
+    assert detail.status_code == 200
+    assert detail.json()["data"]["summary_status"] == "success"
+    assert "找可控变量" in detail.json()["data"]["summary_markdown"]
+    assert detail.json()["data"]["sources"][0]["task_status"] == "success"
 
     exported = client.get(f"/api/collections/{collection_id}/export/markdown")
     assert exported.status_code == 200
@@ -1209,29 +1222,50 @@ def test_collection_api_create_generate_and_export_markdown(tmp_path, monkeypatc
     assert "## 行动清单" in exported.text
 
 
-def test_collection_summary_route_runs_generation_in_threadpool(monkeypatch):
+def test_collection_summary_route_enqueues_background_job(monkeypatch):
     from video_transcript_api.api.routes import collections
 
     calls = []
+    background_jobs = []
 
     class FakeService:
-        def generate_summary(self, collection_id):
-            calls.append(("generate_summary", collection_id))
-            return {"id": collection_id, "summary_markdown": "# summary"}
+        def begin_summary_generation(self, collection_id):
+            calls.append(("begin_summary_generation", collection_id))
+            return {
+                "id": collection_id,
+                "summary_status": "processing",
+                "summary_enqueue": True,
+            }
+
+        def generate_summary_job(self, collection_id):
+            calls.append(("generate_summary_job", collection_id))
+
+    class FakeBackgroundTasks:
+        def add_task(self, func, *args, **kwargs):
+            background_jobs.append((func, args, kwargs))
 
     async def fake_run_in_threadpool(func, *args, **kwargs):
-        calls.append(("threadpool", func.__name__, args))
+        calls.append(("threadpool", getattr(func, "__name__", str(func)), args))
         return func(*args, **kwargs)
 
     monkeypatch.setattr(collections, "get_collection_service", lambda: FakeService())
     monkeypatch.setattr(collections, "run_in_threadpool", fake_run_in_threadpool, raising=False)
 
     response = asyncio.run(
-        collections.generate_collection_summary("collection-1", user_info={"user_id": "u1"})
+        collections.generate_collection_summary(
+            "collection-1",
+            background_tasks=FakeBackgroundTasks(),
+            user_info={"user_id": "u1"},
+        )
     )
 
-    assert calls[0] == ("threadpool", "generate_summary", ("collection-1",))
+    assert ("threadpool", "begin_summary_generation", ("collection-1",)) in calls
+    assert ("begin_summary_generation", "collection-1") in calls
+    assert len(background_jobs) == 1
+    assert background_jobs[0][1] == ("collection-1",)
     assert response.data["id"] == "collection-1"
+    assert response.data["summary_status"] == "processing"
+    assert "summary_enqueue" not in response.data
 
 
 def test_collection_summary_updates_ai_generated_description(tmp_path):
@@ -1473,6 +1507,9 @@ def test_collection_upload_inserts_numbered_source_by_filename_prefix(tmp_path, 
 
 
 def test_cancel_collection_processing_only_cancels_unfinished_sources(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
     from video_transcript_api.api.routes import collections
     from video_transcript_api.api.services.transcription import verify_token
     from video_transcript_api.collections.repository import LearningCollectionRepository
@@ -1506,6 +1543,22 @@ def test_cancel_collection_processing_only_cancels_unfinished_sources(tmp_path, 
         )
 
     monkeypatch.setattr(collections, "get_collection_service", lambda: service)
+    wake_waiters = MagicMock()
+
+    def cancel_if_not_active(strategy, *, owner_prefix, on_cancel):
+        assert strategy == "local"
+        assert owner_prefix.startswith("local:task_")
+        on_cancel()
+        return True
+
+    monkeypatch.setattr(
+        collections,
+        "get_transcription_concurrency_controller",
+        lambda: SimpleNamespace(
+            wake_waiters=wake_waiters,
+            cancel_if_not_active=cancel_if_not_active,
+        ),
+    )
 
     app = FastAPI()
     app.include_router(collections.router)
@@ -1519,6 +1572,7 @@ def test_cancel_collection_processing_only_cancels_unfinished_sources(tmp_path, 
     assert cache_manager.get_task_by_id(task_ids[0])["status"] == "success"
     assert cache_manager.get_task_by_id(task_ids[1])["status"] == "canceled"
     assert cache_manager.get_task_by_id(task_ids[2])["status"] == "canceled"
+    wake_waiters.assert_called_once_with()
 
 
 def test_collection_workflow_status_is_stopped_after_cancel(tmp_path):
@@ -1558,22 +1612,111 @@ def test_collections_import_uses_one_primary_choice_and_collapsed_history():
     js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
 
     intro = html[html.index('class="lc-intro-strip"') : html.index('class="lc-import-card"')]
-    import_card = html[html.index('class="lc-import-card"') : html.index('class="lc-history')]
-    import_files = js[js.index("async function importFiles(") : js.index("async function appendFilesToCurrentCollection(")]
+    import_card = html[html.index('class="lc-import-card"') : html.index('class="lc-history lc-history-panel"')]
+    import_files = js[
+        js.index("async function importFiles(") : js.index(
+            "async function appendLocalDirectoryToCurrentCollection("
+        )
+    ]
 
     assert "lc-eyebrow" not in intro
     assert "lc-points" not in intro
-    assert '<div class="lc-drop" id="drop-action"' in import_card
-    assert "dropAction.addEventListener('click'" not in js
-    assert 'class="lc-btn primary" id="pick-files"' in import_card
-    assert import_card.count("lc-btn primary") == 1
+    assert 'id="drop-action"' in import_card
+    assert 'id="local-import-path"' in import_card
+    assert 'id="import-local-path"' in import_card
+    assert 'id="pick-files"' in import_card
+    assert import_card.count("lc-btn primary") >= 1
     busy_guard = import_files[import_files.index("if (busy)") : import_files.index("const files = normalizeFiles")]
     assert "return;" in busy_guard
+    assert "video_course" in busy_guard or "视频课程请填写本机" in import_files
     assert '<details class="lc-history lc-history-panel"' in html
     assert '<summary class="lc-history-summary">' in html
     assert '<details class="lc-history lc-history-panel" open' not in html
-    assert "formData.append('files', file, file.name);" in js
+    assert "from-local-paths" in js
     assert "displaySourceTitle(source)" in js
+    assert "clearImportIdentityFields" in js
+    assert "uq_learning_collections" not in js  # uniqueness is backend-enforced
+
+
+def test_collections_import_identity_input_does_not_collapse_panel():
+    """Typing IP/topic must not re-collapse the import <details> mid-input."""
+    project_root = Path(__file__).resolve().parents[2]
+    js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+    html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
+
+    assert 'id="collection-creator"' in html
+    assert 'list="collection-creator-options"' in html
+    assert 'class="lc-import-wrap' in html
+
+    render_history = js[js.index("function renderHistory(") : js.index("function applyInitialPanelLayoutOnce(")]
+    # renderHistory must not force-close the import panel on every list refresh.
+    assert "importDetails.open = false" not in render_history
+    assert "lc-import-wrap" not in render_history
+
+    # Initial layout collapse is one-shot only (returning users with history).
+    assert "function applyInitialPanelLayoutOnce(" in js
+    assert "didApplyInitialPanelLayout" in js
+    assert "applyInitialPanelLayoutOnce();" in js[
+        js.index("async function loadCollections(") : js.index("async function selectCollection(")
+    ]
+
+    # Input handlers must not call full render() (which rebuilds history / re-ran layout).
+    creator_title_input = js[
+        js.index("// Only refresh workspace chrome while typing") : js.index(
+            "[els.historyCreatorFilter, els.historyTopicFilter"
+        )
+    ]
+    assert "render();" not in creator_title_input
+    assert "renderMetadata();" in creator_title_input
+    assert "workspaceTitle" in creator_title_input
+
+
+def test_collections_import_shows_upload_progress_for_large_batches():
+    """Large folder imports must surface progress instead of a silent gray empty board."""
+    project_root = Path(__file__).resolve().parents[2]
+    js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+    css = (project_root / "src/web/static/css/collections.css").read_text(encoding="utf-8")
+
+    assert "const UPLOAD_BATCH_SIZE = 3" in js
+    assert "function setImportStatus(" in js
+    assert "function clearImportStatus(" in js
+    assert "function renderImportStatus(" in js
+    assert "function uploadFileBatch(" in js
+    assert "XMLHttpRequest" in js
+    assert "request.upload.onprogress" in js
+    assert "UPLOAD_BATCH_SIZE" in js[
+        js.index("async function uploadFiles(") : js.index("async function loadFilterOptions(")
+    ]
+    assert "refreshCollection(collectionId)" in js[
+        js.index("async function uploadFiles(") : js.index("async function loadFilterOptions(")
+    ]
+    assert "setImportStatus(" in js[
+        js.index("async function importFiles(") : js.index("async function appendFilesToCurrentCollection(")
+    ]
+    assert "clearImportStatus()" in js[
+        js.index("async function importFiles(") : js.index("async function appendFilesToCurrentCollection(")
+    ]
+    assert "lc-empty-uploading" in js
+    assert "正在上传" in js
+    assert "lastImportError" in js
+    assert "lc-empty-error" in js
+    assert ".lc-drop.is-uploading" in css
+    assert ".lc-import-preview.is-uploading" in css
+    assert ".lc-import-preview.is-error" in css
+    assert ".lc-empty-uploading" in css
+    assert ".lc-empty-error" in css
+
+
+def test_collection_upload_maps_disk_full_to_actionable_error():
+    project_root = Path(__file__).resolve().parents[2]
+    source = (
+        project_root
+        / "src/video_transcript_api/api/routes/collections.py"
+    ).read_text(encoding="utf-8")
+    assert 'getattr(exc, "errno", None) == 28' in source
+    assert "磁盘空间不足" in source
+    assert "status_code=507" in source
+    assert "追加文件夹" in source
 
 
 def test_collections_page_restores_existing_collections():
@@ -1588,10 +1731,18 @@ def test_collections_page_restores_existing_collections():
     assert "collection-description" not in js
     assert "lc-intro-strip" in html
     assert "lc-history-panel" in html
-    assert html.index('class="lc-import-card"') < html.index("lc-history-panel")
+    # Import card must appear before the historical topics panel (not the import wrap).
+    assert html.index('class="lc-import-card"') < html.index('class="lc-history lc-history-panel"')
     assert "history-creator-filter" in html
     assert "metadata-creator" in html
     assert 'data-view="map"' in html
+    # Knowledge map UI is retired from the product surface (DOM kept but hidden).
+    assert 'data-view="map" type="button" hidden' in html
+    assert 'id="map-view" hidden' in html
+    assert 'data-view="summary"' in html
+    assert 'class="lc-tab active" data-view="summary"' in html
+    assert "let currentView = 'summary'" in js
+    assert "currentView = opts.sourceId ? 'source' : 'summary'" in js
     assert "knowledge-map-svg" in html
     assert "map-generate" in html
     assert "map-stage-focus" in html
@@ -1619,12 +1770,18 @@ def test_collections_page_restores_existing_collections():
     assert "collection-summary-visual-panel" in html
     assert "collection-summary-article" in html
     assert "collection-summary-visual-root" in html
-    assert "阅读全文" in html
+    assert "阅读全文" not in html
+    assert "collection-summary-reader-open" not in html
     assert "沉浸阅读全文" not in html
+    assert "collection-board" in html
+    assert "sources-panel-toggle" in html
+    assert "lc-summary-toolbar" in html
     assert "collectionSummaryArticle" in js
     assert "collectionSummaryVisualRoot" in js
     assert "renderCollectionSummaryArticle" in js
     assert "focusCollectionSummaryArticle" in js
+    assert "updateSummaryReadingLayout" in js
+    assert "sourcesExpandedInSummary" in js
     assert "renderInlineSummaryVisual" in js
     assert "setCollectionSummaryMode" in js
     assert "summaryToc" in js
@@ -1642,10 +1799,12 @@ def test_collections_page_restores_existing_collections():
     assert "splitInlineNumberedItems" in js
     assert "data-summary-anchor" in js
     assert "aria-disabled" in js
+    assert ".lc-summary-toolbar" in css
     assert ".lc-summary-reader-head" in css
     assert ".lc-summary-reader-actions" in css
     assert ".lc-summary-inline-article" in css
     assert ".lc-summary-inline-visual" in css
+    assert ".lc-board.is-summary-reading:not(.sources-expanded)" in css
     assert ".lc-summary-dialog" in css
     assert ".lc-summary-reader" in css
     assert ".lc-summary-toc" in css
@@ -1653,6 +1812,17 @@ def test_collections_page_restores_existing_collections():
     assert ".lc-inline-numbered" in css
     assert "grid-template-columns: minmax(0, 1fr) 220px" in css
     assert "normalizeMarkdownForPreview" in js
+    assert "function renderInlineMarkdown(" in js
+    assert "<em>${text}</em>" in js
+    assert ".replace(/\\*([^*\\n]+?)\\*/g" in js
+    assert 'id="generate-summary"' in html
+    assert 'class="lc-btn primary" id="generate-summary"' in html
+    assert 'class="lc-btn primary" id="export-markdown"' not in html
+    assert 'els.generateSummary.classList.toggle(\'primary\', !markdown)' in js
+    assert 'els.exportMarkdown.classList.toggle(\'primary\', Boolean(markdown))' in js
+    assert "startSummaryStatusPolling" in js
+    assert "syncSummaryGenerationFromCollection" in js
+    assert "rememberSummaryGenerating" in js
     assert "summarizeMarkdownSection" in js
     assert "startSummaryProgress" in js
     assert "summaryProgressByCollection" in js
@@ -1664,6 +1834,9 @@ def test_collections_page_restores_existing_collections():
         js.index("async function generateSummary()") : js.index("async function exportMarkdown()")
     ]
     assert "setBusy(true);" not in generate_summary_body
+    assert "startSummaryStatusPolling(collectionId)" in generate_summary_body
+    assert "currentView = 'summary'" in generate_summary_body
+    assert "currentView = 'markdown'" not in generate_summary_body
     assert "lc-btn-progress" in html
     assert "summary-progress-text" in html
     assert "文字版" in html
@@ -1685,7 +1858,7 @@ def test_collections_page_restores_existing_collections():
     assert "loadFilterOptions" in js
     assert "selectedHistoryFilters" in js
     assert "selectCollection" in js
-    assert "loadCollections().catch((error) => {\n                    showToast(error.message || '历史专题筛选失败');" in js
+    assert "loadCollections({ selectLatest: false }).catch((error) => {\n                    showToast(error.message || '历史专题筛选失败');" in js
 
 
 def test_collections_page_exposes_immersive_text_visual_reader():
@@ -1715,10 +1888,13 @@ def test_collections_page_exposes_immersive_text_visual_reader():
         "collection-summary-text-panel",
         "collection-summary-visual-panel",
         "collection-summary-article",
-        "collection-summary-reader-open",
+        "collection-board",
+        "sources-panel-toggle",
         "collection-immersive-reader",
     ):
         assert f'id="{element_id}"' in html
+    assert 'id="collection-summary-reader-open"' not in html
+    assert "阅读全文" not in html
 
     assert "function activateCollectionVisuals()" in js
     assert "currentView !== 'visual'" in js
@@ -1731,6 +1907,7 @@ def test_collections_page_exposes_immersive_text_visual_reader():
     assert "function openCollectionReader(" in js
     assert "function openCollectionSummaryReader(" in js
     assert "function closeCollectionReader(" in js
+    assert "function updateSummaryReadingLayout(" in js
     summary_tab_branch = js[
         js.index("els.tabs.forEach((tab) => {") : js.index("if (els.collectionVisualOverviewRetry)")
     ]
@@ -1740,6 +1917,8 @@ def test_collections_page_exposes_immersive_text_visual_reader():
     assert "requestedView === 'visual'" in summary_tab_branch
     assert "setCollectionSummaryMode('text', false)" in summary_tab_branch
     assert "setCollectionSummaryMode('visual', true)" in summary_tab_branch
+    assert "sourcesExpandedInSummary" in summary_tab_branch
+    assert "updateSummaryReadingLayout()" in summary_tab_branch or "updateSummaryReadingLayout();" in js
     assert "ensureCollectionVisualLayer('overview', false)" in js
     assert "function renderInlineSummaryVisual()" in js
     assert "function setCollectionSummaryMode(" in js
@@ -1758,7 +1937,7 @@ def test_collections_page_exposes_immersive_text_visual_reader():
     assert "function parseCollectionVisualRef(" in js
     assert "function visualSummarySections()" in js
     assert "function collectionReaderTextSections(" in js
-    assert "focusCollectionSummaryArticle('')" in js
+    assert "collectionSummaryReaderOpen" not in js
     assert "openCollectionReader('text', els.collectionSummaryReaderOpen)" not in js
     assert "openCollectionReader('visual', els.collectionVisualOpen)" not in js
     assert "openSummaryDialog(`card:${card.dataset.summaryCard || 'problem'}`, card)" not in js
@@ -1780,7 +1959,8 @@ def test_collections_page_exposes_immersive_text_visual_reader():
     assert "@media print" in css
     assert ".lc-visual-view" in css
     assert "overflow: visible" in css
-    assert "loadCollections({ selectLatest: false }).catch((error) => {\n                    showToast(error.message || '历史专题筛选失败');" not in js
+    assert "is-summary-reading" in css
+    assert "sourcesExpandedInSummary" in js
     assert "renderKnowledgeMap" in js
     assert "loadKnowledgeMap" in js
     assert "generateKnowledgeMap" in js

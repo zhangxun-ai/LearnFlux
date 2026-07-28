@@ -87,6 +87,7 @@
     // 百炼云端普通转录（默认关闭）
     // 密钥只从环境变量读取：DASHSCOPE_API_KEY、
     // DASHSCOPE_WORKSPACE_ID、DASHSCOPE_API_HOST；不要写入本文件。
+    // 先展示可信报价；用户确认后才提交付费调用。
     // ============================================================
     "cloud_asr": {
         "enabled": false,
@@ -95,7 +96,6 @@
         "region": "cn-beijing",
         "price_cny_per_second": "0.00022",
         "price_verified_at": "2026-07-21",
-        "max_cny_per_task": "0",
         "poll_interval_seconds": 5,
         "poll_timeout_seconds": 3600
     },
@@ -197,7 +197,8 @@
         "debug_dir": "./data/logs/debug",      // 调试日志目录
         "llm_debug_dir": "./data/logs/llm_debug",  // LLM 调试日志目录
         "max_size": 10485760,            // 单个日志文件大小限制（字节，默认 10MB）
-        "backup_count": 5                // 日志文件备份数量
+        "backup_count": 5,               // 日志文件备份数量
+        "external_access_debug": false   // /view 与 /export 的详细访问诊断，默认关闭
     },
 
     // ============================================================
@@ -270,11 +271,30 @@
 
         // ------------------------------------------------------
         // 内容审查降级（llm-compat content_fallbacks）
-        // 当主模型因内容审查拒绝时，自动切换到 fallback 模型
+        // 当主模型因内容审查/拒答拒绝时，自动切换到 fallback 模型。
+        // 跨供应商模型（如 qwen-plus）需配合 endpoints + model_endpoints，
+        // 否则会错误地打到主 base_url。
         // ------------------------------------------------------
         "content_fallbacks": {
-            "deepseek-v4-pro": ["deepseek-v4-flash"],
-            "deepseek-v4-flash": ["gpt-4.1-mini", "gemini-2.5-flash"]
+            "deepseek-v4-pro": ["qwen-plus-2025-12-01", "deepseek-v4-flash"],
+            "deepseek-v4-flash": ["qwen-plus-2025-12-01", "deepseek-v4-pro"]
+        },
+
+        // ------------------------------------------------------
+        // 跨供应商端点（可选）
+        // 主模型仍用上面的 api_key + base_url；
+        // 二级端点用于 content_fallbacks 中的跨厂模型。
+        // api_key 可直接写，或通过 api_key_env 从环境变量读取。
+        // ------------------------------------------------------
+        "endpoints": {
+            "dashscope": {
+                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "api_key_env": "DASHSCOPE_API_KEY"
+            }
+        },
+        "model_endpoints": {
+            "qwen*": "dashscope",
+            "qwen-plus*": "dashscope"
         },
 
         // ------------------------------------------------------

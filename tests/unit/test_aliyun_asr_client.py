@@ -149,7 +149,7 @@ def test_upload_audio_stages_one_object_and_rejects_incomplete_policy():
         "files": {
             "file": ("sample.wav", audio, "application/octet-stream"),
         },
-        "timeout": 120,
+        "timeout": 600,
         "allow_redirects": False,
     }
 
@@ -419,7 +419,18 @@ def test_poll_success_downloads_only_successful_transcript_and_normalizes_it():
     assert "token=secret" not in rendered
 
     failed_session = _FakeSession(
-        [_FakeResponse({"output": {"task_status": "FAILED", "results": []}})]
+        [
+            _FakeResponse(
+                {
+                    "request_id": "request-123",
+                    "output": {
+                        "task_status": "FAILED",
+                        "code": "ASR_RESPONSE_HAVE_NO_WORDS",
+                        "results": [],
+                    },
+                }
+            )
+        ]
     )
     failed_client = AliyunASRClient(
         "api-secret", "workspace-1", session=failed_session, clock=lambda: 0
@@ -428,6 +439,8 @@ def test_poll_success_downloads_only_successful_transcript_and_normalizes_it():
         failed_client.poll("task-failed", timeout_seconds=30)
 
     assert failed_error.value.code == "provider_failed"
+    assert failed_error.value.provider_error_code == "ASR_RESPONSE_HAVE_NO_WORDS"
+    assert failed_error.value.provider_request_id == "request-123"
     assert str(failed_error.value) == "provider_failed"
 
     expired_url = "https://signed.example/expired.json?token=EXPIRED_SENTINEL"

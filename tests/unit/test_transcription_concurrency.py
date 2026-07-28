@@ -11,7 +11,7 @@ from video_transcript_api.transcriber.concurrency import (
 
 def test_defaults_and_lower_trusted_hard_limit_are_fail_closed():
     defaults = resolve_transcription_limits({"concurrent": {}})
-    assert (defaults.local_soft, defaults.local_hard) == (1, 2)
+    assert (defaults.local_soft, defaults.local_hard) == (1, 3)
     assert (defaults.cloud_soft, defaults.cloud_hard) == (3, 10)
 
     lowered = resolve_transcription_limits(
@@ -107,7 +107,7 @@ def test_owner_transfer_keeps_count_and_cancel_wakes_waiter():
     assert controller.snapshot()["cloud_active"] == 1
 
 
-@pytest.mark.parametrize("value", [True, 0, -1, 3])
+@pytest.mark.parametrize("value", [True, 0, -1, 4])
 def test_user_local_limit_rejects_invalid_or_over_hard_values(value):
     controller = TranscriptionConcurrencyController(local=1, cloud=1)
     with pytest.raises(ConcurrencyLimitError):

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal, Mapping
 
 
-LOCAL_ASR_HARD_LIMIT = 2
+LOCAL_ASR_HARD_LIMIT = 3
 DEFAULT_CLOUD_ASR_HARD_LIMIT = 10
 MAX_CLOUD_ASR_HARD_LIMIT = 10
 
@@ -152,11 +152,42 @@ class TranscriptionConcurrencyController:
                     return True
                 self._condition.wait()
 
+    def try_acquire(self, strategy: Strategy, owner: str) -> bool:
+        """Acquire immediately, returning false when the soft limit is full."""
+        if not isinstance(owner, str) or not owner:
+            raise ConcurrencyLimitError("invalid_asr_slot_owner")
+        with self._condition:
+            owners, limit = self._state(strategy)
+            if owner in owners:
+                return True
+            if len(owners) >= limit:
+                return False
+            owners.add(owner)
+            return True
+
     def reserve_recovered_cloud(self, owner: str) -> None:
         if not isinstance(owner, str) or not owner:
             raise ConcurrencyLimitError("invalid_asr_slot_owner")
         with self._condition:
             self._cloud_owners.add(owner)
+
+    def cancel_if_not_active(
+        self,
+        strategy: Strategy,
+        *,
+        owner_prefix: str,
+        on_cancel: Callable[[], None],
+    ) -> bool:
+        """Cancel queued work only when no matching owner has acquired a slot."""
+        if not isinstance(owner_prefix, str) or not owner_prefix:
+            raise ConcurrencyLimitError("invalid_asr_slot_owner_prefix")
+        with self._condition:
+            owners, _ = self._state(strategy)
+            if any(owner.startswith(owner_prefix) for owner in owners):
+                return False
+            on_cancel()
+            self._condition.notify_all()
+            return True
 
     def transfer_cloud_owner(self, old_owner: str, new_owner: str) -> None:
         if not new_owner:

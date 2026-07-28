@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import uuid
+from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
@@ -11,13 +12,43 @@ from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 
-from ..context import get_cache_manager, get_config, get_logger, get_static_dir, get_user_manager
-from ..services.transcription import TranscribeResponse, process_local_upload, verify_token
+from ..context import (
+    get_cache_manager,
+    get_cloud_asr_dispatcher,
+    get_cloud_quote_repository,
+    get_config,
+    get_logger,
+    get_static_dir,
+    get_transcription_concurrency_controller,
+    get_transcription_control_database,
+    get_user_manager,
+)
+from ..services.transcription import (
+    TranscribeResponse,
+    process_local_upload,
+    refresh_cloud_quote,
+    verify_token,
+)
 from ...collections.repository import LearningCollectionRepository
 from ...collections.service import LearningCollectionService
 from ...collections.titles import source_basename
+from ...collections.transcription import (
+    CollectionTranscriptionService,
+    CollectionQuoteSnapshot,
+    validate_transcription_selection,
+)
+from ...transcriber.cloud_quote_repository import (
+    CloudQuoteConfirmation,
+    CloudQuoteConflict,
+)
+from ...utils.local_fs_browser import (
+    LocalFolderPickCancelled,
+    LocalFolderPickUnavailable,
+    browse_local_directory,
+    pick_local_directory_native,
+)
 
 logger = get_logger()
 config = get_config()
@@ -39,6 +70,8 @@ class CreateCollectionRequest(BaseModel):
     description: str = ""
     import_method: str = ""
     tags: str = ""
+    transcription_strategy: str = "local"
+    transcription_concurrency: StrictInt = 1
 
 
 class GenerateKnowledgeMapRequest(BaseModel):
@@ -47,10 +80,49 @@ class GenerateKnowledgeMapRequest(BaseModel):
     force: bool = False
 
 
+class CollectionCloudQuoteItemConfirmationRequest(BaseModel):
+    task_id: str
+    quote_token: str
+    accepted_max_cost_cny: str
+
+
+class CollectionCloudQuoteConfirmRequest(BaseModel):
+    transcription_revision: StrictInt
+    accepted_total_cny: str
+    confirmations: list[CollectionCloudQuoteItemConfirmationRequest]
+
+
+class ContinueCollectionTranscriptionRequest(BaseModel):
+    transcription_strategy: str
+    transcription_concurrency: StrictInt
+
+
+class LocalPathImportRequest(BaseModel):
+    """Import sources by referencing existing local files (no copy into managed storage)."""
+
+    directory: str = ""
+    paths: List[str] = []
+    transcription_strategy: Optional[str] = None
+    transcription_concurrency: Optional[int] = None
+
+
 @lru_cache
 def get_collection_service() -> LearningCollectionService:
-    cache_db_path = str(cache_manager.db_path)
-    repository = LearningCollectionRepository(db_path=cache_db_path)
+    control_database = get_transcription_control_database(cache_manager)
+    repository = LearningCollectionRepository(db_path=control_database)
+    if getattr(repository.database, "dialect", "sqlite") == "postgres":
+        import_result = repository.import_legacy_sqlite_if_target_empty(
+            cache_manager.db_path
+        )
+        if import_result["status"] == "imported":
+            logger.info(
+                "Imported legacy learning collections into control database: {}",
+                import_result,
+            )
+        elif import_result["status"] == "refused_target_not_empty":
+            logger.warning(
+                "Skipped legacy learning collection import because target is not empty"
+            )
     llm_cfg = (config.get("llm") or {}).copy()
     service = LearningCollectionService(
         repository=repository,
@@ -61,6 +133,18 @@ def get_collection_service() -> LearningCollectionService:
     if not user_manager.is_multi_user_mode():
         repository.assign_unowned_collections("legacy_user")
     return service
+
+
+def get_collection_transcription_service() -> CollectionTranscriptionService:
+    """Build a coordinator around the current collection service dependencies."""
+    collection_service = get_collection_service()
+    return CollectionTranscriptionService(
+        collection_service.repository,
+        collection_service.cache_manager,
+        quote_repository=get_cloud_quote_repository(),
+        quote_refresher=refresh_cloud_quote,
+        concurrency_controller=get_transcription_concurrency_controller(),
+    )
 
 
 def _require_collection_owner(service, collection_id: str, user_info: dict) -> None:
@@ -152,6 +236,18 @@ async def create_collection(
     body: CreateCollectionRequest,
     user_info: dict = Depends(verify_token),
 ):
+    transcription_strategy = body.transcription_strategy
+    transcription_concurrency = body.transcription_concurrency
+    if body.collection_type == "document_topic":
+        transcription_strategy = "local"
+        transcription_concurrency = 1
+    elif body.collection_type == "video_course":
+        try:
+            validate_transcription_selection(
+                transcription_strategy, transcription_concurrency
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     try:
         service = get_collection_service()
         collection = service.create_collection(
@@ -163,6 +259,8 @@ async def create_collection(
             import_method=body.import_method,
             tags=body.tags,
             owner_user_id=user_info.get("user_id") or "",
+            transcription_strategy=transcription_strategy,
+            transcription_concurrency=transcription_concurrency,
         )
         return TranscribeResponse(code=200, message="学习集合已创建", data=collection)
     except ValueError as exc:
@@ -225,6 +323,12 @@ async def retry_collection_source(
             result["media_id"],
             result["use_speaker_recognition"],
             True,
+            True,
+            transcription_strategy=result["transcription_strategy"],
+            cloud_confirmation_required=(
+                result["transcription_strategy"] == "cloud"
+            ),
+            skip_cache=True,
         )
         return TranscribeResponse(
             code=202,
@@ -239,6 +343,163 @@ async def retry_collection_source(
         raise HTTPException(status_code=status_code, detail=str(exc))
 
 
+@router.get("/api/local-fs/browse", response_model=TranscribeResponse)
+async def browse_local_fs(
+    path: str = Query(""),
+    user_info: dict = Depends(verify_token),
+):
+    """Browse directories on the host machine for zero-copy path import UX."""
+    try:
+        data = await run_in_threadpool(browse_local_directory, path or "")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NotADirectoryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"无法浏览目录：{exc}") from exc
+    return TranscribeResponse(code=200, message="本机目录", data=data)
+
+
+@router.post("/api/local-fs/pick-folder", response_model=TranscribeResponse)
+async def pick_local_fs_folder(
+    user_info: dict = Depends(verify_token),
+):
+    """Open the OS-native folder chooser on the API host (Finder on macOS)."""
+    try:
+        path = await run_in_threadpool(
+            pick_local_directory_native,
+            "选择要导入的本机课程文件夹",
+        )
+        preview = await run_in_threadpool(browse_local_directory, path)
+    except LocalFolderPickCancelled as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LocalFolderPickUnavailable as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"打开系统文件夹选择器失败：{exc}"
+        ) from exc
+    return TranscribeResponse(
+        code=200,
+        message="已选择本机文件夹",
+        data={
+            "path": path,
+            "media_count": preview.get("media_count", 0),
+            "video_count": preview.get("video_count", 0),
+            "document_count": preview.get("document_count", 0),
+        },
+    )
+
+
+@router.post(
+    "/api/collections/{collection_id}/sources/from-local-paths",
+    response_model=TranscribeResponse,
+    status_code=202,
+)
+async def import_collection_sources_from_local_paths(
+    collection_id: str,
+    body: LocalPathImportRequest,
+    background_tasks: BackgroundTasks,
+    user_info: dict = Depends(verify_token),
+):
+    """Register local media by absolute path. Does not copy video/document files."""
+    if not (body.directory or "").strip() and not (body.paths or []):
+        raise HTTPException(status_code=400, detail="请提供本机目录路径或文件路径列表")
+
+    service = get_collection_service()
+    _require_collection_owner(service, collection_id, user_info)
+    try:
+        detail = service.get_collection_detail(collection_id)
+        selected_strategy = (
+            body.transcription_strategy
+            if body.transcription_strategy is not None
+            else detail.get("transcription_strategy") or "local"
+        )
+        selected_concurrency = (
+            body.transcription_concurrency
+            if body.transcription_concurrency is not None
+            else int(detail.get("transcription_concurrency") or 1)
+        )
+        try:
+            validate_transcription_selection(selected_strategy, selected_concurrency)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        if (
+            body.transcription_strategy is not None
+            or body.transcription_concurrency is not None
+        ):
+            service.repository.update_transcription_preferences(
+                collection_id,
+                strategy=selected_strategy,
+                requested_concurrency=selected_concurrency,
+            )
+
+        directory = body.directory or ""
+        path_list = list(body.paths or [])
+        candidates = await run_in_threadpool(
+            lambda: service.resolve_local_import_paths(
+                collection_id,
+                directory=directory,
+                paths=path_list,
+            )
+        )
+        result = CollectionTranscriptionService(
+            service.repository, cache_manager
+        ).start_sources(
+            collection_id=collection_id,
+            candidates=candidates,
+            owner_user_id=user_info.get("user_id") or "",
+            strategy=selected_strategy,
+            requested_concurrency=selected_concurrency,
+            use_speaker_recognition=False,
+        )
+        if selected_strategy == "local" and result.effective_concurrency is not None:
+            get_transcription_concurrency_controller().update_soft_limits(
+                local=result.effective_concurrency
+            )
+        for launch in result.launches:
+            background_tasks.add_task(
+                process_local_upload,
+                launch.task_id,
+                launch.file_path,
+                launch.original_name,
+                launch.display_url,
+                launch.media_id,
+                False,
+                True,  # preserve_source_file: keep original path, do not delete user media
+                True,
+                transcription_strategy=launch.strategy,
+                cloud_confirmation_required=launch.strategy == "cloud",
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    logger.info(
+        "collection local-path import accepted: collection={}, count={}, pending={}",
+        collection_id,
+        len(result.sources),
+        len(result.launches),
+    )
+    return TranscribeResponse(
+        code=202,
+        message="已按本机路径登记文件（未复制），正在逐个解析",
+        data={
+            "sources": list(result.sources),
+            "cache_hit_count": result.cache_hit_count,
+            "pending_count": len(result.launches),
+            "requested_concurrency": result.requested_concurrency,
+            "effective_concurrency": result.effective_concurrency,
+            "path_referenced": True,
+            "candidate_count": len(candidates),
+        },
+    )
+
+
 @router.post(
     "/api/collections/{collection_id}/sources/upload",
     response_model=TranscribeResponse,
@@ -250,6 +511,8 @@ async def upload_collection_sources(
     request: Request,
     files: List[UploadFile] = File(...),
     use_speaker_recognition: bool = Form(False),
+    transcription_strategy: Optional[str] = Form(None),
+    transcription_concurrency: Optional[int] = Form(None),
     user_info: dict = Depends(verify_token),
 ):
     if not files:
@@ -257,72 +520,381 @@ async def upload_collection_sources(
 
     service = get_collection_service()
     _require_collection_owner(service, collection_id, user_info)
-    uploaded = []
     try:
         detail = service.get_collection_detail(collection_id)
+        selected_strategy = (
+            transcription_strategy
+            if transcription_strategy is not None
+            else detail.get("transcription_strategy") or "local"
+        )
+        selected_concurrency = (
+            transcription_concurrency
+            if transcription_concurrency is not None
+            else int(detail.get("transcription_concurrency") or 1)
+        )
+        try:
+            validate_transcription_selection(selected_strategy, selected_concurrency)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         existing_positions = [
             int(source.get("position") or 0) for source in detail.get("sources", [])
         ]
         next_position = (max(existing_positions) if existing_positions else 0) + 1
         append_position = next_position
+        validated_files = []
         for file in files:
             filename = source_basename(file.filename or "upload") or "upload"
             position = _source_position_from_filename(filename) or append_position
             append_position = max(append_position, position + 1)
-            source_type = service.validate_source_type_for_collection(collection_id, filename)
-            temp_path, size, file_hash = await _save_upload_file(file, filename)
-            media_id = _media_id_for_upload_hash(file_hash)
-            display_url = f"local://collection-source/{media_id}/{filename}"
-            reusable_task = cache_manager.get_existing_task_by_media(
-                "generic", media_id, use_speaker_recognition
+            validated_files.append(
+                {
+                    "file": file,
+                    "filename": filename,
+                    "position": position,
+                    "source_type": service.validate_source_type_for_collection(
+                        collection_id, filename
+                    ),
+                }
             )
-            if reusable_task and reusable_task.get("status") != "failed":
-                _stable_upload_path(temp_path, media_id, filename)
-                source = service.add_existing_source(
-                    collection_id=collection_id,
-                    task_id=reusable_task["task_id"],
-                    view_token=reusable_task["view_token"],
-                    title=filename,
-                    source_type=source_type,
-                    position=position,
-                )
-                uploaded.append({**source, "size": size, "reused": True})
-                continue
+        if (
+            transcription_strategy is not None
+            or transcription_concurrency is not None
+        ):
+            service.repository.update_transcription_preferences(
+                collection_id,
+                strategy=selected_strategy,
+                requested_concurrency=selected_concurrency,
+            )
 
-            stable_path = _stable_upload_path(temp_path, media_id, filename)
-            task_info = cache_manager.create_task(
-                url=display_url,
-                use_speaker_recognition=use_speaker_recognition,
-                platform="generic",
-                media_id=media_id,
-            )
-            source = service.add_existing_source(
+        candidates = []
+        created_source_files: set[str] = set()
+        try:
+            for validated in validated_files:
+                filename = validated["filename"]
+                temp_path, size, file_hash = await _save_upload_file(
+                    validated["file"], filename
+                )
+                media_id = _media_id_for_upload_hash(file_hash)
+                display_url = f"local://collection-source/{media_id}/{filename}"
+                try:
+                    stable_path = _stable_upload_path(
+                        temp_path,
+                        media_id,
+                        filename,
+                        created_paths=created_source_files,
+                    )
+                except Exception:
+                    if os.path.isfile(temp_path):
+                        os.remove(temp_path)
+                    raise
+                candidates.append(
+                    {
+                        "file_path": stable_path,
+                        "original_name": filename,
+                        "display_url": display_url,
+                        "media_id": media_id,
+                        "content_sha256": file_hash,
+                        "source_type": validated["source_type"],
+                        "position": validated["position"],
+                        "size": size,
+                    }
+                )
+        except Exception:
+            _remove_created_source_files(created_source_files)
+            raise
+
+        try:
+            result = CollectionTranscriptionService(
+                service.repository, cache_manager
+            ).start_sources(
                 collection_id=collection_id,
-                task_id=task_info["task_id"],
-                view_token=task_info["view_token"],
-                title=filename,
-                source_type=source_type,
-                position=position,
+                candidates=candidates,
+                owner_user_id=user_info.get("user_id") or "",
+                strategy=selected_strategy,
+                requested_concurrency=selected_concurrency,
+                use_speaker_recognition=use_speaker_recognition,
             )
+        except Exception:
+            try:
+                current_sources = service.repository.get_sources(collection_id)
+                _cleanup_unreferenced_candidate_files(
+                    candidates=candidates,
+                    sources=current_sources,
+                    launches=(),
+                    created_paths=created_source_files,
+                )
+            except Exception as cleanup_exc:
+                logger.warning(
+                    "Failed to inspect collection source references after upload "
+                    "rollback: {}",
+                    cleanup_exc,
+                )
+            raise
+        if selected_strategy == "local" and result.effective_concurrency is not None:
+            get_transcription_concurrency_controller().update_soft_limits(
+                local=result.effective_concurrency
+            )
+        _cleanup_unreferenced_candidate_files(
+            candidates=candidates,
+            sources=result.sources,
+            launches=result.launches,
+            created_paths=created_source_files,
+        )
+        for launch in result.launches:
+            # Keep durable source media for open/re-parse UX; only intermediate
+            # audio is cleaned after ASR. Prefer path import to avoid a second
+            # permanent copy of on-disk course libraries.
             background_tasks.add_task(
                 process_local_upload,
-                task_info["task_id"],
-                stable_path,
-                filename,
-                display_url,
-                media_id,
+                launch.task_id,
+                launch.file_path,
+                launch.original_name,
+                launch.display_url,
+                launch.media_id,
                 use_speaker_recognition,
                 True,
+                True,
+                transcription_strategy=launch.strategy,
+                cloud_confirmation_required=launch.strategy == "cloud",
             )
-            uploaded.append({**source, "size": size, "reused": False})
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    logger.info(f"collection upload accepted: collection={collection_id}, count={len(uploaded)}")
+    logger.info(
+        "collection upload accepted: collection={}, count={}, pending={}",
+        collection_id,
+        len(result.sources),
+        len(result.launches),
+    )
     return TranscribeResponse(
         code=202,
         message="专题文件已上传，正在逐个解析",
-        data={"sources": uploaded},
+        data={
+            "sources": list(result.sources),
+            "cache_hit_count": result.cache_hit_count,
+            "pending_count": len(result.launches),
+            "requested_concurrency": result.requested_concurrency,
+            "effective_concurrency": result.effective_concurrency,
+        },
+    )
+
+
+def _cloud_quote_snapshot_data(snapshot: CollectionQuoteSnapshot) -> dict:
+    return {
+        "state": snapshot.state,
+        "video_count": snapshot.video_count,
+        "cache_hit_count": snapshot.cache_hit_count,
+        "pending_count": snapshot.pending_count,
+        "duration_seconds": str(snapshot.duration_seconds),
+        "billable_seconds": snapshot.billable_seconds,
+        "max_cost_cny": str(snapshot.max_cost_cny),
+        "transcription_revision": snapshot.transcription_revision,
+        "items": [
+            {
+                "task_id": item.task_id,
+                "source_id": item.source_id,
+                "title": item.title,
+                "quote_token": item.quote_token,
+                "duration_seconds": str(item.duration_seconds),
+                "billable_seconds": item.billable_seconds,
+                "max_cost_cny": str(item.max_cost_cny),
+            }
+            for item in snapshot.items
+        ],
+        "failures": list(snapshot.failures),
+    }
+
+
+def _parse_quote_amount(value: str) -> Decimal:
+    try:
+        amount = Decimal(value)
+    except (InvalidOperation, ValueError):
+        raise HTTPException(status_code=422, detail="invalid_cloud_quote_amount") from None
+    if not amount.is_finite() or amount < 0:
+        raise HTTPException(status_code=422, detail="invalid_cloud_quote_amount")
+    return amount
+
+
+def _raise_collection_transcription_value_error(exc: ValueError) -> None:
+    detail = str(exc)
+    if detail == "collection_not_found":
+        raise HTTPException(status_code=404, detail=detail) from exc
+    if detail.startswith("invalid_collection_transcription_") or detail in {
+        "invalid_transcription_strategy",
+        "invalid_local_transcription_concurrency",
+        "invalid_cloud_transcription_concurrency",
+        "invalid_transcription_concurrency",
+        "invalid_collection_cloud_quote_total",
+        "invalid_collection_cloud_quote_confirmation",
+        "invalid_cloud_quote_amount",
+    }:
+        raise HTTPException(status_code=422, detail=detail) from exc
+    raise HTTPException(status_code=400, detail=detail) from exc
+
+
+@router.get(
+    "/api/collections/{collection_id}/cloud-quote",
+    response_model=TranscribeResponse,
+)
+async def get_collection_cloud_quote(
+    collection_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    _backfill_testable_single_user_owner(get_collection_service(), user_info)
+    service = get_collection_transcription_service()
+    _require_collection_owner(service, collection_id, user_info)
+    try:
+        snapshot = service.get_cloud_quote_snapshot(
+            collection_id, owner_user_id=user_info.get("user_id") or ""
+        )
+    except ValueError as exc:
+        _raise_collection_transcription_value_error(exc)
+    return TranscribeResponse(
+        code=200,
+        message="系列云端报价",
+        data=_cloud_quote_snapshot_data(snapshot),
+    )
+
+
+@router.post(
+    "/api/collections/{collection_id}/cloud-quote/refresh",
+    response_model=TranscribeResponse,
+)
+async def refresh_collection_cloud_quote(
+    collection_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    _backfill_testable_single_user_owner(get_collection_service(), user_info)
+    service = get_collection_transcription_service()
+    _require_collection_owner(service, collection_id, user_info)
+    try:
+        result = service.refresh_collection_cloud_quotes(
+            collection_id, owner_user_id=user_info.get("user_id") or ""
+        )
+    except CloudQuoteConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        _raise_collection_transcription_value_error(exc)
+    return TranscribeResponse(
+        code=200,
+        message="系列云端报价已刷新",
+        data={
+            "snapshot": (
+                _cloud_quote_snapshot_data(result.snapshot)
+                if result.snapshot is not None
+                else None
+            ),
+            "failures": list(result.failures),
+        },
+    )
+
+
+@router.post(
+    "/api/collections/{collection_id}/cloud-confirm",
+    response_model=TranscribeResponse,
+    status_code=202,
+)
+async def confirm_collection_cloud_quote(
+    collection_id: str,
+    body: CollectionCloudQuoteConfirmRequest,
+    user_info: dict = Depends(verify_token),
+):
+    _backfill_testable_single_user_owner(get_collection_service(), user_info)
+    service = get_collection_transcription_service()
+    _require_collection_owner(service, collection_id, user_info)
+    try:
+        dispatcher = get_cloud_asr_dispatcher()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    accepted_total = _parse_quote_amount(body.accepted_total_cny)
+    confirmations = tuple(
+        CloudQuoteConfirmation(
+            task_id=item.task_id,
+            token=item.quote_token,
+            accepted_max_cost=_parse_quote_amount(item.accepted_max_cost_cny),
+        )
+        for item in body.confirmations
+    )
+    try:
+        result = service.confirm_collection_cloud_quotes(
+            collection_id,
+            owner_user_id=user_info.get("user_id") or "",
+            transcription_revision=body.transcription_revision,
+            confirmations=confirmations,
+            accepted_total=accepted_total,
+            cloud_dispatcher=dispatcher,
+        )
+    except CloudQuoteConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        _raise_collection_transcription_value_error(exc)
+    return TranscribeResponse(
+        code=202,
+        message=(
+            "系列云端转录确认已受理"
+            if result.status == "confirmed"
+            else "系列云端转录确认已受理（重复请求）"
+        ),
+        data={"status": result.status, "task_ids": list(result.task_ids)},
+    )
+
+
+@router.post(
+    "/api/collections/{collection_id}/continue",
+    response_model=TranscribeResponse,
+    status_code=202,
+)
+async def continue_collection_processing(
+    collection_id: str,
+    body: ContinueCollectionTranscriptionRequest,
+    background_tasks: BackgroundTasks,
+    user_info: dict = Depends(verify_token),
+):
+    try:
+        validate_transcription_selection(
+            body.transcription_strategy, body.transcription_concurrency
+        )
+    except ValueError as exc:
+        _raise_collection_transcription_value_error(exc)
+
+    _backfill_testable_single_user_owner(get_collection_service(), user_info)
+    service = get_collection_transcription_service()
+    _require_collection_owner(service, collection_id, user_info)
+    try:
+        result = service.continue_collection(
+            collection_id,
+            owner_user_id=user_info.get("user_id") or "",
+            strategy=body.transcription_strategy,
+            requested_concurrency=body.transcription_concurrency,
+        )
+    except ValueError as exc:
+        _raise_collection_transcription_value_error(exc)
+
+    for launch in result.launches:
+        task = cache_manager.get_task_by_id(launch.task_id) or {}
+        background_tasks.add_task(
+            process_local_upload,
+            launch.task_id,
+            launch.file_path,
+            launch.original_name,
+            launch.display_url,
+            launch.media_id,
+            bool(task.get("use_speaker_recognition")),
+            True,
+            True,
+            transcription_strategy=launch.strategy,
+            cloud_confirmation_required=launch.strategy == "cloud",
+        )
+    return TranscribeResponse(
+        code=202,
+        message="已继续未完成的专题解析任务",
+        data={
+            "sources": list(result.sources),
+            "pending_count": len(result.launches),
+            "requested_concurrency": result.requested_concurrency,
+            "effective_concurrency": result.effective_concurrency,
+        },
     )
 
 
@@ -332,29 +904,50 @@ async def cancel_collection_processing(
     user_info: dict = Depends(verify_token),
 ):
     try:
-        service = get_collection_service()
+        _backfill_testable_single_user_owner(get_collection_service(), user_info)
+        service = get_collection_transcription_service()
         _require_collection_owner(service, collection_id, user_info)
-        result = service.cancel_collection_processing(collection_id)
+        result = service.stop_collection(
+            collection_id, owner_user_id=user_info.get("user_id") or ""
+        )
         return TranscribeResponse(
             code=200,
             message="已停止未完成的专题解析任务",
-            data=result,
+            data={
+                "collection": result.collection,
+                "stopped_count": result.stopped_count,
+                "canceled_count": result.stopped_count,
+                "in_flight_count": result.in_flight_count,
+            },
         )
     except ValueError as exc:
-        status_code = 404 if "not found" in str(exc) else 400
-        raise HTTPException(status_code=status_code, detail=str(exc))
+        _raise_collection_transcription_value_error(exc)
 
 
 @router.post("/api/collections/{collection_id}/summary", response_model=TranscribeResponse)
 async def generate_collection_summary(
     collection_id: str,
+    background_tasks: BackgroundTasks,
     user_info: dict = Depends(verify_token),
 ):
+    """Start full-series interpretation generation.
+
+    Generation runs in a background task so leaving the page does not cancel work.
+    Clients should poll GET /api/collections/{id} until summary_status is success/failed.
+    """
     try:
         service = get_collection_service()
         _require_collection_owner(service, collection_id, user_info)
-        detail = await run_in_threadpool(service.generate_summary, collection_id)
-        return TranscribeResponse(code=200, message="全系列解读已生成", data=detail)
+        detail = await run_in_threadpool(service.begin_summary_generation, collection_id)
+        should_enqueue = bool(detail.pop("summary_enqueue", False))
+        if should_enqueue:
+            background_tasks.add_task(service.generate_summary_job, collection_id)
+        message = (
+            "全系列解读生成中"
+            if (detail.get("summary_status") or "").strip() == "processing"
+            else "全系列解读状态已更新"
+        )
+        return TranscribeResponse(code=200, message=message, data=detail)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -521,9 +1114,33 @@ async def _save_upload_file(file: UploadFile, filename: str) -> tuple[str, int, 
                 out.write(chunk)
     except HTTPException:
         raise
-    except Exception as exc:
+    except OSError as exc:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+        # errno 28: ENOSPC — disk full while writing large video batches.
+        if getattr(exc, "errno", None) == 28 or "No space left on device" in str(exc):
+            logger.error("save collection upload failed: disk full ({})", exc)
+            raise HTTPException(
+                status_code=507,
+                detail=(
+                    "磁盘空间不足，无法保存上传文件。"
+                    "请清理 data/source_files 或系统磁盘后，"
+                    "在该专题上使用「追加文件夹」重新导入。"
+                ),
+            ) from exc
         logger.exception(f"save collection upload failed: {exc}")
-        raise HTTPException(status_code=500, detail="保存上传文件失败")
+        raise HTTPException(status_code=500, detail=f"保存上传文件失败：{exc}") from exc
+    except Exception as exc:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+        logger.exception(f"save collection upload failed: {exc}")
+        raise HTTPException(status_code=500, detail="保存上传文件失败") from exc
 
     if size == 0:
         if os.path.exists(temp_path):
@@ -549,20 +1166,94 @@ def _source_position_from_filename(filename: str) -> Optional[int]:
     return value if value > 0 else None
 
 
-def _stable_upload_path(temp_path: str, media_id: str, filename: str) -> str:
+def _stable_upload_path(
+    temp_path: str,
+    media_id: str,
+    filename: str,
+    *,
+    created_paths: Optional[set[str]] = None,
+) -> str:
+    """Persist multipart upload so open-source / re-parse keep working.
+
+    Path-based import never uses this helper — it references the user's original
+    file and avoids a second library copy. Multipart browser uploads have no
+    absolute path, so a durable managed copy is required for product UX.
+    """
     ext = os.path.splitext(filename)[1][:10] or ".bin"
     upload_dir = _source_files_dir()
     upload_dir.mkdir(parents=True, exist_ok=True)
-    stable_path = str(upload_dir / f"{media_id}{ext}")
+    stable_path = str(upload_dir / f"{media_id}-{uuid.uuid4().hex}{ext}")
     if os.path.abspath(temp_path) == os.path.abspath(stable_path):
         return stable_path
-    if os.path.exists(stable_path):
-        os.remove(stable_path)
     os.replace(temp_path, stable_path)
+    if created_paths is not None:
+        created_paths.add(os.path.abspath(stable_path))
     return stable_path
+
+
+def _remove_created_source_files(created_paths: set[str]) -> None:
+    for file_path in sorted(created_paths):
+        if not os.path.isfile(file_path):
+            continue
+        try:
+            os.remove(file_path)
+        except OSError as exc:
+            logger.warning(
+                "Failed to remove request-owned collection source file: {} ({})",
+                file_path,
+                exc,
+            )
+
+
+def _cleanup_unreferenced_candidate_files(
+    *,
+    candidates,
+    sources,
+    launches,
+    created_paths: set[str],
+) -> None:
+    referenced_paths = {
+        os.path.abspath(launch.file_path) for launch in launches
+    }
+    for source in sources:
+        task = cache_manager.get_task_by_id(source["task_id"]) or {}
+        saved_path = task.get("source_file_path")
+        if saved_path:
+            referenced_paths.add(os.path.abspath(str(saved_path)))
+            continue
+        media_id = task.get("media_id")
+        if not media_id:
+            continue
+        ext = os.path.splitext(source.get("title") or "")[1][:10] or ".bin"
+        referenced_paths.add(
+            os.path.abspath(str(_source_files_dir() / f"{media_id}{ext}"))
+        )
+
+    candidate_paths = {
+        os.path.abspath(str(candidate["file_path"])) for candidate in candidates
+    }
+    unreferenced_paths = (created_paths & candidate_paths) - referenced_paths
+    for file_path in sorted(unreferenced_paths):
+        if not os.path.isfile(file_path):
+            continue
+        try:
+            os.remove(file_path)
+        except OSError as exc:
+            logger.warning(
+                "Failed to remove unreferenced collection source file: {} ({})",
+                file_path,
+                exc,
+            )
 
 
 def _source_files_dir() -> Path:
     storage_cfg = config.get("storage", {}) or {}
     source_dir = storage_cfg.get("source_files_dir") or "./data/source_files/collection_uploads"
     return Path(source_dir)
+
+
+def _ephemeral_collection_staging_dir() -> Path:
+    """Temp staging for multipart uploads (deleted after each task finishes)."""
+    storage_cfg = config.get("storage", {}) or {}
+    temp_dir = Path(storage_cfg.get("temp_dir") or "./data/temp")
+    return temp_dir / "collection_staging"

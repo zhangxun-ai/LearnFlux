@@ -65,6 +65,23 @@
             transition: background 0.3s ease;
         }
 
+
+        .page-eyebrow {
+            font-size: 0.85rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--accent-primary, #E4503A);
+            margin-bottom: 8px;
+            margin-top: 0;
+        }
+
+        .page-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin: 12px 0 0 0;
+            line-height: 1.5;
+        }
         .header {
             background: var(--bg-primary);
             color: var(--text-primary);
@@ -331,7 +348,24 @@
                 margin: 16px 10px 28px;
             }
 
-            .header {
+    
+        .page-eyebrow {
+            font-size: 0.85rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--accent-primary, #E4503A);
+            margin-bottom: 8px;
+            margin-top: 0;
+        }
+
+        .page-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin: 12px 0 0 0;
+            line-height: 1.5;
+        }
+        .header {
                 padding: 20px;
             }
 
@@ -1051,25 +1085,29 @@
 
         <section class="page-stage">
             <div class="container">
+                {% block page_header %}
                 <div class="header">
+                    {% block eyebrow %}{% endblock %}
                     <h1>{{ title or "LearnFlux" }}</h1>
-            {% if author or url or created_at_display or created_at %}
-                <div class="meta">
-                    {% if author %}<span>作者：{{ author }}</span>{% endif %}
-                    {% if source_link_url %}
-                        <span><a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }} ↗</a></span>
-                    {% endif %}
-                    {% if source_reveal_url %}
-                        <span><button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button></span>
-                    {% endif %}
-                    {% if created_at_display %}
-                        <span>创建：{{ created_at_display }}</span>
-                    {% elif created_at %}
-                        <span>创建：{{ created_at }}</span>
+                    {% block subtitle %}{% endblock %}
+                    {% if author or url or created_at_display or created_at %}
+                    <div class="meta">
+                        {% if author %}<span>作者：{{ author }}</span>{% endif %}
+                        {% if source_link_url %}
+                            <span><a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label or "查看原视频" }} ↗</a></span>
+                        {% endif %}
+                        {% if source_reveal_url %}
+                            <span><button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button></span>
+                        {% endif %}
+                        {% if created_at_display %}
+                            <span>创建：{{ created_at_display }}</span>
+                        {% elif created_at %}
+                            <span>创建：{{ created_at }}</span>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 </div>
-                {% endif %}
-                </div>
+                {% endblock %}
 
                 {% block content %}{% endblock %}
             </div>

@@ -8,6 +8,7 @@ import os
 import tempfile
 import threading
 import time
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -32,8 +33,16 @@ logger = setup_logger("transcriber")
 class CloudProviderError(RuntimeError):
     """A cloud orchestration error containing only a stable safe code."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        *,
+        provider_error_code: str | None = None,
+        provider_request_id: str | None = None,
+    ) -> None:
         self.code = code
+        self.provider_error_code = provider_error_code
+        self.provider_request_id = provider_request_id
         super().__init__(code)
 
 
@@ -57,6 +66,8 @@ class LeaseHeartbeat:
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._lost = threading.Event()
+        self._refresh_lock = threading.Lock()
+        self._last_refresh_at: datetime | None = None
         self._thread = threading.Thread(
             target=self._run,
             name="aliyun-asr-lease-heartbeat",
@@ -70,24 +81,55 @@ class LeaseHeartbeat:
     def _run(self) -> None:
         try:
             while not self._stop.is_set():
-                if not self._repository.heartbeat_lease(
-                    self._event_id,
-                    self._lease_owner,
-                    now=self._clock(),
-                ):
+                if not self._refresh_or_reclaim():
                     self._lost.set()
                     return
                 self._ready.set()
                 if self._stop.wait(self._interval_seconds):
                     return
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Cloud ASR lease heartbeat failed: {}",
+                type(exc).__name__,
+            )
             self._lost.set()
         finally:
             self._ready.set()
 
+    def _refresh_or_reclaim(self) -> bool:
+        with self._refresh_lock:
+            now = self._clock()
+            refreshed = self._repository.heartbeat_lease(
+                self._event_id,
+                self._lease_owner,
+                now=now,
+            )
+            if not refreshed:
+                reclaim = getattr(self._repository, "reclaim_lease", None)
+                refreshed = bool(
+                    callable(reclaim)
+                    and reclaim(
+                        self._event_id,
+                        self._lease_owner,
+                        now=now,
+                    )
+                )
+            if refreshed:
+                self._last_refresh_at = now
+            return refreshed
+
     def ensure_owned(self) -> None:
         if self._lost.is_set():
             raise CloudProviderError("lease_lost")
+        now = self._clock()
+        last_refresh = self._last_refresh_at
+        if (
+            last_refresh is None
+            or (now - last_refresh).total_seconds() >= self._interval_seconds
+        ):
+            if not self._refresh_or_reclaim():
+                self._lost.set()
+                raise CloudProviderError("lease_lost")
 
     def stop(self) -> None:
         self._stop.set()
@@ -113,6 +155,7 @@ class AliyunFunASRProvider:
         heartbeat_interval_seconds: float = 20,
         attempt_reserver: Callable[[NewASRAttempt], UsageEvent],
         prepared_media_cleanup: Callable[[PreparedASRMedia], None],
+        submission_guard: Any | None = None,
         capacity_transfer_callback: Callable[[UsageEvent], None] | None = None,
         attempt_state_callback: Callable[[str], None] | None = None,
     ) -> None:
@@ -127,6 +170,7 @@ class AliyunFunASRProvider:
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
         self.attempt_reserver = attempt_reserver
         self.prepared_media_cleanup = prepared_media_cleanup
+        self.submission_guard = submission_guard
         self.capacity_transfer_callback = capacity_transfer_callback
         self.attempt_state_callback = attempt_state_callback
 
@@ -145,12 +189,14 @@ class AliyunFunASRProvider:
             raise CloudProviderError("prepared_media_required")
         del audio_path
 
-        estimated_cost = self.settings.reserve_estimate(
-            prepared.duration_seconds
-        )
         accepted_max_cost = context.accepted_max_cost
         if accepted_max_cost is None:
             accepted_max_cost = self.settings.accepted_max_cost
+        estimated_cost = self.settings.estimated_cost(prepared.duration_seconds)
+        if accepted_max_cost is None:
+            estimated_cost = self.settings.reserve_estimate(
+                prepared.duration_seconds
+            )
         if (
             accepted_max_cost is not None
             and estimated_cost > accepted_max_cost
@@ -254,12 +300,18 @@ class AliyunFunASRProvider:
                 raise CloudProviderError("local_preflight_failed") from None
             heartbeat.ensure_owned()
             try:
-                with self.snapshotter.open_for_upload(snapshot) as upload_handle:
+                guard = (
+                    self.submission_guard.hold()
+                    if self.submission_guard is not None
+                    else nullcontext()
+                )
+                with guard, self.snapshotter.open_for_upload(snapshot) as upload_handle:
                     try:
                         staged_uri = client.upload_audio(
                             upload_handle.file, snapshot.path.name
                         )
                     except AliyunASRError:
+                        heartbeat.ensure_owned()
                         self._record_failure(
                             event.id, lease_owner, "upload_failed"
                         )
@@ -377,8 +429,18 @@ class AliyunFunASRProvider:
                     raise CloudProviderError("lease_lost") from None
                 raise CloudProviderError("result_expired") from None
             if exc.code == "provider_failed":
-                self._record_failure(event_id, lease_owner, "provider_failed")
-                raise CloudProviderError("provider_failed") from None
+                self._record_failure(
+                    event_id,
+                    lease_owner,
+                    "provider_failed",
+                    provider_error_code=exc.provider_error_code,
+                    provider_request_id=exc.provider_request_id,
+                )
+                raise CloudProviderError(
+                    "provider_failed",
+                    provider_error_code=exc.provider_error_code,
+                    provider_request_id=exc.provider_request_id,
+                ) from None
             if not self.repository.mark_polling_unknown(
                 event_id,
                 lease_owner,
@@ -480,13 +542,21 @@ class AliyunFunASRProvider:
         )
 
     def _record_failure(
-        self, event_id: str, lease_owner: str, error_code: str
+        self,
+        event_id: str,
+        lease_owner: str,
+        error_code: str,
+        *,
+        provider_error_code: str | None = None,
+        provider_request_id: str | None = None,
     ) -> None:
         self.repository.record_remote_failure(
             event_id,
             lease_owner,
             now=self.clock(),
             error_code=error_code,
+            provider_error_code=provider_error_code,
+            provider_request_id=provider_request_id,
         )
 
     def _finalize_attempt(self, event_id: str, snapshot: Any) -> None:

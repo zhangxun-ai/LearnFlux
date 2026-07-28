@@ -1,13 +1,16 @@
 import datetime
 import json
 import sqlite3
-import threading
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ..transcriber.control_database import SQLiteControlDatabase
 from ..utils.logging import setup_logger
+from ..utils.task_progress import build_progress
+from ..utils.task_status import TaskStatus
+from .identity import normalize_collection_identity_field
 
 logger = setup_logger("learning_collections")
 
@@ -18,46 +21,88 @@ SOURCE_TYPES_BY_COLLECTION = {
 }
 
 
-class LearningCollectionRepository:
-    """SQLite repository for topic-level learning collections."""
+class _ConnectionCursor:
+    """Cursor-shaped facade for control database connection adapters."""
 
-    def __init__(self, db_path: str):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._local = threading.local()
+    def __init__(self, connection: object):
+        self.connection = connection
+        self._result = None
+
+    def execute(self, statement: str, parameters=()):
+        self._result = self.connection.execute(statement, parameters)
+        return self
+
+    @property
+    def rowcount(self) -> int:
+        return int(getattr(self._result, "rowcount", 0))
+
+    def fetchone(self):
+        return self._result.fetchone()
+
+    def fetchall(self):
+        return self._result.fetchall()
+
+
+def _row_value(row: object, key: str, index: int):
+    try:
+        return row[key]
+    except (KeyError, TypeError, IndexError):
+        return row[index]
+
+
+def _read_legacy_rows(
+    connection: sqlite3.Connection, table_name: str
+) -> List[Dict[str, Any]]:
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    if not exists:
+        return []
+    return [dict(row) for row in connection.execute(f"SELECT * FROM {table_name}")]
+
+
+class LearningCollectionRepository:
+    """Repository for topic-level learning collections."""
+
+    def __init__(self, db_path: str | Path | object):
+        if hasattr(db_path, "connect") and hasattr(db_path, "transaction"):
+            self.database = db_path
+            raw_path = getattr(db_path, "path", None)
+            self.db_path = Path(raw_path) if raw_path else None
+            self._owns_database = False
+        else:
+            self.database = SQLiteControlDatabase(db_path)
+            self.db_path = Path(db_path)
+            self._owns_database = True
         self._init_database()
 
-    def _get_connection(self) -> sqlite3.Connection:
-        if not hasattr(self._local, "connection"):
-            self._local.connection = sqlite3.connect(str(self.db_path))
-            self._local.connection.row_factory = sqlite3.Row
-            try:
-                self._local.connection.execute("PRAGMA journal_mode=WAL")
-            except sqlite3.OperationalError:
-                logger.warning("WAL mode not supported for learning collections")
-        return self._local.connection
-
     @contextmanager
-    def _get_cursor(self):
-        conn = self._get_connection()
-        cursor = conn.cursor()
+    def _get_cursor(self, *, write: bool = False):
+        if write:
+            with self.database.transaction() as connection:
+                yield _ConnectionCursor(connection)
+            return
+
+        connection = self.database.connect()
         try:
-            yield cursor
-            conn.commit()
+            yield _ConnectionCursor(connection)
         except Exception:
-            conn.rollback()
+            if connection.in_transaction:
+                connection.rollback()
             raise
+        else:
+            if connection.in_transaction:
+                connection.commit()
         finally:
-            cursor.close()
+            connection.close()
 
     def close(self):
-        conn = getattr(self._local, "connection", None)
-        if conn is not None:
-            conn.close()
-            del self._local.connection
+        if self._owns_database:
+            self.database.close()
 
     def _init_database(self):
-        with self._get_cursor() as cursor:
+        with self._get_cursor(write=True) as cursor:
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS learning_collections (
@@ -74,6 +119,9 @@ class LearningCollectionRepository:
                     status TEXT NOT NULL DEFAULT 'draft',
                     summary_status TEXT NOT NULL DEFAULT 'not_started',
                     summary_markdown TEXT,
+                    transcription_strategy TEXT NOT NULL DEFAULT 'local',
+                    transcription_concurrency INTEGER NOT NULL DEFAULT 1,
+                    transcription_revision INTEGER NOT NULL DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -88,6 +136,7 @@ class LearningCollectionRepository:
                     view_token TEXT NOT NULL,
                     title TEXT NOT NULL,
                     source_type TEXT NOT NULL,
+                    content_sha256 TEXT,
                     position INTEGER NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (collection_id) REFERENCES learning_collections(id)
@@ -127,9 +176,8 @@ class LearningCollectionRepository:
         self._migrate_database()
 
     def _migrate_database(self):
-        with self._get_cursor() as cursor:
-            cursor.execute("PRAGMA table_info(learning_collections)")
-            columns = {row[1] for row in cursor.fetchall()}
+        with self._get_cursor(write=True) as cursor:
+            columns = self._table_columns(cursor, "learning_collections")
             migrations = [
                 ("creator_name", "TEXT NOT NULL DEFAULT ''"),
                 ("description", "TEXT NOT NULL DEFAULT ''"),
@@ -137,12 +185,190 @@ class LearningCollectionRepository:
                 ("tags", "TEXT NOT NULL DEFAULT ''"),
                 ("exported_at", "TIMESTAMP"),
                 ("owner_user_id", "TEXT"),
+                ("transcription_strategy", "TEXT NOT NULL DEFAULT 'local'"),
+                ("transcription_concurrency", "INTEGER NOT NULL DEFAULT 1"),
+                ("transcription_revision", "INTEGER NOT NULL DEFAULT 0"),
             ]
             for name, definition in migrations:
                 if name not in columns:
                     cursor.execute(
                         f"ALTER TABLE learning_collections ADD COLUMN {name} {definition}"
                     )
+            source_columns = self._table_columns(
+                cursor, "learning_collection_sources"
+            )
+            if "content_sha256" not in source_columns:
+                cursor.execute(
+                    "ALTER TABLE learning_collection_sources "
+                    "ADD COLUMN content_sha256 TEXT"
+                )
+            cursor.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                    uq_learning_sources_collection_content_sha256
+                ON learning_collection_sources(collection_id, content_sha256)
+                WHERE content_sha256 IS NOT NULL
+                """
+            )
+            # Hard uniqueness: one collection per owner + creator + title.
+            # IFNULL keeps legacy NULL owners in the same identity space as ''.
+            cursor.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                    uq_learning_collections_owner_creator_title
+                ON learning_collections(
+                    IFNULL(owner_user_id, ''),
+                    creator_name,
+                    title
+                )
+                """
+            )
+
+    def _table_columns(self, cursor, table_name: str) -> set[str]:
+        if getattr(self.database, "dialect", "sqlite") == "postgres":
+            cursor.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = current_schema() AND table_name = ?
+                """,
+                (table_name,),
+            )
+            return {_row_value(row, "column_name", 0) for row in cursor.fetchall()}
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        return {_row_value(row, "name", 1) for row in cursor.fetchall()}
+
+    def import_legacy_sqlite_if_target_empty(
+        self, legacy_db_path: str | Path
+    ) -> Dict[str, Any]:
+        """Copy legacy collection rows into an empty PostgreSQL authority.
+
+        The import is intentionally additive and refuses to merge into a target
+        that already contains collections.
+        """
+        if getattr(self.database, "dialect", "sqlite") != "postgres":
+            return {"status": "skipped_non_postgres"}
+
+        legacy_path = Path(legacy_db_path)
+        if not legacy_path.exists():
+            return {"status": "skipped_no_legacy_database"}
+
+        legacy_connection = sqlite3.connect(str(legacy_path))
+        legacy_connection.row_factory = sqlite3.Row
+        try:
+            collections = _read_legacy_rows(
+                legacy_connection, "learning_collections"
+            )
+            if not collections:
+                return {"status": "skipped_no_legacy_collections"}
+            sources = _read_legacy_rows(
+                legacy_connection, "learning_collection_sources"
+            )
+            knowledge_maps = _read_legacy_rows(
+                legacy_connection, "learning_collection_knowledge_maps"
+            )
+        finally:
+            legacy_connection.close()
+
+        now = datetime.datetime.utcnow().isoformat()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute("SELECT COUNT(*) AS count FROM learning_collections")
+            target_count = int(_row_value(cursor.fetchone(), "count", 0))
+            if target_count:
+                return {
+                    "status": "refused_target_not_empty",
+                    "target_collections": target_count,
+                }
+
+            collection_ids = {row["id"] for row in collections}
+            imported_sources = [
+                row for row in sources if row.get("collection_id") in collection_ids
+            ]
+            imported_maps = [
+                row
+                for row in knowledge_maps
+                if row.get("collection_id") in collection_ids
+            ]
+            for row in collections:
+                cursor.execute(
+                    """
+                    INSERT INTO learning_collections (
+                        id, owner_user_id, title, creator_name, collection_type,
+                        goal, description, import_method, tags, exported_at,
+                        status, summary_status, summary_markdown,
+                        transcription_strategy, transcription_concurrency,
+                        transcription_revision, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"],
+                        row.get("owner_user_id"),
+                        row.get("title") or "",
+                        row.get("creator_name") or "",
+                        row.get("collection_type") or "video_course",
+                        row.get("goal") or "",
+                        row.get("description") or "",
+                        row.get("import_method") or "",
+                        row.get("tags") or "",
+                        row.get("exported_at"),
+                        row.get("status") or "draft",
+                        row.get("summary_status") or "not_started",
+                        row.get("summary_markdown"),
+                        row.get("transcription_strategy") or "local",
+                        int(row.get("transcription_concurrency") or 1),
+                        int(row.get("transcription_revision") or 0),
+                        row.get("created_at") or now,
+                        row.get("updated_at") or now,
+                    ),
+                )
+            for row in imported_sources:
+                cursor.execute(
+                    """
+                    INSERT INTO learning_collection_sources (
+                        id, collection_id, task_id, view_token, title,
+                        source_type, content_sha256, position, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"],
+                        row["collection_id"],
+                        row.get("task_id") or "",
+                        row.get("view_token") or "",
+                        row.get("title") or "",
+                        row.get("source_type") or "video",
+                        row.get("content_sha256"),
+                        int(row.get("position") or 1),
+                        row.get("created_at") or now,
+                    ),
+                )
+            for row in imported_maps:
+                cursor.execute(
+                    """
+                    INSERT INTO learning_collection_knowledge_maps (
+                        id, collection_id, scope, source_id, status, map_json,
+                        model, error_message, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"],
+                        row["collection_id"],
+                        row.get("scope") or "collection",
+                        row.get("source_id") or "",
+                        row.get("status") or "success",
+                        row.get("map_json") or "{}",
+                        row.get("model") or "",
+                        row.get("error_message") or "",
+                        row.get("created_at") or now,
+                        row.get("updated_at") or now,
+                    ),
+                )
+
+        return {
+            "status": "imported",
+            "collections": len(collections),
+            "sources": len(imported_sources),
+            "knowledge_maps": len(imported_maps),
+        }
 
     def create_collection(
         self,
@@ -154,9 +380,11 @@ class LearningCollectionRepository:
         import_method: str = "",
         tags: str = "",
         owner_user_id: str = "",
+        transcription_strategy: str = "local",
+        transcription_concurrency: int = 1,
     ) -> Dict[str, Any]:
-        title = (title or "").strip()
-        creator_name = (creator_name or "").strip()
+        title = normalize_collection_identity_field(title)
+        creator_name = normalize_collection_identity_field(creator_name)
         collection_type = (collection_type or "").strip()
         goal = (goal or "").strip()
         description = (description or "").strip()
@@ -171,27 +399,116 @@ class LearningCollectionRepository:
         if collection_type not in COLLECTION_TYPES:
             raise ValueError("collection_type must be video_course or document_topic")
 
+        # Race-safe reuse under the unique identity index.
+        existing = self.find_collection_by_identity(
+            creator_name=creator_name,
+            title=title,
+            owner_user_id=owner_user_id,
+        )
+        if existing:
+            detail = self.get_collection_detail(existing["id"])
+            detail["created"] = False
+            detail["reused"] = True
+            return detail
+
         collection_id = uuid.uuid4().hex
-        with self._get_cursor() as cursor:
+        try:
+            with self._get_cursor(write=True) as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO learning_collections
+                    (id, owner_user_id, title, creator_name, collection_type, goal,
+                     description, import_method, tags, transcription_strategy,
+                     transcription_concurrency)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        collection_id,
+                        owner_user_id or None,
+                        title,
+                        creator_name,
+                        collection_type,
+                        goal,
+                        description,
+                        import_method,
+                        tags,
+                        transcription_strategy,
+                        transcription_concurrency,
+                    ),
+                )
+        except Exception as exc:
+            # Concurrent create of the same identity: return the winner.
+            message = str(exc).lower()
+            if "unique" in message or "uq_learning_collections_owner_creator_title" in message:
+                existing = self.find_collection_by_identity(
+                    creator_name=creator_name,
+                    title=title,
+                    owner_user_id=owner_user_id,
+                )
+                if existing:
+                    detail = self.get_collection_detail(existing["id"])
+                    detail["created"] = False
+                    detail["reused"] = True
+                    return detail
+            raise
+        detail = self.get_collection_detail(collection_id)
+        detail["created"] = True
+        detail["reused"] = False
+        return detail
+
+    def update_transcription_preferences(
+        self,
+        collection_id: str,
+        *,
+        strategy: str,
+        requested_concurrency: int,
+    ) -> Dict[str, Any]:
+        with self._get_cursor(write=True) as cursor:
             cursor.execute(
                 """
-                INSERT INTO learning_collections
-                (id, owner_user_id, title, creator_name, collection_type, goal, description, import_method, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                UPDATE learning_collections
+                SET transcription_strategy = ?,
+                    transcription_concurrency = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
                 """,
-                (
-                    collection_id,
-                    owner_user_id or None,
-                    title,
-                    creator_name,
-                    collection_type,
-                    goal,
-                    description,
-                    import_method,
-                    tags,
-                ),
+                (strategy, requested_concurrency, collection_id),
             )
+            if cursor.rowcount == 0:
+                raise ValueError("collection not found")
         return self.get_collection_detail(collection_id)
+
+    def find_collection_by_identity(
+        self,
+        *,
+        creator_name: str,
+        title: str,
+        owner_user_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the newest collection with the same creator + title (and owner)."""
+        creator_name = normalize_collection_identity_field(creator_name)
+        title = normalize_collection_identity_field(title)
+        if not creator_name or not title:
+            return None
+        where = ["c.creator_name = ?", "c.title = ?"]
+        params: List[Any] = [creator_name, title]
+        if owner_user_id is not None:
+            where.append("IFNULL(c.owner_user_id, '') = ?")
+            params.append((owner_user_id or "").strip())
+        params.append(1)
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT c.*
+                FROM learning_collections c
+                WHERE {' AND '.join(where)}
+                ORDER BY c.created_at DESC
+                LIMIT ?
+                """,
+                tuple(params),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
     def list_collections(
         self,
@@ -252,7 +569,7 @@ class LearningCollectionRepository:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_filter_options(self, owner_user_id: Optional[str] = None) -> Dict[str, List[str]]:
+    def get_filter_options(self, owner_user_id: Optional[str] = None) -> Dict[str, Any]:
         owner_where = " AND owner_user_id = ?" if owner_user_id is not None else ""
         params = (owner_user_id.strip(),) if owner_user_id is not None else ()
         with self._get_cursor() as cursor:
@@ -276,10 +593,31 @@ class LearningCollectionRepository:
                 params,
             )
             titles = [row["title"] for row in cursor.fetchall()]
-        return {"creator_names": creator_names, "titles": titles}
+            cursor.execute(
+                f"""
+                SELECT creator_name, title
+                FROM learning_collections
+                WHERE TRIM(creator_name) != ''
+                  AND TRIM(title) != ''{owner_where}
+                ORDER BY creator_name ASC, title ASC
+                """,
+                params,
+            )
+            titles_by_creator: Dict[str, List[str]] = {}
+            for row in cursor.fetchall():
+                creator = row["creator_name"]
+                title = row["title"]
+                bucket = titles_by_creator.setdefault(creator, [])
+                if title not in bucket:
+                    bucket.append(title)
+        return {
+            "creator_names": creator_names,
+            "titles": titles,
+            "titles_by_creator": titles_by_creator,
+        }
 
     def assign_unowned_collections(self, owner_user_id: str) -> int:
-        with self._get_cursor() as cursor:
+        with self._get_cursor(write=True) as cursor:
             cursor.execute(
                 """
                 UPDATE learning_collections
@@ -307,6 +645,7 @@ class LearningCollectionRepository:
         title: str,
         source_type: str,
         position: Optional[int] = None,
+        content_sha256: Optional[str] = None,
     ) -> Dict[str, Any]:
         collection = self.get_collection(collection_id)
         if not collection:
@@ -318,11 +657,18 @@ class LearningCollectionRepository:
                 f"{collection['collection_type']} collection only accepts {sorted(allowed)}"
             )
 
-        if position is None:
-            position = self._next_source_position(collection_id)
-
         source_id = uuid.uuid4().hex
-        with self._get_cursor() as cursor:
+        with self._get_cursor(write=True) as cursor:
+            if position is None:
+                cursor.execute(
+                    """
+                    SELECT COALESCE(MAX(position), 0) + 1 AS next_position
+                    FROM learning_collection_sources
+                    WHERE collection_id = ?
+                    """,
+                    (collection_id,),
+                )
+                position = int(cursor.fetchone()["next_position"])
             if position is not None:
                 cursor.execute(
                     """
@@ -335,8 +681,9 @@ class LearningCollectionRepository:
             cursor.execute(
                 """
                 INSERT INTO learning_collection_sources
-                (id, collection_id, task_id, view_token, title, source_type, position)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (id, collection_id, task_id, view_token, title, source_type,
+                 content_sha256, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source_id,
@@ -345,6 +692,7 @@ class LearningCollectionRepository:
                     view_token,
                     title,
                     source_type,
+                    content_sha256,
                     int(position),
                 ),
             )
@@ -355,6 +703,7 @@ class LearningCollectionRepository:
                     summary_status = 'not_started',
                     summary_markdown = NULL,
                     exported_at = NULL,
+                    transcription_revision = transcription_revision + 1,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
@@ -369,13 +718,386 @@ class LearningCollectionRepository:
             )
         return self.get_source(source_id)
 
+    def get_source_by_content_hash(
+        self, collection_id: str, content_sha256: str
+    ) -> Optional[Dict[str, Any]]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT * FROM learning_collection_sources
+                WHERE collection_id = ? AND content_sha256 = ?
+                LIMIT 1
+                """,
+                (collection_id, content_sha256),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def register_source_batch(
+        self,
+        collection_id: str,
+        entries: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Register one upload batch and invalidate derived state atomically.
+
+        The collection revision advances once per committed insert or task
+        replacement. Conflicts keep the source currently stored unless the
+        caller supplied an exact source/task snapshot for a CAS replacement.
+        """
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                "SELECT * FROM learning_collections WHERE id = ?",
+                (collection_id,),
+            )
+            collection_row = cursor.fetchone()
+            if not collection_row:
+                raise ValueError("collection not found")
+            collection = dict(collection_row)
+            allowed = SOURCE_TYPES_BY_COLLECTION[collection["collection_type"]]
+            task_status_columns = self._table_columns(cursor, "task_status")
+            for entry in entries:
+                if entry["source_type"] not in allowed:
+                    raise ValueError(
+                        f"{collection['collection_type']} collection only accepts "
+                        f"{sorted(allowed)}"
+                    )
+
+            results: List[Dict[str, Any]] = []
+            replaced_source_ids: List[str] = []
+            change_count = 0
+            for entry in entries:
+                content_sha256 = str(entry["content_sha256"])
+                cursor.execute(
+                    """
+                    SELECT * FROM learning_collection_sources
+                    WHERE collection_id = ? AND content_sha256 = ?
+                    LIMIT 1
+                    """,
+                    (collection_id, content_sha256),
+                )
+                current_row = cursor.fetchone()
+                current = dict(current_row) if current_row else None
+
+                expected_source_id = entry.get("replace_source_id")
+                expected_task_id = entry.get("replace_task_id")
+                replace_source_id = None
+                replace_task_id = None
+                if (
+                    current
+                    and expected_source_id
+                    and expected_task_id
+                    and current["id"] == expected_source_id
+                    and current["task_id"] == expected_task_id
+                ):
+                    replace_source_id = expected_source_id
+                    replace_task_id = expected_task_id
+                elif current and entry.get("is_cache_alias"):
+                    current_status = self._task_status_for_registration(
+                        cursor,
+                        current["task_id"],
+                        columns=task_status_columns,
+                    )
+                    if current_status != TaskStatus.SUCCESS:
+                        replace_source_id = current["id"]
+                        replace_task_id = current["task_id"]
+
+                if replace_source_id and replace_task_id:
+                    cursor.execute(
+                        """
+                        UPDATE learning_collection_sources
+                        SET task_id = ?, view_token = ?
+                        WHERE id = ? AND task_id = ?
+                        """,
+                        (
+                            entry["task_id"],
+                            entry["view_token"],
+                            replace_source_id,
+                            replace_task_id,
+                        ),
+                    )
+                    if cursor.rowcount == 1:
+                        self._cancel_replaced_task_if_queued(
+                            cursor,
+                            replace_task_id,
+                            columns=task_status_columns,
+                        )
+                        cursor.execute(
+                            "SELECT * FROM learning_collection_sources WHERE id = ?",
+                            (replace_source_id,),
+                        )
+                        source = dict(cursor.fetchone())
+                        results.append(
+                            {
+                                "source": source,
+                                "outcome": "replaced",
+                                "previous_task_id": current["task_id"],
+                                "previous_view_token": current["view_token"],
+                            }
+                        )
+                        replaced_source_ids.append(source["id"])
+                        change_count += 1
+                        continue
+
+                if current:
+                    results.append({"source": current, "outcome": "existing"})
+                    continue
+
+                source_id = uuid.uuid4().hex
+                position = entry.get("position")
+                if position is None:
+                    cursor.execute(
+                        """
+                        SELECT COALESCE(MAX(position), 0) + 1 AS next_position
+                        FROM learning_collection_sources
+                        WHERE collection_id = ?
+                        """,
+                        (collection_id,),
+                    )
+                    position = int(cursor.fetchone()["next_position"])
+                position = int(position)
+                cursor.execute(
+                    """
+                    INSERT INTO learning_collection_sources
+                    (id, collection_id, task_id, view_token, title, source_type,
+                     content_sha256, position)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (
+                        source_id,
+                        collection_id,
+                        entry["task_id"],
+                        entry["view_token"],
+                        entry["title"],
+                        entry["source_type"],
+                        content_sha256,
+                        position,
+                    ),
+                )
+                if cursor.rowcount == 0:
+                    cursor.execute(
+                        """
+                        SELECT * FROM learning_collection_sources
+                        WHERE collection_id = ? AND content_sha256 = ?
+                        LIMIT 1
+                        """,
+                        (collection_id, content_sha256),
+                    )
+                    conflict_row = cursor.fetchone()
+                    if not conflict_row:
+                        raise RuntimeError(
+                            "collection_source_unique_conflict_without_row"
+                        )
+                    results.append(
+                        {"source": dict(conflict_row), "outcome": "existing"}
+                    )
+                    continue
+
+                cursor.execute(
+                    """
+                    UPDATE learning_collection_sources
+                    SET position = position + 1
+                    WHERE collection_id = ? AND id != ? AND position >= ?
+                    """,
+                    (collection_id, source_id, position),
+                )
+                cursor.execute(
+                    "SELECT * FROM learning_collection_sources WHERE id = ?",
+                    (source_id,),
+                )
+                results.append(
+                    {"source": dict(cursor.fetchone()), "outcome": "inserted"}
+                )
+                change_count += 1
+
+            if change_count:
+                cursor.execute(
+                    """
+                    UPDATE learning_collections
+                    SET status = 'processing',
+                        summary_status = 'not_started',
+                        summary_markdown = NULL,
+                        exported_at = NULL,
+                        transcription_revision = transcription_revision + ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (change_count, collection_id),
+                )
+                cursor.execute(
+                    """
+                    DELETE FROM learning_collection_knowledge_maps
+                    WHERE collection_id = ? AND scope = 'collection'
+                    """,
+                    (collection_id,),
+                )
+                for source_id in replaced_source_ids:
+                    cursor.execute(
+                        """
+                        DELETE FROM learning_collection_knowledge_maps
+                        WHERE collection_id = ? AND scope = 'source'
+                          AND source_id = ?
+                        """,
+                        (collection_id, source_id),
+                    )
+            for result in results:
+                cursor.execute(
+                    "SELECT * FROM learning_collection_sources WHERE id = ?",
+                    (result["source"]["id"],),
+                )
+                result["source"] = dict(cursor.fetchone())
+            return results
+
+    @staticmethod
+    def _task_status_for_registration(
+        cursor: _ConnectionCursor,
+        task_id: str,
+        *,
+        columns: set[str],
+    ) -> Optional[str]:
+        """Read the current source task status from the shared control DB."""
+        if "status" not in columns:
+            raise RuntimeError("task_status_schema_missing")
+        cursor.execute(
+            "SELECT status FROM task_status WHERE task_id = ?",
+            (task_id,),
+        )
+        row = cursor.fetchone()
+        return str(_row_value(row, "status", 0)) if row else None
+
+    @staticmethod
+    def _cancel_replaced_task_if_queued(
+        cursor: _ConnectionCursor,
+        task_id: str,
+        *,
+        columns: set[str],
+    ) -> None:
+        """Cancel a replaced queued task inside the source CAS transaction."""
+        if not columns:
+            raise RuntimeError("task_status_schema_missing")
+        required = {
+            "status",
+            "error_message",
+            "progress_json",
+            "completed_at",
+        }
+        if not required.issubset(columns):
+            missing = sorted(required - columns)
+            raise RuntimeError(
+                "task_status_schema_incompatible:" + ",".join(missing)
+            )
+        if not {"updated_at", "last_heartbeat_at"}.intersection(columns):
+            raise RuntimeError("task_status_schema_incompatible:timestamp")
+
+        cursor.execute(
+            "SELECT status FROM task_status WHERE task_id = ?",
+            (task_id,),
+        )
+        row = cursor.fetchone()
+        if not row or _row_value(row, "status", 0) != TaskStatus.QUEUED:
+            return
+
+        timestamp_column = None
+        if "updated_at" in columns:
+            timestamp_column = "updated_at"
+        elif "last_heartbeat_at" in columns:
+            timestamp_column = "last_heartbeat_at"
+        timestamp_assignment = f", {timestamp_column} = CURRENT_TIMESTAMP"
+        error_message = "被同内容成功缓存替代"
+        progress = build_progress(
+            stage="canceled",
+            stage_label="任务已取消",
+            basis="task_canceled",
+            confidence="high",
+            message=error_message,
+        )
+        cursor.execute(
+            f"""
+            UPDATE task_status
+            SET status = ?, error_message = ?, progress_json = ?,
+                completed_at = CURRENT_TIMESTAMP{timestamp_assignment}
+            WHERE task_id = ? AND status = ?
+            """,
+            (
+                TaskStatus.CANCELED,
+                error_message,
+                json.dumps(progress, ensure_ascii=False),
+                task_id,
+                TaskStatus.QUEUED,
+            ),
+        )
+        if cursor.rowcount == 1:
+            return
+
+        cursor.execute(
+            "SELECT status FROM task_status WHERE task_id = ?",
+            (task_id,),
+        )
+        current = cursor.fetchone()
+        if current and _row_value(current, "status", 0) == TaskStatus.QUEUED:
+            raise RuntimeError("queued_task_cancel_not_applied")
+
+    def replace_source_task_if_current(
+        self,
+        source_id: str,
+        *,
+        expected_task_id: str,
+        task_id: str,
+        view_token: str,
+    ) -> bool:
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                SELECT collection_id
+                FROM learning_collection_sources
+                WHERE id = ?
+                """,
+                (source_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+            collection_id = row["collection_id"]
+            cursor.execute(
+                """
+                UPDATE learning_collection_sources
+                SET task_id = ?, view_token = ?
+                WHERE id = ? AND task_id = ?
+                """,
+                (task_id, view_token, source_id, expected_task_id),
+            )
+            if cursor.rowcount == 0:
+                return False
+            cursor.execute(
+                """
+                UPDATE learning_collections
+                SET transcription_revision = transcription_revision + 1,
+                    status = 'processing',
+                    summary_status = 'not_started',
+                    summary_markdown = NULL,
+                    exported_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_knowledge_maps
+                WHERE collection_id = ?
+                  AND (scope = 'collection' OR (scope = 'source' AND source_id = ?))
+                """,
+                (collection_id, source_id),
+            )
+            return True
+
     def update_source_task(
         self,
         source_id: str,
         task_id: str,
         view_token: str,
     ) -> Dict[str, Any]:
-        with self._get_cursor() as cursor:
+        with self._get_cursor(write=True) as cursor:
             cursor.execute(
                 """
                 SELECT collection_id FROM learning_collection_sources
@@ -402,6 +1124,7 @@ class LearningCollectionRepository:
                     summary_status = 'not_started',
                     summary_markdown = NULL,
                     exported_at = NULL,
+                    transcription_revision = transcription_revision + 1,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
@@ -478,12 +1201,53 @@ class LearningCollectionRepository:
         collection["sources"] = self.get_sources(collection_id)
         return collection
 
+    def mark_summary_processing(self, collection_id: str) -> Dict[str, Any]:
+        """Persist in-flight generation so clients can recover after navigation."""
+        now = datetime.datetime.utcnow().isoformat()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collections
+                SET summary_status = 'processing',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, collection_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("collection not found")
+        return self.get_collection_detail(collection_id)
+
+    def mark_summary_failed(self, collection_id: str, error_message: str = "") -> Dict[str, Any]:
+        """Mark generation failed without wiping a previously successful markdown."""
+        now = datetime.datetime.utcnow().isoformat()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collections
+                SET summary_status = CASE
+                        WHEN summary_markdown IS NOT NULL AND TRIM(summary_markdown) != ''
+                        THEN 'success'
+                        ELSE 'failed'
+                    END,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, collection_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("collection not found")
+        detail = self.get_collection_detail(collection_id)
+        if error_message:
+            detail["summary_error"] = error_message
+        return detail
+
     def save_summary(
         self, collection_id: str, markdown: str, description: str = ""
     ) -> Dict[str, Any]:
         now = datetime.datetime.utcnow().isoformat()
         description = (description or "").strip()
-        with self._get_cursor() as cursor:
+        with self._get_cursor(write=True) as cursor:
             if description:
                 cursor.execute(
                     """
@@ -515,7 +1279,7 @@ class LearningCollectionRepository:
 
     def mark_exported(self, collection_id: str) -> Dict[str, Any]:
         now = datetime.datetime.utcnow().isoformat()
-        with self._get_cursor() as cursor:
+        with self._get_cursor(write=True) as cursor:
             cursor.execute(
                 """
                 UPDATE learning_collections
@@ -552,7 +1316,7 @@ class LearningCollectionRepository:
         now = datetime.datetime.utcnow().isoformat()
         map_id = uuid.uuid4().hex
         encoded = json.dumps(map_json, ensure_ascii=False)
-        with self._get_cursor() as cursor:
+        with self._get_cursor(write=True) as cursor:
             cursor.execute(
                 """
                 INSERT INTO learning_collection_knowledge_maps

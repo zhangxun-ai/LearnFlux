@@ -13,6 +13,8 @@ from ..prompts import (
 
 logger = setup_logger(__name__)
 
+_MIN_USEFUL_SUMMARY_CHARS = 50
+
 
 class SummaryProcessor:
     """内容总结处理器
@@ -20,7 +22,7 @@ class SummaryProcessor:
     职责：
     - 生成视频内容的文本总结
     - 根据说话人数量选择合适的 System Prompt
-    - 处理长度检查和降级
+    - fallback 由共享 LLM 客户端统一调度，避免重复执行模型链
     """
 
     def __init__(
@@ -73,54 +75,54 @@ class SummaryProcessor:
             )
             return None
 
-        logger.info(f"Generating summary for text (length: {len(text)}, speaker_count: {speaker_count})")
+        logger.info(
+            f"Generating summary for text (length: {len(text)}, speaker_count: {speaker_count})"
+        )
+
+        if selected_models:
+            primary_model = selected_models.get(
+                "summary_model", self.config.summary_model
+            )
+            reasoning_effort = selected_models.get(
+                "summary_reasoning_effort",
+                self.config.summary_reasoning_effort,
+            )
+        else:
+            primary_model = self.config.summary_model
+            reasoning_effort = self.config.summary_reasoning_effort
+
+        system_prompt = self._select_system_prompt(speaker_count)
+        user_prompt = build_summary_user_prompt(
+            transcript=text,
+            video_title=title,
+            author=author,
+            description=description,
+        )
 
         try:
-            # 步骤 2: 选择模型
-            if selected_models:
-                model = selected_models.get("summary_model", self.config.summary_model)
-                reasoning_effort = selected_models.get(
-                    "summary_reasoning_effort",
-                    self.config.summary_reasoning_effort
-                )
-            else:
-                model = self.config.summary_model
-                reasoning_effort = self.config.summary_reasoning_effort
-
-            # 步骤 3: 选择 System Prompt
-            system_prompt = self._select_system_prompt(speaker_count)
-
-            # 步骤 4: 构建 User Prompt
-            user_prompt = build_summary_user_prompt(
-                transcript=text,
-                video_title=title,
-                author=author,
-                description=description,
-            )
-
-            # 步骤 5: 调用 LLM
             response = self.llm_client.call(
-                model=model,
+                model=primary_model,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 reasoning_effort=reasoning_effort,
-                task_type="summary",  # 标识为总结任务（用于日志追踪和监控）
+                task_type="summary",
             )
-
-            summary_text = response.text
-
-            # 步骤 6: 验证结果
-            if not summary_text or len(summary_text) < 50:
+            summary_text = (response.text or "").strip()
+            if len(summary_text) < _MIN_USEFUL_SUMMARY_CHARS:
                 logger.warning(
-                    f"Summary too short or empty: {len(summary_text) if summary_text else 0} chars"
+                    f"Summary too short or empty: {len(summary_text)} chars"
                 )
                 return None
 
-            logger.info(f"Summary generated successfully (length: {len(summary_text)})")
+            logger.info(
+                f"Summary generated successfully (length: {len(summary_text)})"
+            )
             return summary_text
-
-        except Exception as e:
-            logger.error(f"Summary generation failed: {e}", exc_info=True)
+        except Exception as exc:
+            logger.error(
+                f"Summary generation failed after client fallback chain: {exc}",
+                exc_info=True,
+            )
             return None
 
     def _select_system_prompt(self, speaker_count: int) -> str:

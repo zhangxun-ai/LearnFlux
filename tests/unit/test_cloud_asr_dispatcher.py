@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Event
 
@@ -132,3 +132,45 @@ def test_dispatcher_wakes_for_expired_claim_and_stops_bounded(tmp_path):
     assert dispatcher.stop(timeout=1)
     assert dispatcher.notify("task-1") is False
     executor.shutdown(wait=True)
+
+
+def test_full_cloud_capacity_does_not_block_stale_lease_maintenance(tmp_path):
+    repository = CloudQuoteRepository(tmp_path / "quotes.db")
+    _queue(repository, "task-queued")
+    controller = TranscriptionConcurrencyController(local=1, cloud=1)
+    controller.reserve_recovered_cloud("usage:stale")
+
+    class ExpiringUsageRepository(_UsageRepository):
+        def __init__(self):
+            self.freeze_calls = 0
+
+        def freeze_stale_submissions(self, *, now):
+            self.freeze_calls += 1
+            return 0
+
+        def next_submission_lease_expiry(self, *, now=None):
+            return (now or datetime.now(UTC)) + timedelta(seconds=0.02)
+
+    usage_repository = ExpiringUsageRepository()
+    executor = ThreadPoolExecutor(max_workers=1)
+    dispatcher = CloudASRDispatcher(
+        repository,
+        usage_repository,
+        controller,
+        executor,
+        lambda *args, **kwargs: None,
+    )
+
+    try:
+        dispatcher.start()
+        deadline = datetime.now(UTC).timestamp() + 0.3
+        while (
+            usage_repository.freeze_calls < 2
+            and datetime.now(UTC).timestamp() < deadline
+        ):
+            Event().wait(0.01)
+        assert usage_repository.freeze_calls >= 2
+    finally:
+        controller.release("cloud", "usage:stale")
+        dispatcher.stop(timeout=1)
+        executor.shutdown(wait=True)

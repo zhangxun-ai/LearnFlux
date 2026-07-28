@@ -99,7 +99,7 @@ async def post_insight_page(request: Request, url: str = ""):
     """Render the X post insight page (entry form + result container)."""
     return templates.TemplateResponse(
         "post_insight.html",
-        {"request": request, "title": "帖子精华提炼", "prefill_url": url},
+        {"request": request, "title": "帖子洞察", "prefill_url": url},
         headers={"Cache-Control": "no-cache"},
     )
 

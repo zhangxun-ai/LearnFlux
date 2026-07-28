@@ -1602,6 +1602,9 @@ function syncMarkedHistoryFromServer(force = false) {
     return markedHistorySyncPromise;
 }
 
+return markedHistorySyncPromise;
+}
+
 /** 更新识别横幅 + 视频专属选项可见性 + 按钮文案 */
 function updateDetection() {
     const banner = document.getElementById('detect-banner');

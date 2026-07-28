@@ -308,6 +308,7 @@ Confirm:
 
 ```text
 GET http://localhost:8000/study -> 200
+GET http://localhost:8000/static/study-player-preview.html -> may remain as isolated reference, but no production link points to it
 ```
 
 Verify authenticated library APIs return real or empty data, never samples.

@@ -74,6 +74,8 @@ Deferred:
   - Focused production styles extracted from the mockup.
 - Create `src/web/static/js/study.js`
   - Fetch state, render panels, sync video/transcript, save notes.
+- Keep `src/web/static/study-mode-mockups.html`
+  - Version A-only visual reference.
 - Add tests:
   - `tests/unit/test_study_source_files.py`
   - `tests/unit/test_study_transcript.py`

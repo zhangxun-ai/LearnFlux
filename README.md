@@ -15,7 +15,15 @@ LearnFlux 是面向个人学习与内容研究的 **AI 学习工作台**。
 [![FastAPI](https://img.shields.io/badge/FastAPI-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-MIT%20%2B%20Commons%20Clause-yellow.svg)](LICENSE)
 
----
+## 它能做什么
+
+- 导入 YouTube、Bilibili、抖音、小红书、小宇宙，以及本地音视频和文档。
+- 将内容转录为带时间轴的文本，并用 AI 校对、总结、解释难点和追问全文。
+- 在同一时间轴中边播边学：当前字幕、逐字稿、AI 解读、图解和个人笔记互相联动。
+- 管理系列课程或专题资料：生成集合知识地图、全系列解读和 Obsidian Markdown 笔记。
+- 从帖子、评论和账号内容中提取洞察，辅助选题与内容研究。
+
+## 先选适合你的安装方式
 
 ## 目录
 

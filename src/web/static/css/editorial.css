@@ -130,6 +130,7 @@
 body.has-app-shell {
     background: var(--paper);
     font-family: var(--font-ui);
+    transition: padding-left 0.22s ease;
 }
 
 body.focus-overlay-open {

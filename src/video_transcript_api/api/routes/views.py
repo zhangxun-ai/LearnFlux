@@ -387,6 +387,8 @@ _HOME_HTML = """\
     <meta property="og:type" content="website">
     <meta property="og:image" content="/static/icon/learnflux-og.png">
     <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="/static/css/editorial.css?v=1">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=1">
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
         html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;scroll-behavior:smooth}
@@ -730,6 +732,8 @@ _HOME_HTML = """\
     <footer class="footer">
         Powered by <a href="https://github.com/zhangxun-ai/LearnFlux" target="_blank" rel="noopener">LearnFlux</a> · Open Source
     </footer>
+        </section>
+    </main>
 </body>
 </html>
 """

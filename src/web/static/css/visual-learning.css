@@ -1548,13 +1548,8 @@
 }
 
 .vl-continuous-article .vl-document-head::before {
-    content: "AI CONCEPT MAP";
-    display: block;
-    margin-bottom: 22px;
-    color: #df4f3f;
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: .18em;
+    content: none;
+    display: none;
 }
 
 .vl-continuous-article .vl-document-head h1 {
@@ -2200,8 +2195,8 @@ body.vl-evidence-open {
 }
 
 .vl-reader-visual-atlas.vl-continuous-article .vl-document-head::before {
-    content: "COMPLETE VISUAL PAGE";
-    margin-bottom: 16px;
+    content: none;
+    display: none;
 }
 
 .vl-reader-visual-atlas.vl-continuous-article .vl-document-head h1 {

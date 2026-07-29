@@ -627,16 +627,30 @@
         if (sections) sections.scrollLeft = scrollState.sectionsLeft;
     }
 
-    function readerAction(label, className, callback) {
-        const button = node('button', className || 'vl-reader-action', label);
-        button.type = 'button';
-        button.addEventListener('click', callback);
-        return button;
-    }
-
     function isGeneratingStatus(status) {
         const value = String(status || '');
-        return value.includes('生成中') || value.includes('正在请求');
+        return value.includes('生成中')
+            || value.includes('正在请求')
+            || value.includes('正在生成')
+            || value.includes('正在建立')
+            || value.includes('正在回查')
+            || value.includes('正在校验')
+            || value.includes('正在压缩')
+            || value.includes('等待生成');
+    }
+
+    function readerAction(label, className, callback, options) {
+        const button = node('button', className || 'vl-reader-action', label);
+        button.type = 'button';
+        const disabled = Boolean(options && options.disabled);
+        button.disabled = disabled;
+        button.setAttribute('aria-busy', disabled ? 'true' : 'false');
+        if (disabled) {
+            button.title = (options && options.title) || '正在生成，请稍候';
+        } else if (typeof callback === 'function') {
+            button.addEventListener('click', callback);
+        }
+        return button;
     }
 
     function mergedSourceRefs(documents) {
@@ -775,7 +789,7 @@
 
         const empty = node('div', 'vl-reader-empty');
         const statusStr = data.overviewStatus || '全局图解尚未生成';
-        if (isGeneratingStatus(statusStr)) {
+        if (isGeneratingStatus(statusStr) || options.overviewGenerating) {
             empty.classList.add('is-generating');
             empty.appendChild(node('div', 'vl-spinner'));
             empty.appendChild(node('strong', '', statusStr));
@@ -784,6 +798,7 @@
             skeleton.appendChild(node('div', 'vl-skeleton-box'));
             skeleton.appendChild(node('div', 'vl-skeleton-box'));
             empty.appendChild(skeleton);
+            // Never offer a second generate click while the job is still running.
         } else {
             empty.appendChild(node('strong', '', statusStr));
             if (typeof options.onGenerateOverview === 'function') {

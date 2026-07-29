@@ -115,6 +115,29 @@ def test_workflow_progress_does_not_fake_remote_request_progress():
     assert outline["basis"] == "stage_transition"
 
 
+def test_generating_visual_soft_progress_advances_with_elapsed_time():
+    """Long LLM stage should not freeze the UI at a fixed 75% forever."""
+    from datetime import datetime, timedelta, timezone
+
+    from video_transcript_api.visual_learning.progress import compose_workflow_progress
+
+    started = (datetime.now(timezone.utc) - timedelta(seconds=180)).isoformat()
+    progress = compose_workflow_progress(
+        "generating_visual",
+        None,
+        {
+            "stage": "generating_visual",
+            "stage_label": "正在生成图解",
+            "percent": 75,
+            "updated_at": started,
+        },
+    )
+
+    assert progress["overall_percent"] > 75
+    assert progress["overall_percent"] < 95
+    assert progress["stage"] == "generating_visual"
+
+
 def test_failed_generation_keeps_last_completed_stage_position():
     from video_transcript_api.visual_learning.progress import compose_workflow_progress
 

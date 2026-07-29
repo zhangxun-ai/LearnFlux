@@ -1823,6 +1823,10 @@ def test_collections_page_restores_existing_collections():
     assert "startSummaryStatusPolling" in js
     assert "syncSummaryGenerationFromCollection" in js
     assert "rememberSummaryGenerating" in js
+    assert "collection-summary-toc" in html
+    assert "collection-summary-toc-nav" in html
+    assert "function renderCollectionSummaryToc(" in js
+    assert "function collectCollectionSummaryHeadings(" in js
     assert "summarizeMarkdownSection" in js
     assert "startSummaryProgress" in js
     assert "summaryProgressByCollection" in js
@@ -1841,7 +1845,7 @@ def test_collections_page_restores_existing_collections():
     assert "summary-progress-text" in html
     assert "文字版" in html
     assert "图解版" in html
-    assert "内容总结" in html
+    assert "主线解读" in html
     assert "源内容" in html
     assert ">Markdown<" not in html
     assert "markdown-rendered" in html

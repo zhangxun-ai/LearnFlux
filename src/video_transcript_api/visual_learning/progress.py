@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -9,6 +11,7 @@ _GENERATION_STARTS = {
     "analyzing_outline": 55.0,
     "selecting_evidence": 70.0,
     "generating_visual": 75.0,
+    "planning_visual": 70.0,
     "validating": 95.0,
     "completed": 100.0,
 }
@@ -34,6 +37,34 @@ def _fraction(completed: int | None, total: int | None) -> float | None:
     return max(0.0, min(1.0, completed / total))
 
 
+def _parse_updated_at(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _soft_llm_stage_percent(base: float, payload: dict[str, Any], *, ceiling: float = 93.5) -> float:
+    """Gently advance during long LLM stages so the UI is not frozen at a fixed percent.
+
+    This never claims completion: it asymptotes below ``ceiling`` until a real
+    stage transition (validating/completed) arrives.
+    """
+    started = _parse_updated_at(payload.get("updated_at"))
+    if started is None:
+        return base
+    elapsed = max(0.0, (datetime.now(timezone.utc) - started).total_seconds())
+    # ~2 minutes to approach the soft ceiling for typical multi-page diagrams.
+    advanced = base + ((ceiling - base) * (1.0 - math.exp(-elapsed / 120.0)))
+    return min(ceiling, max(base, advanced))
+
+
 def _generation_percent(stage: str, payload: dict[str, Any]) -> float:
     effective_stage = payload.get("previous_stage") if stage == "failed" else stage
     start = _GENERATION_STARTS.get(str(effective_stage), 55.0)
@@ -43,6 +74,11 @@ def _generation_percent(stage: str, payload: dict[str, Any]) -> float:
         return 70.0 + (5.0 * fraction)
     if effective_stage == "validating" and fraction is not None:
         return 95.0 + (4.0 * fraction)
+    # Long-running LLM call: keep progress moving so clients do not appear stuck.
+    if str(effective_stage) == "generating_visual":
+        return _soft_llm_stage_percent(start, payload, ceiling=93.5)
+    if str(effective_stage) == "planning_visual":
+        return _soft_llm_stage_percent(start, payload, ceiling=74.0)
     return start
 
 

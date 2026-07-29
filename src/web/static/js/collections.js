@@ -85,6 +85,10 @@
         tokenHint: document.getElementById('token-hint'),
         workspaceTitle: document.getElementById('workspace-title'),
         workspaceSubtitle: document.getElementById('workspace-subtitle'),
+        workspaceStatusPill: document.getElementById('workspace-status-pill'),
+        collectionWorkspace: document.getElementById('collection-workspace'),
+        collectionImportPanel: document.getElementById('collection-import-panel'),
+        collectionHistoryPanel: document.getElementById('collection-history-panel'),
         progressValue: document.getElementById('progress-value'),
         progressFill: document.getElementById('progress-fill'),
         metadataCreator: document.getElementById('metadata-creator'),
@@ -149,6 +153,10 @@
         collectionSummaryVisualPanel: document.getElementById('collection-summary-visual-panel'),
         collectionSummaryArticle: document.getElementById('collection-summary-article'),
         collectionSummaryVisualRoot: document.getElementById('collection-summary-visual-root'),
+        collectionSummaryToc: document.getElementById('collection-summary-toc'),
+        collectionSummaryTocNav: document.getElementById('collection-summary-toc-nav'),
+        collectionSummaryTocPin: document.getElementById('collection-summary-toc-pin'),
+        collectionSummaryReadingLayout: document.getElementById('collection-summary-reading-layout'),
         generateSummary: document.getElementById('generate-summary'),
         summaryProgressText: document.getElementById('summary-progress-text'),
         summaryProgressFill: document.getElementById('summary-progress-fill'),
@@ -209,6 +217,8 @@
     let summaryMode = 'guide';
     let collectionSummaryMode = 'text';
     let sourcesExpandedInSummary = false;
+    let collectionSummaryTocPinned = false;
+    let collectionSummaryTocObserver = null;
     let lastSummaryTrigger = null;
     const sourceDetailRequests = new Map();
     let busy = false;
@@ -1325,6 +1335,7 @@
         knowledgeMapScope = opts.sourceId ? 'source' : 'collection';
         selectedMapNodeId = null;
         await refreshCollection(collectionId);
+        updateStudyChromeLayout({ collapseChrome: true });
         const sources = currentCollection ? (currentCollection.sources || []) : [];
         const finished = sources.length > 0 && sources.every((source) => isTerminalSourceStatus(source.task_status));
         if (!finished) startPolling();
@@ -2396,10 +2407,49 @@
         if (didApplyInitialPanelLayout) return;
         didApplyInitialPanelLayout = true;
         if (currentCollection || !collections.length) return;
-        const historyDetails = document.querySelector('.lc-history.lc-history-panel');
-        if (historyDetails) historyDetails.open = true;
-        const importDetails = document.querySelector('.lc-import-wrap');
-        if (importDetails) importDetails.open = false;
+        if (els.collectionHistoryPanel) els.collectionHistoryPanel.open = true;
+        if (els.collectionImportPanel) els.collectionImportPanel.open = false;
+    }
+
+    function updateStudyChromeLayout(options) {
+        const opts = options || {};
+        const studying = Boolean(currentCollection);
+        document.body.classList.toggle('lc-study-focus', studying);
+        if (els.collectionWorkspace) {
+            els.collectionWorkspace.classList.toggle('is-studying', studying);
+        }
+        // Only force-collapse chrome when entering a collection, not on every poll/render.
+        if (studying && opts.collapseChrome) {
+            if (els.collectionImportPanel) els.collectionImportPanel.open = false;
+            if (els.collectionHistoryPanel) els.collectionHistoryPanel.open = false;
+        }
+    }
+
+    function workspaceStatusMeta(collection) {
+        if (!collection) {
+            return { label: '未选择', tone: 'idle' };
+        }
+        const summaryStatus = String(collection.summary_status || '');
+        const workflow = String(collection.workflow_status || '');
+        if (summaryStatus === 'processing' || isSummaryGenerating(collection.id)) {
+            return { label: '解读生成中', tone: 'working' };
+        }
+        if (summaryStatus === 'success' && collection.summary_markdown) {
+            return { label: '解读已就绪', tone: 'ready' };
+        }
+        if (workflow === 'processing' || workflow === 'stopping') {
+            return { label: '解析中', tone: 'working' };
+        }
+        if (workflow === 'failed') {
+            return { label: '有失败', tone: 'danger' };
+        }
+        if (workflow === 'stopped') {
+            return { label: '已停止', tone: 'idle' };
+        }
+        if (workflow === 'ready' || workflow === 'summarized') {
+            return { label: summaryStatus === 'success' ? '解读已就绪' : '待生成解读', tone: summaryStatus === 'success' ? 'ready' : 'idle' };
+        }
+        return { label: '已导入', tone: 'idle' };
     }
 
     function startPolling() {
@@ -3539,14 +3589,20 @@
 
         const summaryStatus = String((currentCollection && currentCollection.summary_status) || '');
         const generating = summaryStatus === 'processing' || isSummaryGenerating(currentCollection && currentCollection.id);
-        if (markdown) {
-            els.summaryStatus.textContent = '全系列解读已生成';
-        } else if (generating) {
-            els.summaryStatus.textContent = '全系列解读生成中…';
-        } else if (summaryStatus === 'failed') {
-            els.summaryStatus.textContent = '全系列解读生成失败';
-        } else {
-            els.summaryStatus.textContent = '等待生成全系列解读';
+        if (els.summaryStatus) {
+            els.summaryStatus.classList.remove('is-ready', 'is-working', 'is-failed');
+            if (markdown) {
+                els.summaryStatus.textContent = '已生成';
+                els.summaryStatus.classList.add('is-ready');
+            } else if (generating) {
+                els.summaryStatus.textContent = '生成中';
+                els.summaryStatus.classList.add('is-working');
+            } else if (summaryStatus === 'failed') {
+                els.summaryStatus.textContent = '生成失败';
+                els.summaryStatus.classList.add('is-failed');
+            } else {
+                els.summaryStatus.textContent = '等待生成';
+            }
         }
         if (els.summaryView) {
             els.summaryView.classList.toggle('is-ready', Boolean(markdown));
@@ -4060,6 +4116,36 @@
         retrySelectedSource();
     }
 
+    function collectionVisualIsBusy(documentType) {
+        if (collectionVisual.loading[documentType]) return true;
+        const state = collectionVisual.states[documentType];
+        if (!state || state.uiError) return false;
+        const latestStatus = state.latest_attempt && state.latest_attempt.status;
+        const phase = String(state.phase || '');
+        return (
+            latestStatus === 'pending'
+            || latestStatus === 'generating'
+            || phase === 'generating_visual'
+            || phase === 'source_processing'
+        );
+    }
+
+    function collectionVisualProgressPercent(documentType) {
+        const state = collectionVisual.states[documentType] || {};
+        const workflow = state.workflow_progress || {};
+        const generation = state.generation_progress || {};
+        const candidates = [
+            workflow.overall_percent,
+            generation.percent,
+            generation.overall_percent
+        ];
+        for (let index = 0; index < candidates.length; index += 1) {
+            const value = Number(candidates[index]);
+            if (Number.isFinite(value)) return Math.max(0, Math.min(100, value));
+        }
+        return NaN;
+    }
+
     function collectionVisualStatusText(documentType) {
         if (!currentCollection || !currentCollection.summary_markdown) {
             return '请先生成全系列解读';
@@ -4078,9 +4164,21 @@
             return error || '生成失败，可单独重试';
         }
         if (latestStatus === 'pending' || state.phase === 'ready_for_generation') return '等待生成…';
-        if (latestStatus === 'generating' || state.phase === 'generating_visual') {
-            const progress = state.workflow_progress && state.workflow_progress.overall_percent;
-            return Number.isFinite(Number(progress)) ? `生成中 ${Math.round(Number(progress))}%` : '生成中…';
+        if (
+            latestStatus === 'generating'
+            || state.phase === 'generating_visual'
+            || collectionVisualIsBusy(documentType)
+        ) {
+            const workflow = state.workflow_progress || {};
+            const generation = state.generation_progress || {};
+            const label = workflow.stage_label
+                || generation.stage_label
+                || generation.message
+                || '生成中';
+            const progress = collectionVisualProgressPercent(documentType);
+            return Number.isFinite(progress)
+                ? `${label} ${Math.round(progress)}%`
+                : `${label}…`;
         }
         if (state.stale) return '正在更新，当前版本仍可查看';
         if (collectionVisual.documents[documentType]) return '已完成';
@@ -4119,20 +4217,147 @@
         return target ? target.id : '';
     }
 
+    function stopCollectionSummaryTocSpy() {
+        if (collectionSummaryTocObserver) {
+            collectionSummaryTocObserver.disconnect();
+            collectionSummaryTocObserver = null;
+        }
+    }
+
+    function setCollectionSummaryTocActive(targetId) {
+        if (!els.collectionSummaryTocNav) return;
+        els.collectionSummaryTocNav.querySelectorAll('[data-toc-target]').forEach((button) => {
+            const active = button.dataset.tocTarget === targetId;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-current', active ? 'location' : 'false');
+        });
+    }
+
+    function collectCollectionSummaryHeadings(article) {
+        if (!article) return [];
+        const headings = Array.from(article.querySelectorAll('h2, h3'));
+        return headings.map((heading, index) => {
+            const title = String(heading.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!title) return null;
+            if (!heading.id) {
+                heading.id = summaryAnchorId(title, index + 1);
+            }
+            heading.classList.add('lc-summary-heading');
+            return {
+                id: heading.id,
+                title,
+                level: heading.tagName === 'H3' ? 3 : 2
+            };
+        }).filter(Boolean);
+    }
+
+    function startCollectionSummaryTocSpy(headings) {
+        stopCollectionSummaryTocSpy();
+        if (!headings.length || typeof IntersectionObserver === 'undefined') return;
+        const elements = headings
+            .map((item) => document.getElementById(item.id))
+            .filter(Boolean);
+        if (!elements.length) return;
+        collectionSummaryTocObserver = new IntersectionObserver((entries) => {
+            const visible = entries
+                .filter((entry) => entry.isIntersecting)
+                .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+            if (!visible.length) return;
+            setCollectionSummaryTocActive(visible[0].target.id);
+        }, {
+            root: null,
+            rootMargin: '-12% 0px -68% 0px',
+            threshold: [0.1, 0.25, 0.5, 0.75]
+        });
+        elements.forEach((element) => collectionSummaryTocObserver.observe(element));
+    }
+
+    function syncCollectionSummaryTocChrome(showToc) {
+        document.body.classList.toggle('lc-summary-toc-visible', Boolean(showToc));
+        document.body.classList.toggle(
+            'lc-summary-toc-open',
+            Boolean(showToc && collectionSummaryTocPinned)
+        );
+        if (els.collectionSummaryToc) {
+            els.collectionSummaryToc.classList.toggle('is-pinned', collectionSummaryTocPinned);
+        }
+        if (els.collectionSummaryReadingLayout) {
+            els.collectionSummaryReadingLayout.classList.toggle('has-toc', Boolean(showToc));
+            els.collectionSummaryReadingLayout.classList.toggle('toc-pinned', collectionSummaryTocPinned);
+        }
+        if (els.collectionSummaryTocPin) {
+            els.collectionSummaryTocPin.setAttribute('aria-pressed', collectionSummaryTocPinned ? 'true' : 'false');
+            els.collectionSummaryTocPin.textContent = collectionSummaryTocPinned ? '已固定' : '固定';
+            els.collectionSummaryTocPin.title = collectionSummaryTocPinned
+                ? '取消固定（恢复悬停展开）'
+                : '固定目录（常显，不随鼠标离开收起）';
+        }
+    }
+
+    function bindCollectionSummaryTocHover() {
+        if (!els.collectionSummaryToc || els.collectionSummaryToc.dataset.hoverBound === '1') return;
+        els.collectionSummaryToc.dataset.hoverBound = '1';
+        const syncOpen = () => {
+            const visible = !els.collectionSummaryToc.hidden;
+            document.body.classList.toggle(
+                'lc-summary-toc-open',
+                visible && (collectionSummaryTocPinned || els.collectionSummaryToc.matches(':hover'))
+            );
+        };
+        els.collectionSummaryToc.addEventListener('mouseenter', syncOpen);
+        els.collectionSummaryToc.addEventListener('mouseleave', syncOpen);
+    }
+
+    function renderCollectionSummaryToc(headings) {
+        if (!els.collectionSummaryToc || !els.collectionSummaryTocNav) return;
+        const showToc = Boolean(headings.length)
+            && currentView === 'summary'
+            && collectionSummaryMode === 'text';
+        els.collectionSummaryToc.hidden = !showToc;
+        syncCollectionSummaryTocChrome(showToc);
+        bindCollectionSummaryTocHover();
+        if (!showToc) {
+            els.collectionSummaryTocNav.replaceChildren();
+            stopCollectionSummaryTocSpy();
+            return;
+        }
+        els.collectionSummaryTocNav.innerHTML = headings.map((item) => `
+            <button type="button"
+                class="lc-summary-toc-item level-${item.level}"
+                data-toc-target="${escapeHTML(item.id)}"
+                title="${escapeHTML(item.title)}">
+                ${escapeHTML(item.title)}
+            </button>
+        `).join('');
+        els.collectionSummaryTocNav.querySelectorAll('[data-toc-target]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const target = document.getElementById(button.dataset.tocTarget);
+                if (!target) return;
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                setCollectionSummaryTocActive(button.dataset.tocTarget);
+            });
+        });
+        if (headings[0]) setCollectionSummaryTocActive(headings[0].id);
+        startCollectionSummaryTocSpy(headings);
+    }
+
     function renderCollectionSummaryArticle(markdown, fallback) {
         if (!els.collectionSummaryArticle) return;
         const sections = buildSummarySections(markdown);
         if (!sections.length) {
             renderMarkdownPreview(els.collectionSummaryArticle, markdown, fallback);
+            renderCollectionSummaryToc([]);
             return;
         }
         els.collectionSummaryArticle.classList.remove('lc-markdown-source');
         els.collectionSummaryArticle.innerHTML = sections.map((section) => `
             <section class="lc-summary-inline-section" id="${escapeHTML(section.id)}">
-                <h2>${renderInlineMarkdown(section.title)}</h2>
+                <h2 id="${escapeHTML(section.id)}-title">${renderInlineMarkdown(section.title)}</h2>
                 ${markdownToHTML(section.body)}
             </section>
         `).join('');
+        const headings = collectCollectionSummaryHeadings(els.collectionSummaryArticle);
+        renderCollectionSummaryToc(headings);
     }
 
     function focusCollectionSummaryArticle(sectionId) {
@@ -4272,12 +4497,18 @@
         detail.textContent = '这里展示合集层面的全局图解；每个子内容的图解仍在对应内容页查看。';
         empty.append(status, detail);
         if (markdown) {
+            const busy = collectionVisualIsBusy('overview');
             const action = document.createElement('button');
             action.className = 'lc-btn primary';
             action.type = 'button';
-            action.textContent = collectionVisual.loading.overview ? '正在生成…' : '生成图解';
-            action.disabled = collectionVisual.loading.overview;
-            action.addEventListener('click', () => requestCollectionVisual('overview', false));
+            action.textContent = busy ? '生成中…' : '生成图解';
+            action.disabled = busy;
+            action.setAttribute('aria-busy', busy ? 'true' : 'false');
+            if (busy) {
+                action.title = '图解正在生成，请稍候';
+            } else {
+                action.addEventListener('click', () => requestCollectionVisual('overview', false));
+            }
             empty.appendChild(action);
         }
         els.collectionSummaryVisualRoot.appendChild(empty);
@@ -4305,12 +4536,16 @@
             els.collectionSummaryVisual.tabIndex = visual ? 0 : -1;
         }
         if (visual) {
+            renderCollectionSummaryToc([]);
             renderInlineSummaryVisual();
             const collectionId = selectedCollectionKey();
             if (collectionId && currentCollection && currentCollection.summary_markdown) {
                 ensureCollectionReaderState(collectionId, 'visual');
                 ensureCollectionVisualLayer('overview', Boolean(generateIfMissing));
             }
+        } else if (els.collectionSummaryArticle) {
+            const headings = collectCollectionSummaryHeadings(els.collectionSummaryArticle);
+            renderCollectionSummaryToc(headings);
         }
     }
 
@@ -4338,8 +4573,8 @@
         els.collectionVisualOverviewStatus.textContent = overviewStatus;
         els.collectionVisualFullNoteStatus.textContent = fullNoteStatus;
         const canRetry = Boolean(currentCollection && currentCollection.summary_markdown);
-        els.collectionVisualOverviewRetry.disabled = !canRetry || collectionVisual.loading.overview;
-        els.collectionVisualFullNoteRetry.disabled = !canRetry || collectionVisual.loading.full_note;
+        els.collectionVisualOverviewRetry.disabled = !canRetry || collectionVisualIsBusy('overview');
+        els.collectionVisualFullNoteRetry.disabled = !canRetry || collectionVisualIsBusy('full_note');
 
         const overview = collectionVisual.documents.overview;
         els.collectionVisualExport.disabled = !overview;
@@ -4407,6 +4642,11 @@
         const collectionId = selectedCollectionKey();
         if (!collectionId || !currentCollection.summary_markdown) return;
         if (!ensureCollectionReaderState(collectionId, 'visual')) return;
+        // Block re-entry for the whole generation lifecycle, not just the POST.
+        if (collectionVisualIsBusy(documentType)) {
+            showToast('图解正在生成中，请稍候');
+            return;
+        }
         const readerGeneration = collectionReader.state.generation();
         collectionVisual.loading[documentType] = true;
         renderCollectionVisual();
@@ -4440,9 +4680,20 @@
         } finally {
             if (collectionReaderAccepts(collectionId, readerGeneration)) {
                 collectionVisual.loading[documentType] = false;
+                // Keep the button disabled while poll-driven generation continues.
                 renderCollectionVisual();
+                renderInlineSummaryVisual();
             }
         }
+    }
+
+    function retryCollectionVisual(documentType) {
+        if (!VISUAL_DOCUMENT_TYPES.includes(documentType)) return;
+        if (collectionVisualIsBusy(documentType)) {
+            showToast('图解正在生成中，请稍候');
+            return;
+        }
+        requestCollectionVisual(documentType, true);
     }
 
     async function ensureCollectionVisualLayer(documentType, generateIfMissing = true) {
@@ -4488,11 +4739,6 @@
         } finally {
             if (selectedCollectionKey() === collectionId) collectionVisual.activating = false;
         }
-    }
-
-    function retryCollectionVisual(documentType) {
-        if (!VISUAL_DOCUMENT_TYPES.includes(documentType)) return;
-        requestCollectionVisual(documentType, true);
     }
 
     function parseCollectionVisualRef(refId) {
@@ -4574,7 +4820,7 @@
         const count = currentCollection && Array.isArray(currentCollection.sources)
             ? currentCollection.sources.length
             : 0;
-        return count > 0 ? `Sources · ${count}` : 'Sources';
+        return count > 0 ? `章节 · ${count}` : '章节';
     }
 
     function updateSummaryReadingLayout() {
@@ -4587,7 +4833,7 @@
             els.sourcesPanelToggle.hidden = !isSummary;
             els.sourcesPanelToggle.setAttribute('aria-expanded', sourcesExpandedInSummary ? 'true' : 'false');
             els.sourcesPanelToggle.textContent = sourcesExpandedInSummary
-                ? '收起 Sources'
+                ? '收起章节'
                 : sourceCountLabel();
         }
     }
@@ -4609,10 +4855,22 @@
         els.sourceView.classList.toggle('hidden', currentView !== 'source');
         els.markdownView.classList.toggle('hidden', currentView !== 'markdown');
         updateSummaryReadingLayout();
+        if (currentView === 'summary' && collectionSummaryMode === 'text' && els.collectionSummaryArticle) {
+            const headings = collectCollectionSummaryHeadings(els.collectionSummaryArticle);
+            renderCollectionSummaryToc(headings);
+        } else if (els.collectionSummaryToc) {
+            renderCollectionSummaryToc([]);
+        }
     }
 
     function renderMetadata() {
         const collection = currentCollection;
+        if (els.workspaceStatusPill) {
+            const status = workspaceStatusMeta(collection);
+            els.workspaceStatusPill.hidden = !collection;
+            els.workspaceStatusPill.textContent = status.label;
+            els.workspaceStatusPill.dataset.tone = status.tone;
+        }
         if (!collection) {
             els.metadataCreator.textContent = els.creator.value.trim() || '未选择';
             els.metadataType.textContent = collectionTypeLabel(activeType);
@@ -4639,6 +4897,7 @@
     function render() {
         const title = currentCollection ? currentCollection.title : (els.title.value.trim() || '尚未选择专题');
         els.workspaceTitle.textContent = title;
+        updateStudyChromeLayout();
         renderHistory();
         renderMetadata();
         renderProgress();
@@ -5039,6 +5298,13 @@
         }
         if (els.collectionSummaryVisual) {
             els.collectionSummaryVisual.addEventListener('click', () => setCollectionSummaryMode('visual', true));
+        }
+        if (els.collectionSummaryTocPin) {
+            els.collectionSummaryTocPin.addEventListener('click', () => {
+                collectionSummaryTocPinned = !collectionSummaryTocPinned;
+                const visible = els.collectionSummaryToc && !els.collectionSummaryToc.hidden;
+                syncCollectionSummaryTocChrome(Boolean(visible));
+            });
         }
         if (els.collectionVisualOverviewRetry) {
             els.collectionVisualOverviewRetry.addEventListener('click', () => retryCollectionVisual('overview'));

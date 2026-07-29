@@ -1,11 +1,33 @@
 """Regression checks for the accessible home workbench controls."""
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = PROJECT_ROOT / "src/web/static"
+
+
+def test_workbench_app_js_parses_without_syntax_errors():
+    """Merge leftovers once broke tab switching and history rendering entirely."""
+    node = shutil.which("node")
+    assert node, "Node.js is required to syntax-check the workbench script"
+
+    app_js = STATIC_DIR / "js/app.js"
+    result = subprocess.run(
+        [node, "--check", str(app_js)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+    source = app_js.read_text(encoding="utf-8")
+    # Guard against duplicated top-level return after syncMarkedHistoryFromServer.
+    assert source.count("function syncMarkedHistoryFromServer") == 1
+    assert "\n}\n\nreturn markedHistorySyncPromise;\n}" not in source
 
 
 def test_home_input_tabs_have_complete_aria_wiring_and_keyboard_support():

@@ -6,6 +6,7 @@ from ...utils.logging import setup_logger
 from ..core.config import LLMConfig
 from ..core.llm_client import LLMClient
 from ..prompts import (
+    SUMMARY_SYSTEM_PROMPT_DEEP_LEARNING_ARTICLE,
     SUMMARY_SYSTEM_PROMPT_SINGLE_SPEAKER,
     SUMMARY_SYSTEM_PROMPT_MULTI_SPEAKER,
     build_summary_user_prompt,
@@ -50,6 +51,7 @@ class SummaryProcessor:
         speaker_count: int = 0,
         transcription_data: Optional[Dict] = None,
         selected_models: Optional[Dict] = None,
+        summary_profile: Optional[str] = None,
     ) -> Optional[str]:
         """生成文本总结
 
@@ -61,6 +63,7 @@ class SummaryProcessor:
             speaker_count: 说话人数量（0 或 1 表示单说话人，>= 2 表示多说话人）
             transcription_data: 原始转录数据（可选，用于辅助分析）
             selected_models: 选定的模型配置（可选，来自风险检测）
+            summary_profile: 总结输出契约（可选）
 
         Returns:
             总结文本，如果文本过短则返回 None
@@ -91,7 +94,7 @@ class SummaryProcessor:
             primary_model = self.config.summary_model
             reasoning_effort = self.config.summary_reasoning_effort
 
-        system_prompt = self._select_system_prompt(speaker_count)
+        system_prompt = self._select_system_prompt(speaker_count, summary_profile)
         user_prompt = build_summary_user_prompt(
             transcript=text,
             video_title=title,
@@ -125,15 +128,23 @@ class SummaryProcessor:
             )
             return None
 
-    def _select_system_prompt(self, speaker_count: int) -> str:
+    def _select_system_prompt(
+        self,
+        speaker_count: int,
+        summary_profile: Optional[str] = None,
+    ) -> str:
         """根据说话人数量选择 System Prompt
 
         Args:
             speaker_count: 说话人数量
+            summary_profile: 总结输出契约（可选）
 
         Returns:
             System Prompt 字符串
         """
+        if summary_profile in {"deep_learning", "deep_learning_article"}:
+            logger.debug("Using deep-learning summary prompt")
+            return SUMMARY_SYSTEM_PROMPT_DEEP_LEARNING_ARTICLE
         if speaker_count >= 2:
             # 多说话人：强调对话动态、观点碰撞
             logger.debug("Using multi-speaker summary prompt")

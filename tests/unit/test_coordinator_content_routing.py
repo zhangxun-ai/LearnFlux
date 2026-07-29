@@ -115,6 +115,20 @@ def test_plain_text_progress_callback_is_forwarded(coordinator):
     ] is callback
 
 
+def test_summary_profile_is_forwarded_to_summary_processor(coordinator):
+    coordinator.config.min_summary_threshold = 1
+
+    coordinator.process(
+        content="plain transcript",
+        title="Official Account Article",
+        summary_profile="deep_learning_article",
+    )
+
+    assert coordinator.summary_processor.process.call_args.kwargs[
+        "summary_profile"
+    ] == "deep_learning_article"
+
+
 def test_route_dialog_list_to_speaker_processor(coordinator):
     """Test routing dialog list to SpeakerAwareProcessor"""
     content = [

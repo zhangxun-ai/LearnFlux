@@ -154,6 +154,39 @@ def test_missing_api_key_raises_auth_error():
         client.get("/api/v1/demo")
 
 
+def test_permission_error_does_not_expose_bearer_token():
+    secret = "super-secret-token"
+    payload = (
+        "{'code': 403, "
+        "'message': 'API Token lacks required permissions, please edit the API "
+        "Token scopes at user dashboard, go to: "
+        "https://user.tikhub.io/dashboard/api', "
+        f"'headers': {{'Authorization': 'Bearer {secret}'}}}}"
+    )
+    client = TikHubClient(
+        {
+            "api_key": secret,
+            "max_retries": 1,
+            "retry_delay": 0,
+            "cache_enabled": False,
+        }
+    )
+
+    with patch(
+        "video_transcript_api.tikhub.requests.post",
+        return_value=_response(403, payload),
+    ):
+        with pytest.raises(TikHubAuthError) as raised:
+            client.post("/api/v1/wechat_mp/v2/fetch_article_detail", {})
+
+    message = str(raised.value)
+    assert "API Token 缺少所需权限" in message
+    assert "https://user.tikhub.io/dashboard/api" in message
+    assert secret not in message
+    assert "Authorization" not in message
+    assert "Bearer" not in message
+
+
 def test_success_response_is_reused_from_file_cache(tmp_path):
     client = TikHubClient(
         {

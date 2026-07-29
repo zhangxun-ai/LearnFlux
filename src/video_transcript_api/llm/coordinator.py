@@ -102,6 +102,7 @@ class LLMCoordinator:
         platform: str = "",
         media_id: str = "",
         skip_summary: bool = False,
+        summary_profile: Optional[str] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Dict:
         """处理文本（统一入口）
@@ -114,6 +115,7 @@ class LLMCoordinator:
             platform: 平台标识
             media_id: 媒体 ID
             skip_summary: 是否跳过总结生成（重新校对场景使用）
+            summary_profile: 总结输出契约（可选）
 
         Returns:
             处理结果字典:
@@ -162,6 +164,7 @@ class LLMCoordinator:
                 speaker_count=speaker_count,
                 transcription_data=self._extract_transcription_data(content),
                 selected_models=selected_models,
+                summary_profile=summary_profile,
             )
 
         # 步骤 4: 合并结果
@@ -308,6 +311,7 @@ class LLMCoordinator:
         speaker_count: int,
         transcription_data: Optional[Dict],
         selected_models: Dict,
+        summary_profile: Optional[str] = None,
     ) -> Optional[str]:
         """生成总结（如果需要）
 
@@ -319,6 +323,7 @@ class LLMCoordinator:
             speaker_count: 说话人数量
             transcription_data: 原始转录数据
             selected_models: 选定的模型
+            summary_profile: 总结输出契约（可选）
 
         Returns:
             总结文本，如果文本过短则返回 None
@@ -342,6 +347,7 @@ class LLMCoordinator:
                 speaker_count=speaker_count,
                 transcription_data=transcription_data,
                 selected_models=selected_models,
+                summary_profile=summary_profile,
             )
 
             if summary:

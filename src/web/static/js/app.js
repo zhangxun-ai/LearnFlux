@@ -134,17 +134,23 @@ class URLExtractor {
     static extractURLs(text) {
         const urls = [];
         const seenUrls = new Set();
+        const acceptedRanges = [];
 
         URL_PATTERNS.forEach(pattern => {
-            const matches = text.match(pattern);
-            if (matches) {
-                matches.forEach(url => {
-                    const cleanUrl = this.cleanURL(url);
-                    if (cleanUrl && !seenUrls.has(cleanUrl)) {
-                        seenUrls.add(cleanUrl);
-                        urls.push(cleanUrl);
-                    }
-                });
+            for (const match of text.matchAll(pattern)) {
+                const start = match.index;
+                const end = start + match[0].length;
+                const isContained = acceptedRanges.some(
+                    range => start >= range.start && end <= range.end
+                );
+                if (isContained) continue;
+
+                const cleanUrl = this.cleanURL(match[0]);
+                if (cleanUrl && !seenUrls.has(cleanUrl)) {
+                    seenUrls.add(cleanUrl);
+                    urls.push(cleanUrl);
+                    acceptedRanges.push({ start, end });
+                }
             }
         });
 
@@ -256,7 +262,7 @@ class APIManager {
     /**
      * 提交转录任务
      */
-    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100, preserveSourceFile = false, transcriptionStrategy = 'cloud') {
+    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100, preserveSourceFile = false, transcriptionStrategy = 'cloud', sourceType = 'unknown', analysisIntent = 'deep_learning') {
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
 
         if (!token) {
@@ -268,8 +274,10 @@ class APIManager {
             use_speaker_recognition: useSpeakerRecognition,
             include_comments: Boolean(includeComments),
             comment_limit: Number.parseInt(commentLimit, 10) || 100,
-            preserve_source_file: Boolean(preserveSourceFile)
-            ,transcription_strategy: transcriptionStrategy
+            preserve_source_file: Boolean(preserveSourceFile),
+            transcription_strategy: transcriptionStrategy,
+            source_type: sourceType,
+            analysis_intent: analysisIntent
         };
 
         // 只有当 webhook 不为空时才添加到请求体中
@@ -955,10 +963,9 @@ function getSelectedURL() {
    ============================================================ */
 
 /**
- * 内容识别：从链接判断内容形态（视频深度学习 / 帖子洞察 / 未识别）。
- * 业务入口由当前页面决定，这里不把普通解析流路由到 IP 对标模块。
+ * 识别内容来源。来源只选择抓取适配器，不选择分析意图。
  */
-function classifyContent(url) {
+function classifySource(url) {
     let host = '';
     let path = '';
     try {
@@ -966,31 +973,100 @@ function classifyContent(url) {
         host = u.hostname.replace(/^www\./, '').toLowerCase();
         path = u.pathname;
     } catch (e) {
-        return { type: 'unknown', platform: 'unknown', label: '未识别', action: '尝试按视频处理', soon: false };
+        return { sourceType: 'unknown', platform: 'unknown', label: '未识别' };
     }
 
-    // X / Twitter 帖子（已支持）
+    if (host === 'mp.weixin.qq.com') {
+        return {
+            sourceType: 'wechat_mp_article',
+            platform: 'weixin',
+            label: '微信公众号文章'
+        };
+    }
+    if (host === 'weixin.qq.com' && path.startsWith('/sph/')) {
+        return {
+            sourceType: 'wechat_channels_video',
+            platform: 'wechat_channels',
+            label: '微信视频号'
+        };
+    }
     if ((host === 'x.com' || host === 'twitter.com' || host === 'mobile.twitter.com')
         && /\/status\/\d+/.test(path)) {
-        return { type: 'post', platform: 'twitter', label: '𝕏 帖子', action: '帖子精华提炼 + 可信度判断', soon: false };
+        return { sourceType: 'social_post', platform: 'twitter', label: '𝕏 帖子' };
     }
-    // 微信公众号文章 → 帖子洞察（正文 + 留言）
-    if (host === 'mp.weixin.qq.com') {
-        return { type: 'post', platform: 'weixin', label: '微信公众号', action: '帖子精华提炼', soon: false };
-    }
-    // 小红书内容：留在深度学习流，不跳到 IP 对标工作台。
     if (host === 'xiaohongshu.com' || host === 'xhslink.com') {
-        return { type: 'video', platform: 'xiaohongshu', label: '小红书内容', action: '视频转录 / 图文深度学习', soon: false };
+        return { sourceType: 'mixed_media', platform: 'xiaohongshu', label: '小红书内容' };
     }
-    // 视频平台（已支持，走转录）
     const videoHosts = ['youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv',
         'douyin.com', 'v.douyin.com', 'iesdouyin.com', 'xiaoyuzhoufm.com',
         'tiktok.com', 'vm.tiktok.com'];
     if (videoHosts.some((h) => host === h || host.endsWith('.' + h))) {
-        return { type: 'video', platform: host, label: '视频', action: '语音转录', soon: false };
+        return { sourceType: 'video', platform: host, label: '视频' };
     }
-    // 其它/短链：未知，尝试按视频处理
-    return { type: 'unknown', platform: host || 'unknown', label: '未识别', action: '尝试按视频处理', soon: false };
+    return { sourceType: 'unknown', platform: host || 'unknown', label: '未识别' };
+}
+
+/**
+ * 为当前入口生成展示信息；analysisIntent 始终由入口或用户选择提供。
+ */
+function classifyContent(url, analysisIntent = 'deep_learning') {
+    const source = classifySource(url);
+    const base = {
+        sourceType: source.sourceType,
+        analysisIntent,
+        platform: source.platform,
+        label: source.label,
+        soon: false
+    };
+
+    if (analysisIntent === 'post_insight') {
+        return {
+            ...base,
+            type: 'post',
+            historyType: 'post',
+            action: '帖子精华提炼 + 评论洞察'
+        };
+    }
+
+    if (source.sourceType === 'wechat_mp_article') {
+        return {
+            ...base,
+            type: 'article',
+            historyType: 'file',
+            action: '获取文章正文并生成深度学习笔记'
+        };
+    }
+    if (source.sourceType === 'social_post') {
+        return {
+            ...base,
+            type: 'video',
+            historyType: 'video',
+            action: '获取正文或视频并生成深度学习笔记'
+        };
+    }
+    if (source.sourceType === 'mixed_media') {
+        return {
+            ...base,
+            type: 'video',
+            historyType: 'video',
+            action: '视频转录 / 图文深度学习'
+        };
+    }
+    if (source.sourceType === 'video'
+        || source.sourceType === 'wechat_channels_video') {
+        return {
+            ...base,
+            type: 'video',
+            historyType: 'video',
+            action: '语音转录并生成深度学习笔记'
+        };
+    }
+    return {
+        ...base,
+        type: 'unknown',
+        historyType: 'video',
+        action: '尝试按视频处理'
+    };
 }
 
 /** 提交按钮文案（按识别类型） */
@@ -998,7 +1074,8 @@ function submitLabelForUrl(url) {
     if (!url) return '开始解析';
     const c = classifyContent(url);
     if (c.soon) return '该平台暂未支持';
-    if (c.type === 'post') return '提炼精华';
+    if (c.analysisIntent === 'post_insight') return '提炼精华';
+    if (c.type === 'article') return '开始深度学习';
     if (c.type === 'video') return '开始深度学习';
     return '开始解析';
 }
@@ -1088,18 +1165,37 @@ function isLocalMediaHistoryItem(task) {
     return LOCAL_MEDIA_HISTORY_EXTENSIONS.has(extension);
 }
 
-// 历史条目类型：本地音视频按真实扩展名纠正旧数据，再使用已存类型或 URL 推断。
+// 产品意图只能来自任务字段或稳定结果标识，不能由来源域名推断。
+function historyIntentOf(task) {
+    if (task && task.analysis_intent === 'post_insight') return 'post_insight';
+    if (task && task.analysis_intent === 'deep_learning') return 'deep_learning';
+    if (task && task.result_id) return 'post_insight';
+    if (task && task.view_token) return 'deep_learning';
+    if (task && task.type === 'post') return 'post_insight';
+    return 'deep_learning';
+}
+
+// 历史条目类型：意图决定产品类型；来源仅用于展示和内容获取。
 function histTypeOf(task) {
+    if (historyIntentOf(task) === 'post_insight') return 'post';
     if (task.type === 'file' && isLocalMediaHistoryItem(task)) return 'video';
-    if (task.type) return task.type;
-    if (task.view_token) return 'video';
-    const cls = classifyContent(task.url).type;
-    if (cls === 'post') return 'post';
+    if (task.type === 'file') return 'file';
     return 'video';
 }
 
+function historyActionHref(task) {
+    if (historyIntentOf(task) === 'post_insight') {
+        if (task.result_id) {
+            return '/post?view=' + encodeURIComponent(task.result_id);
+        }
+        return '/post?url=' + encodeURIComponent(task.url || '');
+    }
+    if (task.view_token) return '/view/' + encodeURIComponent(task.view_token);
+    return '/add_task_by_web';
+}
+
 function buildHistoryCard(task) {
-    const cls = classifyContent(task.url);
+    const cls = classifyContent(task.url, historyIntentOf(task));
     const histType = histTypeOf(task);
     const icon = histType === 'file' ? '文' : (histType === 'post' ? '帖' : '视');
     const typeLabel = histType === 'post' ? '帖子' : (histType === 'file' ? '文件' : '视频');
@@ -1119,19 +1215,17 @@ function buildHistoryCard(task) {
     // 动作按状态：失败→重试（不查看失败页）；处理中→禁用；成功→查看真正的结果
     let viewBtn;
     if (st.cls === 'failed') {
-        const retryHref = (cls.type === 'post')
-            ? ('/post?url=' + encodeURIComponent(task.url))
-            : '/add_task_by_web';
+        const retryHref = historyActionHref({ ...task, view_token: null, result_id: null });
         viewBtn = `<a class="hist-btn" href="${retryHref}">重试</a>`;
     } else if (st.cls === 'running' || st.cls === 'queued') {
         viewBtn = `<a class="hist-btn" aria-disabled="true">处理中</a>`;
     } else if (task.result_id) {
         // 帖子洞察结果（已持久化到本地）→ 查看存储结果
-        viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">查看</a>`;
+        viewBtn = `<a class="hist-btn" href="${historyActionHref(task)}">查看</a>`;
     } else if (task.view_token) {
-        viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">查看</a>`;
-    } else if (cls.type === 'post') {
-        viewBtn = `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url)}">重新分析</a>`;
+        viewBtn = `<a class="hist-btn" href="${historyActionHref(task)}" target="_blank">查看</a>`;
+    } else if (historyIntentOf(task) === 'post_insight') {
+        viewBtn = `<a class="hist-btn" href="${historyActionHref(task)}">重新分析</a>`;
     } else {
         viewBtn = `<a class="hist-btn" href="/add_task_by_web">重新提交</a>`;
     }
@@ -1514,8 +1608,6 @@ function historyTimestampFromAuditItem(item) {
 function historyTypeFromAuditItem(item) {
     const url = String(item && item.video_url || '');
     if (url.startsWith('local://')) return isLocalMediaHistoryItem(item) ? 'video' : 'file';
-    const platform = String(item && item.platform || '').toLowerCase();
-    if (['twitter', 'x', 'xiaohongshu', 'weixin', 'wechat'].includes(platform)) return 'post';
     return 'video';
 }
 
@@ -1535,6 +1627,7 @@ function mergeMarkedHistoryItems(items) {
             author: item.author || '',
             platform: item.platform || '',
             type: historyTypeFromAuditItem(item),
+            analysis_intent: 'deep_learning',
             timestamp: historyTimestampFromAuditItem(item),
             status: item.status || 'success',
             is_marked: Boolean(item.is_marked),
@@ -1554,6 +1647,7 @@ function mergeMarkedHistoryItems(items) {
         }
         const current = history[existingIndex];
         const merged = Object.assign({}, current, next, {
+            analysis_intent: current.analysis_intent || next.analysis_intent,
             summaryPreview: current.summaryPreview || '',
             summaryPreviewLoaded: Boolean(current.summaryPreviewLoaded)
         });
@@ -1602,9 +1696,6 @@ function syncMarkedHistoryFromServer(force = false) {
     return markedHistorySyncPromise;
 }
 
-return markedHistorySyncPromise;
-}
-
 /** 更新识别横幅 + 视频专属选项可见性 + 按钮文案 */
 function updateDetection() {
     const banner = document.getElementById('detect-banner');
@@ -1621,11 +1712,21 @@ function updateDetection() {
     const c = classifyContent(url);
     if (banner) {
         const variant = c.type === 'video' ? 'is-video'
-            : (c.type === 'post' ? (c.soon ? 'is-soon' : 'is-post') : 'is-unknown');
+            : (c.type === 'article' ? 'is-article'
+                : (c.type === 'post' ? (c.soon ? 'is-soon' : 'is-post') : 'is-unknown'));
+        const alternative = c.sourceType === 'wechat_mp_article'
+            ? '<a class="db-alternative" href="/post?url='
+                + encodeURIComponent(url) + '">切换到帖子洞察</a>'
+            : '';
+        const costNote = c.sourceType === 'wechat_mp_article'
+            ? '<span class="db-cost">开始后将调用 TikHub 获取正文并调用 AI，可能产生费用；不会自动抓取评论。</span>'
+            : '';
         banner.className = 'detect-banner ' + variant;
         banner.hidden = false;
         banner.innerHTML = '<span class="db-chip">' + escapeHtml(c.label) + '</span>'
-            + '<span class="db-text">将执行：<strong>' + escapeHtml(c.action) + '</strong></span>';
+            + '<span class="db-text">将执行：<strong>' + escapeHtml(c.action) + '</strong></span>'
+            + alternative
+            + costNote;
     }
     if (videoOpts) videoOpts.hidden = !(c.type === 'video' || c.type === 'unknown');
     if (typeof UIManager !== 'undefined') UIManager.updateSubmitButton();
@@ -1929,11 +2030,8 @@ async function submitTranscription(event) {
     const preserveEl = document.getElementById('preserve-source-file');
     const preserveSourceFile = preserveEl ? preserveEl.checked : false;
 
-    const includeCommentsEl = document.getElementById('include-comments');
-    const includeComments = includeCommentsEl ? includeCommentsEl.checked : false;
-
-    const commentLimitEl = document.getElementById('comment-limit');
-    const commentLimit = commentLimitEl ? (Number.parseInt(commentLimitEl.value, 10) || 100) : 100;
+    const includeComments = false;
+    const commentLimit = 100;
 
     const wechatWebhookEl = document.getElementById('wechat-webhook');
     const wechatWebhook = wechatWebhookEl ? wechatWebhookEl.value.trim() : '';
@@ -1945,13 +2043,7 @@ async function submitTranscription(event) {
         return;
     }
 
-    // 按当前深度学习入口路由：已支持的帖子（X / 公众号）进入帖子洞察；
-    // 视频和未识别链接留在转录 / 深度学习流程。
     const detected = classifyContent(selectedURL);
-    if (detected.type === 'post' && !detected.soon) {
-        window.location.href = '/post?url=' + encodeURIComponent(selectedURL);
-        return;
-    }
     if (detected.soon) {
         UIManager.showStatus('error', detected.label + ' 暂未支持',
             '该平台的解析功能即将上线，敬请期待');
@@ -1965,13 +2057,13 @@ async function submitTranscription(event) {
     try {
         currentTask = { url: selectedURL };
         UIManager.updateSubmitButton();
-        UIManager.showStatus('loading', '正在提交转录任务...', '请稍候，正在处理您的请求');
+        const submittingLabel = detected.type === 'article'
+            ? '正在创建文章深度学习任务...'
+            : '正在提交转录任务...';
+        UIManager.showStatus('loading', submittingLabel, '请稍候，正在处理您的请求');
 
         // 保存设置到本地存储
         StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, useSpeakerRecognition);
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS, includeComments);
-        StorageManager.set(APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT, commentLimit);
-
         const response = await APIManager.submitTranscription(
             selectedURL,
             useSpeakerRecognition,
@@ -1979,7 +2071,9 @@ async function submitTranscription(event) {
             includeComments,
             commentLimit,
             preserveSourceFile,
-            transcriptionStrategy
+            transcriptionStrategy,
+            detected.sourceType,
+            detected.analysisIntent
         );
 
         if (response.code === 202 && response.data && response.data.task_id) {
@@ -1990,7 +2084,10 @@ async function submitTranscription(event) {
                 original_text: originalText,
                 use_speaker_recognition: useSpeakerRecognition,
                 preserve_source_file: preserveSourceFile,
-                include_comments: includeComments
+                include_comments: includeComments,
+                source_type: detected.sourceType,
+                analysis_intent: detected.analysisIntent,
+                type: detected.historyType
             };
 
             // 添加到历史记录

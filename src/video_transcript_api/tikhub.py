@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -22,6 +23,14 @@ _PLACEHOLDER_KEYS = {
     "your-tikhub-api-key-here",
     "请替换为您的实际API密钥",
 }
+_PERMISSION_ERROR_MARKERS = (
+    "api token lacks required permissions",
+    "api令牌缺少所需权限",
+)
+_BEARER_TOKEN_PATTERN = re.compile(
+    r"(?i)(authorization['\"]?\s*:\s*['\"]?\s*bearer\s+|bearer\s+)"
+    r"[a-z0-9+/=_-]+"
+)
 
 
 class TikHubError(ValueError):
@@ -307,17 +316,29 @@ class TikHubClient:
             return TikHubRateLimitError(full_message, status_code)
         return TikHubRequestError(full_message, status_code)
 
-    @staticmethod
-    def _response_message(response: requests.Response) -> str:
+    @classmethod
+    def _response_message(cls, response: requests.Response) -> str:
         try:
             data = response.json()
             if isinstance(data, dict):
-                return (
-                    data.get("message")
-                    or data.get("message_zh")
+                message = (
+                    data.get("message_zh")
+                    or data.get("message")
                     or data.get("detail")
                     or str(data)
                 )
-            return str(data)
+            else:
+                message = str(data)
         except Exception:
-            return response.text[:200] if response.text else "unknown error"
+            message = response.text if response.text else "unknown error"
+        return cls._sanitize_error_message(str(message))
+
+    @staticmethod
+    def _sanitize_error_message(message: str) -> str:
+        lowered = message.lower()
+        if any(marker in lowered for marker in _PERMISSION_ERROR_MARKERS):
+            return (
+                "TikHub API Token 缺少所需权限，请在用户后台为该 Token "
+                "开通对应接口权限：https://user.tikhub.io/dashboard/api"
+            )
+        return _BEARER_TOKEN_PATTERN.sub(r"\1[REDACTED]", message)[:500]

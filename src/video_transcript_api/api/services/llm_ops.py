@@ -48,6 +48,22 @@ llm_executor = get_llm_executor()
 _SUMMARY_RETRY_DELAYS_SECONDS = (60, 300, 1800)
 
 
+def _summary_profile_for_task(llm_task: dict) -> str | None:
+    """Return the product summary contract selected only by analysis intent."""
+    if (llm_task.get("analysis_intent") or "deep_learning") == "deep_learning":
+        return "deep_learning"
+    return None
+
+
+def _enforce_analysis_intent_boundary(llm_task: dict) -> None:
+    """Prevent acquisition hints from enabling a different product pipeline."""
+    intent = llm_task.get("analysis_intent") or "deep_learning"
+    llm_task["analysis_intent"] = intent
+    if intent == "deep_learning":
+        llm_task["include_comments"] = False
+        llm_task["comment_only"] = False
+
+
 class _PostprocessHeartbeat:
     """Keep one durable postprocess claim alive while LLM work blocks."""
 
@@ -227,6 +243,7 @@ def _handle_summary_only_retry(llm_task: dict) -> None:
                 speaker_count=2 if use_speaker_recognition else 0,
                 transcription_data=None,
                 selected_models=llm_coordinator.config.get_models(),
+                summary_profile=_summary_profile_for_task(llm_task),
             )
             if not summary_text:
                 summary_error = "summary generation returned empty"
@@ -330,6 +347,7 @@ def _handle_llm_task(llm_task: dict):
     Args:
         llm_task: LLM 任务字典，包含 task_id, url, video_title, transcript 等
     """
+    _enforce_analysis_intent_boundary(llm_task)
     task_id = llm_task.get("task_id")
 
     usage_event_id = llm_task.get("usage_event_id")
@@ -541,6 +559,7 @@ def _handle_llm_task(llm_task: dict):
                         platform=platform or "",
                         media_id=media_id or "",
                         skip_summary=skip_summary_for_coordinator,
+                        summary_profile=_summary_profile_for_task(llm_task),
                         progress_callback=_calibration_progress,
                     )
 

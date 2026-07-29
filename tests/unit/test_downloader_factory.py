@@ -17,6 +17,7 @@ from video_transcript_api.downloaders.bilibili import BilibiliDownloader
 from video_transcript_api.downloaders.douyin import DouyinDownloader
 from video_transcript_api.downloaders.xiaohongshu import XiaohongshuDownloader
 from video_transcript_api.downloaders.xiaoyuzhou import XiaoyuzhouDownloader
+from video_transcript_api.downloaders.twitter import TwitterDownloader
 from video_transcript_api.downloaders.generic import GenericDownloader
 
 
@@ -144,6 +145,26 @@ class TestWeChatChannelsRouting:
         downloader = create_downloader(url)
         assert type(downloader).__name__ == "WeChatChannelsDownloader", (
             f"Expected WeChatChannelsDownloader for {url}, got {type(downloader).__name__}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# X / Twitter
+# ---------------------------------------------------------------------------
+
+class TestTwitterRouting:
+    """Factory should return the comment-free TwitterDownloader."""
+
+    @pytest.mark.parametrize("url", [
+        "https://x.com/leoxbtt/status/2082108948505674112/video/1?s=46",
+        "https://www.x.com/user/status/123",
+        "https://twitter.com/user/status/123",
+        "https://mobile.twitter.com/user/status/123/video/2",
+    ])
+    def test_twitter_urls(self, url):
+        downloader = create_downloader(url)
+        assert isinstance(downloader, TwitterDownloader), (
+            f"Expected TwitterDownloader for {url}, got {type(downloader).__name__}"
         )
 
 

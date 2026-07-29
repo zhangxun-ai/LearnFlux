@@ -188,6 +188,8 @@ async def transcribe_video(
                 "include_comments": request_body.include_comments,
                 "comment_limit": request_body.comment_limit,
                 "preserve_source_file": request_body.preserve_source_file,
+                "source_type": request_body.source_type,
+                "analysis_intent": request_body.analysis_intent,
                 "transcription_strategy": (
                     None if request_body.use_speaker_recognition
                     else request_body.transcription_strategy

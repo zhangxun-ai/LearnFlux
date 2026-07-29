@@ -118,7 +118,7 @@ process.stdout.write(JSON.stringify(results));
         text=True,
     )
 
-    assert json.loads(completed.stdout) == ["video", "file", "post", "video", "video"]
+    assert json.loads(completed.stdout) == ["video", "file", "video", "video", "video"]
 
 
 def test_workbench_local_upload_adds_file_to_recent_history():

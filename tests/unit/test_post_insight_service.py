@@ -6,8 +6,10 @@ from src.video_transcript_api.api.services.post_insight import (
     PostInsightResult,
     generate_post_insight,
 )
+from src.video_transcript_api.api.services import post_insight
 from src.video_transcript_api.comments.selector import CommentItem
 from src.video_transcript_api.comments.twitter_post import TwitterPost
+from src.video_transcript_api.comments.weixin_post import WeixinPost, WeixinPostFetcher
 
 
 class _FakeAnalyzer:
@@ -37,6 +39,8 @@ class _FakeFetcher:
 
 
 _TWEET_URL = "https://x.com/naval/status/1002103360646823936"
+_WECHAT_MP_URL = "https://mp.weixin.qq.com/s/r5aDx2ntV9E1QWM3oHe3kw"
+_WECHAT_CHANNELS_URL = "https://weixin.qq.com/sph/abc123"
 
 
 def _post(comments):
@@ -107,6 +111,47 @@ def test_unsupported_platform_raises():
     with pytest.raises(ValueError):
         generate_post_insight(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", analyzer=_FakeAnalyzer()
+        )
+
+
+def test_official_account_url_selects_weixin_post_fetcher(monkeypatch):
+    class _RecordingWeixinFetcher:
+        instance = None
+
+        def __init__(self):
+            self.called_with = None
+            type(self).instance = self
+
+        def fetch(self, url, media_id, max_comments=80):
+            self.called_with = (url, media_id, max_comments)
+            return WeixinPost(
+                title="公众号标题",
+                author="公众号作者",
+                thread_text="公众号正文",
+            )
+
+    assert post_insight._FETCHERS["weixin"] is WeixinPostFetcher
+    monkeypatch.setitem(post_insight._FETCHERS, "weixin", _RecordingWeixinFetcher)
+
+    result = generate_post_insight(_WECHAT_MP_URL, analyzer=_FakeAnalyzer())
+
+    assert result.platform == "weixin"
+    assert _RecordingWeixinFetcher.instance.called_with[:2] == (
+        _WECHAT_MP_URL,
+        "r5aDx2ntV9E1QWM3oHe3kw",
+    )
+
+
+def test_wechat_channels_url_is_rejected_before_post_fetching():
+    class _FailingFetcher:
+        def fetch(self, *args, **kwargs):
+            raise AssertionError("video channels URL must not use post fetcher")
+
+    with pytest.raises(ValueError, match="generic"):
+        generate_post_insight(
+            _WECHAT_CHANNELS_URL,
+            analyzer=_FakeAnalyzer(),
+            post_fetcher=_FailingFetcher(),
         )
 
 

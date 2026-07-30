@@ -104,6 +104,44 @@ def list_vault_directories(
     return sorted(set(results), key=lambda value: (value.casefold(), value))
 
 
+def list_raw_categories(vault_root: str | Path, *, raw_root: str = "raw") -> list[str]:
+    """Return only visible direct category directories under the raw root."""
+    base = resolve_vault_path(vault_root, raw_root)
+    if not base.is_dir():
+        return []
+    vault = Path(vault_root).expanduser().resolve(strict=True)
+    return sorted(
+        (entry.name for entry in base.iterdir() if not entry.name.startswith(".") and entry.is_dir() and not entry.is_symlink() and entry.resolve().is_relative_to(vault)),
+        key=lambda value: (value.casefold(), value),
+    )
+
+
+def build_knowledge_directory(*, root: str, category: str, collection_directory: str = "") -> str:
+    """Build a safe relative directory for one managed knowledge layer."""
+    root_parts = _relative_parts(root)
+    category_parts = _relative_parts(category)
+    if len(category_parts) != 1:
+        raise VaultPathError("category must contain one path segment")
+    collection_parts = _relative_parts(
+        collection_directory, allow_empty=True
+    )
+    if len(collection_parts) > 1:
+        raise VaultPathError(
+            "collection directory must contain one path segment"
+        )
+    parts = (*root_parts, *category_parts, *collection_parts)
+    return PurePosixPath(*parts).as_posix()
+
+
+def ensure_vault_directory_tree(vault_root: str | Path, relative_directory: str) -> Path:
+    """Create a validated, non-symlink directory tree only during apply."""
+    target = resolve_vault_path(vault_root, relative_directory)
+    target.mkdir(parents=True, exist_ok=True)
+    if target.is_symlink() or not target.is_dir():
+        raise VaultPathError("unsafe vault directory")
+    return target
+
+
 def create_vault_directory(
     vault_root: str | Path,
     parent_relative_path: str,

@@ -56,6 +56,21 @@
         transcriptionConcurrency: document.getElementById('collection-transcription-concurrency'),
         cancelCollection: document.getElementById('cancel-collection'),
         continueCollection: document.getElementById('continue-collection'),
+        obsidianCollectionOpen: document.getElementById('obsidian-collection-open'),
+        obsidianCollectionDialog: document.getElementById('obsidian-collection-dialog'),
+        obsidianCollectionClose: document.getElementById('obsidian-collection-close'),
+        obsidianCollectionCategory: document.getElementById('obsidian-collection-category'),
+        obsidianCollectionDirectory: document.getElementById('obsidian-collection-directory'),
+        obsidianCollectionRecommendation: document.getElementById('obsidian-collection-recommendation'),
+        obsidianCollectionSources: document.getElementById('obsidian-collection-sources'),
+        obsidianCollectionSelectAll: document.getElementById('obsidian-collection-select-all'),
+        obsidianCollectionClearAll: document.getElementById('obsidian-collection-clear-all'),
+        obsidianCollectionMessage: document.getElementById('obsidian-collection-message'),
+        obsidianCollectionPreviewList: document.getElementById('obsidian-collection-preview-list'),
+        obsidianCollectionPreviewSelected: document.getElementById('obsidian-collection-preview-selected'),
+        obsidianCollectionIncremental: document.getElementById('obsidian-collection-incremental'),
+        obsidianCollectionApply: document.getElementById('obsidian-collection-apply'),
+        obsidianCollectionForce: document.getElementById('obsidian-collection-force'),
         transcriptionFeedback: document.getElementById('collection-transcription-feedback'),
         actionDialog: document.getElementById('collection-action-dialog'),
         actionDialogTitle: document.getElementById('collection-action-dialog-title'),
@@ -222,6 +237,9 @@
     let lastSummaryTrigger = null;
     const sourceDetailRequests = new Map();
     let busy = false;
+    let collectionKnowledgeBinding = null;
+    let collectionKnowledgePreview = null;
+    let collectionKnowledgeRequest = null;
     // { phase, total, uploaded, percent, message } while create/upload is in flight.
     let importStatus = null;
     // Sticky failure message so a failed bulk upload is not lost after toast dismisses.
@@ -598,8 +616,13 @@
         const payload = contentType.includes('application/json') ? await response.json() : await response.text();
         if (!response.ok) {
             const detail = typeof payload === 'object' ? (payload.detail || payload.message) : payload;
-            const error = new Error(detail || `HTTP ${response.status}`);
+            const detailMessage = detail && typeof detail === 'object'
+                ? (detail.code || payload.message)
+                : detail;
+            const error = new Error(detailMessage || `HTTP ${response.status}`);
             error.status = response.status;
+            error.code = detail && typeof detail === 'object' ? (detail.code || '') : '';
+            error.latestPreview = detail && typeof detail === 'object' ? (detail.latest_preview || null) : null;
             throw error;
         }
         return payload;
@@ -1334,6 +1357,8 @@
         currentView = opts.sourceId ? 'source' : 'summary';
         knowledgeMapScope = opts.sourceId ? 'source' : 'collection';
         selectedMapNodeId = null;
+        clearCollectionKnowledgePreview();
+        collectionKnowledgeBinding = null;
         await refreshCollection(collectionId);
         updateStudyChromeLayout({ collapseChrome: true });
         const sources = currentCollection ? (currentCollection.sources || []) : [];
@@ -3244,6 +3269,9 @@
             els.continueCollection.classList.toggle('hidden', !canResume);
             els.continueCollection.disabled = busy || !canResume;
         }
+        if (els.obsidianCollectionOpen) {
+            els.obsidianCollectionOpen.disabled = busy || !hasCollection;
+        }
     }
 
     function renderSummaryCard(target, points, fallback) {
@@ -4863,6 +4891,319 @@
         }
     }
 
+    async function openCollectionKnowledgeDialog() {
+        if (!currentCollection) {
+            showToast('请先选择一个专题');
+            return;
+        }
+        clearCollectionKnowledgePreview();
+        setCollectionKnowledgeMessage('正在读取分类、合集绑定与分集…');
+        els.obsidianCollectionDialog.showModal();
+        setCollectionKnowledgeBusy(true);
+        try {
+            const collectionId = encodeURIComponent(currentCollection.id);
+            const [categoriesPayload, bindingPayload, recommendationPayload] = await Promise.all([
+                apiJSON('/api/obsidian/knowledge/categories'),
+                apiJSON(`/api/obsidian/knowledge/collections/${collectionId}/binding`),
+                apiJSON(`/api/obsidian/knowledge/collections/${collectionId}/recommend-category`, {
+                    method: 'POST'
+                })
+            ]);
+            const categories = (categoriesPayload.data && categoriesPayload.data.items) || [];
+            const bindingData = bindingPayload.data || {};
+            const recommendationData = recommendationPayload.data || {};
+            collectionKnowledgeBinding = bindingData.binding || null;
+            els.obsidianCollectionCategory.replaceChildren();
+            categories.forEach((category) => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                els.obsidianCollectionCategory.append(option);
+            });
+            const category = collectionKnowledgeBinding
+                ? collectionKnowledgeBinding.category
+                : recommendationData.category;
+            if (category) els.obsidianCollectionCategory.value = category;
+            els.obsidianCollectionDirectory.value = collectionKnowledgeBinding
+                ? collectionKnowledgeBinding.collection_directory
+                : (bindingData.default_collection_directory || '');
+            els.obsidianCollectionRecommendation.textContent = recommendationData.category
+                ? `AI 建议：${recommendationData.category}（${recommendationData.reason || '可手动修改'}）`
+                : '未能生成分类建议，请手动选择。';
+            renderCollectionKnowledgeSources();
+            setCollectionKnowledgeMessage(
+                categories.length
+                    ? '选择分集后预览；打开弹窗本身不会写入 Vault。'
+                    : 'raw 下没有一级分类，请先在 Vault 中创建分类目录。',
+                categories.length ? '' : 'error'
+            );
+        } catch (error) {
+            setCollectionKnowledgeMessage(
+                `加载失败：${error.message}。请检查 Obsidian 配置和登录状态。`,
+                'error'
+            );
+        } finally {
+            setCollectionKnowledgeBusy(false);
+        }
+    }
+
+    function clearCollectionKnowledgePreview() {
+        collectionKnowledgePreview = null;
+        collectionKnowledgeRequest = null;
+        if (els.obsidianCollectionPreviewList) {
+            els.obsidianCollectionPreviewList.replaceChildren();
+        }
+        if (els.obsidianCollectionApply) {
+            els.obsidianCollectionApply.disabled = true;
+            els.obsidianCollectionApply.textContent = '确认同步';
+        }
+    }
+
+    function setCollectionKnowledgeBusy(nextBusy) {
+        [
+            els.obsidianCollectionOpen,
+            els.obsidianCollectionPreviewSelected,
+            els.obsidianCollectionIncremental,
+            els.obsidianCollectionForce
+        ].forEach((button) => {
+            if (button) button.disabled = nextBusy;
+        });
+        if (els.obsidianCollectionApply) {
+            els.obsidianCollectionApply.disabled = nextBusy || !collectionKnowledgePreview;
+        }
+    }
+
+    function setCollectionKnowledgeMessage(text, tone) {
+        if (!els.obsidianCollectionMessage) return;
+        els.obsidianCollectionMessage.textContent = text || '';
+        els.obsidianCollectionMessage.dataset.tone = tone || '';
+    }
+
+    function renderCollectionKnowledgeSources() {
+        els.obsidianCollectionSources.replaceChildren();
+        const sources = (currentCollection && currentCollection.sources) || [];
+        const defaultId = selectedSourceId || (sources[0] && sources[0].id) || '';
+        sources
+            .slice()
+            .sort((a, b) => Number(a.position || 0) - Number(b.position || 0))
+            .forEach((source) => {
+                const label = document.createElement('label');
+                label.className = 'obsidian-collection-source';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = source.id;
+                checkbox.checked = source.id === defaultId;
+                checkbox.addEventListener('change', () => {
+                    clearCollectionKnowledgePreview();
+                    setCollectionKnowledgeMessage('分集选择已变化，请重新预览。');
+                });
+                const title = document.createElement('span');
+                title.textContent = `${source.position || ''} ${source.title || source.id}`.trim();
+                const status = document.createElement('small');
+                status.textContent = source.task_status || 'unknown';
+                label.append(checkbox, title, status);
+                els.obsidianCollectionSources.append(label);
+            });
+    }
+
+    function checkedCollectionSourceIds() {
+        return Array.from(
+            els.obsidianCollectionSources.querySelectorAll('input[type="checkbox"]:checked')
+        ).map((checkbox) => checkbox.value);
+    }
+
+    async function ensureCollectionKnowledgeBinding() {
+        const category = els.obsidianCollectionCategory.value;
+        const collectionDirectory = els.obsidianCollectionDirectory.value.trim();
+        if (!category) throw new Error('请选择一级分类');
+        if (!collectionDirectory) throw new Error('请填写合集目录');
+        if (
+            collectionKnowledgeBinding
+            && collectionKnowledgeBinding.category === category
+            && collectionKnowledgeBinding.collection_directory === collectionDirectory
+        ) {
+            return collectionKnowledgeBinding;
+        }
+        const payload = await apiJSON(
+            `/api/obsidian/knowledge/collections/${encodeURIComponent(currentCollection.id)}/binding`,
+            {
+                method: 'PUT',
+                body: JSON.stringify({
+                    category,
+                    collection_directory: collectionDirectory,
+                    expected_revision: collectionKnowledgeBinding
+                        ? collectionKnowledgeBinding.revision
+                        : null
+                })
+            }
+        );
+        collectionKnowledgeBinding = payload.data.binding;
+        return collectionKnowledgeBinding;
+    }
+
+    function collectionKnowledgeStateLabel(state) {
+        return {
+            new: 'new',
+            unchanged: 'unchanged',
+            changed: 'changed',
+            externally_modified: 'externally_modified',
+            relocated: 'relocated'
+        }[state] || state;
+    }
+
+    function renderCollectionKnowledgePreview(data) {
+        collectionKnowledgePreview = data;
+        els.obsidianCollectionPreviewList.replaceChildren();
+        const hasPreconditions = (data.preconditions || []).length > 0;
+        let externallyModified = false;
+        (data.items || []).forEach((item) => {
+            const section = document.createElement('section');
+            section.className = 'obsidian-collection-preview-item';
+            const heading = document.createElement('strong');
+            heading.textContent = item.source_id || item.view_token || '分集';
+            section.append(heading);
+            (item.documents || []).forEach((previewDocument) => {
+                const row = document.createElement('article');
+                row.className = 'obsidian-collection-document';
+                row.dataset.state = previewDocument.state;
+                const label = document.createElement('span');
+                label.textContent = `${previewDocument.document_type} · ${collectionKnowledgeStateLabel(previewDocument.state)}`;
+                const path = document.createElement('code');
+                path.textContent = previewDocument.relative_path;
+                const diff = document.createElement('pre');
+                diff.textContent = previewDocument.diff || '内容无变化';
+                row.append(label, path, diff);
+                section.append(row);
+                externallyModified = externallyModified || previewDocument.state === 'externally_modified';
+            });
+            els.obsidianCollectionPreviewList.append(section);
+        });
+        (data.unavailable || []).forEach((unavailable) => {
+            const row = document.createElement('p');
+            row.className = 'obsidian-collection-unavailable';
+            row.textContent = `${unavailable.source_id}: unavailable (${unavailable.code})`;
+            els.obsidianCollectionPreviewList.append(row);
+        });
+        els.obsidianCollectionApply.textContent = externallyModified
+            ? '覆盖 Obsidian 中的修改'
+            : '确认同步';
+        els.obsidianCollectionApply.disabled = !hasPreconditions;
+    }
+
+    async function requestCollectionKnowledgePreview(request) {
+        if (!currentCollection) return;
+        setCollectionKnowledgeBusy(true);
+        clearCollectionKnowledgePreview();
+        setCollectionKnowledgeMessage('正在生成合集同步预览…');
+        try {
+            await ensureCollectionKnowledgeBinding();
+            const payload = await apiJSON(
+                `/api/obsidian/knowledge/collections/${encodeURIComponent(currentCollection.id)}/preview`,
+                { method: 'POST', body: JSON.stringify(request) }
+            );
+            const previewData = payload.data || {};
+            collectionKnowledgeRequest = request;
+            renderCollectionKnowledgePreview(previewData);
+            setCollectionKnowledgeMessage(
+                (previewData.preconditions || []).length
+                    ? '预览已生成，请核对路径和状态后确认。'
+                    : '当前没有已就绪、可同步的分集。',
+                (previewData.preconditions || []).length ? 'success' : 'warning'
+            );
+        } catch (error) {
+            setCollectionKnowledgeMessage(`预览失败：${error.message}`, 'error');
+        } finally {
+            setCollectionKnowledgeBusy(false);
+        }
+    }
+
+    async function previewSelectedCollectionKnowledge() {
+        const selectedSourceIds = checkedCollectionSourceIds();
+        if (!selectedSourceIds.length) {
+            setCollectionKnowledgeMessage('请至少勾选一篇分集。', 'error');
+            return;
+        }
+        await requestCollectionKnowledgePreview({
+            source_ids: selectedSourceIds,
+            sync_all: false,
+            force: false
+        });
+    }
+
+    async function previewIncrementalCollectionKnowledge() {
+        await requestCollectionKnowledgePreview({
+            source_ids: null,
+            sync_all: true,
+            force: false
+        });
+    }
+
+    async function previewForcedCollectionKnowledge() {
+        await requestCollectionKnowledgePreview({
+            source_ids: null,
+            sync_all: true,
+            force: true
+        });
+    }
+
+    async function applyCollectionKnowledgePreview() {
+        if (!currentCollection || !collectionKnowledgePreview || !collectionKnowledgeRequest) return;
+        setCollectionKnowledgeBusy(true);
+        setCollectionKnowledgeMessage('正在逐项写入 Obsidian…');
+        try {
+            const payload = await apiJSON(
+                `/api/obsidian/knowledge/collections/${encodeURIComponent(currentCollection.id)}/apply`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ...collectionKnowledgeRequest,
+                        expected_binding_revision: collectionKnowledgePreview.binding_revision,
+                        preconditions: collectionKnowledgePreview.preconditions
+                    })
+                }
+            );
+            const data = payload.data || {};
+            (data.items || []).forEach((item) => {
+                (item.documents || []).forEach((result) => {
+                    const row = document.createElement('p');
+                    row.className = 'obsidian-collection-result';
+                    row.dataset.status = result.status;
+                    row.textContent = `${item.source_id || item.view_token} · ${result.document_type}: ${result.status} · ${result.relative_path}`;
+                    els.obsidianCollectionPreviewList.append(row);
+                });
+            });
+            (data.unavailable || []).forEach((unavailable) => {
+                const row = document.createElement('p');
+                row.textContent = `${unavailable.source_id}: unavailable (${unavailable.code})`;
+                els.obsidianCollectionPreviewList.append(row);
+            });
+            const failed = data.counts && data.counts.failed;
+            setCollectionKnowledgeMessage(
+                failed
+                    ? '部分文件 failed，可重新生成预览后安全重试。'
+                    : '合集同步完成；created / updated / unchanged 结果已列出。',
+                failed ? 'warning' : 'success'
+            );
+            collectionKnowledgePreview = null;
+            collectionKnowledgeRequest = null;
+            els.obsidianCollectionApply.disabled = true;
+        } catch (error) {
+            if (error.status === 409 && error.code === 'stale_preview') {
+                const latest = error.latestPreview;
+                if (latest) {
+                    renderCollectionKnowledgePreview(latest);
+                } else {
+                    await requestCollectionKnowledgePreview(collectionKnowledgeRequest);
+                }
+                setCollectionKnowledgeMessage('预览已过期并刷新，请重新确认。', 'warning');
+            } else {
+                setCollectionKnowledgeMessage(`同步失败：${error.message}`, 'error');
+            }
+        } finally {
+            setCollectionKnowledgeBusy(false);
+        }
+    }
+
     function renderMetadata() {
         const collection = currentCollection;
         if (els.workspaceStatusPill) {
@@ -5137,6 +5478,74 @@
         }
         if (els.continueCollection) {
             els.continueCollection.addEventListener('click', continueCurrentCollection);
+        }
+        if (els.obsidianCollectionOpen) {
+            els.obsidianCollectionOpen.addEventListener('click', openCollectionKnowledgeDialog);
+        }
+        if (els.obsidianCollectionClose) {
+            els.obsidianCollectionClose.addEventListener('click', () => {
+                els.obsidianCollectionDialog.close();
+            });
+        }
+        if (els.obsidianCollectionDialog) {
+            els.obsidianCollectionDialog.addEventListener('click', (event) => {
+                if (event.target === els.obsidianCollectionDialog) {
+                    els.obsidianCollectionDialog.close();
+                }
+            });
+        }
+        if (els.obsidianCollectionSelectAll) {
+            els.obsidianCollectionSelectAll.addEventListener('click', () => {
+                els.obsidianCollectionSources
+                    .querySelectorAll('input[type="checkbox"]')
+                    .forEach((checkbox) => {
+                        checkbox.checked = true;
+                    });
+                clearCollectionKnowledgePreview();
+                setCollectionKnowledgeMessage('已选择全部分集，请生成预览。');
+            });
+        }
+        if (els.obsidianCollectionClearAll) {
+            els.obsidianCollectionClearAll.addEventListener('click', () => {
+                els.obsidianCollectionSources
+                    .querySelectorAll('input[type="checkbox"]')
+                    .forEach((checkbox) => {
+                        checkbox.checked = false;
+                    });
+                clearCollectionKnowledgePreview();
+                setCollectionKnowledgeMessage('已取消全部选择。');
+            });
+        }
+        [els.obsidianCollectionCategory, els.obsidianCollectionDirectory].forEach((field) => {
+            if (!field) return;
+            field.addEventListener('change', () => {
+                clearCollectionKnowledgePreview();
+                setCollectionKnowledgeMessage('分类或合集目录已变化，请重新预览。');
+            });
+        });
+        if (els.obsidianCollectionPreviewSelected) {
+            els.obsidianCollectionPreviewSelected.addEventListener(
+                'click',
+                previewSelectedCollectionKnowledge
+            );
+        }
+        if (els.obsidianCollectionIncremental) {
+            els.obsidianCollectionIncremental.addEventListener(
+                'click',
+                previewIncrementalCollectionKnowledge
+            );
+        }
+        if (els.obsidianCollectionForce) {
+            els.obsidianCollectionForce.addEventListener(
+                'click',
+                previewForcedCollectionKnowledge
+            );
+        }
+        if (els.obsidianCollectionApply) {
+            els.obsidianCollectionApply.addEventListener(
+                'click',
+                applyCollectionKnowledgePreview
+            );
         }
         if (els.actionDialogClose) els.actionDialogClose.addEventListener('click', closeActionDialog);
         if (els.actionDialogCancel) els.actionDialogCancel.addEventListener('click', cancelActionDialog);

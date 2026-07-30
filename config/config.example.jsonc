@@ -415,7 +415,9 @@
     "obsidian": {
         "enabled": false,
         "vault_id": "",
-        "vault_path": ""
+        "vault_path": "",
+        "knowledge_raw_root": "raw",
+        "knowledge_processed_root": "processed"
     },
 
     // ============================================================

@@ -280,6 +280,7 @@
                         <button class="lc-btn ghost" id="append-folder" type="button">追加文件夹</button>
                         <button class="lc-btn ghost" id="append-files" type="button">追加文件</button>
                         <button class="lc-btn ghost hidden" id="continue-collection" type="button">继续解析</button>
+                        <button class="lc-btn ghost" id="obsidian-collection-open" type="button">沉淀到 Obsidian</button>
                         <button class="lc-btn danger" id="cancel-collection" type="button">停止解析</button>
                     </div>
                     <div class="lc-progress">
@@ -592,6 +593,49 @@
                 <button class="lc-btn ghost" id="collection-action-dialog-cancel" type="button">取消</button>
                 <button class="lc-btn primary" id="collection-action-dialog-submit" type="button">确认</button>
             </footer>
+        </div>
+    </dialog>
+
+    <dialog class="obsidian-collection-dialog" id="obsidian-collection-dialog" aria-labelledby="obsidian-collection-title">
+        <div class="obsidian-collection-panel">
+            <header class="obsidian-collection-head">
+                <div>
+                    <span>LearnFlux Knowledge Deposit</span>
+                    <h3 id="obsidian-collection-title">沉淀合集到 Obsidian</h3>
+                    <p>合集分集会进入统一目录，原文与 AI 解读分别写入 raw / processed。</p>
+                </div>
+                <button class="lc-icon-btn" id="obsidian-collection-close" type="button" aria-label="关闭"><span aria-hidden="true">×</span></button>
+            </header>
+            <div class="obsidian-collection-fields">
+                <label for="obsidian-collection-category">一级分类</label>
+                <select id="obsidian-collection-category"></select>
+                <p id="obsidian-collection-recommendation">正在读取分类建议…</p>
+                <label for="obsidian-collection-directory">合集目录</label>
+                <input id="obsidian-collection-directory" type="text" maxlength="160">
+                <p>修改分类或目录只影响后续同步，不会移动或删除旧文件。</p>
+            </div>
+            <section class="obsidian-collection-selection">
+                <div class="obsidian-collection-selection-head">
+                    <strong>选择分集</strong>
+                    <div>
+                        <button class="lc-btn compact" id="obsidian-collection-select-all" type="button">全选</button>
+                        <button class="lc-btn compact" id="obsidian-collection-clear-all" type="button">取消全选</button>
+                    </div>
+                </div>
+                <div id="obsidian-collection-sources" class="obsidian-collection-sources"></div>
+            </section>
+            <p id="obsidian-collection-message" class="obsidian-collection-message" role="status" aria-live="polite"></p>
+            <section id="obsidian-collection-preview-list" class="obsidian-collection-preview-list"></section>
+            <div class="obsidian-collection-actions">
+                <button class="lc-btn" id="obsidian-collection-preview-selected" type="button">预览所选</button>
+                <button class="lc-btn primary" id="obsidian-collection-incremental" type="button">增量同步全部</button>
+                <button class="lc-btn primary" id="obsidian-collection-apply" type="button" disabled>确认同步</button>
+            </div>
+            <details class="obsidian-collection-advanced">
+                <summary>高级操作</summary>
+                <p>强制操作会重新预览所有已就绪分集，确认后才写入。</p>
+                <button class="lc-btn danger" id="obsidian-collection-force" type="button">强制重新同步全部</button>
+            </details>
         </div>
     </dialog>
 

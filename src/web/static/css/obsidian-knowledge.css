@@ -1,0 +1,99 @@
+.obsidian-knowledge-dialog {
+    width: min(760px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    border: 0;
+    border-radius: 16px;
+    padding: 0;
+    color: var(--text-primary, #1b1a17);
+    background: var(--card, #fff);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .24);
+}
+
+.obsidian-knowledge-dialog::backdrop {
+    background: rgba(20, 18, 16, .52);
+    backdrop-filter: blur(3px);
+}
+
+.obsidian-knowledge-panel { padding: 24px; }
+.obsidian-knowledge-head,
+.obsidian-knowledge-document-head,
+.obsidian-knowledge-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.obsidian-knowledge-head { align-items: flex-start; }
+.obsidian-knowledge-head h3 { margin: 4px 0; }
+.obsidian-knowledge-head p,
+.obsidian-knowledge-settings p { color: var(--text-secondary, #6b665f); }
+.obsidian-knowledge-kicker {
+    color: var(--accent, #d6412d);
+    font-size: .72rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+.obsidian-knowledge-close {
+    border: 0;
+    border-radius: 8px;
+    padding: 4px 10px;
+    background: transparent;
+    color: inherit;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+.obsidian-knowledge-settings {
+    display: grid;
+    gap: 8px;
+    margin: 20px 0;
+}
+.obsidian-knowledge-settings select {
+    min-height: 42px;
+    border: 1px solid var(--line, #e6dfd5);
+    border-radius: 9px;
+    padding: 0 12px;
+    background: var(--card, #fff);
+    color: inherit;
+}
+.obsidian-knowledge-message {
+    min-height: 24px;
+    margin: 10px 0;
+}
+.obsidian-knowledge-message[data-tone="error"] { color: #b42318; }
+.obsidian-knowledge-message[data-tone="warning"] { color: #9a6700; }
+.obsidian-knowledge-message[data-tone="success"] { color: #137333; }
+.obsidian-knowledge-preview-list {
+    display: grid;
+    gap: 12px;
+    max-height: 360px;
+    overflow: auto;
+}
+.obsidian-knowledge-document {
+    display: grid;
+    gap: 9px;
+    border: 1px solid var(--line, #e6dfd5);
+    border-radius: 12px;
+    padding: 14px;
+}
+.obsidian-knowledge-document[data-state="externally_modified"] {
+    border-color: #d97706;
+}
+.obsidian-knowledge-document code {
+    overflow-wrap: anywhere;
+    color: var(--text-secondary, #6b665f);
+}
+.obsidian-knowledge-document pre {
+    max-height: 180px;
+    margin: 0;
+    overflow: auto;
+    white-space: pre-wrap;
+    background: var(--bg-tertiary, #f6f2ec);
+    padding: 10px;
+    border-radius: 8px;
+}
+.obsidian-knowledge-actions {
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+.obsidian-knowledge-result { overflow-wrap: anywhere; }

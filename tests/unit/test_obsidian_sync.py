@@ -82,6 +82,8 @@ def test_example_config_has_disabled_empty_obsidian_placeholders():
         "enabled": False,
         "vault_id": "",
         "vault_path": "",
+        "knowledge_raw_root": "raw",
+        "knowledge_processed_root": "processed",
     }
 
 

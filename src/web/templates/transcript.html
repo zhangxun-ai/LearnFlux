@@ -8,6 +8,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/floating-toc.css">
 <link rel="stylesheet" href="/static/css/visual-learning.css?v={{ asset_ver }}">
+<link rel="stylesheet" href="/static/css/obsidian-knowledge.css?v={{ asset_ver }}">
 <style>
 /* Section header with inline action */
 .section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1116,6 +1117,14 @@ body.export-document-mode .export-print-nav {
                 onclick="toggleContentMark()"
             >精华</button>
             <button type="button" class="top-btn" onclick="submitRecalibrate()">重新校对</button>
+            <button
+                type="button"
+                id="obsidian-knowledge-open"
+                class="top-btn"
+                data-view-token="{{ view_token }}"
+                aria-haspopup="dialog"
+                aria-controls="obsidian-knowledge-dialog"
+            >沉淀到 Obsidian</button>
             <div style="position: relative;" id="exportDropdownContainer">
                 <button type="button" id="exportMainBtn" class="top-btn primary" onclick="toggleExportMenu(event)" aria-haspopup="dialog" aria-controls="exportMenu" aria-expanded="false">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
@@ -1712,5 +1721,43 @@ function doExportPng() {
     });
 }
 </script>
+<dialog
+    class="obsidian-knowledge-dialog"
+    id="obsidian-knowledge-dialog"
+    aria-labelledby="obsidian-knowledge-title"
+>
+    <form method="dialog" class="obsidian-knowledge-panel">
+        <header class="obsidian-knowledge-head">
+            <div>
+                <span class="obsidian-knowledge-kicker">LearnFlux Knowledge Deposit</span>
+                <h3 id="obsidian-knowledge-title">沉淀到 Obsidian</h3>
+                <p>原文写入 raw，AI 解读写入 processed。确认前不会写入 Vault。</p>
+            </div>
+            <button type="submit" class="obsidian-knowledge-close" aria-label="关闭">×</button>
+        </header>
+        <section class="obsidian-knowledge-settings">
+            <label for="obsidian-knowledge-category">一级分类</label>
+            <select id="obsidian-knowledge-category"></select>
+            <p id="obsidian-knowledge-recommendation">正在读取现有分类…</p>
+            <p>来源：<span id="obsidian-knowledge-source-access">尚未生成预览</span></p>
+        </section>
+        <div
+            class="obsidian-knowledge-message"
+            id="obsidian-knowledge-message"
+            role="status"
+            aria-live="polite"
+        ></div>
+        <section
+            class="obsidian-knowledge-preview-list"
+            id="obsidian-knowledge-preview-list"
+            aria-label="同步预览"
+        ></section>
+        <footer class="obsidian-knowledge-actions">
+            <button type="button" class="top-btn" id="obsidian-knowledge-preview">生成同步预览</button>
+            <button type="button" class="top-btn primary" id="obsidian-knowledge-apply" disabled>确认同步</button>
+        </footer>
+    </form>
+</dialog>
+<script src="/static/js/obsidian-knowledge.js?v={{ asset_ver }}"></script>
 {% endif %}
 {% endblock %}

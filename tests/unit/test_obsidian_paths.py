@@ -3,6 +3,34 @@ from pathlib import Path
 import pytest
 
 
+def test_knowledge_categories_and_safe_mirror_directory(tmp_path):
+    from video_transcript_api.obsidian.paths import build_knowledge_directory, ensure_vault_directory_tree, list_raw_categories
+    vault = tmp_path / "vault"
+    (vault / "raw" / "AI" / "合集").mkdir(parents=True)
+    (vault / "raw" / ".private").mkdir()
+    assert list_raw_categories(vault, raw_root="raw") == ["AI"]
+    relative = build_knowledge_directory(root="processed", category="AI", collection_directory="合集")
+    assert relative == "processed/AI/合集"
+    assert not (vault / relative).exists()
+    assert ensure_vault_directory_tree(vault, relative) == vault / relative
+
+
+def test_knowledge_directory_accepts_safe_configured_roots_and_rejects_unsafe_segments():
+    from video_transcript_api.obsidian.paths import (
+        VaultPathError,
+        build_knowledge_directory,
+    )
+
+    assert build_knowledge_directory(
+        root="source-material",
+        category="AI",
+        collection_directory="课程",
+    ) == "source-material/AI/课程"
+    for value in ("../raw", "/raw", ".hidden"):
+        with pytest.raises(VaultPathError):
+            build_knowledge_directory(root=value, category="AI")
+
+
 def test_resolve_vault_path_accepts_only_safe_relative_paths(tmp_path):
     from video_transcript_api.obsidian.paths import VaultPathError, resolve_vault_path
 

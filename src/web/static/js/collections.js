@@ -46,11 +46,9 @@
         browseLocalPath: document.getElementById('browse-local-path'),
         localImportPath: document.getElementById('local-import-path'),
         appendFolder: document.getElementById('append-folder'),
-        appendFiles: document.getElementById('append-files'),
         folderInput: document.getElementById('folder-input'),
         filesInput: document.getElementById('files-input'),
         appendFolderInput: document.getElementById('append-folder-input'),
-        appendFilesInput: document.getElementById('append-files-input'),
         transcriptionPolicy: document.getElementById('collection-transcription-policy'),
         transcriptionStrategies: Array.from(document.querySelectorAll('input[name="collection-transcription-strategy"]')),
         transcriptionConcurrency: document.getElementById('collection-transcription-concurrency'),
@@ -61,6 +59,14 @@
         obsidianCollectionClose: document.getElementById('obsidian-collection-close'),
         obsidianCollectionCategory: document.getElementById('obsidian-collection-category'),
         obsidianCollectionDirectory: document.getElementById('obsidian-collection-directory'),
+        obsidianCollectionDirectoryCombobox: document.getElementById('obsidian-collection-directory-combobox'),
+        obsidianCollectionDirectoryBrowse: document.getElementById('obsidian-collection-directory-browse'),
+        obsidianCollectionDirectoryPanel: document.getElementById('obsidian-collection-directory-panel'),
+        obsidianCollectionDirectoryList: document.getElementById('obsidian-collection-directory-list'),
+        obsidianCollectionDirectoryEmpty: document.getElementById('obsidian-collection-directory-empty'),
+        obsidianCollectionDirectoryStatus: document.getElementById('obsidian-collection-directory-status'),
+        obsidianCollectionDirectoryHint: document.getElementById('obsidian-collection-directory-hint'),
+        obsidianCollectionDirectoryPathPreview: document.getElementById('obsidian-collection-directory-path-preview'),
         obsidianCollectionRecommendation: document.getElementById('obsidian-collection-recommendation'),
         obsidianCollectionSources: document.getElementById('obsidian-collection-sources'),
         obsidianCollectionSelectAll: document.getElementById('obsidian-collection-select-all'),
@@ -344,7 +350,7 @@
 
     function setBusy(nextBusy) {
         busy = nextBusy;
-        [els.pickFolder, els.pickFiles, els.importLocalPath, els.appendFolder, els.appendFiles, els.cancelCollection, els.continueCollection].forEach((button) => {
+        [els.pickFolder, els.pickFiles, els.importLocalPath, els.browseLocalPath, els.appendFolder, els.cancelCollection, els.continueCollection].forEach((button) => {
             if (button) button.disabled = busy;
         });
         if (els.localImportPath) els.localImportPath.disabled = busy;
@@ -386,11 +392,17 @@
         if (els.dropAction) {
             els.dropAction.classList.remove('is-uploading');
         }
-        // Restore drop-zone copy for the current content type.
+        if (els.browseLocalPath) {
+            els.browseLocalPath.classList.remove('is-uploading');
+        }
+        // Restore primary CTA copy for the current content type.
         if (els.dropTitle && els.dropSubtitle) {
             const config = typeConfig(activeType);
             els.dropTitle.textContent = config.title;
             els.dropSubtitle.textContent = config.subtitle;
+        }
+        if (els.importPreview && !els.importPreview.innerHTML.trim()) {
+            els.importPreview.classList.add('is-idle');
         }
     }
 
@@ -401,6 +413,7 @@
             ? `${uploaded}/${total} · ${percent}%`
             : `${percent}%`;
         if (els.importPreview) {
+            els.importPreview.classList.remove('is-idle', 'is-error');
             els.importPreview.classList.add('is-uploading');
             els.importPreview.innerHTML = (
                 `<strong>${escapeHTML(message || '正在处理…')}</strong>`
@@ -410,15 +423,18 @@
         if (els.dropAction) {
             els.dropAction.classList.add('is-uploading');
         }
+        if (els.browseLocalPath) {
+            els.browseLocalPath.classList.add('is-uploading');
+        }
         if (els.dropTitle) {
             els.dropTitle.textContent = phase === 'creating'
                 ? '正在创建专题…'
-                : (phase === 'finalizing' ? '上传完成，正在启动解析…' : '正在上传文件…');
+                : (phase === 'finalizing' ? '导入完成，正在启动解析…' : '正在导入…');
         }
         if (els.dropSubtitle) {
             els.dropSubtitle.textContent = total
-                ? `已处理 ${uploaded}/${total} 个文件，请勿关闭或刷新页面`
-                : '请勿关闭或刷新页面';
+                ? `已处理 ${uploaded}/${total} 个文件`
+                : '请稍候，勿关闭页面';
         }
         if (els.workspaceSubtitle) {
             els.workspaceSubtitle.textContent = message || els.dropTitle.textContent;
@@ -632,15 +648,15 @@
         if (type === 'document_topic') {
             return {
                 accept: DOC_EXTS.join(','),
-                title: '填写本机文档文件夹路径',
-                subtitle: '只登记路径，不复制文档；解析后打开源文件定位原路径。',
+                title: '选择文件夹并导入',
+                subtitle: '选完即开始，不额外占用磁盘',
                 goal: '从同一专题文档中提炼知识结构、判断标准和可执行清单。'
             };
         }
         return {
             accept: VIDEO_EXTS.join(','),
-            title: '填写本机课程文件夹路径',
-            subtitle: '只登记路径，不复制视频；解析后打开源文件会直接定位原路径。',
+            title: '选择文件夹并导入',
+            subtitle: '选完即开始，不额外占用磁盘',
             goal: '从同一视频课程中提炼整体主题、章节关系和可复用方法论。'
         };
     }
@@ -651,7 +667,7 @@
         els.typeTabs.forEach((tab) => {
             tab.classList.toggle('active', tab.dataset.type === type);
         });
-        [els.filesInput, els.folderInput, els.appendFilesInput, els.appendFolderInput].forEach((input) => {
+        [els.filesInput, els.folderInput, els.appendFolderInput].forEach((input) => {
             if (input) input.setAttribute('accept', config.accept);
         });
         els.dropTitle.textContent = config.title;
@@ -720,12 +736,18 @@
             });
     }
 
+    function folderDisplayName(directory) {
+        const normalized = String(directory || '').replace(/[/\\]+$/, '');
+        const parts = normalized.split(/[/\\]/).filter(Boolean);
+        return parts[parts.length - 1] || normalized || '未命名文件夹';
+    }
+
     function previewFiles(files) {
-        if (els.importPreview) {
-            els.importPreview.classList.remove('is-uploading', 'is-error');
-        }
+        if (!els.importPreview) return;
+        els.importPreview.classList.remove('is-uploading', 'is-error', 'is-idle');
         if (!files.length) {
-            els.importPreview.innerHTML = '<strong>尚未指定本机路径</strong><span>导入后按文件名顺序解析，不额外占用原视频空间</span>';
+            els.importPreview.classList.add('is-idle');
+            els.importPreview.innerHTML = '';
             return;
         }
 
@@ -735,13 +757,19 @@
     }
 
     function previewLocalPath(directory) {
-        if (els.importPreview) {
+        if (!els.importPreview) return;
+        const path = String(directory || '').trim();
+        if (!path) {
+            els.importPreview.classList.add('is-idle');
             els.importPreview.classList.remove('is-uploading', 'is-error');
-            els.importPreview.innerHTML = (
-                `<strong>本机路径（零拷贝）</strong>`
-                + `<span>${escapeHTML(directory)}</span>`
-            );
+            els.importPreview.innerHTML = '';
+            return;
         }
+        els.importPreview.classList.remove('is-uploading', 'is-error', 'is-idle');
+        els.importPreview.innerHTML = (
+            `<strong>${escapeHTML(folderDisplayName(path))}</strong>`
+            + `<span>${escapeHTML(path)}</span>`
+        );
     }
 
     function escapeHTML(value) {
@@ -1521,10 +1549,8 @@
                 }
                 if (pathPickerMode === 'append') {
                     await appendLocalDirectoryToCurrentCollection(nativePath, 'local_path');
-                } else if (els.localImportPath) {
-                    els.localImportPath.value = nativePath;
-                    previewLocalPath(nativePath);
-                    showToast('已选择文件夹，可点击「扫描路径并导入」');
+                } else {
+                    await importSelectedLocalDirectory(nativePath, 'local_path');
                 }
                 return;
             } catch (error) {
@@ -1579,20 +1605,17 @@
             });
             return;
         }
-        if (els.localImportPath) {
-            els.localImportPath.value = directory;
-        }
-        previewLocalPath(directory);
-        showToast('已选择文件夹，可点击「扫描路径并导入」');
+        importSelectedLocalDirectory(directory, 'local_path').catch((error) => {
+            showToast(error.message || '导入失败');
+        });
     }
 
     function bindLocalPathPickerEvents() {
         if (els.browseLocalPath) {
             els.browseLocalPath.addEventListener('click', () => {
-                openLocalPathPicker({
-                    mode: 'import',
-                    startPath: (els.localImportPath && els.localImportPath.value) || ''
-                }).catch((error) => showToast(error.message || '无法打开文件夹选择器'));
+                startFolderImport().catch((error) => {
+                    showToast(error.message || '无法打开文件夹选择器');
+                });
             });
         }
         if (els.pathPickerClose) {
@@ -1714,16 +1737,47 @@
         }
     }
 
-    async function importFromLocalDirectory(importMethod) {
+    async function startFolderImport() {
         if (busy) {
             showToast('当前导入正在处理中');
             return;
         }
+        try {
+            readImportIdentity();
+        } catch (error) {
+            showToast(error.message || '请先填写 IP 名称和专题名称');
+            return;
+        }
+        await openLocalPathPicker({
+            mode: 'import',
+            startPath: (els.localImportPath && els.localImportPath.value) || ''
+        });
+    }
+
+    async function importSelectedLocalDirectory(directory, importMethod) {
+        const path = String(directory || '').trim();
+        if (!path) {
+            showToast('请先选择本机文件夹');
+            return;
+        }
+        if (els.localImportPath) {
+            els.localImportPath.value = path;
+        }
+        previewLocalPath(path);
+        await importFromLocalDirectory(importMethod || 'local_path', { directory: path, skipConfirm: true });
+    }
+
+    async function importFromLocalDirectory(importMethod, options) {
+        if (busy) {
+            showToast('当前导入正在处理中');
+            return;
+        }
+        const opts = options || {};
         let directory;
         try {
-            directory = readLocalImportDirectory();
+            directory = (opts.directory || '').trim() || readLocalImportDirectory();
         } catch (error) {
-            showToast(error.message || '请填写本机路径');
+            showToast(error.message || '请选择本机文件夹');
             return;
         }
         pendingImportMethod = importMethod || 'local_path';
@@ -1731,22 +1785,10 @@
         selectedCandidateCount = 0;
         updateTranscriptionControls({ applyDefault: selectedTranscriptionStrategy() === 'cloud' });
 
-        let identity;
         try {
-            identity = readImportIdentity();
+            readImportIdentity();
         } catch (error) {
             showToast(error.message || '请先填写 IP 名称和专题名称');
-            return;
-        }
-        const confirmed = window.confirm(
-            `确认按本机路径导入（不复制文件）？\n\n`
-            + `IP 名称：${identity.creatorName}\n`
-            + `专题名称：${identity.title}\n`
-            + `本机路径：${directory}\n\n`
-            + `服务端只会登记路径并直接读取原文件，不会再拷贝一份视频。`
-        );
-        if (!confirmed) {
-            showToast('已取消导入');
             return;
         }
 
@@ -1756,7 +1798,7 @@
                 total: 0,
                 uploaded: 0,
                 percent: 20,
-                message: '正在扫描本机路径并计算文件指纹（不复制）…'
+                message: `正在导入 ${folderDisplayName(directory)}…`
             });
             return importSourcesFromLocalPath(collection.id, directory);
         });
@@ -1770,8 +1812,7 @@
         // Video courses should use zero-copy path import. Browser multipart upload
         // duplicates every file under data/source_files and can fill the disk.
         if (activeType === 'video_course') {
-            showToast('视频课程请填写本机文件夹路径并点「扫描路径并导入」，避免重复占用磁盘');
-            if (els.localImportPath) els.localImportPath.focus();
+            showToast('视频请用「选择文件夹并导入」，避免重复占用磁盘');
             return;
         }
         const files = normalizeFiles(fileList);
@@ -1878,70 +1919,6 @@
             clearImportStatus();
             setBusy(false);
             render();
-        }
-    }
-
-    async function appendFilesToCurrentCollection(fileList, importMethod) {
-        if (!currentCollection) {
-            showToast('请先打开或创建一个专题');
-            return;
-        }
-        if ((currentCollection.collection_type || activeType) === 'video_course') {
-            showToast('视频课程请用「追加文件夹」并填写本机路径，避免重复存储');
-            return;
-        }
-        const files = normalizeFiles(fileList);
-        selectedCandidateCount = files.length;
-        updateTranscriptionControls({ applyDefault: selectedTranscriptionStrategy() === 'cloud' });
-        pendingImportMethod = importMethod || currentCollection.import_method || 'local_files';
-        if (!files.length) {
-            showToast('没有找到当前类型支持的文件');
-            return;
-        }
-
-        cloudQuoteFeedbackVisible = true;
-        cloudQuoteAutoOpenRequested = selectedTranscriptionStrategy() === 'cloud';
-        lastImportError = '';
-        setBusy(true);
-        setImportStatus({
-            phase: 'uploading',
-            total: files.length,
-            uploaded: 0,
-            percent: 0,
-            message: `正在追加上传 ${files.length} 个文件…`
-        });
-        try {
-            await uploadFiles(currentCollection.id, files);
-            setImportStatus({
-                phase: 'finalizing',
-                total: files.length,
-                uploaded: files.length,
-                percent: 100,
-                message: `追加完成（${files.length} 个），正在启动解析…`
-            });
-            lastImportError = '';
-            showToast(`已追加 ${files.length} 个 source，开始解析新增内容`);
-            await refreshCollection(currentCollection.id);
-            await loadFilterOptions();
-            await loadCollections({ selectLatest: false });
-            startPolling();
-        } catch (error) {
-            lastImportError = error.message || '追加失败';
-            showToast(lastImportError);
-            if (els.importPreview) {
-                els.importPreview.classList.remove('is-uploading');
-                els.importPreview.classList.add('is-error');
-                els.importPreview.innerHTML = (
-                    `<strong>追加失败</strong>`
-                    + `<span>${escapeHTML(lastImportError)}</span>`
-                );
-            }
-        } finally {
-            clearImportStatus();
-            setBusy(false);
-            render();
-            if (els.appendFolderInput) els.appendFolderInput.value = '';
-            if (els.appendFilesInput) els.appendFilesInput.value = '';
         }
     }
 
@@ -2404,24 +2381,92 @@
             const metrics = collection.metrics || {};
             const elapsed = metrics.elapsed_seconds ? ` · ${formatDuration(metrics.elapsed_seconds)}` : '';
             const date = formatDate(collection.created_at);
+            const collectionId = escapeHTML(collection.id);
             return `
-                <button class="lc-history-item${active}" type="button" data-collection-id="${escapeHTML(collection.id)}">
-                    <span>
-                        <strong>${escapeHTML(collection.title)}</strong>
-                        <small>${escapeHTML(collection.creator_name || '未归属')} · ${escapeHTML(type)} · ${count} 个 source${escapeHTML(elapsed)}${date ? ' · ' + escapeHTML(date) : ''}</small>
-                    </span>
-                    <em>${escapeHTML(collectionStatusLabel(collection))}</em>
-                </button>
+                <div class="lc-history-item${active}" data-collection-id="${collectionId}">
+                    <button class="lc-history-open" type="button" data-collection-id="${collectionId}">
+                        <span>
+                            <strong>${escapeHTML(collection.title)}</strong>
+                            <small>${escapeHTML(collection.creator_name || '未归属')} · ${escapeHTML(type)} · ${count} 个 source${escapeHTML(elapsed)}${date ? ' · ' + escapeHTML(date) : ''}</small>
+                        </span>
+                        <em>${escapeHTML(collectionStatusLabel(collection))}</em>
+                    </button>
+                    <button class="lc-history-delete" type="button" data-collection-id="${collectionId}" aria-label="删除专题" title="删除专题">删除</button>
+                </div>
             `;
         }).join('');
 
-        els.collectionHistoryList.querySelectorAll('[data-collection-id]').forEach((button) => {
+        els.collectionHistoryList.querySelectorAll('.lc-history-open[data-collection-id]').forEach((button) => {
             button.addEventListener('click', () => {
                 selectCollection(button.dataset.collectionId).catch((error) => {
                     showToast(error.message || '打开历史专题失败');
                 });
             });
         });
+        els.collectionHistoryList.querySelectorAll('.lc-history-delete[data-collection-id]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const collectionId = button.dataset.collectionId;
+                const item = collections.find((entry) => entry.id === collectionId);
+                confirmDeleteCollection(collectionId, item).catch((error) => {
+                    showToast(error.message || '删除专题失败');
+                });
+            });
+        });
+    }
+
+    async function confirmDeleteCollection(collectionId, collectionMeta) {
+        if (!collectionId) return;
+        const title = (collectionMeta && collectionMeta.title) || '该专题';
+        const sourceCount = Number((collectionMeta && collectionMeta.source_count) || 0);
+        openActionDialog({
+            title: '删除专题',
+            description: `确认删除「${title}」？将移除 ${sourceCount || 0} 个章节挂接与系列总结。已完成的转写缓存会保留，之后用正确文件夹新建专题仍可秒开。此操作不可撤销。`,
+            submitLabel: '删除专题',
+            onSubmit: async () => {
+                setBusy(true);
+                try {
+                    await deleteCollectionById(collectionId);
+                    showToast(`已删除专题「${title}」`);
+                } finally {
+                    setBusy(false);
+                    render();
+                }
+            }
+        });
+    }
+
+    async function deleteCollectionById(collectionId) {
+        await apiJSON(`/api/collections/${encodeURIComponent(collectionId)}`, {
+            method: 'DELETE'
+        });
+        window.clearInterval(pollTimer);
+        if (currentCollection && currentCollection.id === collectionId) {
+            currentCollection = null;
+            selectedSourceId = null;
+            sourceDetails = {};
+            sourceDetailRequests.clear();
+            knowledgeMaps = { collection: null, sources: {} };
+            knowledgeMapErrors.clear();
+            knowledgeMapLoading = false;
+            knowledgeMapRequests.clear();
+            knowledgeMapLoadedKeys = new Set();
+            customMapPositions = {};
+            mapZoom = DEFAULT_MAP_ZOOM;
+            mapFocused = false;
+            currentView = 'summary';
+            knowledgeMapScope = 'collection';
+            selectedMapNodeId = null;
+            cloudQuote = null;
+            cloudQuoteAutoOpenRequested = false;
+            lastImportError = '';
+            if (typeof resetCollectionVisualState === 'function') {
+                resetCollectionVisualState('');
+            }
+        }
+        await loadCollections({ selectLatest: false });
+        if (els.collectionHistoryPanel) els.collectionHistoryPanel.open = true;
     }
 
     // One-shot default layout for returning users with history and no selection.
@@ -3177,7 +3222,7 @@
             if (currentCollection) {
                 els.sourceList.innerHTML = (
                     `<div class="lc-empty">`
-                    + `该专题还没有 source。请用右上角「追加文件夹 / 追加文件」导入视频，`
+                    + `该专题还没有 source。请用右上角「追加文件夹」导入视频，`
                     + `成功后这里会显示每个视频的解析状态。`
                     + `</div>`
                 );
@@ -3259,9 +3304,9 @@
         const hasCollection = Boolean(currentCollection);
         const hasActive = sources.some((source) => !isTerminalSourceStatus(source.task_status));
         const canResume = sources.some(isResumableSource);
-        [els.appendFolder, els.appendFiles].forEach((button) => {
-            if (button) button.disabled = busy || !hasCollection;
-        });
+        if (els.appendFolder) {
+            els.appendFolder.disabled = busy || !hasCollection;
+        }
         if (els.cancelCollection) {
             els.cancelCollection.disabled = busy || !hasActive;
         }
@@ -4891,6 +4936,217 @@
         }
     }
 
+    let collectionVaultDirectories = [];
+    let collectionKnowledgeBusy = false;
+    let collectionDirectoryPanelOpen = false;
+
+    function normalizeCollectionDirectoryName(value) {
+        return String(value || '')
+            .trim()
+            .replace(/^\/+|\/+$/g, '')
+            .split('/')
+            .filter(Boolean)
+            .pop() || '';
+    }
+
+    function scoreCollectionDirectoryMatch(directoryName, collection) {
+        const name = String(directoryName || '').toLowerCase();
+        const creator = String(
+            (collection && (collection.creator_name || collection.creator)) || ''
+        ).toLowerCase();
+        const title = String((collection && collection.title) || '').toLowerCase();
+        if (!name) return 0;
+        let score = 0;
+        const haystack = `${creator} ${title}`;
+        const tokens = haystack
+            .split(/[\s\-_/|，,。.]+/)
+            .map((part) => part.trim())
+            .filter((part) => part.length >= 2);
+        tokens.forEach((token) => {
+            if (name.includes(token)) score += token.length >= 4 ? 3 : 1;
+        });
+        if (name.includes('codex') && (haystack.includes('codex') || haystack.includes('code x'))) {
+            score += 4;
+        }
+        if (name.includes('小王子') && haystack.includes('小王子')) {
+            score += 4;
+        }
+        return score;
+    }
+
+    async function loadCollectionVaultDirectories(category) {
+        const cat = String(category || '').trim();
+        if (!cat) {
+            collectionVaultDirectories = [];
+            return [];
+        }
+        try {
+            const payload = await apiJSON('/api/obsidian/directories?root=raw');
+            const items = (payload.data && payload.data.items) || [];
+            const prefix = `raw/${cat}/`;
+            collectionVaultDirectories = items
+                .filter((path) => {
+                    const text = String(path || '');
+                    if (!text.startsWith(prefix)) return false;
+                    const rest = text.slice(prefix.length);
+                    return rest && !rest.includes('/');
+                })
+                .map((path) => path.slice(prefix.length))
+                .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+        } catch (_error) {
+            collectionVaultDirectories = [];
+        }
+        return collectionVaultDirectories;
+    }
+
+    function setCollectionDirectoryValue(name) {
+        const normalized = normalizeCollectionDirectoryName(name);
+        if (els.obsidianCollectionDirectory) {
+            els.obsidianCollectionDirectory.value = normalized;
+        }
+        updateCollectionDirectoryMeta(normalized);
+        return normalized;
+    }
+
+    function updateCollectionDirectoryMeta(name) {
+        const category = (els.obsidianCollectionCategory && els.obsidianCollectionCategory.value || '').trim();
+        const directory = normalizeCollectionDirectoryName(
+            name != null ? name : (els.obsidianCollectionDirectory && els.obsidianCollectionDirectory.value)
+        );
+        const exists = Boolean(directory && collectionVaultDirectories.includes(directory));
+        if (els.obsidianCollectionDirectoryPathPreview) {
+            els.obsidianCollectionDirectoryPathPreview.textContent = category && directory
+                ? `raw/${category}/${directory}`
+                : (category ? `raw/${category}/…` : 'raw/…');
+        }
+        if (els.obsidianCollectionDirectoryStatus) {
+            if (!directory) {
+                els.obsidianCollectionDirectoryStatus.hidden = false;
+                els.obsidianCollectionDirectoryStatus.dataset.tone = 'empty';
+                els.obsidianCollectionDirectoryStatus.textContent = '待填写';
+            } else if (exists) {
+                els.obsidianCollectionDirectoryStatus.hidden = false;
+                els.obsidianCollectionDirectoryStatus.dataset.tone = 'exists';
+                els.obsidianCollectionDirectoryStatus.textContent = '已有目录';
+            } else {
+                els.obsidianCollectionDirectoryStatus.hidden = false;
+                els.obsidianCollectionDirectoryStatus.dataset.tone = 'create';
+                els.obsidianCollectionDirectoryStatus.textContent = '同步时创建';
+            }
+        }
+        if (els.obsidianCollectionDirectoryHint) {
+            // Keep static helper structure; path preview is the dynamic bit.
+        }
+        if (els.obsidianCollectionDirectoryList) {
+            els.obsidianCollectionDirectoryList
+                .querySelectorAll('.obsidian-dir-option')
+                .forEach((button) => {
+                    button.classList.toggle('is-active', button.dataset.value === directory);
+                });
+        }
+    }
+
+    function renderCollectionDirectoryPanel(selectedDirectory) {
+        const selected = normalizeCollectionDirectoryName(selectedDirectory);
+        if (!els.obsidianCollectionDirectoryList) return;
+        els.obsidianCollectionDirectoryList.replaceChildren();
+        const ranked = collectionVaultDirectories
+            .slice()
+            .sort((a, b) => (
+                scoreCollectionDirectoryMatch(b, currentCollection)
+                - scoreCollectionDirectoryMatch(a, currentCollection)
+            ) || a.localeCompare(b, 'zh-Hans-CN'));
+        if (els.obsidianCollectionDirectoryEmpty) {
+            els.obsidianCollectionDirectoryEmpty.hidden = ranked.length > 0;
+        }
+        ranked.forEach((name) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'obsidian-dir-option' + (name === selected ? ' is-active' : '');
+            button.dataset.value = name;
+            button.setAttribute('role', 'option');
+            button.setAttribute('aria-selected', name === selected ? 'true' : 'false');
+            button.textContent = name;
+            button.addEventListener('click', () => {
+                setCollectionDirectoryValue(name);
+                closeCollectionDirectoryPanel();
+                clearCollectionKnowledgePreview();
+                setCollectionKnowledgeMessage(`已选择目录「${name}」`, 'success');
+                refreshCollectionKnowledgeApplyState();
+            });
+            els.obsidianCollectionDirectoryList.append(button);
+        });
+        updateCollectionDirectoryMeta(selected);
+    }
+
+    function openCollectionDirectoryPanel() {
+        if (!els.obsidianCollectionDirectoryPanel) return;
+        collectionDirectoryPanelOpen = true;
+        els.obsidianCollectionDirectoryPanel.hidden = false;
+        if (els.obsidianCollectionDirectoryCombobox) {
+            els.obsidianCollectionDirectoryCombobox.classList.add('is-open');
+        }
+        if (els.obsidianCollectionDirectory) {
+            els.obsidianCollectionDirectory.setAttribute('aria-expanded', 'true');
+        }
+        renderCollectionDirectoryPanel(
+            els.obsidianCollectionDirectory && els.obsidianCollectionDirectory.value
+        );
+    }
+
+    function closeCollectionDirectoryPanel() {
+        collectionDirectoryPanelOpen = false;
+        if (els.obsidianCollectionDirectoryPanel) {
+            els.obsidianCollectionDirectoryPanel.hidden = true;
+        }
+        if (els.obsidianCollectionDirectoryCombobox) {
+            els.obsidianCollectionDirectoryCombobox.classList.remove('is-open');
+        }
+        if (els.obsidianCollectionDirectory) {
+            els.obsidianCollectionDirectory.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    function toggleCollectionDirectoryPanel() {
+        if (collectionDirectoryPanelOpen) closeCollectionDirectoryPanel();
+        else openCollectionDirectoryPanel();
+    }
+
+    function chooseCollectionDirectoryValue(bindingData) {
+        const binding = collectionKnowledgeBinding;
+        if (binding && binding.collection_directory) {
+            return normalizeCollectionDirectoryName(binding.collection_directory);
+        }
+        const defaultDirectory = normalizeCollectionDirectoryName(
+            (bindingData && bindingData.default_collection_directory) || ''
+        );
+        const ranked = collectionVaultDirectories
+            .map((name) => ({
+                name,
+                score: scoreCollectionDirectoryMatch(name, currentCollection)
+            }))
+            .filter((item) => item.score >= 4)
+            .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'zh-Hans-CN'));
+        if (ranked.length) {
+            return ranked[0].name;
+        }
+        return defaultDirectory;
+    }
+
+    function refreshCollectionKnowledgeApplyState() {
+        if (!els.obsidianCollectionApply) return;
+        const hasSelection = checkedCollectionSourceIds().length > 0;
+        els.obsidianCollectionApply.disabled = collectionKnowledgeBusy || !hasSelection;
+        els.obsidianCollectionApply.title = collectionKnowledgePreview
+            ? '按最近一次预览结果写入 Obsidian'
+            : (hasSelection
+                ? '将先生成预览；若无外部冲突则直接写入'
+                : '请先勾选至少一篇分集');
+        if (!collectionKnowledgePreview) {
+            els.obsidianCollectionApply.textContent = '确认同步';
+        }
+    }
+
     async function openCollectionKnowledgeDialog() {
         if (!currentCollection) {
             showToast('请先选择一个专题');
@@ -4924,19 +5180,29 @@
                 ? collectionKnowledgeBinding.category
                 : recommendationData.category;
             if (category) els.obsidianCollectionCategory.value = category;
-            els.obsidianCollectionDirectory.value = collectionKnowledgeBinding
-                ? collectionKnowledgeBinding.collection_directory
-                : (bindingData.default_collection_directory || '');
+            await loadCollectionVaultDirectories(els.obsidianCollectionCategory.value);
+            const directory = chooseCollectionDirectoryValue(bindingData);
+            if (els.obsidianCollectionDirectory) {
+                els.obsidianCollectionDirectory.readOnly = false;
+                els.obsidianCollectionDirectory.disabled = false;
+            }
+            setCollectionDirectoryValue(directory);
+            closeCollectionDirectoryPanel();
+            renderCollectionDirectoryPanel(directory);
             els.obsidianCollectionRecommendation.textContent = recommendationData.category
-                ? `AI 建议：${recommendationData.category}（${recommendationData.reason || '可手动修改'}）`
+                ? `建议：${recommendationData.category}${recommendationData.reason ? ` · ${recommendationData.reason}` : ''}`
                 : '未能生成分类建议，请手动选择。';
-            renderCollectionKnowledgeSources();
+            renderCollectionKnowledgeSources({ selectAll: true });
+            const reusedExisting = collectionVaultDirectories.includes(directory);
             setCollectionKnowledgeMessage(
                 categories.length
-                    ? '选择分集后预览；打开弹窗本身不会写入 Vault。'
+                    ? (reusedExisting
+                        ? `已匹配已有目录「${directory}」，可直接确认同步。`
+                        : '目录可编辑；点右侧图标可浏览已有目录。不存在将在同步时自动创建。')
                     : 'raw 下没有一级分类，请先在 Vault 中创建分类目录。',
-                categories.length ? '' : 'error'
+                categories.length ? (reusedExisting ? 'success' : '') : 'error'
             );
+            refreshCollectionKnowledgeApplyState();
         } catch (error) {
             setCollectionKnowledgeMessage(
                 `加载失败：${error.message}。请检查 Obsidian 配置和登录状态。`,
@@ -4954,23 +5220,25 @@
             els.obsidianCollectionPreviewList.replaceChildren();
         }
         if (els.obsidianCollectionApply) {
-            els.obsidianCollectionApply.disabled = true;
             els.obsidianCollectionApply.textContent = '确认同步';
         }
+        refreshCollectionKnowledgeApplyState();
     }
 
     function setCollectionKnowledgeBusy(nextBusy) {
+        collectionKnowledgeBusy = Boolean(nextBusy);
         [
             els.obsidianCollectionOpen,
             els.obsidianCollectionPreviewSelected,
             els.obsidianCollectionIncremental,
-            els.obsidianCollectionForce
-        ].forEach((button) => {
-            if (button) button.disabled = nextBusy;
+            els.obsidianCollectionForce,
+            els.obsidianCollectionCategory,
+            els.obsidianCollectionDirectory,
+            els.obsidianCollectionDirectoryBrowse
+        ].forEach((control) => {
+            if (control) control.disabled = collectionKnowledgeBusy;
         });
-        if (els.obsidianCollectionApply) {
-            els.obsidianCollectionApply.disabled = nextBusy || !collectionKnowledgePreview;
-        }
+        refreshCollectionKnowledgeApplyState();
     }
 
     function setCollectionKnowledgeMessage(text, tone) {
@@ -4979,7 +5247,8 @@
         els.obsidianCollectionMessage.dataset.tone = tone || '';
     }
 
-    function renderCollectionKnowledgeSources() {
+    function renderCollectionKnowledgeSources(options) {
+        const opts = options || {};
         els.obsidianCollectionSources.replaceChildren();
         const sources = (currentCollection && currentCollection.sources) || [];
         const defaultId = selectedSourceId || (sources[0] && sources[0].id) || '';
@@ -4992,18 +5261,22 @@
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.value = source.id;
-                checkbox.checked = source.id === defaultId;
+                checkbox.checked = opts.selectAll ? true : source.id === defaultId;
                 checkbox.addEventListener('change', () => {
                     clearCollectionKnowledgePreview();
-                    setCollectionKnowledgeMessage('分集选择已变化，请重新预览。');
+                    setCollectionKnowledgeMessage('分集选择已变化，可直接点「确认同步」。');
+                    refreshCollectionKnowledgeApplyState();
                 });
                 const title = document.createElement('span');
-                title.textContent = `${source.position || ''} ${source.title || source.id}`.trim();
+                const niceTitle = displaySourceTitle(source) || source.id;
+                title.textContent = `${source.position || ''} ${niceTitle}`.trim();
+                title.title = source.title || niceTitle;
                 const status = document.createElement('small');
                 status.textContent = source.task_status || 'unknown';
                 label.append(checkbox, title, status);
                 els.obsidianCollectionSources.append(label);
             });
+        refreshCollectionKnowledgeApplyState();
     }
 
     function checkedCollectionSourceIds() {
@@ -5087,11 +5360,15 @@
         els.obsidianCollectionApply.textContent = externallyModified
             ? '覆盖 Obsidian 中的修改'
             : '确认同步';
-        els.obsidianCollectionApply.disabled = !hasPreconditions;
+        refreshCollectionKnowledgeApplyState();
+        if (!hasPreconditions) {
+            els.obsidianCollectionApply.disabled = true;
+            els.obsidianCollectionApply.title = '当前没有可写入的预览项';
+        }
     }
 
     async function requestCollectionKnowledgePreview(request) {
-        if (!currentCollection) return;
+        if (!currentCollection) return null;
         setCollectionKnowledgeBusy(true);
         clearCollectionKnowledgePreview();
         setCollectionKnowledgeMessage('正在生成合集同步预览…');
@@ -5110,8 +5387,10 @@
                     : '当前没有已就绪、可同步的分集。',
                 (previewData.preconditions || []).length ? 'success' : 'warning'
             );
+            return previewData;
         } catch (error) {
             setCollectionKnowledgeMessage(`预览失败：${error.message}`, 'error');
+            return null;
         } finally {
             setCollectionKnowledgeBusy(false);
         }
@@ -5146,8 +5425,45 @@
         });
     }
 
+    function collectionPreviewHasExternalModifications(preview) {
+        return (preview && preview.items || []).some((item) => (
+            (item.documents || []).some((document) => document.state === 'externally_modified')
+        ));
+    }
+
     async function applyCollectionKnowledgePreview() {
-        if (!currentCollection || !collectionKnowledgePreview || !collectionKnowledgeRequest) return;
+        if (!currentCollection) return;
+        const selectedSourceIds = checkedCollectionSourceIds();
+        if (!selectedSourceIds.length) {
+            setCollectionKnowledgeMessage('请至少勾选一篇分集。', 'error');
+            return;
+        }
+
+        // One-click path: auto-preview when user has not previewed yet.
+        if (!collectionKnowledgePreview || !collectionKnowledgeRequest) {
+            const previewData = await requestCollectionKnowledgePreview({
+                source_ids: selectedSourceIds,
+                sync_all: false,
+                force: false
+            });
+            if (!previewData || !(previewData.preconditions || []).length) {
+                return;
+            }
+            if (collectionPreviewHasExternalModifications(previewData)) {
+                setCollectionKnowledgeMessage(
+                    '检测到 Obsidian 中有外部修改。请核对预览后再次点击「覆盖 Obsidian 中的修改」。',
+                    'warning'
+                );
+                return;
+            }
+        }
+
+        if (!collectionKnowledgePreview || !collectionKnowledgeRequest) return;
+        if (!(collectionKnowledgePreview.preconditions || []).length) {
+            setCollectionKnowledgeMessage('当前没有可写入的预览项。', 'warning');
+            return;
+        }
+
         setCollectionKnowledgeBusy(true);
         setCollectionKnowledgeMessage('正在逐项写入 Obsidian…');
         try {
@@ -5178,15 +5494,27 @@
                 els.obsidianCollectionPreviewList.append(row);
             });
             const failed = data.counts && data.counts.failed;
+            const created = Number((data.counts && data.counts.created) || 0);
+            const updated = Number((data.counts && data.counts.updated) || 0);
+            const unchanged = Number((data.counts && data.counts.unchanged) || 0);
             setCollectionKnowledgeMessage(
                 failed
-                    ? '部分文件 failed，可重新生成预览后安全重试。'
-                    : '合集同步完成；created / updated / unchanged 结果已列出。',
+                    ? '部分文件失败，可重新同步后安全重试。'
+                    : `同步完成：新建 ${created} · 更新 ${updated} · 未变 ${unchanged}`,
                 failed ? 'warning' : 'success'
             );
             collectionKnowledgePreview = null;
             collectionKnowledgeRequest = null;
-            els.obsidianCollectionApply.disabled = true;
+            refreshCollectionKnowledgeApplyState();
+            if (!failed && els.obsidianCollectionDialog && els.obsidianCollectionDialog.open) {
+                window.setTimeout(() => {
+                    if (els.obsidianCollectionDialog && els.obsidianCollectionDialog.open) {
+                        closeCollectionDirectoryPanel();
+                        els.obsidianCollectionDialog.close();
+                    }
+                    showToast('已同步到 Obsidian');
+                }, 900);
+            }
         } catch (error) {
             if (error.status === 409 && error.code === 'stale_preview') {
                 const latest = error.latestPreview;
@@ -5436,15 +5764,15 @@
         }
         if (els.pickFolder) {
             els.pickFolder.addEventListener('click', () => {
-                if (els.localImportPath) els.localImportPath.focus();
-                else if (els.folderInput) els.folderInput.click();
+                startFolderImport().catch((error) => {
+                    showToast(error.message || '无法开始导入');
+                });
             });
         }
         if (els.pickFiles) {
             els.pickFiles.addEventListener('click', () => {
                 if (activeType === 'video_course') {
-                    showToast('视频请用本机路径导入；上传副本会重复占磁盘');
-                    if (els.localImportPath) els.localImportPath.focus();
+                    showToast('视频请用「选择文件夹并导入」');
                     return;
                 }
                 els.filesInput.click();
@@ -5461,16 +5789,6 @@
                     mode: 'append',
                     startPath: (els.localImportPath && els.localImportPath.value) || ''
                 }).catch((error) => showToast(error.message || '无法打开文件夹选择器'));
-            });
-        }
-        if (els.appendFiles) {
-            els.appendFiles.addEventListener('click', () => {
-                if ((currentCollection && currentCollection.collection_type) === 'video_course'
-                    || (!currentCollection && activeType === 'video_course')) {
-                    showToast('视频请用「追加文件夹」选择本机路径');
-                    return;
-                }
-                els.appendFilesInput.click();
             });
         }
         if (els.cancelCollection) {
@@ -5502,7 +5820,8 @@
                         checkbox.checked = true;
                     });
                 clearCollectionKnowledgePreview();
-                setCollectionKnowledgeMessage('已选择全部分集，请生成预览。');
+                setCollectionKnowledgeMessage('已选择全部分集，可直接点「确认同步」。', 'success');
+                refreshCollectionKnowledgeApplyState();
             });
         }
         if (els.obsidianCollectionClearAll) {
@@ -5514,15 +5833,72 @@
                     });
                 clearCollectionKnowledgePreview();
                 setCollectionKnowledgeMessage('已取消全部选择。');
+                refreshCollectionKnowledgeApplyState();
             });
         }
-        [els.obsidianCollectionCategory, els.obsidianCollectionDirectory].forEach((field) => {
-            if (!field) return;
-            field.addEventListener('change', () => {
+        if (els.obsidianCollectionCategory) {
+            els.obsidianCollectionCategory.addEventListener('change', async () => {
                 clearCollectionKnowledgePreview();
-                setCollectionKnowledgeMessage('分类或合集目录已变化，请重新预览。');
+                closeCollectionDirectoryPanel();
+                setCollectionKnowledgeBusy(true);
+                try {
+                    await loadCollectionVaultDirectories(els.obsidianCollectionCategory.value);
+                    const preferred = chooseCollectionDirectoryValue({
+                        default_collection_directory: (
+                            els.obsidianCollectionDirectory && els.obsidianCollectionDirectory.value
+                        ) || ''
+                    });
+                    setCollectionDirectoryValue(preferred || '');
+                    renderCollectionDirectoryPanel(preferred || '');
+                    setCollectionKnowledgeMessage('分类已更新。可继续编辑目录，或点右侧图标浏览已有目录。');
+                } finally {
+                    setCollectionKnowledgeBusy(false);
+                }
             });
+        }
+        if (els.obsidianCollectionDirectoryBrowse) {
+            els.obsidianCollectionDirectoryBrowse.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleCollectionDirectoryPanel();
+            });
+        }
+        if (els.obsidianCollectionDirectory) {
+            els.obsidianCollectionDirectory.addEventListener('input', () => {
+                clearCollectionKnowledgePreview();
+                updateCollectionDirectoryMeta();
+                if (collectionDirectoryPanelOpen) {
+                    renderCollectionDirectoryPanel(els.obsidianCollectionDirectory.value);
+                }
+                refreshCollectionKnowledgeApplyState();
+            });
+            els.obsidianCollectionDirectory.addEventListener('change', () => {
+                clearCollectionKnowledgePreview();
+                const name = normalizeCollectionDirectoryName(els.obsidianCollectionDirectory.value);
+                setCollectionDirectoryValue(name);
+                setCollectionKnowledgeMessage(name ? `目录已设为「${name}」` : '请填写合集目录名。');
+                refreshCollectionKnowledgeApplyState();
+            });
+            els.obsidianCollectionDirectory.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    closeCollectionDirectoryPanel();
+                } else if (event.key === 'ArrowDown' && !collectionDirectoryPanelOpen) {
+                    event.preventDefault();
+                    openCollectionDirectoryPanel();
+                }
+            });
+        }
+        document.addEventListener('click', (event) => {
+            if (!collectionDirectoryPanelOpen) return;
+            const combobox = els.obsidianCollectionDirectoryCombobox;
+            if (combobox && combobox.contains(event.target)) return;
+            closeCollectionDirectoryPanel();
         });
+        if (els.obsidianCollectionDialog) {
+            els.obsidianCollectionDialog.addEventListener('close', () => {
+                closeCollectionDirectoryPanel();
+            });
+        }
         if (els.obsidianCollectionPreviewSelected) {
             els.obsidianCollectionPreviewSelected.addEventListener(
                 'click',
@@ -5568,17 +5944,8 @@
         if (els.filesInput) {
             els.filesInput.addEventListener('change', () => importFiles(els.filesInput.files, 'local_files'));
         }
-        if (els.appendFolderInput) {
-            els.appendFolderInput.addEventListener('change', () => appendFilesToCurrentCollection(els.appendFolderInput.files, 'local_folder'));
-        }
-        if (els.appendFilesInput) {
-            els.appendFilesInput.addEventListener('change', () => appendFilesToCurrentCollection(els.appendFilesInput.files, 'local_files'));
-        }
-
         if (els.dropAction) {
-            els.dropAction.addEventListener('click', () => {
-                if (els.localImportPath) els.localImportPath.focus();
-            });
+            // Keep drag affordance for documents only; primary action is the CTA button.
             ['dragenter', 'dragover'].forEach((eventName) => {
                 els.dropAction.addEventListener(eventName, (event) => {
                     event.preventDefault();
@@ -5594,8 +5961,7 @@
             els.dropAction.addEventListener('drop', (event) => {
                 event.preventDefault();
                 if (activeType === 'video_course') {
-                    showToast('视频课程请粘贴本机文件夹路径后导入，拖放上传会复制整份视频');
-                    if (els.localImportPath) els.localImportPath.focus();
+                    showToast('视频请用「选择文件夹并导入」');
                     return;
                 }
                 importFiles(event.dataTransfer.files, 'local_files');

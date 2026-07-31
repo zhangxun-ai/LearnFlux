@@ -344,6 +344,15 @@ class LearningCollectionService:
             "canceled_count": canceled_count,
         }
 
+    def delete_collection(self, collection_id: str) -> Dict[str, Any]:
+        """Remove a collection row and its sources. Transcript caches stay reusable."""
+        try:
+            self.cancel_collection_processing(collection_id)
+        except ValueError:
+            # Missing collection is handled by repository.delete_collection.
+            pass
+        return self.repository.delete_collection(collection_id)
+
     def source_type_for_filename(self, filename: str) -> str:
         ext = os.path.splitext(filename or "")[1].lower()
         if ext in DOCUMENT_EXTS:

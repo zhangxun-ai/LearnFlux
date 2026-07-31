@@ -1292,6 +1292,52 @@ class LearningCollectionRepository:
                 raise ValueError("collection not found")
         return self.get_collection_detail(collection_id)
 
+    def delete_collection(self, collection_id: str) -> Dict[str, Any]:
+        """Delete a collection and its sources/maps. Does not delete transcript cache."""
+        collection = self.get_collection(collection_id)
+        if not collection:
+            raise ValueError("collection not found")
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS source_count
+                FROM learning_collection_sources
+                WHERE collection_id = ?
+                """,
+                (collection_id,),
+            )
+            source_count = int(cursor.fetchone()["source_count"] or 0)
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_knowledge_maps
+                WHERE collection_id = ?
+                """,
+                (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_sources
+                WHERE collection_id = ?
+                """,
+                (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collections
+                WHERE id = ?
+                """,
+                (collection_id,),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("collection not found")
+        return {
+            "id": collection_id,
+            "title": collection.get("title") or "",
+            "creator_name": collection.get("creator_name") or "",
+            "deleted": True,
+            "source_count": source_count,
+        }
+
     def save_knowledge_map(
         self,
         collection_id: str,

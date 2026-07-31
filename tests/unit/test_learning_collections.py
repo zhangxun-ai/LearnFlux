@@ -74,6 +74,113 @@ def test_collection_repository_rejects_mixed_source_type(tmp_path):
         raise AssertionError("Expected mixed source type to be rejected")
 
 
+def test_collection_repository_deletes_collection_sources_and_maps(tmp_path):
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    collection = repo.create_collection(
+        title="脏专题",
+        creator_name="Codex",
+        collection_type="video_course",
+        owner_user_id="u1",
+    )
+    repo.add_source(
+        collection_id=collection["id"],
+        task_id="task-1",
+        view_token="view-1",
+        title="1.mp4",
+        source_type="video",
+        position=1,
+        content_sha256="sha-1",
+    )
+    repo.save_knowledge_map(
+        collection_id=collection["id"],
+        scope="collection",
+        map_json={"version": 1, "nodes": []},
+    )
+    keep = repo.create_collection(
+        title="保留专题",
+        creator_name="Codex",
+        collection_type="video_course",
+        owner_user_id="u1",
+    )
+    repo.add_source(
+        collection_id=keep["id"],
+        task_id="task-keep",
+        view_token="view-keep",
+        title="keep.mp4",
+        source_type="video",
+        position=1,
+        content_sha256="sha-keep",
+    )
+
+    deleted = repo.delete_collection(collection["id"])
+    assert deleted["id"] == collection["id"]
+    assert deleted["deleted"] is True
+    assert deleted["source_count"] == 1
+    assert repo.get_collection(collection["id"]) is None
+    assert repo.get_collection_detail(collection["id"]) is None
+    assert repo.get_knowledge_map(collection["id"], "collection") is None
+    remaining = repo.get_collection_detail(keep["id"])
+    assert remaining is not None
+    assert [source["title"] for source in remaining["sources"]] == ["keep.mp4"]
+
+    try:
+        repo.delete_collection(collection["id"])
+    except ValueError as exc:
+        assert "not found" in str(exc)
+    else:
+        raise AssertionError("Expected missing collection delete to raise")
+
+
+def test_collection_api_deletes_owned_collection(tmp_path, monkeypatch):
+    from video_transcript_api.api.routes import collections
+    from video_transcript_api.api.services.transcription import verify_token
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+    from video_transcript_api.collections.service import LearningCollectionService
+
+    cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
+    service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
+    monkeypatch.setattr(collections, "get_collection_service", lambda: service)
+
+    app = FastAPI()
+    app.include_router(collections.router)
+    app.dependency_overrides[verify_token] = lambda: {"user_id": "u1", "api_key": "test"}
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/collections",
+        json={
+            "title": "ai 小王子-codex 从 0-1 实战课",
+            "creator_name": "Codex",
+            "collection_type": "video_course",
+        },
+    )
+    assert created.status_code == 200
+    collection_id = created.json()["data"]["id"]
+    service.add_existing_source(
+        collection_id=collection_id,
+        task_id="task-dirty",
+        view_token="view-dirty",
+        title="noise.mp4",
+        source_type="video",
+        position=1,
+    )
+
+    deleted = client.delete(f"/api/collections/{collection_id}")
+    assert deleted.status_code == 200
+    assert deleted.json()["data"]["deleted"] is True
+    assert deleted.json()["data"]["id"] == collection_id
+
+    missing = client.get(f"/api/collections/{collection_id}")
+    assert missing.status_code == 404
+
+    listed = client.get("/api/collections")
+    assert listed.status_code == 200
+    assert listed.json()["data"]["collections"] == []
+
+
 def test_collection_service_classifies_html_as_document_source():
     from video_transcript_api.collections.service import LearningCollectionService
 
@@ -1622,13 +1729,23 @@ def test_collections_import_uses_one_primary_choice_and_collapsed_history():
     assert "lc-eyebrow" not in intro
     assert "lc-points" not in intro
     assert 'id="drop-action"' in import_card
+    assert 'id="browse-local-path"' in import_card
     assert 'id="local-import-path"' in import_card
     assert 'id="import-local-path"' in import_card
     assert 'id="pick-files"' in import_card
+    assert "选择文件夹并导入" in import_card
+    assert "更多选项" in import_card
+    assert "扫描路径并导入" not in import_card
+    assert "上传文件副本（不推荐）" not in import_card
     assert import_card.count("lc-btn primary") >= 1
     busy_guard = import_files[import_files.index("if (busy)") : import_files.index("const files = normalizeFiles")]
     assert "return;" in busy_guard
-    assert "video_course" in busy_guard or "视频课程请填写本机" in import_files
+    assert "video_course" in busy_guard or "选择文件夹并导入" in import_files
+    assert "startFolderImport" in js
+    assert "importSelectedLocalDirectory" in js
+    assert "window.confirm" not in js[
+        js.index("async function importFromLocalDirectory(") : js.index("async function importFiles(")
+    ]
     assert '<details class="lc-history lc-history-panel"' in html
     assert '<summary class="lc-history-summary">' in html
     assert '<details class="lc-history lc-history-panel" open' not in html
@@ -1691,16 +1808,17 @@ def test_collections_import_shows_upload_progress_for_large_batches():
         js.index("async function uploadFiles(") : js.index("async function loadFilterOptions(")
     ]
     assert "setImportStatus(" in js[
-        js.index("async function importFiles(") : js.index("async function appendFilesToCurrentCollection(")
+        js.index("async function importFiles(") : js.index("async function cancelCurrentCollection(")
     ]
     assert "clearImportStatus()" in js[
-        js.index("async function importFiles(") : js.index("async function appendFilesToCurrentCollection(")
+        js.index("async function importFiles(") : js.index("async function cancelCurrentCollection(")
     ]
     assert "lc-empty-uploading" in js
     assert "正在上传" in js
     assert "lastImportError" in js
     assert "lc-empty-error" in js
-    assert ".lc-drop.is-uploading" in css
+    assert ".lc-import-primary.is-uploading" in css
+    assert ".lc-import-cta.is-uploading" in css
     assert ".lc-import-preview.is-uploading" in css
     assert ".lc-import-preview.is-error" in css
     assert ".lc-empty-uploading" in css
@@ -1755,8 +1873,11 @@ def test_collections_page_restores_existing_collections():
     assert "map-fit" in html
     assert "open-source-file" in html
     assert "append-folder" in html
-    assert "append-files" in html
+    assert "append-files" not in html
     assert "cancel-collection" in html
+    assert "lc-history-delete" in js
+    assert "deleteCollectionById" in js
+    assert 'method: \'DELETE\'' in js or 'method: "DELETE"' in js
     assert "map-related-sources" in html
     assert "全系列解读" in html
     assert "grid-template-rows: auto minmax(0, 1fr)" in css
@@ -1972,7 +2093,7 @@ def test_collections_page_exposes_immersive_text_visual_reader():
     assert "renderWrappedSvgText" in js
     assert "makeMapNodeDraggable" in js
     assert "openSourceFile" in js
-    assert "appendFilesToCurrentCollection" in js
+    assert "appendLocalDirectoryToCurrentCollection" in js
     assert "cancelCurrentCollection" in js
     assert "/cancel" in js
     assert "mapLinksVisible" in js

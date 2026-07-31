@@ -31,6 +31,29 @@ def test_workbench_opens_local_file_panel_from_study_hash():
     assert "tab-file" in app_js
 
 
+def test_workbench_javascript_is_syntax_valid():
+    from pathlib import Path
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node.js is required for JavaScript syntax validation")
+
+    project_root = Path(__file__).resolve().parents[2]
+    app_js = project_root / "src/web/static/js/app.js"
+    result = subprocess.run(
+        [node, "--check", str(app_js)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_workbench_upload_reports_http_errors_before_network_fallback():
     from pathlib import Path
 

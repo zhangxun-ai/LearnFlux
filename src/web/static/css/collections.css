@@ -299,87 +299,126 @@ body.lc-study-focus .lc-meta-bar {
     transition: width 0.35s ease;
 }
 
-.lc-drop {
+.lc-import-primary {
     display: grid;
-    width: 100%;
-    min-height: 120px;
-    grid-template-columns: 44px minmax(0, 1fr);
-    align-items: center;
-    column-gap: 14px;
-    row-gap: 4px;
-    padding: 18px 20px;
-    border: 2px dashed var(--border-secondary);
-    border-radius: var(--radius-card);
-    background: var(--paper);
-    color: var(--ink);
-    text-align: left;
-    transition: all 0.2s ease;
+    gap: 10px;
+    margin: 14px 0 8px;
 }
 
-.lc-drop.dragging {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+.lc-import-primary.is-busy,
+.lc-import-primary.is-uploading {
+    opacity: 1;
 }
 
-.lc-drop.is-busy {
-    opacity: 0.88;
+.lc-import-primary.is-busy {
     pointer-events: none;
 }
 
-.lc-drop.is-uploading {
-    opacity: 1;
-    border-color: var(--accent);
-    background: var(--accent-soft);
+.lc-import-primary.dragging {
+    outline: 2px dashed var(--accent);
+    outline-offset: 4px;
+    border-radius: var(--radius-card);
 }
 
-.lc-drop.is-uploading .lc-plus {
-    animation: lc-upload-pulse 1.2s ease-in-out infinite;
+.lc-import-cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
+    min-height: 64px;
+    padding: 16px 20px;
+    border-radius: 14px;
+    font-size: 15px;
+    text-align: left;
 }
 
-@keyframes lc-upload-pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(0.92); opacity: 0.72; }
+.lc-import-cta.is-uploading {
+    opacity: 0.92;
 }
 
-.lc-plus {
+.lc-import-cta-icon {
     display: grid;
-    width: 44px;
-    height: 44px;
-    grid-row: 1 / span 2;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
     place-items: center;
-    border-radius: 12px;
-    background: rgba(0,0,0,0.85);
-    color: #fff;
-    font-size: 26px;
-    font-weight: 800;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.18);
+    color: inherit;
+    font-size: 24px;
+    font-weight: 700;
     line-height: 1;
 }
 
-.lc-drop strong {
-    align-self: end;
-    font-size: 17px;
+.lc-import-cta-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.lc-import-cta-copy strong {
+    font-size: 16px;
+    font-weight: 800;
     line-height: 1.25;
 }
 
-.lc-drop span:last-child {
-    align-self: start;
-    max-width: 42rem;
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 700;
+.lc-import-cta-copy span {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Legacy class hooks kept for product-linear theme overrides. */
+.lc-drop {
+    display: contents;
+}
+
+.lc-plus {
+    display: none;
 }
 
 .lc-import-actions {
+    display: none;
+}
+
+.lc-import-advanced {
+    margin: 4px 0 8px;
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+}
+
+.lc-import-advanced > summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    list-style: none;
+    user-select: none;
+}
+
+.lc-import-advanced > summary::-webkit-details-marker {
+    display: none;
+}
+
+.lc-import-advanced > summary::after {
+    content: ' ▾';
+    opacity: 0.7;
+}
+
+.lc-import-advanced[open] > summary::after {
+    content: ' ▴';
+}
+
+.lc-import-advanced-body {
     display: grid;
-    grid-template-columns: 1fr 1fr;
     gap: 10px;
-    margin: 10px 0;
+    margin-top: 10px;
 }
 
 .lc-local-path-field {
     display: grid;
     gap: 6px;
-    margin: 10px 0 4px;
 }
 
 .lc-local-path-row {
@@ -391,6 +430,48 @@ body.lc-study-focus .lc-meta-bar {
 
 .lc-local-path-field .lc-input {
     width: 100%;
+}
+
+.lc-import-preview {
+    display: grid;
+    gap: 2px;
+    min-height: 0;
+    padding: 0;
+    border-radius: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.lc-import-preview.is-idle:empty {
+    display: none;
+}
+
+.lc-import-preview:not(.is-idle) {
+    padding: 10px 12px;
+    background: var(--paper-warm, var(--bg-tertiary));
+}
+
+.lc-import-preview strong {
+    color: var(--ink);
+    font-size: 13px;
+}
+
+.lc-import-preview span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lc-import-preview.is-uploading {
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    background: var(--accent-soft, rgba(37, 99, 235, 0.08));
+}
+
+.lc-import-preview.is-error {
+    border: 1px solid rgba(220, 38, 38, 0.22);
+    background: rgba(254, 242, 242, 0.9);
+    color: #991b1b;
 }
 
 .lc-path-dialog {
@@ -549,44 +630,9 @@ body.lc-study-focus .lc-meta-bar {
     font-size: 13px;
 }
 
-.lc-import-preview {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-height: 48px;
-    padding: 10px 14px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    color: var(--muted);
-}
-
-.lc-import-preview strong {
-    color: var(--ink-soft);
-}
-
+/* Status under primary import CTA — keep compact; base rules live above. */
 .lc-import-preview span {
-    text-align: right;
-}
-
-.lc-import-preview.is-uploading {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-    background: var(--accent-soft);
-    color: var(--ink);
-}
-
-.lc-import-preview.is-uploading strong {
-    color: var(--ink);
-}
-
-.lc-import-preview.is-error {
-    border-color: color-mix(in srgb, #ef4444 45%, var(--line));
-    background: rgba(239, 68, 68, 0.08);
-    color: var(--ink);
-}
-
-.lc-import-preview.is-error strong {
-    color: #b91c1c;
+    text-align: left;
 }
 
 .lc-empty-uploading {
@@ -803,18 +849,16 @@ body.lc-study-focus .lc-meta-bar {
 .lc-history-item {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
     width: 100%;
     min-height: 48px;
-    padding: 12px 10px;
+    padding: 4px 4px 4px 6px;
     border: 1px solid transparent;
     border-bottom: 1px solid var(--line);
     border-radius: var(--radius-card);
     background: transparent;
     color: var(--ink);
-    cursor: pointer;
-    text-align: left;
     transition: all 0.2s ease;
 }
 
@@ -822,6 +866,28 @@ body.lc-study-focus .lc-meta-bar {
 .lc-history-item.active {
     border-color: var(--border-primary);
     background: var(--card-translucent-light);
+}
+
+.lc-history-open {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 6px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+}
+
+.lc-history-open:hover,
+.lc-history-open:focus-visible {
+    background: rgba(15, 23, 42, 0.04);
+    outline: none;
 }
 
 .lc-history-item span {
@@ -855,6 +921,27 @@ body.lc-study-focus .lc-meta-bar {
     font-style: normal;
     font-weight: 900;
     white-space: nowrap;
+}
+
+.lc-history-delete {
+    flex-shrink: 0;
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 1px solid rgba(220, 38, 38, 0.18);
+    border-radius: 999px;
+    background: rgba(254, 242, 242, 0.9);
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.lc-history-delete:hover,
+.lc-history-delete:focus-visible {
+    border-color: rgba(220, 38, 38, 0.4);
+    background: #fee2e2;
+    outline: none;
 }
 
 .lc-history-empty {
@@ -3728,30 +3815,264 @@ body.has-app-shell .lc-metadata > div {
 }
 
 .obsidian-collection-dialog {
-    width: min(760px, calc(100vw - 32px));
-    max-height: calc(100vh - 32px);
+    width: min(560px, calc(100vw - 28px));
+    max-height: calc(100vh - 28px);
     padding: 0;
     border: 0;
-    border-radius: 12px;
+    border-radius: 16px;
     color: var(--ink);
-    background: var(--card);
-    box-shadow: 0 24px 72px rgba(26, 31, 38, 0.24);
+    background: #fff;
+    box-shadow:
+        0 0 0 1px rgba(15, 23, 42, 0.06),
+        0 24px 64px rgba(15, 23, 42, 0.18);
 }
 
 .obsidian-collection-dialog::backdrop {
-    background: rgba(15, 23, 42, 0.46);
-    backdrop-filter: blur(2px);
+    background: rgba(15, 23, 42, 0.42);
+    backdrop-filter: blur(4px);
 }
 
 .obsidian-collection-panel {
     display: grid;
-    gap: 18px;
-    max-height: calc(100vh - 32px);
-    padding: 24px;
+    gap: 20px;
+    max-height: calc(100vh - 28px);
+    padding: 22px 22px 18px;
     overflow: auto;
 }
 
-.obsidian-collection-head,
+.obsidian-collection-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.obsidian-collection-kicker {
+    margin: 0 0 4px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.obsidian-collection-head h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+}
+
+.obsidian-collection-subhead,
+.obsidian-collection-message {
+    margin: 0;
+}
+
+.obsidian-collection-subhead {
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.45;
+    font-weight: 500;
+}
+
+.obsidian-collection-setup {
+    display: grid;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid #e8ecf1;
+    border-radius: 14px;
+    background: #fafbfc;
+}
+
+.obsidian-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.obsidian-field-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.obsidian-field-label {
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.obsidian-field-control {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid #dbe1ea;
+    border-radius: 10px;
+    color: #0f172a;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 550;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.obsidian-field-control:hover {
+    border-color: #c5cedb;
+}
+
+.obsidian-field-control:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.obsidian-field-meta {
+    margin: 0;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 500;
+}
+
+.obsidian-field-meta code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #eef2f7;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.obsidian-dir-status {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.obsidian-dir-status[data-tone="exists"] {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.obsidian-dir-status[data-tone="create"] {
+    color: #1d4ed8;
+    background: #dbeafe;
+}
+
+.obsidian-dir-status[data-tone="empty"] {
+    color: #92400e;
+    background: #fef3c7;
+}
+
+.obsidian-dir-combobox {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 42px;
+    gap: 0;
+    align-items: stretch;
+}
+
+.obsidian-dir-input {
+    border-radius: 10px 0 0 10px;
+    border-right: 0;
+}
+
+.obsidian-dir-browse {
+    display: grid;
+    place-items: center;
+    min-width: 42px;
+    border: 1px solid #dbe1ea;
+    border-radius: 0 10px 10px 0;
+    background: #fff;
+    color: #475569;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.obsidian-dir-browse:hover,
+.obsidian-dir-browse:focus-visible {
+    background: #f8fafc;
+    border-color: #c5cedb;
+    color: #0f172a;
+    outline: none;
+}
+
+.obsidian-dir-combobox.is-open .obsidian-dir-input,
+.obsidian-dir-combobox.is-open .obsidian-dir-browse {
+    border-color: #3b82f6;
+}
+
+.obsidian-dir-combobox.is-open .obsidian-dir-input {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.obsidian-dir-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+}
+
+.obsidian-dir-panel-head {
+    padding: 10px 12px 6px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.obsidian-dir-panel-list {
+    max-height: 220px;
+    overflow: auto;
+    padding: 4px;
+}
+
+.obsidian-dir-option {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.obsidian-dir-option:hover,
+.obsidian-dir-option:focus-visible,
+.obsidian-dir-option.is-active {
+    background: #eff6ff;
+    color: #1d4ed8;
+    outline: none;
+}
+
+.obsidian-dir-panel-empty {
+    padding: 14px 12px 16px;
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 550;
+}
+
+.obsidian-collection-selection {
+    display: grid;
+    gap: 10px;
+}
+
 .obsidian-collection-selection-head,
 .obsidian-collection-actions {
     display: flex;
@@ -3760,42 +4081,23 @@ body.has-app-shell .lc-metadata > div {
     gap: 12px;
 }
 
-.obsidian-collection-head h3,
-.obsidian-collection-head p,
-.obsidian-collection-fields p,
-.obsidian-collection-message {
-    margin: 0;
-}
-
-.obsidian-collection-fields {
-    display: grid;
-    grid-template-columns: 140px minmax(0, 1fr);
-    gap: 10px 14px;
-    align-items: center;
-}
-
-.obsidian-collection-fields p {
-    grid-column: 2;
-    color: var(--muted);
+.obsidian-collection-selection-head strong {
     font-size: 13px;
+    font-weight: 750;
 }
 
-.obsidian-collection-fields select,
-.obsidian-collection-fields input {
-    min-height: 42px;
-    padding: 8px 10px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    color: inherit;
-    background: var(--card);
+.obsidian-selection-tools {
+    display: flex;
+    gap: 6px;
 }
 
 .obsidian-collection-sources,
 .obsidian-collection-preview-list {
     display: grid;
-    gap: 8px;
-    max-height: 260px;
+    gap: 6px;
+    max-height: 220px;
     overflow: auto;
+    padding-right: 2px;
 }
 
 .obsidian-collection-source {
@@ -3804,13 +4106,22 @@ body.has-app-shell .lc-metadata > div {
     gap: 10px;
     align-items: center;
     padding: 10px 12px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    border: 1px solid #e8ecf1;
+    border-radius: 10px;
+    background: #fff;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.obsidian-collection-source:hover {
+    border-color: #d5dde8;
+    background: #fafbfc;
 }
 
 .obsidian-collection-source small,
 .obsidian-collection-document code {
-    color: var(--muted);
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 700;
 }
 
 .obsidian-collection-preview-item,
@@ -3821,35 +4132,99 @@ body.has-app-shell .lc-metadata > div {
 
 .obsidian-collection-preview-item {
     padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    border: 1px solid #e8ecf1;
+    border-radius: 10px;
+    background: #fff;
 }
 
 .obsidian-collection-document pre {
-    max-height: 180px;
+    max-height: 140px;
     margin: 0;
     padding: 10px;
     overflow: auto;
-    border-radius: 6px;
+    border-radius: 8px;
     white-space: pre-wrap;
-    background: var(--bg-tertiary);
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+}
+
+.obsidian-collection-message {
+    min-height: 18px;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .obsidian-collection-message[data-tone="error"] {
-    color: var(--danger);
+    color: #b91c1c;
 }
 
 .obsidian-collection-message[data-tone="warning"] {
-    color: #9a6700;
+    color: #b45309;
 }
 
 .obsidian-collection-message[data-tone="success"] {
-    color: var(--success);
+    color: #15803d;
 }
 
 .obsidian-collection-actions {
     justify-content: flex-end;
     flex-wrap: wrap;
+    padding-top: 4px;
+    border-top: 1px solid #eef2f6;
+}
+
+.obsidian-collection-actions .lc-btn.primary {
+    min-width: 112px;
+}
+
+#obsidian-collection-apply:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.obsidian-collection-advanced {
+    border-top: 1px solid #eef2f6;
+    padding-top: 8px;
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.obsidian-collection-advanced summary {
+    cursor: pointer;
+    font-weight: 700;
+    list-style: none;
+}
+
+.obsidian-collection-advanced summary::-webkit-details-marker {
+    display: none;
+}
+
+.obsidian-collection-advanced p {
+    margin: 8px 0;
+    line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+    .obsidian-collection-dialog {
+        width: calc(100vw - 16px);
+        border-radius: 14px;
+    }
+
+    .obsidian-collection-panel {
+        padding: 16px;
+        gap: 16px;
+    }
+
+    .obsidian-collection-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+
+    .obsidian-collection-actions .lc-btn {
+        width: 100%;
+    }
 }
 
 @media (max-width: 620px) {

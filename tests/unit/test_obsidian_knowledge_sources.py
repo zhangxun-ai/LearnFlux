@@ -97,9 +97,23 @@ def test_collection_resolves_selected_items_in_position_order_and_reports_unread
         cache_manager=MagicMock(), collection_service=collection_service
     ).resolve_collection("u", "c1", ["s3", "s2", "s1"])
 
-    assert [item.source_id for item in items] == ["s1", "s2"]
-    assert items[0].source_access == "https://e/1"
-    assert items[1].source_access == str(local)
-    assert items[0].collection_title == "作者-专题"
+    from video_transcript_api.obsidian.knowledge_markdown import (
+        COLLECTION_INDEX_SOURCE_ID,
+        COLLECTION_INDEX_TITLE,
+    )
+
+    assert [item.source_id for item in items] == [
+        COLLECTION_INDEX_SOURCE_ID,
+        "s1",
+        "s2",
+    ]
+    assert items[0].title == COLLECTION_INDEX_TITLE
+    assert "全系列主线总结" in items[0].analysis_content
+    assert "主线" in items[0].analysis_content
+    assert "01" in items[0].analysis_content
+    assert items[1].title == "01"
+    assert items[1].source_access == "https://e/1"
+    assert items[2].source_access == str(local)
+    assert items[1].collection_title == "作者-专题"
     assert unavailable == [{"source_id": "s3", "code": "transcript_not_ready"}]
     assert collection["title"] == "专题"

@@ -10,6 +10,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
 
 from .knowledge_markdown import (
+    COLLECTION_INDEX_TITLE,
+    is_collection_index_item,
     managed_document_hash,
     render_analysis_knowledge_markdown,
     render_raw_knowledge_markdown,
@@ -73,26 +75,50 @@ class ObsidianKnowledgeService:
             "learnflux_context_key": item.context_key,
         }
 
-    def _candidate_path(
+    @staticmethod
+    def _type_identity(document_type: str) -> dict[str, str]:
+        return {
+            "source": "LearnFlux",
+            "type": f"learnflux-{document_type}",
+        }
+
+    @staticmethod
+    def _view_token_identity(item: KnowledgeItem, document_type: str) -> dict[str, str]:
+        return {
+            "source": "LearnFlux",
+            "type": f"learnflux-{document_type}",
+            "learnflux_view_token": item.view_token,
+        }
+
+    def _unique_managed_match(
         self,
         directory: str,
-        title: str,
         identity: Mapping[str, str],
-        *,
-        preferred_filename: str | None = None,
-    ) -> str:
+    ) -> str | None:
         directory_path = resolve_vault_path(self.vault_path, directory)
-        if directory_path.is_dir():
-            matches = find_managed_markdown_files(
-                self.vault_path, directory, identity
+        if not directory_path.is_dir():
+            return None
+        matches = find_managed_markdown_files(
+            self.vault_path, directory, identity
+        )
+        if len(matches) > 1:
+            raise ManagedFileConflict(
+                "multiple files claim the same managed identity"
             )
-            if len(matches) > 1:
-                raise ManagedFileConflict(
-                    "multiple files claim the same managed identity"
-                )
-            if matches:
-                return matches[0]
-        filename = preferred_filename or sanitize_markdown_filename(title)
+        return matches[0] if matches else None
+
+    def _managed_filename_path(
+        self,
+        directory: str,
+        filename: str,
+        document_type: str,
+    ) -> str | None:
+        """Reuse an existing LearnFlux-managed note with the preferred basename.
+
+        When users re-import a course under a new collection_id but the same
+        Vault folder, context_key changes. Prefer overwriting the canonical
+        filename instead of allocating ``name (2).md`` duplicates.
+        """
         if (
             PurePosixPath(filename).name != filename
             or not filename.lower().endswith(".md")
@@ -100,13 +126,71 @@ class ObsidianKnowledgeService:
             raise ValueError("preferred filename must be a Markdown basename")
         candidate = PurePosixPath(directory, filename).as_posix()
         path = resolve_vault_path(self.vault_path, candidate)
+        if not path.is_file():
+            return None
+        # Only reclaim LearnFlux-managed notes of the same document layer.
+        managed = find_managed_markdown_files(
+            self.vault_path,
+            directory,
+            self._type_identity(document_type),
+        )
+        return candidate if candidate in managed else None
+
+    def _candidate_path(
+        self,
+        directory: str,
+        title: str,
+        identity: Mapping[str, str],
+        *,
+        preferred_filename: str | None = None,
+        item: KnowledgeItem | None = None,
+        document_type: str = "raw",
+    ) -> str:
+        exact = self._unique_managed_match(directory, identity)
+        if exact:
+            return exact
+
+        filename = preferred_filename or sanitize_markdown_filename(title)
+        if (
+            PurePosixPath(filename).name != filename
+            or not filename.lower().endswith(".md")
+        ):
+            raise ValueError("preferred filename must be a Markdown basename")
+
+        # 1) Canonical filename already managed by LearnFlux → overwrite.
+        reclaimed = self._managed_filename_path(
+            directory, filename, document_type
+        )
+        if reclaimed:
+            return reclaimed
+
+        # 2) Same view_token (stable content identity across re-collections).
+        if item and item.view_token:
+            by_token = self._unique_managed_match(
+                directory, self._view_token_identity(item, document_type)
+            )
+            if by_token:
+                return by_token
+
+        candidate = PurePosixPath(directory, filename).as_posix()
+        path = resolve_vault_path(self.vault_path, candidate)
         stem = path.stem
         suffix = path.suffix
         index = 2
         while path.exists() or path.is_symlink():
-            candidate = PurePosixPath(
+            # Prefer reclaiming LearnFlux-managed collision names with same token.
+            collision = PurePosixPath(
                 directory, f"{stem} ({index}){suffix}"
             ).as_posix()
+            if item and item.view_token:
+                managed = find_managed_markdown_files(
+                    self.vault_path,
+                    directory,
+                    self._view_token_identity(item, document_type),
+                )
+                if collision in managed:
+                    return collision
+            candidate = collision
             path = resolve_vault_path(self.vault_path, candidate)
             index += 1
         return candidate
@@ -119,32 +203,88 @@ class ObsidianKnowledgeService:
         directory: str,
         synced_path: str | None,
         preferred_filename: str | None = None,
-    ) -> tuple[str, bool]:
+    ) -> tuple[str, bool, bool]:
+        """Return ``(relative_path, relocated, reclaimed_managed)``.
+
+        ``reclaimed_managed`` is True when an existing LearnFlux note was reused
+        under a new context_key (e.g. re-imported collection) so preview can
+        treat identity/frontmatter updates as normal ``changed`` writes.
+        """
         if synced_path:
             old_path = resolve_vault_path(self.vault_path, synced_path)
             if old_path.is_file():
-                return synced_path, False
+                return synced_path, False, False
         identity = self._identity(item, document_type)
-        directory_path = resolve_vault_path(self.vault_path, directory)
-        if directory_path.is_dir():
-            matches = find_managed_markdown_files(
-                self.vault_path, directory, identity
+        exact = self._unique_managed_match(directory, identity)
+        if exact:
+            return exact, bool(synced_path and exact != synced_path), False
+
+        filename = preferred_filename or sanitize_markdown_filename(item.title)
+        reclaimed = self._managed_filename_path(
+            directory, filename, document_type
+        )
+        if reclaimed:
+            return (
+                reclaimed,
+                bool(synced_path and reclaimed != synced_path),
+                True,
             )
-            if len(matches) > 1:
-                raise ManagedFileConflict(
-                    "multiple files claim the same managed identity"
+
+        if item.view_token:
+            by_token = self._unique_managed_match(
+                directory, self._view_token_identity(item, document_type)
+            )
+            if by_token:
+                return (
+                    by_token,
+                    bool(synced_path and by_token != synced_path),
+                    True,
                 )
-            if matches:
-                return matches[0], bool(synced_path and matches[0] != synced_path)
+
         return (
             self._candidate_path(
                 directory,
                 item.title,
                 identity,
                 preferred_filename=preferred_filename,
+                item=item,
+                document_type=document_type,
             ),
             False,
+            False,
         )
+
+    def _cleanup_stale_managed_duplicates(
+        self,
+        *,
+        directory: str,
+        document_type: str,
+        item: KnowledgeItem,
+        keep_relative_path: str,
+    ) -> None:
+        """Remove leftover ``name (2).md`` copies for the same managed note."""
+        if not item.view_token:
+            return
+        directory_path = resolve_vault_path(self.vault_path, directory)
+        if not directory_path.is_dir():
+            return
+        try:
+            matches = find_managed_markdown_files(
+                self.vault_path,
+                directory,
+                self._view_token_identity(item, document_type),
+            )
+        except (ManagedFileConflict, ValueError):
+            return
+        for relative in matches:
+            if relative == keep_relative_path:
+                continue
+            path = resolve_vault_path(self.vault_path, relative)
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError:
+                continue
 
     def _documents(
         self,
@@ -170,13 +310,19 @@ class ObsidianKnowledgeService:
             )
             or {}
         )
-        raw_path, raw_relocated = self._resolve_path(
+        preferred_name = (
+            f"{COLLECTION_INDEX_TITLE}.md"
+            if is_collection_index_item(item)
+            else None
+        )
+        raw_path, raw_relocated, raw_reclaimed = self._resolve_path(
             item=item,
             document_type="raw",
             directory=raw_directory,
             synced_path=sync.get("raw_relative_path"),
+            preferred_filename=preferred_name,
         )
-        analysis_path, analysis_relocated = self._resolve_path(
+        analysis_path, analysis_relocated, analysis_reclaimed = self._resolve_path(
             item=item,
             document_type="analysis",
             directory=analysis_directory,
@@ -196,6 +342,7 @@ class ObsidianKnowledgeService:
                 ),
                 "last_synced_hash": sync.get("raw_synced_hash"),
                 "relocated": raw_relocated,
+                "reclaimed_managed": raw_reclaimed,
             },
             {
                 "document_type": "analysis",
@@ -209,6 +356,7 @@ class ObsidianKnowledgeService:
                 ),
                 "last_synced_hash": sync.get("analysis_synced_hash"),
                 "relocated": analysis_relocated,
+                "reclaimed_managed": analysis_reclaimed,
             },
         ]
 
@@ -233,6 +381,10 @@ class ObsidianKnowledgeService:
         elif existing_hash == desired_hash:
             state = "unchanged"
         elif last_synced_hash and existing_hash == last_synced_hash:
+            state = "changed"
+        elif document.get("reclaimed_managed"):
+            # Same-folder re-import with a new collection/source identity should
+            # overwrite the previous LearnFlux note rather than look external.
             state = "changed"
         else:
             state = "externally_modified"
@@ -418,6 +570,14 @@ class ObsidianKnowledgeService:
                                 f"{document_type}_relative_path": relative_path,
                                 f"{document_type}_synced_hash": desired_hash,
                             },
+                        )
+                        # After reclaiming the canonical path, drop leftover
+                        # ``title (2).md`` clones for the same view_token.
+                        self._cleanup_stale_managed_duplicates(
+                            directory=PurePosixPath(relative_path).parent.as_posix(),
+                            document_type=document_type,
+                            item=item,
+                            keep_relative_path=relative_path,
                         )
                         raw_succeeded = (
                             raw_succeeded or document_type == "raw"

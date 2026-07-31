@@ -113,10 +113,13 @@ def test_collections_page_prefers_local_path_zero_copy_import():
 
     assert 'id="local-import-path"' in html
     assert 'id="import-local-path"' in html
-    assert "扫描路径并导入" in html
-    assert "不复制视频" in html
+    assert 'id="browse-local-path"' in html
+    assert "选择文件夹并导入" in html
+    assert "扫描路径并导入" not in html
     assert "from-local-paths" in js
     assert "importFromLocalDirectory" in js
+    assert "startFolderImport" in js
+    assert "importSelectedLocalDirectory" in js
     assert "appendLocalDirectoryToCurrentCollection" in js
     assert "path_referenced" in (
         project_root / "src/video_transcript_api/collections/service.py"

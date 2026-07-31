@@ -192,35 +192,35 @@
                 </label>
             </section>
 
-            <div class="lc-drop" id="drop-action" role="group" aria-labelledby="drop-title" aria-describedby="drop-subtitle">
-                <span class="lc-plus">+</span>
-                <strong id="drop-title">填写本机课程文件夹路径</strong>
-                <span id="drop-subtitle">只登记路径，不复制视频；解析后打开源文件会直接定位原路径。</span>
+            <div class="lc-import-primary" id="drop-action" role="group" aria-labelledby="drop-title" aria-describedby="drop-subtitle">
+                <button class="lc-btn primary lc-import-cta" id="browse-local-path" type="button">
+                    <span class="lc-import-cta-icon" aria-hidden="true">+</span>
+                    <span class="lc-import-cta-copy">
+                        <strong id="drop-title">选择文件夹并导入</strong>
+                        <span id="drop-subtitle">选完即开始，不额外占用磁盘</span>
+                    </span>
+                </button>
+                <div class="lc-import-preview is-idle" id="import-preview" aria-live="polite"></div>
             </div>
 
-            <div class="lc-local-path-field">
-                <span class="lc-label">本机文件夹路径</span>
-                <div class="lc-local-path-row">
-                    <input id="local-import-path" class="lc-input" type="text" name="lf-local-import-path" placeholder="选择或粘贴本机课程文件夹路径" autocomplete="off" spellcheck="false">
-                    <button class="lc-btn" id="browse-local-path" type="button">选择文件夹</button>
+            <details class="lc-import-advanced">
+                <summary>更多选项</summary>
+                <div class="lc-import-advanced-body">
+                    <div class="lc-local-path-field">
+                        <label class="lc-label" for="local-import-path">粘贴文件夹路径</label>
+                        <div class="lc-local-path-row">
+                            <input id="local-import-path" class="lc-input" type="text" name="lf-local-import-path" placeholder="/path/to/course" autocomplete="off" spellcheck="false">
+                            <button class="lc-btn primary" id="import-local-path" type="button">导入</button>
+                        </div>
+                    </div>
+                    <button class="lc-btn ghost" id="pick-files" type="button" title="仅适合小体积文档">上传文件副本</button>
                 </div>
-            </div>
-
-            <div class="lc-import-actions">
-                <button class="lc-btn primary" id="import-local-path" type="button">扫描路径并导入</button>
-                <button class="lc-btn" id="pick-files" type="button" title="仅适合小体积文档；视频请用上方本机路径导入">上传文件副本（不推荐）</button>
-            </div>
+            </details>
             <!-- Kept for append actions / legacy document upload; folder pick no longer copies videos. -->
             <input id="folder-input" type="file" webkitdirectory multiple hidden>
             <input id="files-input" type="file" multiple hidden>
             <input id="append-folder-input" type="file" webkitdirectory multiple hidden>
-            <input id="append-files-input" type="file" multiple hidden>
             <input id="append-local-path" type="hidden">
-
-            <div class="lc-import-preview" id="import-preview">
-                <strong>尚未指定本机路径</strong>
-                <span>导入后按文件名顺序解析，不额外占用原视频空间</span>
-            </div>
                 </section>
             </div>
         </details>
@@ -278,7 +278,6 @@
                 <div class="lc-workspace-tools">
                     <div class="lc-workspace-actions" aria-label="当前专题操作">
                         <button class="lc-btn ghost" id="append-folder" type="button">追加文件夹</button>
-                        <button class="lc-btn ghost" id="append-files" type="button">追加文件</button>
                         <button class="lc-btn ghost hidden" id="continue-collection" type="button">继续解析</button>
                         <button class="lc-btn ghost" id="obsidian-collection-open" type="button">沉淀到 Obsidian</button>
                         <button class="lc-btn danger" id="cancel-collection" type="button">停止解析</button>
@@ -600,41 +599,90 @@
         <div class="obsidian-collection-panel">
             <header class="obsidian-collection-head">
                 <div>
-                    <span>LearnFlux Knowledge Deposit</span>
-                    <h3 id="obsidian-collection-title">沉淀合集到 Obsidian</h3>
-                    <p>合集分集会进入统一目录，原文与 AI 解读分别写入 raw / processed。</p>
+                    <p class="obsidian-collection-kicker">知识沉淀</p>
+                    <h3 id="obsidian-collection-title">同步到 Obsidian</h3>
+                    <p class="obsidian-collection-subhead">选择分类与目录后同步；原文与 AI 解读分别写入 raw / processed。</p>
                 </div>
                 <button class="lc-icon-btn" id="obsidian-collection-close" type="button" aria-label="关闭"><span aria-hidden="true">×</span></button>
             </header>
-            <div class="obsidian-collection-fields">
-                <label for="obsidian-collection-category">一级分类</label>
-                <select id="obsidian-collection-category"></select>
-                <p id="obsidian-collection-recommendation">正在读取分类建议…</p>
-                <label for="obsidian-collection-directory">合集目录</label>
-                <input id="obsidian-collection-directory" type="text" maxlength="160">
-                <p>修改分类或目录只影响后续同步，不会移动或删除旧文件。</p>
-            </div>
-            <section class="obsidian-collection-selection">
+
+            <section class="obsidian-collection-setup" aria-label="同步目标">
+                <div class="obsidian-field">
+                    <label class="obsidian-field-label" for="obsidian-collection-category">一级分类</label>
+                    <select id="obsidian-collection-category" class="obsidian-field-control"></select>
+                    <p id="obsidian-collection-recommendation" class="obsidian-field-meta">正在读取分类建议…</p>
+                </div>
+
+                <div class="obsidian-field">
+                    <div class="obsidian-field-label-row">
+                        <label class="obsidian-field-label" for="obsidian-collection-directory">合集目录</label>
+                        <span id="obsidian-collection-directory-status" class="obsidian-dir-status" hidden></span>
+                    </div>
+                    <div class="obsidian-dir-combobox" id="obsidian-collection-directory-combobox">
+                        <input
+                            id="obsidian-collection-directory"
+                            class="obsidian-field-control obsidian-dir-input"
+                            type="text"
+                            maxlength="160"
+                            placeholder="输入目录名，不存在将在同步时自动创建"
+                            autocomplete="off"
+                            spellcheck="false"
+                            aria-autocomplete="list"
+                            aria-controls="obsidian-collection-directory-panel"
+                            aria-expanded="false"
+                        >
+                        <button
+                            class="obsidian-dir-browse"
+                            id="obsidian-collection-directory-browse"
+                            type="button"
+                            aria-label="浏览已有目录"
+                            title="浏览已有目录"
+                        >
+                            <span aria-hidden="true">📁</span>
+                        </button>
+                        <div
+                            class="obsidian-dir-panel"
+                            id="obsidian-collection-directory-panel"
+                            role="listbox"
+                            hidden
+                        >
+                            <div class="obsidian-dir-panel-head">当前分类下的已有目录</div>
+                            <div class="obsidian-dir-panel-list" id="obsidian-collection-directory-list"></div>
+                            <div class="obsidian-dir-panel-empty" id="obsidian-collection-directory-empty" hidden>
+                                暂无已有目录，可直接输入新名称
+                            </div>
+                        </div>
+                    </div>
+                    <p id="obsidian-collection-directory-hint" class="obsidian-field-meta">
+                        将写入 <code id="obsidian-collection-directory-path-preview">raw/…</code> · 不存在则同步时自动创建
+                    </p>
+                </div>
+            </section>
+
+            <section class="obsidian-collection-selection" aria-label="选择分集">
                 <div class="obsidian-collection-selection-head">
                     <strong>选择分集</strong>
-                    <div>
-                        <button class="lc-btn compact" id="obsidian-collection-select-all" type="button">全选</button>
-                        <button class="lc-btn compact" id="obsidian-collection-clear-all" type="button">取消全选</button>
+                    <div class="obsidian-selection-tools">
+                        <button class="lc-btn ghost compact" id="obsidian-collection-select-all" type="button">全选</button>
+                        <button class="lc-btn ghost compact" id="obsidian-collection-clear-all" type="button">清空</button>
                     </div>
                 </div>
                 <div id="obsidian-collection-sources" class="obsidian-collection-sources"></div>
             </section>
+
             <p id="obsidian-collection-message" class="obsidian-collection-message" role="status" aria-live="polite"></p>
-            <section id="obsidian-collection-preview-list" class="obsidian-collection-preview-list"></section>
-            <div class="obsidian-collection-actions">
-                <button class="lc-btn" id="obsidian-collection-preview-selected" type="button">预览所选</button>
-                <button class="lc-btn primary" id="obsidian-collection-incremental" type="button">增量同步全部</button>
-                <button class="lc-btn primary" id="obsidian-collection-apply" type="button" disabled>确认同步</button>
-            </div>
+            <section id="obsidian-collection-preview-list" class="obsidian-collection-preview-list" aria-label="同步预览"></section>
+
+            <footer class="obsidian-collection-actions">
+                <button class="lc-btn ghost" id="obsidian-collection-preview-selected" type="button">预览</button>
+                <button class="lc-btn ghost" id="obsidian-collection-incremental" type="button">增量全部</button>
+                <button class="lc-btn primary" id="obsidian-collection-apply" type="button" title="未预览时会先预览，无冲突则直接写入">确认同步</button>
+            </footer>
+
             <details class="obsidian-collection-advanced">
-                <summary>高级操作</summary>
-                <p>强制操作会重新预览所有已就绪分集，确认后才写入。</p>
-                <button class="lc-btn danger" id="obsidian-collection-force" type="button">强制重新同步全部</button>
+                <summary>高级</summary>
+                <p>强制重新预览全部已就绪分集，确认后才写入。</p>
+                <button class="lc-btn danger compact" id="obsidian-collection-force" type="button">强制重新同步全部</button>
             </details>
         </div>
     </dialog>

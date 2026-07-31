@@ -55,12 +55,16 @@ def test_collection_has_selection_incremental_force_and_result_ui():
         'id="obsidian-collection-dialog"',
         'id="obsidian-collection-category"',
         'id="obsidian-collection-directory"',
+        'id="obsidian-collection-directory-browse"',
+        'id="obsidian-collection-directory-panel"',
+        'id="obsidian-collection-directory-list"',
+        'id="obsidian-collection-directory-status"',
         'id="obsidian-collection-sources"',
         'id="obsidian-collection-select-all"',
         'id="obsidian-collection-clear-all"',
-        "预览所选",
-        "增量同步全部",
+        "确认同步",
         "强制重新同步全部",
+        "同步时自动创建",
         "<details",
     ):
         assert value in html
@@ -71,7 +75,19 @@ def test_collection_has_selection_incremental_force_and_result_ui():
     assert "force: true" in script
     assert "clearCollectionKnowledgePreview" in script
     assert "preconditions" in script
-    assert "const hasPreconditions = (data.preconditions || []).length > 0" in script
+    assert "loadCollectionVaultDirectories" in script
+    assert "chooseCollectionDirectoryValue" in script
+    assert "setCollectionDirectoryValue" in script
+    assert "openCollectionDirectoryPanel" in script
+    assert "closeCollectionDirectoryPanel" in script
+    assert "updateCollectionDirectoryMeta" in script
+    assert "refreshCollectionKnowledgeApplyState" in script
+    assert "collectionPreviewHasExternalModifications" in script
+    assert "One-click path: auto-preview when user has not previewed yet." in script
+    assert "/api/obsidian/directories" in script
+    assert "createCollectionDirectoryInVault" not in script
+    assert "displaySourceTitle(source)" in script
+    assert "els.obsidianCollectionDialog.close()" in script
     force_preview = script[
         script.index("async function previewForcedCollectionKnowledge"):
         script.index("async function applyCollectionKnowledgePreview")
@@ -85,7 +101,9 @@ def test_collection_has_selection_incremental_force_and_result_ui():
         "failed",
     ):
         assert status in script
-    assert ".obsidian-collection" in css
+    assert ".obsidian-dir-combobox" in css
+    assert ".obsidian-dir-panel" in css
+    assert ".obsidian-collection-setup" in css
 
 
 def test_opening_dialogs_does_not_call_apply():

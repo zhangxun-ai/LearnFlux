@@ -924,6 +924,33 @@ async def cancel_collection_processing(
         _raise_collection_transcription_value_error(exc)
 
 
+@router.delete("/api/collections/{collection_id}", response_model=TranscribeResponse)
+async def delete_collection(
+    collection_id: str,
+    user_info: dict = Depends(verify_token),
+):
+    """Delete a learning collection and its sources. Transcript cache is kept."""
+    try:
+        service = get_collection_service()
+        _backfill_testable_single_user_owner(service, user_info)
+        _require_collection_owner(service, collection_id, user_info)
+        # Best-effort stop for in-flight work before unlinking sources.
+        try:
+            get_collection_transcription_service().stop_collection(
+                collection_id, owner_user_id=user_info.get("user_id") or ""
+            )
+        except ValueError:
+            pass
+        deleted = service.delete_collection(collection_id)
+        return TranscribeResponse(
+            code=200,
+            message="学习集合已删除",
+            data=deleted,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/api/collections/{collection_id}/summary", response_model=TranscribeResponse)
 async def generate_collection_summary(
     collection_id: str,

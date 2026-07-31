@@ -22,6 +22,88 @@ def test_preview_is_side_effect_free_then_apply_writes_mirrored_documents(tmp_pa
     assert (vault / "processed" / "分类" / "标题.md").exists()
 
 
+def test_collection_index_is_written_as_stable_overview_note(tmp_path):
+    from video_transcript_api.obsidian.knowledge_markdown import (
+        COLLECTION_INDEX_SOURCE_ID,
+        COLLECTION_INDEX_TITLE,
+        build_collection_index_bodies,
+    )
+    from video_transcript_api.obsidian.knowledge_repository import ObsidianKnowledgeRepository
+    from video_transcript_api.obsidian.knowledge_service import ObsidianKnowledgeService
+
+    vault = tmp_path / "vault"
+    (vault / "raw" / "知识").mkdir(parents=True)
+    repo = ObsidianKnowledgeRepository(tmp_path / "db.sqlite")
+    binding = repo.save_binding(
+        "u", "collection", "c1", "vault", "知识", "AI小王子-Codex课", None
+    )
+    raw_body, analysis_body = build_collection_index_bodies(
+        creator="AI小王子",
+        collection_title="Codex课",
+        description="简介",
+        summary_markdown="课程总主线",
+        chapters=[
+            {
+                "position": 1,
+                "title": "01-入门",
+                "ready": True,
+                "summary": "入门摘要",
+            }
+        ],
+    )
+    index = KnowledgeItem(
+        "u",
+        "collection-index:c1",
+        COLLECTION_INDEX_TITLE,
+        raw_body,
+        analysis_body,
+        "collection_index",
+        "learnflux://collections/c1",
+        "c1",
+        COLLECTION_INDEX_SOURCE_ID,
+        "AI小王子-Codex课",
+    )
+    chapter = KnowledgeItem(
+        "u",
+        "v1",
+        "01-入门",
+        "原文",
+        "入门摘要",
+        "online_url",
+        "https://e/1",
+        "c1",
+        "s1",
+        "AI小王子-Codex课",
+        position=1,
+    )
+    service = ObsidianKnowledgeService(vault_path=vault, repository=repo)
+    preview = service.preview(items=[index, chapter], binding=binding)
+    result = service.apply(
+        items=[index, chapter],
+        binding=binding,
+        expected_binding_revision=1,
+        preconditions=preview["preconditions"],
+    )
+    assert result["counts"]["created"] >= 4
+    overview_raw = vault / "raw" / "知识" / "AI小王子-Codex课" / "00-合集总览.md"
+    overview_processed = (
+        vault / "processed" / "知识" / "AI小王子-Codex课" / "00-合集总览.md"
+    )
+    assert overview_raw.is_file()
+    assert overview_processed.is_file()
+    processed_text = overview_processed.read_text(encoding="utf-8")
+    assert "learnflux_role: collection_index" in processed_text
+    assert "课程总主线" in processed_text
+    assert "[[01-入门]]" in processed_text
+
+    repeated = service.preview(items=[index, chapter], binding=binding)
+    assert all(
+        doc["state"] == "unchanged"
+        for item in repeated["items"]
+        for doc in item["documents"]
+    )
+
+
 def _setup(tmp_path, *, writer=None):
     from video_transcript_api.obsidian.knowledge_repository import ObsidianKnowledgeRepository
     from video_transcript_api.obsidian.knowledge_service import ObsidianKnowledgeService
@@ -71,6 +153,80 @@ def test_unmanaged_raw_name_collision_keeps_raw_and_processed_filenames_mirrored
     }
     assert Path(documents["raw"]["relative_path"]).name == "坏-标题 (2).md"
     assert Path(documents["analysis"]["relative_path"]).name == "坏-标题 (2).md"
+
+
+def test_reimport_with_new_collection_id_overwrites_canonical_filename(tmp_path):
+    """Re-depositing into the same folder must not create ``name (2).md``."""
+    from video_transcript_api.obsidian.knowledge_repository import ObsidianKnowledgeRepository
+    from video_transcript_api.obsidian.knowledge_service import ObsidianKnowledgeService
+    from video_transcript_api.obsidian.knowledge_markdown import render_raw_knowledge_markdown
+
+    vault = tmp_path / "vault"
+    target_dir = vault / "raw" / "AI" / "Codex课"
+    target_dir.mkdir(parents=True)
+    (vault / "processed" / "AI" / "Codex课").mkdir(parents=True)
+    repo = ObsidianKnowledgeRepository(tmp_path / "db.sqlite")
+    binding = repo.save_binding(
+        "u", "collection", "new-collection", "vault", "AI", "Codex课", None
+    )
+    service = ObsidianKnowledgeService(vault_path=vault, repository=repo)
+
+    old_item = KnowledgeItem(
+        "u",
+        "view-shared",
+        "002-部署",
+        "原文内容",
+        "旧解读",
+        "online_url",
+        "https://e",
+        "old-collection",
+        "old-source",
+        "Codex课",
+    )
+    old_raw = render_raw_knowledge_markdown(
+        old_item,
+        category="AI",
+        relative_path="raw/AI/Codex课/002-部署.md",
+        synced_at="2026-07-30T00:00:00+08:00",
+    )
+    (target_dir / "002-部署.md").write_text(old_raw, encoding="utf-8")
+    # Leftover duplicate from the buggy re-sync path.
+    (target_dir / "002-部署 (2).md").write_text(old_raw, encoding="utf-8")
+
+    new_item = KnowledgeItem(
+        "u",
+        "view-shared",
+        "002-部署",
+        "原文内容",
+        "新解读",
+        "online_url",
+        "https://e",
+        "new-collection",
+        "new-source",
+        "Codex课",
+    )
+    preview = service.preview(items=[new_item], binding=binding)
+    documents = {
+        document["document_type"]: document
+        for document in preview["items"][0]["documents"]
+    }
+    assert documents["raw"]["relative_path"].endswith("002-部署.md")
+    assert "(2)" not in documents["raw"]["relative_path"]
+    assert documents["raw"]["state"] == "changed"
+
+    result = service.apply(
+        items=[new_item],
+        binding=binding,
+        expected_binding_revision=1,
+        preconditions=preview["preconditions"],
+    )
+    assert result["counts"]["failed"] == 0
+    assert (target_dir / "002-部署.md").is_file()
+    # Canonical path reclaimed; same-view_token duplicate should be cleaned.
+    assert not (target_dir / "002-部署 (2).md").exists()
+    text = (target_dir / "002-部署.md").read_text(encoding="utf-8")
+    assert "learnflux_collection_id: new-collection" in text
+    assert "learnflux_source_id: new-source" in text
 
 
 def test_external_edit_and_rename_are_detected_without_writing_during_preview(tmp_path):

@@ -92,7 +92,11 @@
             const heading = window.document.createElement('div');
             heading.className = 'obsidian-knowledge-document-head';
             const title = window.document.createElement('strong');
-            title.textContent = previewDocument.document_type === 'raw' ? '原材料' : 'AI 解读';
+            const pathText = String(previewDocument.relative_path || '');
+            const isCollectionIndex = pathText.includes('00-合集总览');
+            title.textContent = isCollectionIndex
+                ? (previewDocument.document_type === 'raw' ? '合集总览（目录）' : '合集总览（主线）')
+                : (previewDocument.document_type === 'raw' ? '原材料' : 'AI 解读');
             const badge = window.document.createElement('span');
             badge.textContent = stateLabel(previewDocument.state);
             heading.append(title, badge);

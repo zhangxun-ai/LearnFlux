@@ -2,7 +2,14 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Sequence
+from .knowledge_markdown import (
+    COLLECTION_INDEX_SOURCE_ID,
+    COLLECTION_INDEX_TITLE,
+    build_collection_index_bodies,
+    collection_index_view_token,
+)
 from .knowledge_models import KnowledgeItem
+from ..collections.titles import source_display_title
 from ..study.transcript import normalize_transcript
 
 class KnowledgeContentNotReady(ValueError):
@@ -45,7 +52,9 @@ class ObsidianKnowledgeSourceResolver:
             raise KnowledgeContentNotReady("analysis_not_ready")
 
         task = cache.get("task_info") or {}
-        title = str(cache.get("title") or task.get("title") or view_token).strip()
+        title = source_display_title(
+            str(cache.get("title") or task.get("title") or view_token).strip()
+        )
         local_path = str(
             task.get("source_file_path") or cache.get("source_file_path") or ""
         )
@@ -72,6 +81,63 @@ class ObsidianKnowledgeSourceResolver:
             analysis_content=analysis,
             source_kind=source_kind,
             source_access=source_access,
+        )
+
+    def _build_collection_index_item(
+        self,
+        *,
+        owner_user_id: str,
+        collection_id: str,
+        collection: dict[str, Any],
+        creator: str,
+        collection_title: str,
+        directory: str,
+        ready_items: Sequence[KnowledgeItem],
+    ) -> KnowledgeItem:
+        ready_by_id = {item.source_id: item for item in ready_items}
+        chapters = []
+        for source in sorted(
+            collection.get("sources") or [],
+            key=lambda value: (value.get("position", 0), value.get("id", "")),
+        ):
+            source_id = str(source.get("id") or "")
+            ready_item = ready_by_id.get(source_id)
+            raw_title = str(
+                (ready_item.title if ready_item else None)
+                or source.get("display_title")
+                or source.get("title")
+                or source_id
+                or "未命名章节"
+            )
+            chapters.append(
+                {
+                    "position": int(source.get("position") or 0),
+                    "title": source_display_title(raw_title),
+                    "source_id": source_id,
+                    "ready": ready_item is not None,
+                    "summary": ready_item.analysis_content if ready_item else "",
+                }
+            )
+        raw_body, analysis_body = build_collection_index_bodies(
+            creator=creator,
+            collection_title=collection_title,
+            description=str(collection.get("description") or ""),
+            summary_markdown=str(collection.get("summary_markdown") or ""),
+            chapters=chapters,
+        )
+        return KnowledgeItem(
+            owner_user_id=owner_user_id,
+            view_token=collection_index_view_token(collection_id),
+            title=COLLECTION_INDEX_TITLE,
+            raw_content=raw_body,
+            analysis_content=analysis_body,
+            source_kind="collection_index",
+            source_access=f"learnflux://collections/{collection_id}",
+            collection_id=collection_id,
+            source_id=COLLECTION_INDEX_SOURCE_ID,
+            collection_title=directory,
+            collection_creator=creator,
+            position=0,
         )
 
     def resolve_collection(
@@ -124,6 +190,15 @@ class ObsidianKnowledgeSourceResolver:
                     )
                 else:
                     source_access = access.get("view_url") or ""
+                item_title = source_display_title(
+                    str(
+                        detail.get("display_title")
+                        or detail.get("title")
+                        or source.get("display_title")
+                        or source.get("title")
+                        or source["id"]
+                    )
+                )
                 items.append(
                     KnowledgeItem(
                         owner_user_id=owner_user_id,
@@ -132,11 +207,7 @@ class ObsidianKnowledgeSourceResolver:
                             or source.get("view_token")
                             or ""
                         ),
-                        title=str(
-                            detail.get("title")
-                            or source.get("title")
-                            or source["id"]
-                        ),
+                        title=item_title,
                         raw_content=raw,
                         analysis_content=analysis,
                         source_kind=str(access.get("kind") or ""),
@@ -150,4 +221,16 @@ class ObsidianKnowledgeSourceResolver:
                 )
             except KnowledgeContentNotReady as exc:
                 unavailable.append({"source_id": source["id"], "code": exc.code})
-        return collection, items, unavailable
+
+        # Always deposit a collection-level overview so AI can reason globally
+        # before opening individual chapter notes.
+        index_item = self._build_collection_index_item(
+            owner_user_id=owner_user_id,
+            collection_id=collection_id,
+            collection=collection,
+            creator=creator,
+            collection_title=collection_title,
+            directory=directory,
+            ready_items=items,
+        )
+        return collection, [index_item, *items], unavailable

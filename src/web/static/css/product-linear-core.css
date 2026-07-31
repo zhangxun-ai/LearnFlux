@@ -70,16 +70,25 @@ body.product-linear.page-collections .lc-btn.primary {
     box-shadow: none;
 }
 
-body.product-linear.page-collections .lc-drop {
-    border: 1px dashed var(--product-line-strong);
+body.product-linear.page-collections .lc-import-cta {
+    border-color: var(--product-accent);
     border-radius: var(--product-radius-lg);
+    background: var(--product-accent);
+    color: var(--product-on-accent);
+    box-shadow: none;
+}
+
+body.product-linear.page-collections .lc-import-cta:hover {
+    filter: brightness(1.03);
+    transform: none;
+}
+
+body.product-linear.page-collections .lc-import-preview:not(.is-idle) {
     background: var(--product-surface-muted);
 }
 
-body.product-linear.page-collections .lc-drop:hover {
-    border-color: var(--product-accent);
-    background: var(--product-accent-soft);
-    transform: none;
+body.product-linear.page-collections .lc-import-advanced {
+    border-color: var(--product-line);
 }
 
 body.product-linear.page-collections .lc-history-summary,

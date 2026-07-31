@@ -23,6 +23,37 @@ def test_legacy_public_request_defaults_to_local_free():
     request = TranscribeRequest(url="https://example.com/video")
 
     assert request.transcription_strategy == "local"
+    assert request.analysis_intent == "deep_learning"
+    assert request.source_type is None
+
+
+@pytest.mark.parametrize(
+    "source_type",
+    [
+        "wechat_mp_article",
+        "wechat_channels_video",
+        "video",
+        "social_post",
+        "mixed_media",
+        "unknown",
+    ],
+)
+def test_every_public_source_keeps_deep_learning_intent(source_type):
+    request = TranscribeRequest(
+        url="https://example.com/content",
+        source_type=source_type,
+        include_comments=True,
+    )
+
+    assert request.analysis_intent == "deep_learning"
+
+
+def test_public_transcribe_request_rejects_post_insight_intent():
+    with pytest.raises(ValidationError):
+        TranscribeRequest(
+            url="https://mp.weixin.qq.com/s/example",
+            analysis_intent="post_insight",
+        )
 
 
 def test_paid_quote_action_is_limited_to_task_owner():

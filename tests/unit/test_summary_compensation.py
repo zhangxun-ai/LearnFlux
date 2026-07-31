@@ -56,6 +56,8 @@ def test_missing_summary_schedules_first_bounded_retry(tmp_path):
                 "wechat_webhook": None,
                 "notification_channel": None,
                 "notification_webhooks": {},
+                "source_type": "wechat_mp_article",
+                "analysis_intent": "deep_learning",
             }
         )
 
@@ -71,6 +73,7 @@ def test_missing_summary_schedules_first_bounded_retry(tmp_path):
     assert (row.get("progress") or {}).get("stage_label") == (
         "AI 解读失败（已切换备用模型）"
     )
+    assert coordinator.process.call_args.kwargs["summary_profile"] == "deep_learning"
     cm.close()
 
 
@@ -134,10 +137,15 @@ def test_summary_retry_uses_cached_calibration_without_recalibrating(tmp_path):
                 "summary_only_retry": True,
                 "summary_retry_attempt": 1,
                 "skip_notification": True,
+                "source_type": "wechat_mp_article",
+                "analysis_intent": "deep_learning",
             }
         )
 
     coordinator.process.assert_not_called()
+    assert coordinator.summary_processor.process.call_args.kwargs[
+        "summary_profile"
+    ] == "deep_learning"
     cache = cm.get_cache(
         "youtube",
         "vid2",

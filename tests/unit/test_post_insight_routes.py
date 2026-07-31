@@ -1,6 +1,12 @@
 """Unit tests for post-insight presentation logic (markdown -> sections + chips)."""
 
+from pathlib import Path
+
 from src.video_transcript_api.api.routes.post_insight import build_insight_sections
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+POST_TEMPLATE = PROJECT_ROOT / "src/web/templates/post_insight.html"
 
 _SAMPLE = """## 正文核心主张
 作者认为财富来自资产而非出卖时间。
@@ -69,3 +75,13 @@ def test_markdown_without_headers_becomes_single_block():
 def test_empty_markdown_returns_empty_list():
     assert build_insight_sections("") == []
     assert build_insight_sections(None) == []
+
+
+def test_prefilled_post_url_never_auto_analyzes_or_repeats_paid_work():
+    template = POST_TEMPLATE.read_text(encoding="utf-8")
+    startup = template[template.index("// 带 ?view=<id>"):]
+
+    assert "analyze();" not in startup
+    assert "点击“分析”后才会开始抓取并调用 AI" in template
+    assert "可能产生 TikHub 与模型费用" in template
+    assert "未找到已保存的帖子洞察结果" in startup

@@ -108,6 +108,41 @@ class TestDownloadInfoCaching:
 
 
 # ============================================================
+# TikHub Request Helpers
+# ============================================================
+
+
+class TestTikHubRequestHelpers:
+    """Verify BaseDownloader delegates POST payloads without changing GET calls."""
+
+    def test_post_api_request_delegates_json_payload_with_min_timeout(
+        self, mock_downloader
+    ):
+        mock_downloader.config = {"tikhub": {"api_key": "configured-key"}}
+        mock_downloader.api_key = "effective-key"
+
+        with patch("video_transcript_api.downloaders.base.TikHubClient") as client_class:
+            client_class.return_value.post.return_value = {
+                "code": 200,
+                "data": {"ok": True},
+            }
+
+            result = mock_downloader.post_api_request(
+                "/api/v1/wechat_mp/v2/fetch_article_detail",
+                {"url": "https://mp.weixin.qq.com/s/example", "raw": False},
+                min_timeout=30,
+            )
+
+        assert result == {"code": 200, "data": {"ok": True}}
+        client_class.assert_called_once_with({"api_key": "effective-key"})
+        client_class.return_value.post.assert_called_once_with(
+            "/api/v1/wechat_mp/v2/fetch_article_detail",
+            {"url": "https://mp.weixin.qq.com/s/example", "raw": False},
+            min_timeout=30,
+        )
+
+
+# ============================================================
 # Short URL Resolution Tests
 # ============================================================
 

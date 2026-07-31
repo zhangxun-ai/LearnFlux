@@ -47,6 +47,14 @@
         position: relative;
         z-index: 2;
     }
+
+    .post-cost-note {
+        max-width: 760px;
+        margin: 12px auto 0;
+        color: var(--text-secondary);
+        font-size: 0.86rem;
+        line-height: 1.6;
+    }
     
     .post-entry input[type="text"] {
         flex: 1; 
@@ -479,6 +487,7 @@
                value="{{ prefill_url or '' }}" autocomplete="off" spellcheck="false">
         <button class="btn-analyze" id="analyze-btn">分析</button>
     </div>
+    <p class="post-cost-note">点击“分析”后才会开始抓取并调用 AI；每次重新分析都可能产生 TikHub 与模型费用。</p>
 </div>
 
 <!-- 加载 -->
@@ -703,7 +712,7 @@
         if (e.key === 'Enter') analyze();
     });
 
-    // 带 ?view=<id> 直接展示已存结果（不重新请求、不耗费用）；否则若带 url 则自动分析
+    // 带 ?view=<id> 只展示本机已存结果；预填 URL 永不自动抓取或调用 LLM。
     var __viewId = new URLSearchParams(window.location.search).get('view');
     if (__viewId) {
         var __stored = null;
@@ -711,11 +720,13 @@
         if (__stored) {
             if (urlInput) urlInput.value = __stored.source_url || '';
             renderResult(__stored);
-        } else if ((urlInput.value || '').trim()) {
-            analyze();
+        } else {
+            showError(
+                '未找到已保存的帖子洞察结果',
+                '该旧结果只保存在创建它的浏览器中。你可以返回输入链接，确认费用后重新分析。',
+                false
+            );
         }
-    } else if ((urlInput.value || '').trim()) {
-        analyze();
     }
 })();
 </script>

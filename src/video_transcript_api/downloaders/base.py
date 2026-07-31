@@ -450,3 +450,17 @@ class BaseDownloader(ABC):
         except TikHubError as exc:
             logger.error(f"TikHub API request failed: {exc}")
             raise ValueError(str(exc)) from exc
+
+    def post_api_request(self, endpoint, payload=None, *, min_timeout=None):
+        """Send a JSON POST request through the shared TikHub client."""
+        tikhub_config = dict(self.config.get("tikhub", {}) or {})
+        tikhub_config["api_key"] = self.api_key
+        try:
+            return TikHubClient(tikhub_config).post(
+                endpoint,
+                payload,
+                min_timeout=min_timeout,
+            )
+        except TikHubError as exc:
+            logger.error(f"TikHub API POST request failed: {exc}")
+            raise ValueError(str(exc)) from exc

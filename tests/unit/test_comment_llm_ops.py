@@ -6,6 +6,8 @@ All console output must be in English only.
 from video_transcript_api.api.services.llm_ops import (
     _append_comment_insight,
     _build_comment_only_result_dict,
+    _enforce_analysis_intent_boundary,
+    _summary_profile_for_task,
 )
 
 
@@ -111,3 +113,29 @@ def test_build_comment_only_result_dict_uses_cached_outputs():
     assert result["stats"]["original_length"] == len("original transcript")
     assert result["stats"]["calibrated_length"] == len("cached calibrated")
     assert result["stats"]["summary_length"] == len("cached summary")
+
+
+def test_deep_learning_payload_cannot_enable_comment_pipeline():
+    task = {
+        "analysis_intent": "deep_learning",
+        "include_comments": True,
+        "comment_only": True,
+        "source_type": "social_post",
+    }
+
+    _enforce_analysis_intent_boundary(task)
+
+    assert task["include_comments"] is False
+    assert task["comment_only"] is False
+    assert _summary_profile_for_task(task) == "deep_learning"
+
+
+def test_legacy_transcription_payload_defaults_to_deep_learning_boundary():
+    task = {"include_comments": True, "comment_only": True}
+
+    _enforce_analysis_intent_boundary(task)
+
+    assert task["analysis_intent"] == "deep_learning"
+    assert task["include_comments"] is False
+    assert task["comment_only"] is False
+    assert _summary_profile_for_task(task) == "deep_learning"

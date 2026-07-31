@@ -60,6 +60,7 @@
 .detect-banner {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
     margin-top: 12px;
     padding: 11px 14px;
@@ -84,6 +85,15 @@
 .detect-banner.is-video   .db-chip { background: rgba(228,80,58,0.18); color: var(--accent-primary); }
 .detect-banner.is-post    { border-color: #1d9bf0; background: rgba(29,155,240,0.06); }
 .detect-banner.is-post    .db-chip { background: rgba(29,155,240,0.18); color: #1d9bf0; }
+.detect-banner.is-article { background: rgba(40,104,216,0.08); }
+.detect-banner.is-article .db-chip { background: rgba(40,104,216,0.16); color: #2868d8; }
+.detect-banner .db-alternative { margin-left: auto; color: var(--accent-primary); white-space: nowrap; }
+.detect-banner .db-cost {
+    flex-basis: 100%;
+    color: var(--text-tertiary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
 .detect-banner.is-soon    { border-color: #f59e0b; background: rgba(245,158,11,0.06); }
 .detect-banner.is-soon    .db-chip { background: rgba(245,158,11,0.18); color: #d97706; }
 .detect-banner.is-unknown { border-color: var(--border-secondary); }
@@ -851,6 +861,11 @@
     gap: 4px;
     margin-bottom: 24px;
 }
+
+#video-options[hidden] {
+    display: none;
+}
+
 .compact-strategy-toggle .strategy-card {
     margin: 0;
 }

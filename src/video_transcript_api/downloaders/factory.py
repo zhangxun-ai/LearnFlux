@@ -4,6 +4,7 @@ from .xiaohongshu import XiaohongshuDownloader
 from .youtube import YoutubeDownloader
 from .xiaoyuzhou import XiaoyuzhouDownloader
 from .wechat_channels import WeChatChannelsDownloader
+from .twitter import TwitterDownloader
 from .generic import GenericDownloader
 from ..utils.logging import setup_logger
 
@@ -27,7 +28,8 @@ def create_downloader(url):
         XiaohongshuDownloader(),
         YoutubeDownloader(),
         XiaoyuzhouDownloader(),
-        WeChatChannelsDownloader()
+        WeChatChannelsDownloader(),
+        TwitterDownloader(),
     ]
     
     # 先尝试平台特定的下载器

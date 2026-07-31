@@ -11,6 +11,7 @@ import time
 from typing import Optional, Dict, Any, Literal
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from fastapi import HTTPException, Header, Request
@@ -30,7 +31,7 @@ from ..context import (
     get_transcription_concurrency_controller,
     get_user_manager,
 )
-from ...downloaders import create_downloader
+from ...downloaders import TwitterDownloader, create_downloader
 from ...transcriber import FunASRSpeakerClient, Transcriber, TranscriptionContext
 from ...transcriber.cloud_runtime import build_aliyun_provider
 from ...transcriber.cloud_config import (
@@ -833,6 +834,280 @@ def _persist_downloaded_source_if_requested(
         return None
 
 
+def _is_weixin_official_account_article_url(url: str) -> bool:
+    """Return whether *url* is a canonical Official Account article URL."""
+    try:
+        parsed = urlsplit(url)
+    except (TypeError, ValueError):
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if (parsed.hostname or "").lower() != "mp.weixin.qq.com":
+        return False
+    if parsed.path.startswith("/s/") and parsed.path.removeprefix("/s/").strip("/"):
+        return True
+    if parsed.path != "/s":
+        return False
+    query = parse_qs(parsed.query, keep_blank_values=False)
+    return bool(query.get("__biz") or query.get("mid"))
+
+
+def _confirmed_source_type(url: str, platform: str | None) -> str:
+    """Derive a server-confirmed acquisition source without trusting the client."""
+    if _is_weixin_official_account_article_url(url):
+        return "wechat_mp_article"
+    if TwitterDownloader.is_canonical_status_url(url):
+        return "social_post"
+    try:
+        parsed = urlsplit(url)
+        host = (parsed.hostname or "").lower()
+        path = parsed.path
+    except (TypeError, ValueError):
+        host = ""
+        path = ""
+    if host == "weixin.qq.com" and path.startswith("/sph/"):
+        return "wechat_channels_video"
+    if platform == "xiaohongshu":
+        return "mixed_media"
+    if platform and platform not in {"generic", "unknown"}:
+        return "video"
+    return "unknown"
+
+
+def _queue_weixin_article_deep_learning(
+    *,
+    task_id: str,
+    url: str,
+    display_url: str,
+    media_id: str,
+    use_speaker_recognition: bool,
+    wechat_webhook: Optional[str],
+    notification_channel: Optional[str],
+    notification_webhooks: Dict[str, Any],
+    tracker: PerfTracker,
+    task_notifier,
+    preserve_source_file: bool = False,
+    article_fetcher=None,
+) -> Dict[str, Any]:
+    """Fetch an Official Account body and queue the deep-learning pipeline."""
+    if not _is_weixin_official_account_article_url(url):
+        raise ValueError("不是受支持的微信公众号文章链接")
+
+    if article_fetcher is None:
+        from ...comments.weixin_post import WeixinPostFetcher
+
+        article_fetcher = WeixinPostFetcher().fetch_article
+    article = article_fetcher(url)
+    article_text = (article.text or "").strip()
+    if not article_text:
+        raise ValueError("无法获取公众号文章正文")
+
+    platform = "weixin"
+    title = (article.title or "").strip() or f"公众号文章 {media_id}"
+    author = (article.author or "").strip() or "unknown"
+    description = "微信公众号文章正文"
+
+    task_notifier.notify_task_status(
+        display_url,
+        "文章正文获取成功 - 正在生成深度学习笔记",
+        title=title,
+        author=author,
+        transcript=article_text,
+    )
+    _safe_update_progress(
+        task_id,
+        stage="calibrating",
+        stage_label="已获取文章正文，正在生成深度学习笔记",
+        basis="wechat_mp_article_text",
+        confidence="high",
+        evidence={"transcript_chars": len(article_text)},
+    )
+
+    cache_result = cache_manager.save_cache(
+        platform=platform,
+        url=url,
+        media_id=media_id,
+        use_speaker_recognition=use_speaker_recognition,
+        transcript_data=article_text,
+        transcript_type="capswriter",
+        title=title,
+        author=author,
+        description=description,
+    )
+    if not cache_result:
+        raise ValueError("保存公众号文章正文缓存失败")
+
+    source_file_path = None
+    if preserve_source_file:
+        source_file_path = _preserve_source_file(
+            platform=platform,
+            media_id=media_id,
+            title=title,
+            source_kind="document",
+            source_text=article_text,
+        )
+
+    llm_task_queue.put(
+        {
+            "task_id": task_id,
+            "url": url,
+            "display_url": display_url,
+            "platform": platform,
+            "media_id": media_id,
+            "video_title": title,
+            "author": author,
+            "description": description,
+            "transcript": article_text,
+            "use_speaker_recognition": use_speaker_recognition,
+            "is_generic": False,
+            "wechat_webhook": wechat_webhook,
+            "notification_channel": notification_channel,
+            "notification_webhooks": notification_webhooks,
+            "include_comments": False,
+            "comment_limit": 100,
+            "source_type": "wechat_mp_article",
+            "content_kind": "article_text",
+            "analysis_intent": "deep_learning",
+            "perf_tracker": tracker,
+        }
+    )
+    tracker.count("weixin_article_text")
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.CALIBRATING,
+        platform=platform,
+        media_id=media_id,
+        title=title,
+        author=author,
+        source_file_path=source_file_path,
+    )
+    return {
+        "status": "success",
+        "message": "公众号文章正文获取成功，正在生成深度学习笔记",
+        "data": {
+            "video_title": title,
+            "author": author,
+            "transcript": article_text,
+            "media_type": "article",
+        },
+    }
+
+
+def _queue_twitter_text_deep_learning(
+    *,
+    task_id: str,
+    url: str,
+    display_url: str,
+    metadata,
+    use_speaker_recognition: bool,
+    wechat_webhook: Optional[str],
+    notification_channel: Optional[str],
+    notification_webhooks: Dict[str, Any],
+    tracker: PerfTracker,
+    task_notifier,
+    preserve_source_file: bool = False,
+) -> Dict[str, Any]:
+    """Queue server-confirmed X text as deep learning without fetching replies."""
+    if not TwitterDownloader.is_canonical_status_url(url):
+        raise ValueError("不是受支持的 X/Twitter 状态链接")
+
+    text = (metadata.description or "").strip()
+    if not text:
+        raise ValueError("X/Twitter 未获取到可学习内容")
+
+    platform = "twitter"
+    media_id = metadata.video_id
+    title = (metadata.title or "").strip() or f"X content {media_id}"
+    author = (metadata.author or "").strip() or "unknown"
+    description = "X/Twitter text source"
+
+    task_notifier.notify_task_status(
+        display_url,
+        "X/Twitter text acquired - generating deep-learning notes",
+        title=title,
+        author=author,
+        transcript=text,
+    )
+    _safe_update_progress(
+        task_id,
+        stage="calibrating",
+        stage_label="已获取 X 正文，正在生成深度学习笔记",
+        basis="twitter_text",
+        confidence="high",
+        evidence={"transcript_chars": len(text)},
+    )
+
+    cache_result = cache_manager.save_cache(
+        platform=platform,
+        url=url,
+        media_id=media_id,
+        use_speaker_recognition=use_speaker_recognition,
+        transcript_data=text,
+        transcript_type="capswriter",
+        title=title,
+        author=author,
+        description=description,
+    )
+    if not cache_result:
+        raise ValueError("保存 X/Twitter 正文缓存失败")
+
+    source_file_path = None
+    if preserve_source_file:
+        source_file_path = _preserve_source_file(
+            platform=platform,
+            media_id=media_id,
+            title=title,
+            source_kind="document",
+            source_text=text,
+        )
+
+    llm_task_queue.put(
+        {
+            "task_id": task_id,
+            "url": url,
+            "display_url": display_url,
+            "platform": platform,
+            "media_id": media_id,
+            "video_title": title,
+            "author": author,
+            "description": description,
+            "transcript": text,
+            "use_speaker_recognition": use_speaker_recognition,
+            "is_generic": False,
+            "wechat_webhook": wechat_webhook,
+            "notification_channel": notification_channel,
+            "notification_webhooks": notification_webhooks,
+            "include_comments": False,
+            "comment_only": False,
+            "comment_limit": 100,
+            "source_type": "social_post",
+            "content_kind": "social_text",
+            "analysis_intent": "deep_learning",
+            "perf_tracker": tracker,
+        }
+    )
+    tracker.count("twitter_text")
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.CALIBRATING,
+        platform=platform,
+        media_id=media_id,
+        title=title,
+        author=author,
+        source_file_path=source_file_path,
+    )
+    return {
+        "status": "success",
+        "message": "X/Twitter 正文获取成功，正在生成深度学习笔记",
+        "data": {
+            "video_title": title,
+            "author": author,
+            "transcript": text,
+            "media_type": "text",
+        },
+    }
+
+
 def _queue_xiaohongshu_article_deep_learning(
     *,
     task_id: str,
@@ -939,6 +1214,9 @@ def _queue_xiaohongshu_article_deep_learning(
             "notification_webhooks": notification_webhooks,
             "include_comments": include_comments,
             "comment_limit": comment_limit,
+            "source_type": "mixed_media",
+            "content_kind": "article_text",
+            "analysis_intent": "deep_learning",
             "perf_tracker": tracker,
         }
     )
@@ -1532,6 +1810,9 @@ def _submit_local_link_asr(
     tracker,
     download_url,
     transcription_strategy: str | None,
+    source_type: str = "video",
+    content_kind: str = "video",
+    analysis_intent: str = "deep_learning",
 ) -> dict[str, str]:
     """Hand acquired link media to the local provider continuation."""
     output_base = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
@@ -1588,6 +1869,9 @@ def _submit_local_link_asr(
                 "notification_webhooks": notification_webhooks,
                 "include_comments": include_comments,
                 "comment_limit": comment_limit,
+                "source_type": source_type,
+                "content_kind": content_kind,
+                "analysis_intent": analysis_intent,
                 "perf_tracker": tracker,
             }
         )
@@ -1662,6 +1946,20 @@ class TranscribeRequest(BaseModel):
     """转录请求数据模型"""
 
     url: str = Field(..., description="视频URL（平台链接，用于 view_token 和缓存）")
+    source_type: Optional[
+        Literal[
+            "wechat_mp_article",
+            "wechat_channels_video",
+            "video",
+            "social_post",
+            "mixed_media",
+            "unknown",
+        ]
+    ] = Field(None, description="客户端识别的来源类型，仅作展示与审计提示")
+    analysis_intent: Literal["deep_learning"] = Field(
+        "deep_learning",
+        description="当前接口只接受单篇深度学习意图",
+    )
     transcription_strategy: Literal["local", "cloud"] = Field(
         "local", description="转录策略；旧客户端安全默认使用本地免费"
     )
@@ -1682,7 +1980,8 @@ class TranscribeRequest(BaseModel):
         None, description="通知配置（可选，指定渠道和自定义 webhook）"
     )
     include_comments: bool = Field(
-        False, description="是否获取高赞评论并生成评论洞察"
+        False,
+        description="旧客户端兼容字段；深度学习入口始终忽略并关闭评论洞察",
     )
     comment_limit: int = Field(
         100, ge=1, le=200, description="热评拉取上限，仅在 include_comments=true 时生效"
@@ -1887,6 +2186,8 @@ async def process_task_queue():
             comment_limit = task.get("comment_limit", 100)
             preserve_source_file = task.get("preserve_source_file", False)
             transcription_strategy = task.get("transcription_strategy")
+            source_type = task.get("source_type")
+            analysis_intent = task.get("analysis_intent", "deep_learning")
 
             try:
                 if _is_task_canceled(task_id):
@@ -1919,6 +2220,8 @@ async def process_task_queue():
                     preserve_source_file=preserve_source_file,
                     transcription_strategy=transcription_strategy,
                     cloud_confirmation_required=True,
+                    source_type=source_type,
+                    analysis_intent=analysis_intent,
                 )
 
                 def task_completed(future_result):
@@ -1976,6 +2279,8 @@ def process_transcription(
     *,
     transcription_strategy: str | None = None,
     cloud_confirmation_required: bool = False,
+    source_type: str | None = None,
+    analysis_intent: str = "deep_learning",
 ):
     """
     处理视频转录
@@ -1992,6 +2297,8 @@ def process_transcription(
         include_comments: 是否在 LLM 阶段生成高赞评论洞察
         comment_limit: 热评拉取上限
         preserve_source_file: 是否把解析过程中下载到的源内容保存到本地
+        source_type: 客户端来源提示；不作为服务端抓取器路由真相
+        analysis_intent: 分析意图；当前转录入口仅支持 deep_learning
     """
     if notification_webhooks is None:
         notification_webhooks = {}
@@ -1999,10 +2306,21 @@ def process_transcription(
     tracker = PerfTracker(task_id=task_id)
 
     try:
+        if analysis_intent != "deep_learning":
+            raise ValueError("unsupported_analysis_intent")
+        if include_comments:
+            logger.info(
+                f"Ignoring include_comments for deep-learning task: "
+                f"task={task_id}"
+            )
+        include_comments = False
         if transcription_strategy is not None and use_speaker_recognition:
             raise ValueError("strategy_conflicts_with_speaker_mode")
         if _is_task_canceled(task_id):
             return {"status": "canceled", "message": "任务已取消"}
+        is_weixin_article_deep_learning = (
+            _is_weixin_official_account_article_url(url)
+        )
         # 规范化 download_url：将空字符串转换为 None
         if download_url is not None and isinstance(download_url, str) and not download_url.strip():
             download_url = None
@@ -2079,6 +2397,29 @@ def process_transcription(
                 platform = 'generic'
                 video_id = generate_media_id_from_url(url)
                 logger.info(f"[URL解析] 回退到通用标识: platform={platform}, video_id={video_id}")
+
+        if platform == "twitter" and not TwitterDownloader.is_canonical_status_url(
+            parsed_normalized_url
+        ):
+            logger.warning(
+                "[URL parse] Rejecting non-canonical Twitter host before cache lookup"
+            )
+            platform = "generic"
+            video_id = generate_media_id_from_url(url)
+        if (
+            platform == "weixin"
+            and not _is_weixin_official_account_article_url(parsed_normalized_url)
+        ):
+            logger.warning(
+                "[URL parse] Rejecting non-canonical Official Account host "
+                "before cache lookup"
+            )
+            platform = "generic"
+            video_id = generate_media_id_from_url(url)
+
+        confirmed_source_type = _confirmed_source_type(
+            parsed_normalized_url, platform
+        )
 
         # ==================== 阶段2: 缓存检测（在创建下载器之前）====================
         cache_data = None
@@ -2296,6 +2637,13 @@ def process_transcription(
                         "include_comments": include_comments,
                         "comment_limit": comment_limit,
                         "comment_only": has_llm_calibrated and has_llm_summary and include_comments,
+                        "source_type": (
+                            "wechat_mp_article"
+                            if is_weixin_article_deep_learning
+                            else confirmed_source_type
+                        ),
+                        "content_kind": "cached_transcript",
+                        "analysis_intent": analysis_intent,
                         "cached_calibrated": cache_data.get("llm_calibrated"),
                         "cached_summary": cache_data.get("llm_summary"),
                         "perf_tracker": tracker,
@@ -2335,6 +2683,21 @@ def process_transcription(
             }
         else:
             logger.info("[缓存检测] ❌ 缓存未命中，准备下载和转录")
+
+            if is_weixin_article_deep_learning:
+                return _queue_weixin_article_deep_learning(
+                    task_id=task_id,
+                    url=parsed_normalized_url,
+                    display_url=display_url,
+                    media_id=video_id,
+                    use_speaker_recognition=use_speaker_recognition,
+                    wechat_webhook=wechat_webhook,
+                    notification_channel=notification_channel,
+                    notification_webhooks=notification_webhooks,
+                    preserve_source_file=preserve_source_file,
+                    tracker=tracker,
+                    task_notifier=task_notifier,
+                )
 
             if platform == "xiaohongshu" and not download_url:
                 article_result = _queue_xiaohongshu_article_deep_learning(
@@ -2384,6 +2747,12 @@ def process_transcription(
                         "author": metadata_obj.author,
                         "description": metadata_obj.description,
                         "platform": metadata_obj.platform,
+                        "content_kind": (
+                            (metadata_obj.extra or {}).get("content_kind")
+                        ),
+                        "source_type": (
+                            (metadata_obj.extra or {}).get("source_type")
+                        ),
                     }
                     logger.info(
                         f"[元数据获取] 成功: platform={metadata_obj.platform}, "
@@ -2401,6 +2770,11 @@ def process_transcription(
                 video_title = final_metadata.get('title') or final_metadata.get('video_title', '')
                 author = final_metadata.get('author', '')
                 description = final_metadata.get('description', '')
+                content_kind = final_metadata.get("content_kind") or "video"
+                confirmed_source_type = (
+                    final_metadata.get("source_type")
+                    or _confirmed_source_type(url, platform)
+                )
                 # 更新 platform 和 video_id（用完整数据覆盖 URLParser 提取的值）
                 platform = final_metadata.get('platform', platform)
                 video_id = final_metadata.get('video_id', video_id)
@@ -2411,6 +2785,7 @@ def process_transcription(
                 video_title = final_metadata.get('title') or extract_filename_from_url(url) or "Untitled"
                 author = final_metadata.get('author', 'Unknown')
                 description = final_metadata.get('description', '')
+                content_kind = "direct_media" if download_url else "unknown"
                 logger.info(f"[元数据合并] 元数据解析失败，使用 metadata_override 或默认值")
 
             media_id = video_id
@@ -2447,6 +2822,30 @@ def process_transcription(
                 except Exception as e:
                     logger.warning(f"[下载信息] 获取失败: {e}")
                     download_info_obj = None
+
+            if (
+                isinstance(metadata_downloader, TwitterDownloader)
+                and not has_separate_download_url
+                and not (
+                    download_info_obj
+                    and download_info_obj.download_url
+                )
+            ):
+                if metadata_obj is None:
+                    raise ValueError("X/Twitter 未获取到可学习内容")
+                return _queue_twitter_text_deep_learning(
+                    task_id=task_id,
+                    url=parsed_normalized_url,
+                    display_url=display_url,
+                    metadata=metadata_obj,
+                    use_speaker_recognition=use_speaker_recognition,
+                    wechat_webhook=wechat_webhook,
+                    notification_channel=notification_channel,
+                    notification_webhooks=notification_webhooks,
+                    preserve_source_file=preserve_source_file,
+                    tracker=tracker,
+                    task_notifier=task_notifier,
+                )
 
             # ========== YouTube API Server 快速路径 ==========
             # 如果提供了 download_url，则跳过 API Server，强制使用 download_url 下载
@@ -2943,6 +3342,9 @@ def process_transcription(
                             "notification_webhooks": notification_webhooks,
                             "include_comments": include_comments,
                             "comment_limit": comment_limit,
+                            "source_type": confirmed_source_type,
+                            "content_kind": "subtitle",
+                            "analysis_intent": analysis_intent,
                             "perf_tracker": tracker,
                         }
                     )
@@ -3166,6 +3568,9 @@ def process_transcription(
                                     tracker=tracker,
                                     download_url=download_url,
                                     transcription_strategy=transcription_strategy,
+                                    source_type=confirmed_source_type,
+                                    content_kind=content_kind,
+                                    analysis_intent=analysis_intent,
                                 )
                             # 使用时间戳作为临时输出基础名
                             temp_output_base = datetime.datetime.now().strftime(
@@ -3285,6 +3690,9 @@ def process_transcription(
                                 "notification_webhooks": notification_webhooks,
                                 "include_comments": include_comments,
                                 "comment_limit": comment_limit,
+                                "source_type": confirmed_source_type,
+                                "content_kind": content_kind,
+                                "analysis_intent": analysis_intent,
                                 "perf_tracker": tracker,
                             }
                         )

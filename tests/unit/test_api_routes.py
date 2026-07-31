@@ -284,6 +284,23 @@ class TestTranscribeEndpoint:
         queued_task = mock_task_queue.get_nowait()
         assert queued_task["preserve_source_file"] is True
 
+    def test_transcribe_enqueues_source_type_and_analysis_intent(
+        self, client, mock_task_queue
+    ):
+        resp = client.post(
+            "/api/transcribe",
+            json={
+                "url": "https://mp.weixin.qq.com/s/example",
+                "source_type": "wechat_mp_article",
+                "analysis_intent": "deep_learning",
+            },
+        )
+
+        assert resp.status_code == 200
+        queued_task = mock_task_queue.get_nowait()
+        assert queued_task["source_type"] == "wechat_mp_article"
+        assert queued_task["analysis_intent"] == "deep_learning"
+
     def test_transcribe_source_preservation_defaults_to_false(
         self, client, mock_task_queue
     ):

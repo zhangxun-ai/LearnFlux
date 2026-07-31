@@ -965,6 +965,137 @@ def _queue_xiaohongshu_article_deep_learning(
     }
 
 
+def _queue_twitter_post_deep_learning(
+    *,
+    task_id: str,
+    url: str,
+    display_url: str,
+    tweet_id: str,
+    use_speaker_recognition: bool,
+    wechat_webhook: Optional[str],
+    notification_channel: Optional[str],
+    notification_webhooks: Dict[str, Any],
+    include_comments: bool,
+    comment_limit: int,
+    tracker: PerfTracker,
+    task_notifier,
+    preserve_source_file: bool = False,
+    post_fetcher=None,
+) -> Optional[Dict[str, Any]]:
+    """Queue X/Twitter posts as text deep-learning tasks via TikHub.
+
+    Download factory has no Twitter media adapter, so status URLs must not go
+    through GenericDownloader. Reuse TwitterPostFetcher (same as post insight).
+    """
+    from ...comments.twitter_post import TwitterPostFetcher
+    from ...utils.url_parser import URLParser
+
+    parser = URLParser()
+    parsed = parser.parse(url)
+    if parsed.platform != "twitter":
+        return None
+
+    media_id = str(tweet_id or parsed.video_id or "").strip()
+    if not media_id:
+        raise ValueError("无法从 X 链接解析推文 ID")
+
+    fetcher = post_fetcher or TwitterPostFetcher()
+    post = fetcher.fetch(parsed.normalized_url, media_id, max_comments=0)
+    thread_text = (post.thread_text or "").strip()
+    if not thread_text:
+        raise ValueError("X 帖子正文为空，暂无法生成深度学习笔记")
+
+    platform = "twitter"
+    media_id = str(post.main_tweet_id or media_id)
+    title = post.title or f"X 帖子 {media_id}"
+    author = post.author or "unknown"
+    description = "X 帖子正文"
+    normalized_url = parsed.normalized_url or url
+
+    task_notifier.notify_task_status(
+        display_url,
+        "帖子正文获取成功 - 正在校对和总结",
+        title=title,
+        author=author,
+        transcript=thread_text,
+    )
+    _safe_update_progress(
+        task_id,
+        stage="calibrating",
+        stage_label="已获取帖子正文，正在生成深度学习笔记",
+        basis="twitter_post_text",
+        confidence="high",
+        evidence={"transcript_chars": len(thread_text)},
+    )
+
+    cache_result = cache_manager.save_cache(
+        platform=platform,
+        url=normalized_url,
+        media_id=media_id,
+        use_speaker_recognition=use_speaker_recognition,
+        transcript_data=thread_text,
+        transcript_type="capswriter",
+        title=title,
+        author=author,
+        description=description,
+    )
+    if not cache_result:
+        raise ValueError("保存 X 帖子正文缓存失败")
+
+    source_file_path = None
+    if preserve_source_file:
+        source_file_path = _preserve_source_file(
+            platform=platform,
+            media_id=media_id,
+            title=title,
+            source_kind="document",
+            source_text=thread_text,
+        )
+
+    llm_task_queue.put(
+        {
+            "task_id": task_id,
+            "url": normalized_url,
+            "display_url": display_url,
+            "platform": platform,
+            "media_id": media_id,
+            "video_title": title,
+            "author": author,
+            "description": description,
+            "transcript": thread_text,
+            "use_speaker_recognition": use_speaker_recognition,
+            "is_generic": False,
+            "wechat_webhook": wechat_webhook,
+            "notification_channel": notification_channel,
+            "notification_webhooks": notification_webhooks,
+            "include_comments": include_comments,
+            "comment_limit": comment_limit,
+            "perf_tracker": tracker,
+        }
+    )
+    tracker.count("twitter_post_text")
+    cache_manager.update_task_status(
+        task_id,
+        TaskStatus.CALIBRATING,
+        platform=platform,
+        media_id=media_id,
+        title=title,
+        author=author,
+        source_file_path=source_file_path,
+    )
+
+    return {
+        "status": "success",
+        "message": "X 帖子正文获取成功，正在生成深度学习笔记",
+        "data": {
+            "video_title": title,
+            "author": author,
+            "transcript": thread_text,
+            "media_type": "article",
+        },
+    }
+
+
 def process_local_upload(
     task_id: str,
     file_path: str,
@@ -2353,6 +2484,25 @@ def process_transcription(
                 )
                 if article_result is not None:
                     return article_result
+
+            if platform == "twitter" and not download_url:
+                twitter_result = _queue_twitter_post_deep_learning(
+                    task_id=task_id,
+                    url=parsed_normalized_url or url,
+                    display_url=display_url,
+                    tweet_id=str(video_id or ""),
+                    use_speaker_recognition=use_speaker_recognition,
+                    wechat_webhook=wechat_webhook,
+                    notification_channel=notification_channel,
+                    notification_webhooks=notification_webhooks,
+                    include_comments=include_comments,
+                    comment_limit=comment_limit,
+                    preserve_source_file=preserve_source_file,
+                    tracker=tracker,
+                    task_notifier=task_notifier,
+                )
+                if twitter_result is not None:
+                    return twitter_result
 
             # ==================== 阶段3: 元数据获取（创建下载器实例）====================
             parsed_metadata = None

@@ -54,6 +54,27 @@ def test_workbench_javascript_is_syntax_valid():
     assert result.returncode == 0, result.stderr
 
 
+def test_deep_learning_submit_does_not_route_posts_to_post_insights():
+    """单篇深度学习入口必须与帖子洞察解耦，X/公众号链接不得自动跳转 /post。"""
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+
+    submit_fn = app_js[
+        app_js.index("async function submitTranscription(") : app_js.index(
+            "function initializePage("
+        )
+    ]
+    assert "window.location.href = '/post?url=" not in submit_fn
+    assert "/post?url=" not in submit_fn
+    assert "开始深度学习" in app_js
+    assert "function submitLabelForUrl(url)" in app_js
+    # 识别仍可标注平台，但动作必须是深度学习，而不是帖子洞察文案。
+    assert "action: '深度学习解析'" in app_js
+    assert "action: '帖子精华提炼" not in app_js
+
+
 def test_workbench_upload_reports_http_errors_before_network_fallback():
     from pathlib import Path
 

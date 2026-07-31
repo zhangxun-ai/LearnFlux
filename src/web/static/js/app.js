@@ -955,8 +955,8 @@ function getSelectedURL() {
    ============================================================ */
 
 /**
- * 内容识别：从链接判断内容形态（视频深度学习 / 帖子洞察 / 未识别）。
- * 业务入口由当前页面决定，这里不把普通解析流路由到 IP 对标模块。
+ * 内容识别：仅用于工作台展示识别标签，不决定业务跳转。
+ * 「单篇深度学习」与「帖子洞察」是独立入口；深度学习提交始终走转录/学习链路。
  */
 function classifyContent(url) {
     let host = '';
@@ -966,41 +966,37 @@ function classifyContent(url) {
         host = u.hostname.replace(/^www\./, '').toLowerCase();
         path = u.pathname;
     } catch (e) {
-        return { type: 'unknown', platform: 'unknown', label: '未识别', action: '尝试按视频处理', soon: false };
+        return { type: 'unknown', platform: 'unknown', label: '未识别', action: '深度学习解析', soon: false };
     }
 
-    // X / Twitter 帖子（已支持）
+    // X / Twitter 帖子：在深度学习入口仍按深度学习处理，不跳转帖子洞察。
     if ((host === 'x.com' || host === 'twitter.com' || host === 'mobile.twitter.com')
         && /\/status\/\d+/.test(path)) {
-        return { type: 'post', platform: 'twitter', label: '𝕏 帖子', action: '帖子精华提炼 + 可信度判断', soon: false };
+        return { type: 'video', platform: 'twitter', label: '𝕏 帖子', action: '深度学习解析', soon: false };
     }
-    // 微信公众号文章 → 帖子洞察（正文 + 留言）
+    // 微信公众号文章：同上，入口决定产品能力。
     if (host === 'mp.weixin.qq.com') {
-        return { type: 'post', platform: 'weixin', label: '微信公众号', action: '帖子精华提炼', soon: false };
+        return { type: 'video', platform: 'weixin', label: '微信公众号', action: '深度学习解析', soon: false };
     }
-    // 小红书内容：留在深度学习流，不跳到 IP 对标工作台。
+    // 小红书内容
     if (host === 'xiaohongshu.com' || host === 'xhslink.com') {
-        return { type: 'video', platform: 'xiaohongshu', label: '小红书内容', action: '视频转录 / 图文深度学习', soon: false };
+        return { type: 'video', platform: 'xiaohongshu', label: '小红书内容', action: '深度学习解析', soon: false };
     }
-    // 视频平台（已支持，走转录）
+    // 视频平台
     const videoHosts = ['youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv',
         'douyin.com', 'v.douyin.com', 'iesdouyin.com', 'xiaoyuzhoufm.com',
         'tiktok.com', 'vm.tiktok.com'];
     if (videoHosts.some((h) => host === h || host.endsWith('.' + h))) {
-        return { type: 'video', platform: host, label: '视频', action: '语音转录', soon: false };
+        return { type: 'video', platform: host, label: '视频', action: '深度学习解析', soon: false };
     }
-    // 其它/短链：未知，尝试按视频处理
-    return { type: 'unknown', platform: host || 'unknown', label: '未识别', action: '尝试按视频处理', soon: false };
+    // 其它/短链：未知，仍尝试深度学习
+    return { type: 'unknown', platform: host || 'unknown', label: '未识别', action: '深度学习解析', soon: false };
 }
 
-/** 提交按钮文案（按识别类型） */
+/** 单篇深度学习工作台提交按钮文案：与内容形态解耦，始终深度学习。 */
 function submitLabelForUrl(url) {
-    if (!url) return '开始解析';
-    const c = classifyContent(url);
-    if (c.soon) return '该平台暂未支持';
-    if (c.type === 'post') return '提炼精华';
-    if (c.type === 'video') return '开始深度学习';
-    return '开始解析';
+    if (!url) return '开始深度学习';
+    return '开始深度学习';
 }
 
 /** 历史状态徽章信息 */
@@ -1116,22 +1112,19 @@ function buildHistoryCard(task) {
         if (!isLocalSource) host = new URL(task.url).hostname.replace(/^www\./, '');
     } catch (e) { /* keep fallback */ }
 
-    // 动作按状态：失败→重试（不查看失败页）；处理中→禁用；成功→查看真正的结果
+    // 动作按状态：失败→重试；处理中→禁用；成功→查看结果。
+    // 仅「帖子洞察」产物（result_id）进入 /post；深度学习任务始终走 /view 或工作台。
     let viewBtn;
     if (st.cls === 'failed') {
-        const retryHref = (cls.type === 'post')
-            ? ('/post?url=' + encodeURIComponent(task.url))
-            : '/add_task_by_web';
-        viewBtn = `<a class="hist-btn" href="${retryHref}">重试</a>`;
+        viewBtn = task.result_id
+            ? `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url || '')}">重试</a>`
+            : `<a class="hist-btn" href="/add_task_by_web">重试</a>`;
     } else if (st.cls === 'running' || st.cls === 'queued') {
         viewBtn = `<a class="hist-btn" aria-disabled="true">处理中</a>`;
     } else if (task.result_id) {
-        // 帖子洞察结果（已持久化到本地）→ 查看存储结果
         viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">查看</a>`;
     } else if (task.view_token) {
         viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">查看</a>`;
-    } else if (cls.type === 'post') {
-        viewBtn = `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url)}">重新分析</a>`;
     } else {
         viewBtn = `<a class="hist-btn" href="/add_task_by_web">重新提交</a>`;
     }
@@ -1624,7 +1617,8 @@ function updateDetection() {
         banner.innerHTML = '<span class="db-chip">' + escapeHtml(c.label) + '</span>'
             + '<span class="db-text">将执行：<strong>' + escapeHtml(c.action) + '</strong></span>';
     }
-    if (videoOpts) videoOpts.hidden = !(c.type === 'video' || c.type === 'unknown');
+    // 深度学习工作台始终展示解析选项，不因识别为帖子而隐藏。
+    if (videoOpts) videoOpts.hidden = false;
     if (typeof UIManager !== 'undefined') UIManager.updateSubmitButton();
 }
 
@@ -1942,19 +1936,7 @@ async function submitTranscription(event) {
         return;
     }
 
-    // 按当前深度学习入口路由：已支持的帖子（X / 公众号）进入帖子洞察；
-    // 视频和未识别链接留在转录 / 深度学习流程。
-    const detected = classifyContent(selectedURL);
-    if (detected.type === 'post' && !detected.soon) {
-        window.location.href = '/post?url=' + encodeURIComponent(selectedURL);
-        return;
-    }
-    if (detected.soon) {
-        UIManager.showStatus('error', detected.label + ' 暂未支持',
-            '该平台的解析功能即将上线，敬请期待');
-        setTimeout(UIManager.hideStatus, 4000);
-        return;
-    }
+    // 单篇深度学习入口始终提交转录/学习任务，不因链接形态跳转到帖子洞察。
 
     const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
     // Removed strict token validation to allow global fallback configurations to handle missing tokens

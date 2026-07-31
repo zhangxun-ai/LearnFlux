@@ -8,7 +8,6 @@ by author: the author's own tweets extend the post content, everyone else become
 comment. Verified against real responses on 2026-06-09.
 """
 
-import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -96,21 +95,24 @@ class TwitterPostFetcher:
         title = self._build_title(data)
         author = root_author or "Unknown"
 
-        # X 长文（Article）：正文不在 text/display_text（那里只是 t.co 链接），而在
-        # fetch_tweet_detail 的 data.article.full_text。仅当当前正文"很薄"（为空或
-        # 只是一个链接）时才补取一次，避免给普通推文/thread 多打一次请求。
+        # X long-form Articles: body is only on fetch_tweet_detail → data.article.
+        # post_comments returns the main tweet as a t.co / x.com/i/article link, and
+        # author replies in the conversation can inflate merged thread_text. The old
+        # gate checked _looks_thin(merged_thread) and skipped detail for real Articles
+        # (e.g. jxnlco Codex article: main=t.co, author chat replies in thread).
+        # Always probe detail; if article.full_text exists, it is the sole content.
         is_article = False
-        if self._looks_thin(thread_text):
-            article = self._fetch_article(downloader, tweet_id)
-            if article and article.get("full_text"):
-                thread_text = article["full_text"].strip()
-                if article.get("title"):
-                    title = article["title"].strip()[:120]
-                is_article = True
+        article = self._fetch_article(downloader, tweet_id)
+        if article and (article.get("full_text") or "").strip():
+            thread_text = article["full_text"].strip()
+            if article.get("title"):
+                title = article["title"].strip()[:120]
+            is_article = True
 
         logger.info(
             f"Fetched twitter post: id={tweet_id}, author=@{author}, "
-            f"article={is_article}, thread_parts={len(author_thread)}, replies={len(comments)}"
+            f"article={is_article}, article_chars={len(thread_text) if is_article else 0}, "
+            f"thread_parts={len(author_thread)}, replies={len(comments)}"
         )
         return TwitterPost(
             title=title,
@@ -138,12 +140,6 @@ class TwitterPostFetcher:
         except Exception as exc:
             logger.warning(f"Fetch tweet article failed: id={tweet_id}, error={exc}")
         return None
-
-    @staticmethod
-    def _looks_thin(text: str) -> bool:
-        """True when content is empty or just a single URL (likely an Article/link)."""
-        stripped = (text or "").strip()
-        return (not stripped) or bool(re.match(r"^https?://\S+$", stripped))
 
     @staticmethod
     def _unwrap(response: Any) -> dict[str, Any]:

@@ -195,6 +195,74 @@ ARTICLE_DETAIL = {
 }
 
 
+# Regression: Article main tweet is only t.co, but author also posted short
+# conversation replies. Merged thread_text is NOT thin — old logic skipped detail.
+JXNL_ARTICLE_POST_COMMENTS = {
+    "code": 200,
+    "data": {
+        "id": "2057153744630890620",
+        "text": "https://t.co/9KkXEINuIj",
+        "display_text": "https://t.co/9KkXEINuIj",
+        "likes": 2800,
+        "replies": 69,
+        "author": {"screen_name": "jxnlco", "name": "Jason Liu"},
+        "thread": [
+            {
+                "id": "r_author_1",
+                "text": "They are sending me a windows computer\n@dkundel I will be dogfoodign",
+                "display_text": "They are sending me a windows computer\n@dkundel I will be dogfoodign",
+                "likes": 10,
+                "replies": 0,
+                "author": {"screen_name": "jxnlco", "name": "Jason Liu"},
+            },
+            {
+                "id": "r_other",
+                "text": "Such a great article",
+                "display_text": "Such a great article",
+                "likes": 5,
+                "replies": 0,
+                "author": {"screen_name": "reader1"},
+            },
+            {
+                "id": "r_author_2",
+                "text": "we're noticing an issue, and working on a resolution!",
+                "display_text": "we're noticing an issue, and working on a resolution!",
+                "likes": 3,
+                "replies": 0,
+                "author": {"screen_name": "jxnlco", "name": "Jason Liu"},
+            },
+        ],
+    },
+}
+JXNL_ARTICLE_DETAIL = {
+    "code": 200,
+    "data": {
+        "id": "2057153744630890620",
+        "text": "x.com/i/article/2057…",
+        "author": {"screen_name": "jxnlco"},
+        "article": {
+            "title": "Getting the most out of Codex",
+            "preview_text": "Most developers first use coding agents for code...",
+            "full_text": (
+                "Most developers first use coding agents for code: inspect a repository, "
+                "make a diff, run tests, and open a pull request.\n\n"
+                "That's still the center of gravity for Codex. But much of the work on a "
+                "computer is already mediated by code."
+            ),
+        },
+    },
+}
+
+DETAIL_NO_ARTICLE = {
+    "code": 200,
+    "data": {
+        "id": "1002103360646823936",
+        "text": "How to Get Rich (without getting lucky):",
+        "author": {"screen_name": "naval"},
+    },
+}
+
+
 class TestTwitterArticle:
     def test_article_full_text_becomes_content(self):
         downloader = _RoutingDownloader({
@@ -216,10 +284,37 @@ class TestTwitterArticle:
         # 确实补取了 tweet_detail
         assert any("fetch_tweet_detail" in c for c in downloader.calls)
 
-    def test_substantive_tweet_does_not_call_detail(self):
-        # 正文不"薄"时不应额外请求 tweet_detail
-        downloader = _RoutingDownloader({"fetch_post_comments": SELF_THREAD_RESPONSE})
-        TwitterPostFetcher(downloader_factory=lambda url: downloader).fetch(
+    def test_article_not_masked_by_author_conversation_replies(self):
+        """Main=t.co + author chat replies must still use Article full_text."""
+        downloader = _RoutingDownloader({
+            "fetch_post_comments": JXNL_ARTICLE_POST_COMMENTS,
+            "fetch_tweet_detail": JXNL_ARTICLE_DETAIL,
+        })
+        post = TwitterPostFetcher(downloader_factory=lambda url: downloader).fetch(
+            "https://x.com/jxnlco/status/2057153744630890620",
+            "2057153744630890620",
+        )
+        assert post.title == "Getting the most out of Codex"
+        assert "coding agents for code" in post.thread_text
+        assert "center of gravity for Codex" in post.thread_text
+        # Must NOT use author conversation stubs as deep-learning body
+        assert "windows computer" not in post.thread_text.lower()
+        assert "dogfoodign" not in post.thread_text
+        assert "working on a resolution" not in post.thread_text
+        # Third-party replies still available as comments
+        assert any(c.user_nickname == "reader1" for c in post.comments)
+        assert any("fetch_tweet_detail" in c for c in downloader.calls)
+
+    def test_substantive_tweet_keeps_thread_when_detail_has_no_article(self):
+        # Always probes detail; without article, keep author self-thread content.
+        downloader = _RoutingDownloader({
+            "fetch_post_comments": SELF_THREAD_RESPONSE,
+            "fetch_tweet_detail": DETAIL_NO_ARTICLE,
+        })
+        post = TwitterPostFetcher(downloader_factory=lambda url: downloader).fetch(
             "https://x.com/naval/status/1002103360646823936", "1002103360646823936"
         )
-        assert all("fetch_tweet_detail" not in c for c in downloader.calls)
+        assert any("fetch_tweet_detail" in c for c in downloader.calls)
+        assert "How to Get Rich" in post.thread_text
+        assert "Seek wealth" in post.thread_text
+        assert "ethical wealth creation" in post.thread_text

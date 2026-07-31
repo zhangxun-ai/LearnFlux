@@ -1318,16 +1318,42 @@ body.export-document-mode .export-print-nav {
 <script src="/static/js/visual-learning.js?v={{ asset_ver }}"></script>
 <script src="/static/js/transcript-visual-reader.js?v={{ asset_ver }}-reader-20260718"></script>
 <script>
+function decryptContentMarkToken(encoded) {
+    if (!encoded) return '';
+    try {
+        var reversed = encoded.split('').reverse().join('');
+        var decoded = decodeURIComponent(escape(atob(reversed)));
+        return decoded.replace('vta_encrypt_key_2024', '');
+    } catch (e) {
+        return encoded;
+    }
+}
+
+// Same sources as homepage / marks: encrypted vta_bearer_token first, then legacy keys.
+function getContentMarkToken() {
+    return decryptContentMarkToken(localStorage.getItem('vta_bearer_token'))
+        || localStorage.getItem('vta_api_key_persist')
+        || sessionStorage.getItem('vta_api_key')
+        || localStorage.getItem('api_key')
+        || '';
+}
+
 (function() {
-    // Auto-fill API key from localStorage (shared with /add_task_by_web)
-    var stored = localStorage.getItem('api_key') || '';
+    var stored = getContentMarkToken();
     var input = document.getElementById('recalibrateApiKey');
     if (input && stored) input.value = stored;
 })();
 
 function submitRecalibrate() {
     var area = document.getElementById('recalibrateArea');
-    var apiKey = localStorage.getItem('api_key') || '';
+    // Must use getContentMarkToken — homepage stores encrypted vta_bearer_token,
+    // not plain localStorage.api_key. Empty key becomes "Bearer " → 401 format error
+    // which the old UI mislabeled as "API Key invalid".
+    var apiKey = getContentMarkToken();
+    if (!apiKey) {
+        area.innerHTML = '<span class="recalibrate-status recalibrate-error">未找到登录令牌，请回首页高级设置填写后重试</span>';
+        return;
+    }
 
     area.innerHTML = '<span class="recalibrate-status"><span class="recalibrate-loader"></span>校对请求中...</span>';
 
@@ -1340,21 +1366,34 @@ function submitRecalibrate() {
         body: JSON.stringify({ view_token: '{{ view_token }}' })
     })
     .then(function(resp) {
-        if (resp.status === 401) throw new Error('API Key invalid');
-        if (resp.status === 403) throw new Error('No recalibrate permission');
-        if (resp.status === 404) throw new Error('Transcript data not found');
-        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.detail || 'Request failed'); });
+        if (resp.status === 401) {
+            throw new Error('登录令牌无效或已过期，请回首页高级设置重新填写');
+        }
+        if (resp.status === 403) throw new Error('当前账号无重新校对权限');
+        if (resp.status === 404) throw new Error('未找到原文数据，无法重新校对');
+        if (!resp.ok) {
+            return resp.json().then(function(d) {
+                var detail = d && d.detail;
+                if (Array.isArray(detail)) {
+                    detail = detail.map(function(item) {
+                        return (item && item.msg) || String(item);
+                    }).join('; ');
+                }
+                throw new Error(detail || ('请求失败 HTTP ' + resp.status));
+            }, function() {
+                throw new Error('请求失败 HTTP ' + resp.status);
+            });
+        }
         return resp.json();
     })
     .then(function(data) {
         var taskId = data.data && data.data.task_id;
-        if (!taskId) throw new Error('No task_id returned');
-        // Show inline status on the fixed area
+        if (!taskId) throw new Error('未返回 task_id');
         area.innerHTML = '<span class="recalibrate-status"><span class="recalibrate-loader"></span>校对中... (0s)</span>';
         pollTask(taskId, apiKey, area);
     })
     .catch(function(err) {
-        area.innerHTML = '<span class="recalibrate-status recalibrate-error">' + err.message + '</span>';
+        area.innerHTML = '<span class="recalibrate-status recalibrate-error">' + (err.message || String(err)) + '</span>';
     });
 }
 
@@ -1388,25 +1427,6 @@ function pollTask(taskId, apiKey, area) {
             area.innerHTML = '<span class="recalibrate-status recalibrate-error">超时，请手动刷新页面</span>';
         }
     }, 3000);
-}
-
-function decryptContentMarkToken(encoded) {
-    if (!encoded) return '';
-    try {
-        var reversed = encoded.split('').reverse().join('');
-        var decoded = decodeURIComponent(escape(atob(reversed)));
-        return decoded.replace('vta_encrypt_key_2024', '');
-    } catch (e) {
-        return encoded;
-    }
-}
-
-function getContentMarkToken() {
-    return decryptContentMarkToken(localStorage.getItem('vta_bearer_token'))
-        || localStorage.getItem('vta_api_key_persist')
-        || sessionStorage.getItem('vta_api_key')
-        || localStorage.getItem('api_key')
-        || '';
 }
 
 function setContentMarkState(marked) {

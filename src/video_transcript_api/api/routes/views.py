@@ -387,8 +387,6 @@ _HOME_HTML = """\
     <meta property="og:type" content="website">
     <meta property="og:image" content="/static/icon/learnflux-og.png">
     <meta name="twitter:card" content="summary_large_image">
-    <link rel="stylesheet" href="/static/css/editorial.css?v=1">
-    <link rel="stylesheet" href="/static/css/app-shell.css?v=1">
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
         html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;scroll-behavior:smooth}
@@ -402,7 +400,7 @@ _HOME_HTML = """\
         }
         a{color:inherit;text-decoration:none}
         img{max-width:100%;height:auto;display:block}
-        ::selection{background:#2563EB;color:#fff}
+        ::selection{background:#2868D8;color:#fff}
 
         .nav{
             max-width:1120px;margin:0 auto;padding:20px 24px;
@@ -421,9 +419,9 @@ _HOME_HTML = """\
         }
         .links a:hover{background:rgba(0,0,0,0.04);color:#111827}
         .links a.cta{
-            background:#2563EB;color:#fff;padding:8px 16px;margin-left:4px;
+            background:#2868D8;color:#fff;padding:8px 16px;margin-left:4px;
         }
-        .links a.cta:hover{background:#1D4ED8;box-shadow:0 4px 12px rgba(37,99,235,0.2)}
+        .links a.cta:hover{background:#1F57B6;box-shadow:0 4px 12px rgba(40,104,216,0.2)}
 
         .hero{
             max-width:880px;margin:0 auto;text-align:center;
@@ -431,8 +429,8 @@ _HOME_HTML = """\
         }
         .eyebrow{
             display:inline-block;
-            font-size:0.82rem;letter-spacing:0.04em;color:#2563EB;font-weight:600;
-            background:rgba(37,99,235,0.08);padding:6px 14px;border-radius:999px;
+            font-size:0.82rem;letter-spacing:0.04em;color:#2868D8;font-weight:600;
+            background:rgba(40,104,216,0.08);padding:6px 14px;border-radius:999px;
             margin-bottom:20px;
         }
         .hero h1{
@@ -445,7 +443,7 @@ _HOME_HTML = """\
             word-break:break-word;
             max-width:100%;
         }
-        .hero h1 em{font-style:normal;color:#2563EB}
+        .hero h1 em{font-style:normal;color:#2868D8}
         .hero .sub{
             margin:20px auto 0;max-width:620px;color:#4B5563;
             font-size:clamp(0.98rem, 2.4vw, 1.12rem);line-height:1.7;
@@ -457,8 +455,8 @@ _HOME_HTML = """\
             padding:12px 24px;border-radius:10px;font-weight:600;font-size:1rem;
             transition:all .15s ease;cursor:pointer;min-height:48px;
         }
-        .btn-primary{background:#2563EB;color:#fff;box-shadow:0 4px 14px rgba(37,99,235,0.22)}
-        .btn-primary:hover{background:#1D4ED8;transform:translateY(-1px);box-shadow:0 6px 18px rgba(37,99,235,0.28)}
+        .btn-primary{background:#2868D8;color:#fff;box-shadow:0 4px 14px rgba(40,104,216,0.22)}
+        .btn-primary:hover{background:#1F57B6;transform:translateY(-1px);box-shadow:0 6px 18px rgba(40,104,216,0.28)}
         .btn-ghost{background:#fff;color:#111827;border:1px solid #E5E7EB;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
         .btn-ghost:hover{border-color:#D1D5DB;background:#F9FAFB}
 
@@ -508,8 +506,8 @@ _HOME_HTML = """\
             background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:28px;
             box-shadow:0 2px 4px rgba(0,0,0,0.02);transition:all .15s ease;
         }
-        .step-card:hover{border-color:#93C5FD;transform:translateY(-2px);box-shadow:0 10px 20px -8px rgba(37,99,235,0.12)}
-        .step-num{font-size:0.8rem;font-weight:700;color:#2563EB;margin-bottom:12px;letter-spacing:0.04em}
+        .step-card:hover{border-color:#93C5FD;transform:translateY(-2px);box-shadow:0 10px 20px -8px rgba(40,104,216,0.12)}
+        .step-num{font-size:0.8rem;font-weight:700;color:#2868D8;margin-bottom:12px;letter-spacing:0.04em}
         .step-card h3{font-size:1.15rem;font-weight:600;margin-bottom:10px;color:#111827}
         .step-card p{color:#4B5563;font-size:0.95rem;line-height:1.65}
 
@@ -521,7 +519,7 @@ _HOME_HTML = """\
         }
         .feature-card:hover{border-color:#CBD5E1;box-shadow:0 12px 24px -12px rgba(15,23,42,0.1)}
         .feat-icon{
-            width:44px;height:44px;border-radius:12px;background:#EFF6FF;color:#2563EB;
+            width:44px;height:44px;border-radius:12px;background:#E9F1FF;color:#2868D8;
             display:flex;align-items:center;justify-content:center;font-size:0.95rem;
             margin-bottom:16px;font-weight:700;
         }
@@ -536,7 +534,7 @@ _HOME_HTML = """\
             padding:88px 24px 72px;
             overflow:hidden;
             background:
-                radial-gradient(ellipse 70% 55% at 50% 0%, rgba(37,99,235,0.10), transparent 68%),
+                radial-gradient(ellipse 70% 55% at 50% 0%, rgba(40,104,216,0.10), transparent 68%),
                 radial-gradient(ellipse 42% 48% at 12% 88%, rgba(99,102,241,0.07), transparent 62%),
                 radial-gradient(ellipse 40% 46% at 88% 78%, rgba(56,189,248,0.07), transparent 60%),
                 linear-gradient(180deg, #F9FAFB 0%, #F4F7FC 28%, #EEF3FB 72%, #E9EFF8 100%);
@@ -564,18 +562,18 @@ _HOME_HTML = """\
             padding:8px 14px;border-radius:999px;
             font-size:0.9rem;color:#334155;display:inline-flex;align-items:center;gap:8px;
         }
-        .tag span{color:#2563EB;font-weight:700}
+        .tag span{color:#2868D8;font-weight:700}
         .trust-section .btn-primary{
-            box-shadow:0 8px 22px rgba(37,99,235,0.18);
+            box-shadow:0 8px 22px rgba(40,104,216,0.18);
         }
 
         .footer{
-            text-align:center;padding:28px 20px;color:#94A3B8;font-size:0.88rem;
+            text-align:center;padding:28px 20px;color:#475569;font-size:0.88rem;
             background:#E9EFF8;
             border-top:1px solid rgba(15,23,42,0.05);
         }
-        .footer a{color:#64748B}
-        .footer a:hover{color:#2563EB}
+        .footer a{color:#475569}
+        .footer a:hover{color:#2868D8}
 
         @media (max-width:900px){
             .shot-grid{grid-template-columns:1fr;max-width:520px}

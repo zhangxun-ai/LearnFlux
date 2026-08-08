@@ -1073,7 +1073,7 @@ function inDateRange(ts, rangeKey) {
 /** 构建单条历史卡片 DOM */
 const LOCAL_MEDIA_HISTORY_EXTENSIONS = new Set([
     'mp3', 'm4a', 'wav', 'aac', 'flac',
-    'mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v'
+    'mp4', 'ts', 'mov', 'mkv', 'webm', 'avi', 'm4v'
 ]);
 
 function isLocalMediaHistoryItem(task) {

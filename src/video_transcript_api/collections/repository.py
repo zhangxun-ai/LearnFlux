@@ -733,6 +733,43 @@ class LearningCollectionRepository:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def backfill_source_content_hash(
+        self,
+        source_id: str,
+        *,
+        expected_task_id: str,
+        content_sha256: str,
+    ) -> Dict[str, Any]:
+        """Attach a verified full hash to one legacy source without replacing it."""
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                SELECT * FROM learning_collection_sources
+                WHERE id = ? AND task_id = ?
+                """,
+                (source_id, expected_task_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise ValueError("source changed during legacy reconciliation")
+            source = dict(row)
+            stored_hash = source.get("content_sha256")
+            if stored_hash:
+                if stored_hash != content_sha256:
+                    raise ValueError("source hash changed during legacy reconciliation")
+                return source
+            cursor.execute(
+                """
+                UPDATE learning_collection_sources
+                SET content_sha256 = ?
+                WHERE id = ? AND task_id = ? AND content_sha256 IS NULL
+                """,
+                (content_sha256, source_id, expected_task_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("source changed during legacy reconciliation")
+        return self.get_source(source_id)
+
     def register_source_batch(
         self,
         collection_id: str,

@@ -9,6 +9,7 @@ _SAFE_ID_RE = re.compile(r"[^A-Za-z0-9_-]+")
 
 _MEDIA_TYPES = {
     ".mp4": "video/mp4",
+    ".ts": "video/mp2t",
     ".m4v": "video/mp4",
     ".mov": "video/quicktime",
     ".webm": "video/webm",

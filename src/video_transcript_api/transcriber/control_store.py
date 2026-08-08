@@ -264,6 +264,21 @@ class _TranscriptionControlStore:
             )
         return {"task_id": task_id, "view_token": reusable_view_token}
 
+    def set_task_source_file_path(self, task_id: str, source_file_path: str) -> None:
+        """Refresh a task's stable local source path without changing its status."""
+        now = _iso(datetime.now(UTC))
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE task_status
+                SET source_file_path = ?, updated_at = ?
+                WHERE task_id = ?
+                """,
+                (source_file_path, now, task_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("task not found")
+
     def update_task_status(self, task_id: str, status: str, **fields) -> None:
         allowed = {
             "platform",

@@ -491,6 +491,9 @@ async def import_collection_sources_from_local_paths(
         data={
             "sources": list(result.sources),
             "cache_hit_count": result.cache_hit_count,
+            "new_source_count": result.new_source_count,
+            "existing_source_count": result.existing_source_count,
+            "reconciled_source_count": result.reconciled_source_count,
             "pending_count": len(result.launches),
             "requested_concurrency": result.requested_concurrency,
             "effective_concurrency": result.effective_concurrency,
@@ -672,6 +675,9 @@ async def upload_collection_sources(
         data={
             "sources": list(result.sources),
             "cache_hit_count": result.cache_hit_count,
+            "new_source_count": result.new_source_count,
+            "existing_source_count": result.existing_source_count,
+            "reconciled_source_count": result.reconciled_source_count,
             "pending_count": len(result.launches),
             "requested_concurrency": result.requested_concurrency,
             "effective_concurrency": result.effective_concurrency,

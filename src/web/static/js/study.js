@@ -1696,7 +1696,7 @@
     }
 
     function acceptedMediaFiles(fileList) {
-        const extensions = /\.(mp3|m4a|wav|aac|flac|mp4|mov|mkv|webm|avi|m4v)$/i;
+        const extensions = /\.(mp3|m4a|wav|aac|flac|mp4|ts|mov|mkv|webm|avi|m4v)$/i;
         return Array.from(fileList || [])
             .filter((file) => /^(audio|video)\//.test(file.type || '') || extensions.test(file.name || ''))
             .sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(

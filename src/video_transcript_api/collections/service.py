@@ -18,6 +18,7 @@ logger = setup_logger("learning_collection_service")
 DOCUMENT_EXTS = {".txt", ".md", ".markdown", ".csv", ".log", ".html", ".htm", ".pdf", ".docx"}
 VIDEO_EXTS = {
     ".mp4",
+    ".ts",
     ".mov",
     ".mkv",
     ".webm",

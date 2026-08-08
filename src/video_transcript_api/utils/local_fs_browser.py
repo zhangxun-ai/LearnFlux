@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 VIDEO_EXTS = {
     ".mp4",
+    ".ts",
     ".mov",
     ".mkv",
     ".webm",

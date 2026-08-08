@@ -147,6 +147,7 @@ def test_marked_history_keeps_local_media_classified_as_video():
     script = function_source + """
 const results = [
     historyTypeFromAuditItem({video_url: 'local://lesson.mp4', title: 'lesson.mp4'}),
+    historyTypeFromAuditItem({video_url: 'local://lesson.ts', title: 'lesson.ts'}),
     historyTypeFromAuditItem({video_url: 'local://notes.pdf', title: 'notes.pdf'}),
     historyTypeFromAuditItem({video_url: 'https://x.com/example', platform: 'x'}),
     historyTypeFromAuditItem({video_url: 'https://example.com/video'}),
@@ -162,7 +163,7 @@ process.stdout.write(JSON.stringify(results));
         text=True,
     )
 
-    assert json.loads(completed.stdout) == ["video", "file", "post", "video", "video"]
+    assert json.loads(completed.stdout) == ["video", "video", "file", "post", "video", "video"]
 
 
 def test_workbench_local_upload_adds_file_to_recent_history():

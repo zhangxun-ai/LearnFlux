@@ -79,6 +79,7 @@ def test_study_page_uses_note_and_manuscript_panels():
     assert "正在转录本地视频" in js
     assert "正在生成 AI 总结" in js
     assert "window.setTimeout(loadSession" in js
+    assert "|ts|" in js
     assert ".manuscript-reader" in css
     assert ".study-visual-toolbar" in css
     assert ".study-visual-dialog" in css

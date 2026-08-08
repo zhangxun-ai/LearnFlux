@@ -42,6 +42,9 @@ class CollectionStartResult:
     cache_hit_count: int
     requested_concurrency: int
     effective_concurrency: int | None
+    new_source_count: int = 0
+    existing_source_count: int = 0
+    reconciled_source_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -688,14 +691,59 @@ class CollectionTranscriptionService:
         sources_by_id: dict[str, dict] = {}
         launches: list[SourceLaunch] = []
         cache_hit_count = 0
+        new_source_count = 0
+        existing_source_count = 0
+        reconciled_source_count = 0
         created_task_ids: list[str] = []
         prepared_sources: list[_PreparedSource] = []
+        legacy_sources_by_media_id: dict[str, dict] = {}
+
+        for source in self.repository.get_sources(collection_id):
+            if source.get("content_sha256"):
+                continue
+            task = self.cache_manager.get_task_by_id(source.get("task_id")) or {}
+            media_id = task.get("media_id")
+            if isinstance(media_id, str) and media_id:
+                legacy_sources_by_media_id.setdefault(media_id, source)
 
         try:
             for candidate in candidates:
                 existing = self.repository.get_source_by_content_hash(
                     collection_id, str(candidate["content_sha256"])
                 )
+                if existing:
+                    if candidate.get("path_referenced"):
+                        self.cache_manager.set_task_source_file_path(
+                            existing["task_id"],
+                            str(candidate["file_path"]),
+                        )
+                    sources_by_id[existing["id"]] = {
+                        **existing,
+                        "size": candidate.get("size", 0),
+                        "reused": True,
+                    }
+                    existing_source_count += 1
+                    continue
+
+                legacy = legacy_sources_by_media_id.get(str(candidate["media_id"]))
+                if legacy:
+                    reconciled = self.repository.backfill_source_content_hash(
+                        legacy["id"],
+                        expected_task_id=legacy["task_id"],
+                        content_sha256=str(candidate["content_sha256"]),
+                    )
+                    self.cache_manager.set_task_source_file_path(
+                        reconciled["task_id"],
+                        str(candidate["file_path"]),
+                    )
+                    sources_by_id[reconciled["id"]] = {
+                        **reconciled,
+                        "size": candidate.get("size", 0),
+                        "reused": True,
+                    }
+                    reconciled_source_count += 1
+                    continue
+
                 reusable_task, reusable_cache = self._successful_cache(
                     media_id=str(candidate["media_id"]),
                     use_speaker_recognition=use_speaker_recognition,
@@ -766,6 +814,10 @@ class CollectionTranscriptionService:
             task = prepared.task
             source = registration["source"]
             owns_task = registration["outcome"] in {"inserted", "replaced"}
+            if registration["outcome"] == "inserted":
+                new_source_count += 1
+            else:
+                existing_source_count += 1
             sources_by_id[source["id"]] = {
                 **source,
                 "size": candidate.get("size", 0),
@@ -807,6 +859,9 @@ class CollectionTranscriptionService:
             cache_hit_count=cache_hit_count,
             requested_concurrency=requested_concurrency,
             effective_concurrency=effective,
+            new_source_count=new_source_count,
+            existing_source_count=existing_source_count,
+            reconciled_source_count=reconciled_source_count,
         )
 
     def _successful_cache(

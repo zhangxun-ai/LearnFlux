@@ -91,4 +91,5 @@ def test_source_kind_for_path_classifies_document_video_and_media():
     assert source_kind_for_path("guide.pdf") == "document"
     assert source_kind_for_path("slides.html") == "document"
     assert source_kind_for_path("lesson.mp4") == "video"
+    assert source_kind_for_path("lesson.ts") == "video"
     assert source_kind_for_path("archive.bin") == "media"

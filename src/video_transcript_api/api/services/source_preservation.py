@@ -10,7 +10,7 @@ from typing import Optional
 
 
 DOC_EXTS = {".txt", ".md", ".markdown", ".csv", ".log", ".html", ".htm", ".pdf", ".docx"}
-VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".flv", ".avi"}
+VIDEO_EXTS = {".mp4", ".ts", ".mov", ".m4v", ".webm", ".mkv", ".flv", ".avi"}
 
 
 def _read_text_file(path: str) -> str:

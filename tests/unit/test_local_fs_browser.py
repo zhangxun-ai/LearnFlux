@@ -13,14 +13,15 @@ def test_browse_local_directory_lists_subdirs_and_media_counts(tmp_path):
     nested = course / "chapter-1"
     nested.mkdir(parents=True)
     (course / "001-intro.mp4").write_bytes(b"video")
+    (course / "087-update.ts").write_bytes(b"transport-stream")
     (course / "note.md").write_text("hello", encoding="utf-8")
     (nested / "keep.txt").write_text("x", encoding="utf-8")
 
     data = browse_local_directory(str(course))
     assert data["path"] == str(course.resolve())
-    assert data["video_count"] == 1
+    assert data["video_count"] == 2
     assert data["document_count"] == 1
-    assert data["media_count"] == 2
+    assert data["media_count"] == 3
     names = {entry["name"] for entry in data["entries"]}
     assert "chapter-1" in names
     assert all(entry["type"] == "dir" for entry in data["entries"])

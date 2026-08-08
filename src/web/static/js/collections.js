@@ -1,7 +1,7 @@
 (function () {
     const STORAGE_KEY = 'vta_bearer_token';
     const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
-    const VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.mp3', '.m4a', '.wav', '.aac', '.flac'];
+    const VIDEO_EXTS = ['.mp4', '.ts', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.mp3', '.m4a', '.wav', '.aac', '.flac'];
     const DOC_EXTS = ['.txt', '.md', '.markdown', '.csv', '.log', '.html', '.htm', '.pdf', '.docx'];
     const POLL_MS = 2500;
     const DEFAULT_MAP_ZOOM = 1.16;
@@ -1406,6 +1406,19 @@
         });
     }
 
+    function localImportSummary(payload) {
+        const data = payload && payload.data ? payload.data : {};
+        const scanned = Number(data.candidate_count || data.pending_count || 0);
+        const added = Number(data.new_source_count ?? data.pending_count ?? scanned);
+        const existing = Number(data.existing_source_count || 0)
+            + Number(data.reconciled_source_count || 0);
+        const pending = Number(data.pending_count || 0);
+        const parts = [`扫描 ${scanned} 个`, `新增 ${added} 个`];
+        if (existing) parts.push(`已存在 ${existing} 个`);
+        parts.push(pending ? `待解析 ${pending} 个` : '无需重复解析');
+        return { scanned, added, existing, pending, message: parts.join(' · ') };
+    }
+
     function readLocalImportDirectory() {
         const directory = (els.localImportPath && els.localImportPath.value || '').trim();
         if (!directory) {
@@ -1691,26 +1704,21 @@
                 message: '专题已创建，正在登记本机文件…'
             });
             const payload = await prepareSources(collection);
-            const count = Number(
-                (payload && payload.data && (payload.data.candidate_count || payload.data.pending_count))
-                || selectedCandidateCount
-                || 0
-            );
+            const summary = localImportSummary(payload);
+            const count = summary.scanned || selectedCandidateCount || 0;
             selectedCandidateCount = count || selectedCandidateCount;
             setImportStatus({
                 phase: 'finalizing',
                 total: count,
                 uploaded: count,
                 percent: 100,
-                message: count
-                    ? `已按本机路径登记 ${count} 个文件（未复制），开始解析…`
-                    : '登记完成，开始解析…'
+                message: count ? summary.message : '登记完成，无需重复解析'
             });
             lastImportError = '';
             if (collection.reused) {
-                showToast(count ? `已复用同名专题并追加 ${count} 个本机文件` : '已复用同名专题');
+                showToast(count ? `已复用同名专题：${summary.message}` : '已复用同名专题');
             } else {
-                showToast(count ? `已创建专题并开始解析 ${count} 个本机文件` : '已创建专题并开始解析');
+                showToast(count ? `已创建专题：${summary.message}` : '已创建专题');
             }
             await refreshCollection(collection.id);
             clearImportIdentityFields();
@@ -1887,19 +1895,18 @@
         });
         try {
             const payload = await importSourcesFromLocalPath(currentCollection.id, path);
-            const count = Number(
-                (payload && payload.data && (payload.data.candidate_count || payload.data.pending_count)) || 0
-            );
+            const summary = localImportSummary(payload);
+            const count = summary.scanned;
             selectedCandidateCount = count;
             setImportStatus({
                 phase: 'finalizing',
                 total: count,
                 uploaded: count,
                 percent: 100,
-                message: `已追加 ${count} 个本机文件（未复制），开始解析…`
+                message: summary.message
             });
             lastImportError = '';
-            showToast(`已追加 ${count} 个本机 source（零拷贝）`);
+            showToast(summary.message);
             await refreshCollection(currentCollection.id);
             await loadFilterOptions();
             await loadCollections({ selectLatest: false });

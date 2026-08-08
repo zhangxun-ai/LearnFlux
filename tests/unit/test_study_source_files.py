@@ -34,6 +34,7 @@ def test_media_type_for_common_video_files():
     assert media_type_for_filename("demo.webm") == "video/webm"
     assert media_type_for_filename("demo.mov") == "video/quicktime"
     assert media_type_for_filename("demo.mkv") == "video/x-matroska"
+    assert media_type_for_filename("demo.ts") == "video/mp2t"
 
 
 def test_find_study_source_file_resolves_existing_local_url(tmp_path):
@@ -62,6 +63,7 @@ def test_find_study_source_file_resolves_existing_local_url(tmp_path):
         ("local://study-source/id/notes.md", "notes.md", "", "", "document"),
         ("local://study-source/id/slides.html", "slides.html", "", "", "document"),
         ("local://study-source/id/clip.mp4", "clip.mp4", "application/octet-stream", "", "video"),
+        ("local://study-source/id/clip.ts", "clip.ts", "", "", "video"),
         ("local://study-source/id/lesson.mp3", "lesson.mp3", "", "", "audio"),
         ("local://study-text/id/content.md", "content.md", "text/markdown", "", "text"),
         ("https://example.test/source", "source", "application/pdf", "", "document"),

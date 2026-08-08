@@ -1107,6 +1107,26 @@ class CacheManager:
             logger.error(f"创建缓存别名任务失败: {e}")
             raise
 
+    def set_task_source_file_path(self, task_id: str, source_file_path: str) -> None:
+        """Refresh a task's stable local source path without changing its status."""
+        if self._task_status_repository is not None:
+            self._task_status_repository.set_task_source_file_path(
+                task_id,
+                source_file_path,
+            )
+            return
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE task_status
+                SET source_file_path = ?, last_heartbeat_at = CURRENT_TIMESTAMP
+                WHERE task_id = ?
+                """,
+                (source_file_path, task_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("task not found")
+
     def update_task_status(self, task_id: str, status: str, platform: str = None,
                           media_id: str = None, title: str = None, author: str = None,
                           cache_id: int = None, download_url: str = None,

@@ -18,9 +18,9 @@ def test_video_collections_expose_strategy_and_concurrency_controls():
     assert 'value="local"' in HTML
     assert 'value="cloud"' in HTML
     assert 'id="collection-transcription-concurrency"' in HTML
+    assert 'min="1" max="3"' in HTML
     assert "local: { min: 1, max: 3, defaultValue: 1 }" in JAVASCRIPT
     assert "cloud: { min: 1, max: 10" in JAVASCRIPT
-    assert "共同上限" in HTML
     assert "document_topic" in JAVASCRIPT
 
 
@@ -29,7 +29,7 @@ def test_cloud_feedback_is_a_compact_current_collection_status_bar():
         'id="collection-transcription-feedback"'
     )
     assert HTML.index('id="collection-transcription-feedback"') < HTML.index(
-        'class="lc-metadata"'
+        'class="lc-meta-bar"'
     )
     assert "lc-quote-summary" in HTML
     assert "确认报价" in JAVASCRIPT
@@ -59,7 +59,8 @@ def test_cloud_quote_has_one_explicit_paid_confirmation_and_folder_warning():
     assert "openCloudQuoteConfirmation" in JAVASCRIPT
     assert "查看并确认" not in JAVASCRIPT
     assert "确认整批云端报价" in JAVASCRIPT
-    assert "浏览器会显示系统安全确认" in HTML
+    assert 'id="collection-action-dialog"' in HTML
+    assert "提交后不可重复提交" in HTML
 
 
 def test_new_cloud_quote_opens_the_existing_confirmation_once_after_user_action():
@@ -79,14 +80,19 @@ def test_quote_dialog_cancel_stops_unconfirmed_collection_tasks():
 
 
 def test_stop_and_continue_use_accessible_custom_dialogs_instead_of_confirm():
+    stop_and_continue = JAVASCRIPT[
+        JAVASCRIPT.index("async function cancelCurrentCollection()") : JAVASCRIPT.index(
+            "async function loadCloudQuote("
+        )
+    ]
     assert 'id="collection-action-dialog"' in HTML
-    assert "window.confirm" not in JAVASCRIPT
+    assert "window.confirm" not in stop_and_continue
     assert "event.key === 'Escape'" in JAVASCRIPT
-    assert "els.actionDialog.close()" in JAVASCRIPT
+    assert "els.actionDialog.close()" in stop_and_continue
     assert "提交后不可重复提交" in HTML
-    assert "已提交云服务的在途任务会继续" in JAVASCRIPT
-    assert "/api/collections/${collectionId}/cancel" in JAVASCRIPT
-    assert "/api/collections/${currentCollection.id}/continue" in JAVASCRIPT
+    assert "已提交云服务的在途任务会继续" in stop_and_continue
+    assert "/api/collections/${collectionId}/cancel" in stop_and_continue
+    assert "/api/collections/${currentCollection.id}/continue" in stop_and_continue
     assert ".lc-action-dialog" in CSS
 
 

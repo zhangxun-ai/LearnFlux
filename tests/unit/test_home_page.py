@@ -201,6 +201,35 @@ def test_workbench_submission_and_history_statuses_keep_polling():
     assert "任务提交成功" not in app_js
 
 
+def test_workbench_history_polls_document_tasks_until_terminal():
+    """本地文档与音视频必须共享同一条服务器状态同步链路。"""
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parents[2]
+    app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
+
+    refresh_visible = app_js[
+        app_js.index("function refreshHistoryStatuses()") : app_js.index(
+            "async function refreshRunningHistoryStatuses()"
+        )
+    ]
+    refresh_running = app_js[
+        app_js.index("async function refreshRunningHistoryStatuses()") : app_js.index(
+            "function ensureHistoryStatusPolling()"
+        )
+    ]
+    ensure_polling = app_js[
+        app_js.index("function ensureHistoryStatusPolling()") : app_js.index(
+            "function renderSubmittedTaskStatus("
+        )
+    ]
+
+    assert '.hist-card[data-task-id]' in refresh_visible
+    assert 'data-type="video"' not in refresh_visible
+    assert "type === 'video'" not in refresh_running
+    assert "type === 'video'" not in ensure_polling
+
+
 def test_workbench_exposes_pasted_text_study_entry():
     from pathlib import Path
 

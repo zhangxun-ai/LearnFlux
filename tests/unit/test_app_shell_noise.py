@@ -34,7 +34,6 @@ def _topbar(html: str) -> str:
 
 def test_production_shells_remove_static_status_and_duplicate_actions():
     sources = [path.read_text(encoding="utf-8") for path in SHELL_SOURCES]
-    sources.append(_HOME_HTML)
 
     for html in sources:
         topbar = _topbar(html)

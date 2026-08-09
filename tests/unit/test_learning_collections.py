@@ -1458,6 +1458,13 @@ def test_collection_upload_reuses_cached_local_file(tmp_path, monkeypatch):
         author="本地上传",
         description="",
     )
+    cache_manager.save_llm_result(
+        platform="generic",
+        media_id=media_id,
+        use_speaker_recognition=False,
+        llm_type="summary",
+        content="cached summary",
+    )
     cache_manager.update_task_status(
         task_info["task_id"],
         "success",
@@ -1493,7 +1500,12 @@ def test_collection_upload_reuses_cached_local_file(tmp_path, monkeypatch):
     assert response.status_code == 202
     source = response.json()["data"]["sources"][0]
     assert source["reused"] is True
-    assert source["task_id"] == task_info["task_id"]
+    assert source["task_id"] != task_info["task_id"]
+    assert source["view_token"] == task_info["view_token"]
+    alias_task = cache_manager.get_task_by_id(source["task_id"])
+    assert alias_task["status"] == "success"
+    assert alias_task["progress"]["evidence"]["cache_hit"] is True
+    assert alias_task["progress"]["evidence"]["source_task_id"] == task_info["task_id"]
 
 
 def test_collection_upload_appends_after_existing_sources(tmp_path, monkeypatch):

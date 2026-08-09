@@ -127,6 +127,21 @@ assert.equal(shell.isNavItemActive('/view/token-1', {
 assert.equal(shell.isNavItemActive('/flywheel', {
   href: '/trend-radar', aliases: [],
 }), false);
+
+const activeLink = {
+  querySelector: (selector) => selector === '.nav-label'
+    ? {textContent: '单篇深度学习'}
+    : null,
+};
+const sidebar = {
+  querySelector: (selector) => selector === '.nav-item.is-active' ? activeLink : null,
+};
+const documentStub = {title: 'localhost:8000/view/token-1'};
+assert.equal(
+  shell.syncProductPageTitle(sidebar, documentStub),
+  '单篇深度学习 · LearnFlux',
+);
+assert.equal(documentStub.title, '单篇深度学习 · LearnFlux');
 """
         result = subprocess.run(
             ["node", "-e", node_test, str(APP_SHELL)],

@@ -66,12 +66,25 @@
         });
     }
 
+    function syncProductPageTitle(sidebar, documentRoot) {
+        if (!sidebar || !documentRoot || typeof sidebar.querySelector !== 'function') {
+            return '';
+        }
+        const activeLink = sidebar.querySelector('.nav-item.is-active');
+        const label = activeLink ? navLabel(activeLink) : '';
+        if (!label) return documentRoot.title || '';
+        const title = `${label} · LearnFlux`;
+        documentRoot.title = title;
+        return title;
+    }
+
     const exported = {
         applyFeatureVisibility,
         isFeatureEnabled,
         isNavItemActive,
         normalizeShellState,
         reconcileNavigation,
+        syncProductPageTitle,
     };
 
     if (typeof module !== 'undefined' && module.exports) {
@@ -91,6 +104,7 @@
     if (!sidebar.id) sidebar.id = 'app-sidebar';
     applyFeatureVisibility(document, features);
     reconcileNavigation(sidebar, window.location.pathname);
+    syncProductPageTitle(sidebar, document);
 
     const observerRoot = document.querySelector('.main-area') || body;
     if (typeof MutationObserver === 'function') {

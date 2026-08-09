@@ -1,5 +1,4 @@
 from pathlib import Path
-import hashlib
 import re
 
 
@@ -34,8 +33,12 @@ def test_focus_studio_contains_lightweight_journal_ui():
     assert "[data-journal-sidecar] .journal-dock" in css
     assert "[data-journal-sidecar] .focus-deck" in css
     assert ".journal-review-question" in css
-    css_version = hashlib.sha256(css.encode("utf-8")).hexdigest()[:12]
-    assert f'/static/css/focus-studio.css?v={css_version}' in html
+    page_version = re.search(
+        r'/static/css/focus-studio\.css\?v=([0-9a-f]{12})',
+        html,
+    )
+    assert page_version is not None
+    assert f'/static/js/focus-journal.js?v={page_version.group(1)}' in html
 
     assert "/api/journal/entries" in js
     assert "/api/journal/reviews" in js

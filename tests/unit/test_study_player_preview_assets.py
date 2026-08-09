@@ -7,7 +7,6 @@ STATIC_ROOT = REPO_ROOT / "src" / "web" / "static"
 PREVIEW_HTML = STATIC_ROOT / "study-player-preview.html"
 PREVIEW_CSS = STATIC_ROOT / "css" / "study-player-preview.css"
 PREVIEW_JS = STATIC_ROOT / "js" / "study-player-preview.js"
-APP_SHELL_JS = STATIC_ROOT / "js" / "app-shell.js"
 APP_JS = STATIC_ROOT / "js" / "app.js"
 COLLECTIONS_HTML = STATIC_ROOT / "collections.html"
 COLLECTIONS_JS = STATIC_ROOT / "js" / "collections.js"
@@ -83,12 +82,12 @@ def test_preview_is_clearly_isolated_from_existing_pages():
 
 
 def test_preview_is_not_used_as_the_production_player_entry():
-    shell_script = APP_SHELL_JS.read_text(encoding="utf-8")
+    workbench_html = INDEX_HTML.read_text(encoding="utf-8")
     preview_html = PREVIEW_HTML.read_text(encoding="utf-8")
 
-    assert "const studyPlayerHref = '/study';" in shell_script
-    assert "/static/study-player-preview.html" not in shell_script
-    assert "边播边学" in shell_script
+    assert 'href="/study"' in workbench_html
+    assert "/static/study-player-preview.html" not in workbench_html
+    assert "边播边学" in workbench_html
     assert 'id="preview-player-nav"' in preview_html
     assert "边播边学" in preview_html
 

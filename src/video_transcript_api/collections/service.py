@@ -336,6 +336,7 @@ class LearningCollectionService:
                 source["task_id"],
                 TaskStatus.CANCELED,
                 error_message="用户取消合集解析",
+                terminal_evidence={"collection_resume_allowed": True},
             )
             canceled_count += 1
 

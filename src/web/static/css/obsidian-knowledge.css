@@ -97,3 +97,71 @@
     margin-top: 20px;
 }
 .obsidian-knowledge-result { overflow-wrap: anywhere; }
+
+.obsidian-knowledge-notice {
+    --notice-accent: #16794a;
+    --notice-soft: #eaf7f0;
+    position: fixed;
+    inset: 24px 24px auto auto;
+    width: min(360px, calc(100vw - 32px));
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px solid color-mix(in srgb, var(--notice-accent) 24%, transparent);
+    border-radius: 14px;
+    color: #17221c;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 18px 46px rgba(20, 33, 26, .18);
+    backdrop-filter: blur(18px);
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: center;
+    gap: 11px;
+    animation: obsidian-notice-enter .24s ease-out both;
+}
+.obsidian-knowledge-notice[hidden] { display: none; }
+.obsidian-knowledge-notice:popover-open { display: grid; }
+.obsidian-knowledge-notice[data-tone="error"] {
+    --notice-accent: #b42318;
+    --notice-soft: #fff0ee;
+}
+.obsidian-knowledge-notice-icon {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--notice-accent);
+    background: var(--notice-soft);
+    font-size: 1rem;
+    font-weight: 800;
+}
+.obsidian-knowledge-notice-icon::before { content: "✓"; }
+.obsidian-knowledge-notice[data-tone="error"] .obsidian-knowledge-notice-icon::before {
+    content: "!";
+}
+.obsidian-knowledge-notice-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+.obsidian-knowledge-notice-copy strong {
+    color: var(--notice-accent);
+    font-size: .94rem;
+}
+.obsidian-knowledge-notice-copy span {
+    color: #5c665f;
+    font-size: .82rem;
+    line-height: 1.45;
+}
+
+@keyframes obsidian-notice-enter {
+    from { opacity: 0; transform: translateY(-8px) scale(.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 640px) {
+    .obsidian-knowledge-notice {
+        inset: 16px 16px auto;
+        width: auto;
+    }
+}

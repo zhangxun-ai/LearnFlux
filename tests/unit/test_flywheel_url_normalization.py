@@ -188,7 +188,7 @@ def test_workbench_keeps_xiaohongshu_in_deep_learning_flow():
 
     assert "platform: 'xiaohongshu'" in js
     assert "label: '小红书内容'" in js
-    assert "视频转录 / 图文深度学习" in js
+    assert "action: '深度学习解析'" in js
     assert "label: '小红书视频'" not in js
     assert "type: 'flywheel'" not in js
     assert "window.location.href = '/flywheel?url='" not in js

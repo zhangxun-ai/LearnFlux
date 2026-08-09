@@ -1296,9 +1296,10 @@ async function refreshHistoryEntryStatus(taskId, card) {
     updateHistoryEntryFromStatus(taskId, raw, card);
 }
 
-/** 历史视频任务的状态最佳努力刷新（复用既有 getTaskStatus，容错字段名） */
+/** 深度学习历史任务的状态最佳努力刷新（文档与音视频共用同一真相源） */
 function refreshHistoryStatuses() {
-    document.querySelectorAll('.hist-card[data-task-id][data-type="video"]').forEach((card) => {
+    document.querySelectorAll('.hist-card[data-task-id]').forEach((card) => {
+        if (card.getAttribute('data-type') === 'post') return;
         const taskId = card.getAttribute('data-task-id');
         refreshHistoryEntryStatus(taskId, card).catch(() => { /* best-effort, ignore */ });
     });
@@ -1308,7 +1309,7 @@ async function refreshRunningHistoryStatuses() {
     const history = TaskHistoryManager.getHistory();
     const tasks = history.filter((task) => {
         const type = histTypeOf(task);
-        return type === 'video' && task.id && !isTerminalHistoryStatus(task.status, type);
+        return type !== 'post' && task.id && !isTerminalHistoryStatus(task.status, type);
     });
     await Promise.all(tasks.map((task) => (
         refreshHistoryEntryStatus(task.id).catch(() => { /* best-effort, ignore */ })
@@ -1325,7 +1326,7 @@ function ensureHistoryStatusPolling() {
     if (!token) return;
     const hasRunningTask = TaskHistoryManager.getHistory().some((task) => {
         const type = histTypeOf(task);
-        return type === 'video' && task.id && !isTerminalHistoryStatus(task.status, type);
+        return type !== 'post' && task.id && !isTerminalHistoryStatus(task.status, type);
     });
     if (!hasRunningTask) return;
     historyStatusPollTimer = setTimeout(async () => {

@@ -4,11 +4,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_single_result_has_independent_preview_confirm_assets():
+def test_single_result_syncs_without_a_preview_step_and_closes_on_success():
     template = (ROOT / "src/web/templates/transcript.html").read_text(
         encoding="utf-8"
     )
     script = (ROOT / "src/web/static/js/obsidian-knowledge.js").read_text(
+        encoding="utf-8"
+    )
+    context = (ROOT / "src/video_transcript_api/api/context.py").read_text(
         encoding="utf-8"
     )
 
@@ -18,25 +21,40 @@ def test_single_result_has_independent_preview_confirm_assets():
     assert "study_available" not in nearby
     assert "/static/css/obsidian-knowledge.css" in template
     assert "/static/js/obsidian-knowledge.js" in template
+    assert 'static_dir / "css" / "obsidian-knowledge.css"' in context
+    assert 'static_dir / "js" / "obsidian-knowledge.js"' in context
+    for element_id in (
+        "obsidian-knowledge-notice",
+        "obsidian-knowledge-notice-title",
+        "obsidian-knowledge-notice-detail",
+    ):
+        assert f'id="{element_id}"' in template
+    assert 'popover="manual"' in template
     for element_id in (
         "obsidian-knowledge-category",
         "obsidian-knowledge-recommendation",
-        "obsidian-knowledge-source-access",
-        "obsidian-knowledge-preview-list",
-        "obsidian-knowledge-preview",
         "obsidian-knowledge-apply",
     ):
         assert f'id="{element_id}"' in template
+    assert 'id="obsidian-knowledge-source-access"' not in template
+    assert 'id="obsidian-knowledge-preview-list"' not in template
+    assert 'id="obsidian-knowledge-preview"' not in template
+    assert "生成同步预览" not in template
+    assert "同步到 Obsidian" in template
 
     assert "/recommend-category" in script
     assert "/binding" in script
     assert "/preview" in script
     assert "/apply" in script
+    assert "async function syncKnowledgeToObsidian" in script
+    assert "function showSyncNotice" in script
+    assert "showSyncNotice('success'" in script
+    assert "showSyncNotice('error'" in script
+    assert "dialog.close()" in script
+    assert "data.counts && data.counts.failed" in script
     assert "preconditions" in script
     assert "expected_binding_revision" in script
     assert "stale_preview" in script
-    assert "refreshPreviewAfterStale" in script
-    assert "externally_modified" in script
 
 
 def test_collection_has_selection_incremental_force_and_result_ui():
@@ -115,7 +133,7 @@ def test_opening_dialogs_does_not_call_apply():
     )
     single_open = single[
         single.index("async function openKnowledgeDialog"):
-        single.index("async function generatePreview")
+        single.index("async function syncKnowledgeToObsidian")
     ]
     collection_open = collections[
         collections.index("async function openCollectionKnowledgeDialog"):

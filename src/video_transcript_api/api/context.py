@@ -278,6 +278,7 @@ def get_templates() -> Jinja2Templates:
             version_files = [
                 static_dir / "css" / "editorial.css",
                 static_dir / "css" / "visual-learning.css",
+                static_dir / "css" / "obsidian-knowledge.css",
                 static_dir / "css" / "product-linear.css",
                 static_dir / "css" / "product-linear-core.css",
                 static_dir / "css" / "product-linear-insights.css",
@@ -288,6 +289,7 @@ def get_templates() -> Jinja2Templates:
                 static_dir / "js" / "floating-toc.js",
                 static_dir / "js" / "visual-learning.js",
                 static_dir / "js" / "transcript-visual-reader.js",
+                static_dir / "js" / "obsidian-knowledge.js",
             ]
             version = max((f.stat().st_mtime for f in version_files if f.exists()), default=0)
             _templates.env.globals["asset_ver"] = str(int(version))

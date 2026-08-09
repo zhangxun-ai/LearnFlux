@@ -95,7 +95,7 @@ def test_read_settings_returns_effective_concurrency_and_trusted_limits(monkeypa
     assert _field(data, "concurrent.local_asr_workers")["value"] == 1
     assert _field(data, "concurrent.cloud_asr_workers")["value"] == 2
     assert data["concurrency_limits"] == {
-        "local_asr_workers": 2,
+        "local_asr_workers": 3,
         "cloud_asr_workers": 2,
     }
 

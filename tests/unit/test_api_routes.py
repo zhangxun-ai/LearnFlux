@@ -984,9 +984,9 @@ class TestViewProgressEndpoint:
             "status": "success",
             "task_id": "task-2",
             "view_token": "vt-2",
-            "title": "如何走出人生困局/2.mp4",
+            "title": "如何走出人生困局/2.ts",
             "author": "本地上传",
-            "url": "local://collection-source/media-2/如何走出人生困局/2.mp4",
+            "url": "local://collection-source/media-2/如何走出人生困局/2.ts",
             "platform": "generic",
             "media_id": "media-2",
             "summary": "## 内容总结",
@@ -1003,26 +1003,26 @@ class TestViewProgressEndpoint:
             "items": [
                 {
                     "id": "source-1",
-                    "title": "1.mp4",
+                    "title": "1",
                     "view_url": "/view/vt-1",
                     "is_current": False,
                 },
                 {
                     "id": "source-2",
-                    "title": "2.mp4",
+                    "title": "2",
                     "view_url": "/view/vt-2",
                     "is_current": True,
                 },
                 {
                     "id": "source-3",
-                    "title": "3.mp4",
+                    "title": "3",
                     "view_url": "/view/vt-3",
                     "is_current": False,
                 },
             ],
-            "current": {"title": "2.mp4", "view_url": "/view/vt-2"},
-            "previous": {"title": "1.mp4", "view_url": "/view/vt-1"},
-            "next": {"title": "3.mp4", "view_url": "/view/vt-3"},
+            "current": {"title": "2", "view_url": "/view/vt-2"},
+            "previous": {"title": "1", "view_url": "/view/vt-1"},
+            "next": {"title": "3", "view_url": "/view/vt-3"},
             "current_number": 2,
             "total": 3,
         }
@@ -1042,7 +1042,11 @@ class TestViewProgressEndpoint:
         assert resp.status_code == 200
         build_navigation.assert_called_once_with("vt-2")
         assert "<h1>2</h1>" in resp.text
-        assert "如何走出人生困局/2.mp4" not in resp.text
+        assert ".ts" not in resp.text
+        assert 'class="minimal-nav" aria-label="合集章节导航"' in resp.text
+        assert 'class="minimal-nav-progress">2 / 3</span>' in resp.text
+        assert 'aria-label="上一节：1"' in resp.text
+        assert 'aria-label="下一节：3"' in resp.text
 
     def test_view_progress_returns_minimal_progress_payload(
         self, client, mock_cache_manager

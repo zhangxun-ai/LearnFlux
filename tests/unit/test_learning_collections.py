@@ -710,7 +710,7 @@ def test_collection_source_navigation_by_view_token(tmp_path):
                 collection_id=collection["id"],
                 task_id=f"task-{index}",
                 view_token=f"view-{index}",
-                title=f"如何走出人生困局/{index}.mp4",
+                title=f"如何走出人生困局/{index}.ts",
                 source_type="video",
                 position=index,
             )

@@ -17,6 +17,7 @@ DISPLAY_EXTENSIONS = {
     ".webm",
     ".avi",
     ".m4v",
+    ".ts",
     ".mp3",
     ".m4a",
     ".wav",

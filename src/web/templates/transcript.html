@@ -918,42 +918,129 @@ body.export-document-mode .export-print-nav {
     .status-dot.warn { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.5); }
     .status-dot.ok { background: #10b981; }
 
-    /* Minimal Collection Nav */
+    /* Collection chapter navigation */
     .minimal-nav {
+        display: grid;
+        grid-template-columns: minmax(112px, auto) minmax(0, 1fr) minmax(112px, auto);
+        grid-template-areas: "previous current next";
+        align-items: stretch;
+        gap: 12px;
+        padding: 12px;
+        margin-bottom: 32px;
+        border: 1px solid var(--line, rgba(27, 26, 23, 0.08));
+        border-radius: 12px;
+        background: var(--bg-secondary, #F6F7F9);
+    }
+    .minimal-nav-step {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 12px 0;
-        margin-bottom: 32px;
-        border-bottom: 1px solid var(--line, rgba(0,0,0,0.06));
-    }
-    .minimal-nav a {
-        color: var(--muted, rgba(0,0,0,0.5));
+        gap: 10px;
+        min-width: 0;
+        padding: 10px 12px;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        color: var(--ink-soft, rgba(0,0,0,0.76));
         text-decoration: none;
-        font-size: 0.88rem;
-        font-weight: 500;
-        transition: color 0.2s;
+        transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
     }
-    .minimal-nav a:hover { color: var(--ink, #1B1A17); }
-    .minimal-nav-disabled {
+    .minimal-nav-step.previous { grid-area: previous; }
+    .minimal-nav-step.next {
+        grid-area: next;
+        justify-content: flex-end;
+        text-align: right;
+    }
+    a.minimal-nav-step:hover {
+        border-color: var(--line, rgba(27, 26, 23, 0.08));
+        background: var(--card, #FFFFFF);
+        color: var(--ink, #1B1A17);
+    }
+    a.minimal-nav-step:active { transform: scale(0.98); }
+    .minimal-nav-step:focus-visible,
+    .minimal-nav-collection:focus-visible,
+    .minimal-nav-select:focus-visible {
+        outline: 2px solid var(--accent, #D6412D);
+        outline-offset: 2px;
+    }
+    .minimal-nav-step.minimal-nav-disabled {
         color: var(--text-tertiary, rgba(0,0,0,0.25));
     }
+    .minimal-nav-arrow {
+        flex: 0 0 auto;
+        font-size: 1.1rem;
+        line-height: 1;
+    }
+    .minimal-nav-step-copy {
+        display: grid;
+        min-width: 0;
+        gap: 2px;
+    }
+    .minimal-nav-step-label {
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: var(--muted, rgba(0,0,0,0.48));
+        white-space: nowrap;
+    }
+    .minimal-nav-step-title {
+        overflow: hidden;
+        font-size: 0.86rem;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
     .minimal-nav-center {
-        display: flex;
+        grid-area: current;
+        display: grid;
+        min-width: 0;
+        gap: 7px;
+        padding: 8px 12px 10px;
+        border-right: 1px solid var(--line, rgba(27, 26, 23, 0.08));
+        border-left: 1px solid var(--line, rgba(27, 26, 23, 0.08));
+    }
+    .minimal-nav-collection {
+        width: fit-content;
+        max-width: 100%;
+        overflow: hidden;
+        color: var(--muted, rgba(0,0,0,0.5));
+        font-size: 0.76rem;
+        font-weight: 600;
+        text-decoration: none;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: color 0.2s ease;
+    }
+    .minimal-nav-collection:hover {
+        color: var(--ink, #1B1A17);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+    .minimal-nav-select-wrap {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
         align-items: center;
-        gap: 12px;
-        font-size: 0.88rem;
-        color: var(--ink-soft, rgba(0,0,0,0.8));
+        gap: 10px;
+        min-width: 0;
+    }
+    .minimal-nav-progress {
+        color: var(--accent, #D6412D);
+        font-size: 0.78rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
     }
     .minimal-nav-select {
+        width: 100%;
+        min-width: 0;
         appearance: none;
         -webkit-appearance: none;
         background: transparent;
         border: none;
-        font-size: 0.88rem;
+        font-size: 0.92rem;
+        font-weight: 600;
         color: var(--ink-soft, rgba(0,0,0,0.8));
         cursor: pointer;
-        padding-right: 18px;
+        padding: 2px 24px 2px 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
         background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
         background-repeat: no-repeat;
         background-position: right center;
@@ -963,6 +1050,35 @@ body.export-document-mode .export-print-nav {
     }
     .minimal-nav-select:hover {
         color: var(--ink, #1B1A17);
+    }
+    [data-theme="dark"] .minimal-nav {
+        background: rgba(255,255,255,0.025);
+    }
+    [data-theme="dark"] a.minimal-nav-step:hover {
+        background: rgba(255,255,255,0.05);
+    }
+
+    @media (max-width: 720px) {
+        .minimal-nav {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-areas:
+                "current current"
+                "previous next";
+            gap: 8px;
+            padding: 8px;
+        }
+        .minimal-nav-center {
+            border-right: 0;
+            border-bottom: 1px solid var(--line, rgba(27, 26, 23, 0.08));
+            border-left: 0;
+            padding: 8px 8px 12px;
+        }
+        .minimal-nav-step {
+            padding: 10px 8px;
+        }
+        .minimal-nav-step-title {
+            display: none;
+        }
     }
     
     /* Export Menu */
@@ -1156,31 +1272,67 @@ body.export-document-mode .export-print-nav {
         {% endif %}
     </div>
 
-    <!-- Minimal Collection Navigation -->
+    <!-- Collection chapter navigation -->
     {% if collection_navigation %}
-    <nav class="minimal-nav">
+    <nav class="minimal-nav" aria-label="合集章节导航">
         {% if collection_navigation.previous and collection_navigation.previous.view_url %}
-            <a href="{{ collection_navigation.previous.view_url }}">← 上一节</a>
+            <a
+                class="minimal-nav-step previous"
+                href="{{ collection_navigation.previous.view_url }}"
+                aria-label="上一节：{{ collection_navigation.previous.title }}"
+            >
+                <span class="minimal-nav-arrow" aria-hidden="true">←</span>
+                <span class="minimal-nav-step-copy">
+                    <span class="minimal-nav-step-label">上一节</span>
+                    <span class="minimal-nav-step-title">{{ collection_navigation.previous.title }}</span>
+                </span>
+            </a>
         {% else %}
-            <span class="minimal-nav-disabled">← 上一节</span>
+            <span class="minimal-nav-step minimal-nav-disabled previous" aria-disabled="true">
+                <span class="minimal-nav-arrow" aria-hidden="true">←</span>
+                <span class="minimal-nav-step-copy">
+                    <span class="minimal-nav-step-label">上一节</span>
+                    <span class="minimal-nav-step-title">已经是第一节</span>
+                </span>
+            </span>
         {% endif %}
 
         <div class="minimal-nav-center">
-            <a href="{{ collection_navigation.collection.url }}">{{ collection_navigation.collection.title }}</a>
-            <span style="opacity: 0.2;">/</span>
-            <select class="minimal-nav-select" onchange="if (this.value) window.location.href = this.value" aria-label="切换章节" title="切换其他章节">
-                {% for item in collection_navigation["items"] %}
-                <option value="{{ item.view_url }}" {% if item.is_current %}selected{% endif %}>
-                    第 {{ loop.index }}/{{ collection_navigation.total }} 节 {% if item.title %}- {{ item.title }}{% endif %}
-                </option>
-                {% endfor %}
-            </select>
+            <a class="minimal-nav-collection" href="{{ collection_navigation.collection.url }}">
+                ← 返回合集 · {{ collection_navigation.collection.title }}
+            </a>
+            <div class="minimal-nav-select-wrap">
+                <span class="minimal-nav-progress">{{ collection_navigation.current_number }} / {{ collection_navigation.total }}</span>
+                <select class="minimal-nav-select" onchange="if (this.value) window.location.href = this.value" aria-label="切换章节" title="切换其他章节">
+                    {% for item in collection_navigation["items"] %}
+                    <option value="{{ item.view_url }}" {% if item.is_current %}selected{% endif %}>
+                        第 {{ loop.index }} 节{% if item.title %} · {{ item.title }}{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
 
         {% if collection_navigation.next and collection_navigation.next.view_url %}
-            <a href="{{ collection_navigation.next.view_url }}">下一节 →</a>
+            <a
+                class="minimal-nav-step next"
+                href="{{ collection_navigation.next.view_url }}"
+                aria-label="下一节：{{ collection_navigation.next.title }}"
+            >
+                <span class="minimal-nav-step-copy">
+                    <span class="minimal-nav-step-label">下一节</span>
+                    <span class="minimal-nav-step-title">{{ collection_navigation.next.title }}</span>
+                </span>
+                <span class="minimal-nav-arrow" aria-hidden="true">→</span>
+            </a>
         {% else %}
-            <span class="minimal-nav-disabled">下一节 →</span>
+            <span class="minimal-nav-step minimal-nav-disabled next" aria-disabled="true">
+                <span class="minimal-nav-step-copy">
+                    <span class="minimal-nav-step-label">下一节</span>
+                    <span class="minimal-nav-step-title">已经是最后一节</span>
+                </span>
+                <span class="minimal-nav-arrow" aria-hidden="true">→</span>
+            </span>
         {% endif %}
     </nav>
     {% endif %}

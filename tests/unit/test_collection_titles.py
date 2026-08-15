@@ -11,5 +11,6 @@ def test_source_basename_removes_browser_folder_paths():
 
 def test_source_display_title_hides_supported_file_extensions_only():
     assert source_display_title("课程目录/第01课.MP3") == "第01课"
+    assert source_display_title("课程目录/第02课.ts") == "第02课"
     assert source_display_title("资料目录/学习指南.pdf") == "学习指南"
     assert source_display_title("课程版本.v2") == "课程版本.v2"

@@ -20,6 +20,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from ..collections.summary_worker import CollectionSummaryWorker
 from ..utils.notifications import init_all_notifiers, shutdown_all_notifiers
 from ..utils.source_file_cleanup import cleanup_old_source_files
 from ..utils.ytdlp import YtdlpConfigBuilder
@@ -505,6 +506,30 @@ def create_app() -> FastAPI:
         # 打印每任务 provider+model+thinking 摘要（set_default_config 已注入 custom_patterns）
         log_llm_config_summary(config)
 
+        if runtime_lock_file is not None:
+            llm_config = config.get("llm") or {}
+            summary_worker = CollectionSummaryWorker(
+                collections.get_collection_service(),
+                poll_interval_seconds=float(
+                    llm_config.get("collection_summary_poll_interval_seconds", 1.0)
+                ),
+                heartbeat_interval_seconds=float(
+                    llm_config.get("collection_summary_heartbeat_seconds", 10.0)
+                ),
+                lease_seconds=int(
+                    llm_config.get("collection_summary_lease_seconds", 60)
+                ),
+            )
+            summary_recovery = summary_worker.start()
+            app.state.collection_summary_worker = summary_worker
+            if any(summary_recovery.values()):
+                logger.warning(
+                    "Collection summary recovery completed: {}",
+                    summary_recovery,
+                )
+        else:
+            app.state.collection_summary_worker = None
+
         # 初始化 yt-dlp 配置并验证 YouTube cookie
         logger.info("Initializing yt-dlp configuration...")
         ytdlp_builder = YtdlpConfigBuilder(config)
@@ -553,6 +578,9 @@ def create_app() -> FastAPI:
 
     @app.on_event("shutdown")
     async def shutdown_event():
+        summary_worker = getattr(app.state, "collection_summary_worker", None)
+        if summary_worker is not None:
+            summary_worker.stop(timeout=2.0)
         dispatcher = getattr(app.state, "cloud_asr_dispatcher", None)
         set_cloud_asr_dispatcher(None)
         if dispatcher is not None:

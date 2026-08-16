@@ -125,6 +125,17 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
         def validate_cookie_on_startup(self):
             return None
 
+    class FakeSummaryWorker:
+        def __init__(self, service, **kwargs):
+            trace.append("summary_worker_init")
+
+        def start(self):
+            trace.append("summary_worker_start")
+            return {"requeued_jobs": 0, "legacy_failed": 0}
+
+        def stop(self, timeout):
+            trace.append("summary_worker_stop")
+
     monkeypatch.setattr(app_module, "get_cache_manager", lambda: cache_manager)
     monkeypatch.setattr(app_module, "get_temp_manager", lambda: temp_manager)
     monkeypatch.setattr(
@@ -139,6 +150,10 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
     monkeypatch.setattr(app_module, "log_llm_config_summary", lambda config: None)
     monkeypatch.setattr(app_module, "log_llm_stats", lambda: None)
     monkeypatch.setattr(app_module, "YtdlpConfigBuilder", FakeYtdlpConfigBuilder)
+    monkeypatch.setattr(app_module, "CollectionSummaryWorker", FakeSummaryWorker)
+    monkeypatch.setattr(
+        app_module.collections, "get_collection_service", lambda: object()
+    )
     monkeypatch.setattr(app_module, "cleanup_old_source_files", source_cleanup)
     monkeypatch.setattr(
         app_module, "_recover_reading_deletions", reading_cleanup
@@ -224,6 +239,8 @@ def test_secondary_app_instance_does_not_recover_active_tasks(
     assert released_locks == [primary_lock]
 
     assert cache_manager.recover_orphaned_tasks.call_count == 1
+    assert trace.count("summary_worker_start") == 1
+    assert trace.count("summary_worker_stop") == 1
     cache_manager.recover_orphaned_tasks.assert_called_once_with(
         protected_task_ids=set()
     )

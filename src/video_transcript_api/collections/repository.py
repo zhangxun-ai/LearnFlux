@@ -50,6 +50,10 @@ def _row_value(row: object, key: str, index: int):
         return row[index]
 
 
+def _utcnow() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
 def _read_legacy_rows(
     connection: sqlite3.Connection, table_name: str
 ) -> List[Dict[str, Any]]:
@@ -173,6 +177,57 @@ class LearningCollectionRepository:
                 ON learning_collection_knowledge_maps(collection_id, scope, source_id)
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS learning_collection_summary_jobs (
+                    job_id TEXT PRIMARY KEY,
+                    collection_id TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'queued',
+                    phase TEXT NOT NULL DEFAULT 'queued',
+                    worker_id TEXT NOT NULL DEFAULT '',
+                    attempt INTEGER NOT NULL DEFAULT 0,
+                    total_modules INTEGER NOT NULL DEFAULT 0,
+                    completed_modules INTEGER NOT NULL DEFAULT 0,
+                    progress_message TEXT NOT NULL DEFAULT '',
+                    error_message TEXT NOT NULL DEFAULT '',
+                    started_at TIMESTAMP,
+                    heartbeat_at TIMESTAMP,
+                    lease_until TIMESTAMP,
+                    deadline_seconds INTEGER NOT NULL DEFAULT 720,
+                    deadline_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (collection_id) REFERENCES learning_collections(id)
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_learning_summary_jobs_status
+                ON learning_collection_summary_jobs(status, created_at)
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS learning_collection_summary_modules (
+                    job_id TEXT NOT NULL,
+                    module_index INTEGER NOT NULL,
+                    title TEXT NOT NULL DEFAULT '',
+                    role TEXT NOT NULL DEFAULT '',
+                    rationale TEXT NOT NULL DEFAULT '',
+                    source_numbers TEXT NOT NULL DEFAULT '[]',
+                    status TEXT NOT NULL DEFAULT 'queued',
+                    markdown TEXT NOT NULL DEFAULT '',
+                    error_message TEXT NOT NULL DEFAULT '',
+                    started_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (job_id, module_index),
+                    FOREIGN KEY (job_id) REFERENCES learning_collection_summary_jobs(job_id)
+                )
+                """
+            )
         self._migrate_database()
 
     def _migrate_database(self):
@@ -201,6 +256,14 @@ class LearningCollectionRepository:
                 cursor.execute(
                     "ALTER TABLE learning_collection_sources "
                     "ADD COLUMN content_sha256 TEXT"
+                )
+            summary_job_columns = self._table_columns(
+                cursor, "learning_collection_summary_jobs"
+            )
+            if "deadline_seconds" not in summary_job_columns:
+                cursor.execute(
+                    "ALTER TABLE learning_collection_summary_jobs "
+                    "ADD COLUMN deadline_seconds INTEGER NOT NULL DEFAULT 720"
                 )
             cursor.execute(
                 """
@@ -237,6 +300,23 @@ class LearningCollectionRepository:
             return {_row_value(row, "column_name", 0) for row in cursor.fetchall()}
         cursor.execute(f"PRAGMA table_info({table_name})")
         return {_row_value(row, "name", 1) for row in cursor.fetchall()}
+
+    @staticmethod
+    def _delete_summary_job_records(cursor, collection_id: str) -> None:
+        cursor.execute(
+            """
+            DELETE FROM learning_collection_summary_modules
+            WHERE job_id IN (
+                SELECT job_id FROM learning_collection_summary_jobs
+                WHERE collection_id = ?
+            )
+            """,
+            (collection_id,),
+        )
+        cursor.execute(
+            "DELETE FROM learning_collection_summary_jobs WHERE collection_id = ?",
+            (collection_id,),
+        )
 
     def import_legacy_sqlite_if_target_empty(
         self, legacy_db_path: str | Path
@@ -709,6 +789,7 @@ class LearningCollectionRepository:
                 """,
                 (collection_id,),
             )
+            self._delete_summary_job_records(cursor, collection_id)
             cursor.execute(
                 """
                 DELETE FROM learning_collection_knowledge_maps
@@ -961,6 +1042,7 @@ class LearningCollectionRepository:
                     """,
                     (change_count, collection_id),
                 )
+                self._delete_summary_job_records(cursor, collection_id)
                 cursor.execute(
                     """
                     DELETE FROM learning_collection_knowledge_maps
@@ -1118,6 +1200,7 @@ class LearningCollectionRepository:
                 """,
                 (collection_id,),
             )
+            self._delete_summary_job_records(cursor, collection_id)
             cursor.execute(
                 """
                 DELETE FROM learning_collection_knowledge_maps
@@ -1167,6 +1250,7 @@ class LearningCollectionRepository:
                 """,
                 (collection_id,),
             )
+            self._delete_summary_job_records(cursor, collection_id)
             cursor.execute(
                 """
                 DELETE FROM learning_collection_knowledge_maps
@@ -1238,9 +1322,573 @@ class LearningCollectionRepository:
         collection["sources"] = self.get_sources(collection_id)
         return collection
 
+    def enqueue_summary_job(
+        self,
+        collection_id: str,
+        *,
+        deadline_seconds: int = 600,
+    ) -> Dict[str, Any]:
+        """Replace the terminal job for a collection with one durable queued job."""
+        now = _utcnow()
+        job_id = uuid.uuid4().hex
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                "SELECT job_id FROM learning_collection_summary_jobs WHERE collection_id = ?",
+                (collection_id,),
+            )
+            existing = cursor.fetchone()
+            if existing:
+                previous_job_id = _row_value(existing, "job_id", 0)
+                cursor.execute(
+                    "DELETE FROM learning_collection_summary_modules WHERE job_id = ?",
+                    (previous_job_id,),
+                )
+                cursor.execute(
+                    "DELETE FROM learning_collection_summary_jobs WHERE job_id = ?",
+                    (previous_job_id,),
+                )
+            cursor.execute(
+                """
+                INSERT INTO learning_collection_summary_jobs (
+                    job_id, collection_id, status, phase, deadline_seconds,
+                    progress_message, created_at, updated_at
+                ) VALUES (?, ?, 'queued', 'queued', ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    collection_id,
+                    max(1, int(deadline_seconds)),
+                    "Waiting for summary worker",
+                    now.isoformat(),
+                    now.isoformat(),
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE learning_collections
+                SET summary_status = 'processing', updated_at = ?
+                WHERE id = ?
+                """,
+                (now.isoformat(), collection_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("collection not found")
+        return self.get_summary_job(collection_id)
+
+    def get_summary_job(self, collection_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT * FROM learning_collection_summary_jobs
+                WHERE collection_id = ?
+                """,
+                (collection_id,),
+            )
+            row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_summary_job_by_id(self, job_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM learning_collection_summary_jobs WHERE job_id = ?",
+                (job_id,),
+            )
+            row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def requeue_summary_job(
+        self,
+        job_id: str,
+        *,
+        deadline_seconds: int,
+    ) -> bool:
+        """Retry one failed job while preserving successful module checkpoints."""
+        now = _utcnow().isoformat()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                SELECT status
+                FROM learning_collection_summary_jobs
+                WHERE job_id = ?
+                """,
+                (job_id,),
+            )
+            job_row = cursor.fetchone()
+            if not job_row or _row_value(job_row, "status", 0) != "failed":
+                return False
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_modules
+                SET status = 'queued', error_message = '', started_at = NULL,
+                    completed_at = NULL, updated_at = ?
+                WHERE job_id = ? AND status != 'success'
+                """,
+                (now, job_id),
+            )
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS total,
+                       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS completed
+                FROM learning_collection_summary_modules
+                WHERE job_id = ?
+                """,
+                (job_id,),
+            )
+            count_row = cursor.fetchone()
+            total = int(_row_value(count_row, "total", 0) or 0)
+            completed = int(_row_value(count_row, "completed", 1) or 0)
+            phase = "modules" if total else "queued"
+            message = (
+                f"Resuming from module {completed}/{total}"
+                if total
+                else "Waiting for summary worker"
+            )
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET status = 'queued', phase = ?, worker_id = '',
+                    deadline_seconds = ?, deadline_at = NULL,
+                    total_modules = ?, completed_modules = ?,
+                    progress_message = ?, error_message = '', started_at = NULL,
+                    completed_at = NULL, heartbeat_at = NULL, lease_until = NULL,
+                    updated_at = ?
+                WHERE job_id = ? AND status = 'failed'
+                """,
+                (
+                    phase,
+                    max(1, int(deadline_seconds)),
+                    total,
+                    completed,
+                    message,
+                    now,
+                    job_id,
+                ),
+            )
+            requeued = cursor.rowcount == 1
+            if requeued:
+                cursor.execute(
+                    """
+                    UPDATE learning_collections
+                    SET summary_status = 'processing', updated_at = ?
+                    WHERE id = (
+                        SELECT collection_id
+                        FROM learning_collection_summary_jobs
+                        WHERE job_id = ?
+                    )
+                    """,
+                    (now, job_id),
+                )
+        return requeued
+
+    @staticmethod
+    def _renew_summary_job_deadline(cursor, job_id: str, now: datetime.datetime) -> None:
+        cursor.execute(
+            """
+            SELECT deadline_seconds
+            FROM learning_collection_summary_jobs
+            WHERE job_id = ? AND status = 'running'
+            """,
+            (job_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return
+        deadline_seconds = int(_row_value(row, "deadline_seconds", 0) or 720)
+        deadline_at = now + datetime.timedelta(seconds=max(1, deadline_seconds))
+        cursor.execute(
+            """
+            UPDATE learning_collection_summary_jobs
+            SET deadline_at = ?
+            WHERE job_id = ? AND status = 'running'
+            """,
+            (deadline_at.isoformat(), job_id),
+        )
+
+    def claim_next_summary_job(
+        self,
+        *,
+        worker_id: str,
+        lease_seconds: int = 60,
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically lease the oldest queued summary job to one worker."""
+        now = _utcnow()
+        lease_until = now + datetime.timedelta(seconds=max(1, int(lease_seconds)))
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                SELECT job_id, deadline_seconds FROM learning_collection_summary_jobs
+                WHERE status = 'queued'
+                ORDER BY created_at ASC
+                LIMIT 1
+                """
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            job_id = _row_value(row, "job_id", 0)
+            deadline_seconds = int(_row_value(row, "deadline_seconds", 1) or 720)
+            deadline_at = now + datetime.timedelta(seconds=max(1, deadline_seconds))
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET status = 'running', worker_id = ?, attempt = attempt + 1,
+                    started_at = COALESCE(started_at, ?), heartbeat_at = ?,
+                    lease_until = ?, deadline_at = ?,
+                    progress_message = 'Summary worker started',
+                    updated_at = ?
+                WHERE job_id = ? AND status = 'queued'
+                """,
+                (
+                    worker_id,
+                    now.isoformat(),
+                    now.isoformat(),
+                    lease_until.isoformat(),
+                    deadline_at.isoformat(),
+                    now.isoformat(),
+                    job_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                return None
+            cursor.execute(
+                "SELECT * FROM learning_collection_summary_jobs WHERE job_id = ?",
+                (job_id,),
+            )
+            claimed = cursor.fetchone()
+        return dict(claimed) if claimed else None
+
+    def heartbeat_summary_job(
+        self,
+        job_id: str,
+        worker_id: str,
+        *,
+        lease_seconds: int = 60,
+    ) -> bool:
+        now = _utcnow()
+        lease_until = now + datetime.timedelta(seconds=max(1, int(lease_seconds)))
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET heartbeat_at = ?, lease_until = ?, updated_at = ?
+                WHERE job_id = ? AND worker_id = ? AND status = 'running'
+                """,
+                (
+                    now.isoformat(),
+                    lease_until.isoformat(),
+                    now.isoformat(),
+                    job_id,
+                    worker_id,
+                ),
+            )
+            return cursor.rowcount == 1
+
+    def update_summary_job_progress(
+        self,
+        job_id: str,
+        *,
+        phase: str,
+        message: str,
+    ) -> None:
+        now = _utcnow()
+        with self._get_cursor(write=True) as cursor:
+            self._renew_summary_job_deadline(cursor, job_id, now)
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET phase = ?, progress_message = ?, heartbeat_at = ?, updated_at = ?
+                WHERE job_id = ? AND status = 'running'
+                """,
+                (phase, message, now.isoformat(), now.isoformat(), job_id),
+            )
+
+    def save_summary_plan(
+        self,
+        job_id: str,
+        modules: List[Dict[str, Any]],
+    ) -> None:
+        now = _utcnow()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                "DELETE FROM learning_collection_summary_modules WHERE job_id = ?",
+                (job_id,),
+            )
+            for fallback_index, module in enumerate(modules):
+                module_index = int(module.get("index", fallback_index))
+                cursor.execute(
+                    """
+                    INSERT INTO learning_collection_summary_modules (
+                        job_id, module_index, title, role, rationale,
+                        source_numbers, status, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)
+                    """,
+                    (
+                        job_id,
+                        module_index,
+                        str(module.get("title") or ""),
+                        str(module.get("role") or ""),
+                        str(module.get("rationale") or ""),
+                        json.dumps(module.get("source_numbers") or []),
+                        now.isoformat(),
+                    ),
+                )
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET phase = 'modules', total_modules = ?, completed_modules = 0,
+                    progress_message = ?, heartbeat_at = ?, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (
+                    len(modules),
+                    f"Generating module 0/{len(modules)}",
+                    now.isoformat(),
+                    now.isoformat(),
+                    job_id,
+                ),
+            )
+            self._renew_summary_job_deadline(cursor, job_id, now)
+
+    def list_summary_modules(self, job_id: str) -> List[Dict[str, Any]]:
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT * FROM learning_collection_summary_modules
+                WHERE job_id = ?
+                ORDER BY module_index ASC
+                """,
+                (job_id,),
+            )
+            rows = cursor.fetchall()
+        modules = []
+        for row in rows:
+            module = dict(row)
+            try:
+                module["source_numbers"] = json.loads(module.get("source_numbers") or "[]")
+            except (TypeError, ValueError):
+                module["source_numbers"] = []
+            module["index"] = int(module.get("module_index") or 0)
+            modules.append(module)
+        return modules
+
+    def mark_summary_module_running(self, job_id: str, module_index: int) -> None:
+        now = _utcnow().isoformat()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_modules
+                SET status = 'running', error_message = '', started_at = ?, updated_at = ?
+                WHERE job_id = ? AND module_index = ? AND status != 'success'
+                """,
+                (now, now, job_id, int(module_index)),
+            )
+
+    def complete_summary_module(
+        self,
+        job_id: str,
+        module_index: int,
+        markdown: str,
+    ) -> None:
+        now = _utcnow()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_modules
+                SET status = 'success', markdown = ?, error_message = '',
+                    completed_at = ?, updated_at = ?
+                WHERE job_id = ? AND module_index = ?
+                """,
+                (
+                    markdown,
+                    now.isoformat(),
+                    now.isoformat(),
+                    job_id,
+                    int(module_index),
+                ),
+            )
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS total,
+                       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS completed
+                FROM learning_collection_summary_modules
+                WHERE job_id = ?
+                """,
+                (job_id,),
+            )
+            count_row = cursor.fetchone()
+            total = int(_row_value(count_row, "total", 0) or 0)
+            completed = int(_row_value(count_row, "completed", 1) or 0)
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET total_modules = ?, completed_modules = ?, progress_message = ?,
+                    heartbeat_at = ?, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (
+                    total,
+                    completed,
+                    f"Generating module {completed}/{total}",
+                    now.isoformat(),
+                    now.isoformat(),
+                    job_id,
+                ),
+            )
+            self._renew_summary_job_deadline(cursor, job_id, now)
+
+    def fail_summary_module(
+        self,
+        job_id: str,
+        module_index: int,
+        error_message: str,
+    ) -> None:
+        now = _utcnow().isoformat()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_modules
+                SET status = 'failed', error_message = ?, completed_at = ?, updated_at = ?
+                WHERE job_id = ? AND module_index = ?
+                """,
+                (str(error_message), now, now, job_id, int(module_index)),
+            )
+
+    def complete_summary_job(self, job_id: str) -> None:
+        now = _utcnow().isoformat()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET status = 'success', phase = 'completed', worker_id = '',
+                    progress_message = 'Summary completed', error_message = '',
+                    completed_at = ?, heartbeat_at = ?, lease_until = NULL, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (now, now, now, job_id),
+            )
+
+    def fail_summary_job(self, job_id: str, error_message: str) -> None:
+        now = _utcnow().isoformat()
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET status = 'failed', phase = 'failed', worker_id = '',
+                    progress_message = 'Summary failed', error_message = ?,
+                    completed_at = ?, heartbeat_at = ?, lease_until = NULL, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (str(error_message), now, now, now, job_id),
+            )
+
+    def fail_expired_summary_job(self, collection_id: str) -> bool:
+        """Fail one running job only when its persisted lease has expired."""
+        now = _utcnow().isoformat()
+        error_message = "Summary worker heartbeat expired. Please retry."
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                UPDATE learning_collection_summary_jobs
+                SET status = 'failed', phase = 'failed', worker_id = '',
+                    progress_message = 'Summary interrupted', error_message = ?,
+                    completed_at = ?, heartbeat_at = ?, lease_until = NULL,
+                    updated_at = ?
+                WHERE collection_id = ? AND status = 'running'
+                  AND lease_until IS NOT NULL AND lease_until <= ?
+                """,
+                (
+                    error_message,
+                    now,
+                    now,
+                    now,
+                    collection_id,
+                    now,
+                ),
+            )
+            expired = cursor.rowcount == 1
+            if expired:
+                cursor.execute(
+                    """
+                    UPDATE learning_collections
+                    SET summary_status = 'failed', updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now, collection_id),
+                )
+        return expired
+
+    def recover_interrupted_summary_jobs(self) -> Dict[str, int]:
+        """Requeue durable jobs and fail legacy processing rows without a job."""
+        now = _utcnow().isoformat()
+        requeued_jobs = 0
+        legacy_failed = 0
+        with self._get_cursor(write=True) as cursor:
+            cursor.execute(
+                """
+                SELECT job_id FROM learning_collection_summary_jobs
+                WHERE status = 'running'
+                """
+            )
+            running_job_ids = [
+                _row_value(row, "job_id", 0) for row in cursor.fetchall()
+            ]
+            for job_id in running_job_ids:
+                cursor.execute(
+                    """
+                    UPDATE learning_collection_summary_modules
+                    SET status = 'queued', error_message = '', updated_at = ?
+                    WHERE job_id = ? AND status = 'running'
+                    """,
+                    (now, job_id),
+                )
+                cursor.execute(
+                    """
+                    UPDATE learning_collection_summary_jobs
+                    SET status = 'queued', worker_id = '', lease_until = NULL,
+                        progress_message = 'Resuming after service restart', updated_at = ?
+                    WHERE job_id = ? AND status = 'running'
+                    """,
+                    (now, job_id),
+                )
+                requeued_jobs += cursor.rowcount
+
+            cursor.execute(
+                """
+                SELECT c.id
+                FROM learning_collections c
+                LEFT JOIN learning_collection_summary_jobs j
+                  ON j.collection_id = c.id
+                WHERE c.summary_status = 'processing' AND j.job_id IS NULL
+                """
+            )
+            legacy_collection_ids = [
+                _row_value(row, "id", 0) for row in cursor.fetchall()
+            ]
+            for collection_id in legacy_collection_ids:
+                job_id = uuid.uuid4().hex
+                error_message = "Summary interrupted by service restart. Please retry."
+                cursor.execute(
+                    """
+                    INSERT INTO learning_collection_summary_jobs (
+                        job_id, collection_id, status, phase, progress_message,
+                        error_message, completed_at, created_at, updated_at
+                    ) VALUES (?, ?, 'failed', 'failed', 'Summary interrupted', ?, ?, ?, ?)
+                    """,
+                    (job_id, collection_id, error_message, now, now, now),
+                )
+                cursor.execute(
+                    """
+                    UPDATE learning_collections
+                    SET summary_status = 'failed', updated_at = ? WHERE id = ?
+                    """,
+                    (now, collection_id),
+                )
+                legacy_failed += 1
+        return {"requeued_jobs": requeued_jobs, "legacy_failed": legacy_failed}
+
     def mark_summary_processing(self, collection_id: str) -> Dict[str, Any]:
         """Persist in-flight generation so clients can recover after navigation."""
-        now = datetime.datetime.utcnow().isoformat()
+        now = _utcnow().isoformat()
         with self._get_cursor(write=True) as cursor:
             cursor.execute(
                 """
@@ -1354,6 +2002,23 @@ class LearningCollectionRepository:
             cursor.execute(
                 """
                 DELETE FROM learning_collection_sources
+                WHERE collection_id = ?
+                """,
+                (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_summary_modules
+                WHERE job_id IN (
+                    SELECT job_id FROM learning_collection_summary_jobs
+                    WHERE collection_id = ?
+                )
+                """,
+                (collection_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM learning_collection_summary_jobs
                 WHERE collection_id = ?
                 """,
                 (collection_id,),

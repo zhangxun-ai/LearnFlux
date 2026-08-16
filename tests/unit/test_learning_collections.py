@@ -1316,7 +1316,9 @@ def test_collection_api_create_generate_and_export_markdown(tmp_path, monkeypatc
     assert generated.status_code == 200
     assert generated.json()["data"]["summary_status"] == "processing"
 
-    # BackgroundTasks run after the response; detail should then contain markdown.
+    from video_transcript_api.collections.summary_worker import CollectionSummaryWorker
+
+    assert CollectionSummaryWorker(service).run_once() is True
     detail = client.get(f"/api/collections/{collection_id}")
     assert detail.status_code == 200
     assert detail.json()["data"]["summary_status"] == "success"
@@ -1329,11 +1331,10 @@ def test_collection_api_create_generate_and_export_markdown(tmp_path, monkeypatc
     assert "## 行动清单" in exported.text
 
 
-def test_collection_summary_route_enqueues_background_job(monkeypatch):
+def test_collection_summary_route_only_persists_worker_job(monkeypatch):
     from video_transcript_api.api.routes import collections
 
     calls = []
-    background_jobs = []
 
     class FakeService:
         def begin_summary_generation(self, collection_id):
@@ -1341,15 +1342,9 @@ def test_collection_summary_route_enqueues_background_job(monkeypatch):
             return {
                 "id": collection_id,
                 "summary_status": "processing",
-                "summary_enqueue": True,
+                "summary_created": True,
+                "summary_job": {"status": "queued"},
             }
-
-        def generate_summary_job(self, collection_id):
-            calls.append(("generate_summary_job", collection_id))
-
-    class FakeBackgroundTasks:
-        def add_task(self, func, *args, **kwargs):
-            background_jobs.append((func, args, kwargs))
 
     async def fake_run_in_threadpool(func, *args, **kwargs):
         calls.append(("threadpool", getattr(func, "__name__", str(func)), args))
@@ -1361,18 +1356,16 @@ def test_collection_summary_route_enqueues_background_job(monkeypatch):
     response = asyncio.run(
         collections.generate_collection_summary(
             "collection-1",
-            background_tasks=FakeBackgroundTasks(),
             user_info={"user_id": "u1"},
         )
     )
 
     assert ("threadpool", "begin_summary_generation", ("collection-1",)) in calls
     assert ("begin_summary_generation", "collection-1") in calls
-    assert len(background_jobs) == 1
-    assert background_jobs[0][1] == ("collection-1",)
     assert response.data["id"] == "collection-1"
     assert response.data["summary_status"] == "processing"
-    assert "summary_enqueue" not in response.data
+    assert response.data["summary_job"]["status"] == "queued"
+    assert "summary_created" not in response.data
 
 
 def test_collection_summary_updates_ai_generated_description(tmp_path):
@@ -1964,6 +1957,11 @@ def test_collections_page_restores_existing_collections():
     assert "startSummaryProgress" in js
     assert "summaryProgressByCollection" in js
     assert "function isSummaryGenerating(collectionId)" in js
+    assert "function summaryJobProgressMeta(collection)" in js
+    assert "任务已中断，可重试" in js
+    assert "连接异常，正在重试" in js
+    assert "completed_modules" in js
+    assert "lease_until" in js
     assert "startSummaryProgress(collectionId)" in js
     assert "stopSummaryProgress(collectionId" in js
     assert "currentCollection.id === collectionId" in js

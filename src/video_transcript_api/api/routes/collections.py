@@ -960,21 +960,18 @@ async def delete_collection(
 @router.post("/api/collections/{collection_id}/summary", response_model=TranscribeResponse)
 async def generate_collection_summary(
     collection_id: str,
-    background_tasks: BackgroundTasks,
     user_info: dict = Depends(verify_token),
 ):
     """Start full-series interpretation generation.
 
-    Generation runs in a background task so leaving the page does not cancel work.
+    Generation is claimed by the durable collection-summary worker.
     Clients should poll GET /api/collections/{id} until summary_status is success/failed.
     """
     try:
         service = get_collection_service()
         _require_collection_owner(service, collection_id, user_info)
         detail = await run_in_threadpool(service.begin_summary_generation, collection_id)
-        should_enqueue = bool(detail.pop("summary_enqueue", False))
-        if should_enqueue:
-            background_tasks.add_task(service.generate_summary_job, collection_id)
+        detail.pop("summary_created", None)
         message = (
             "全系列解读生成中"
             if (detail.get("summary_status") or "").strip() == "processing"

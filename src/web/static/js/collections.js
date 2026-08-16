@@ -490,13 +490,59 @@
         return key ? summaryProgressByCollection.get(key) : null;
     }
 
+    function summaryJobProgressMeta(collection) {
+        const job = collection && collection.summary_job;
+        if (!job) {
+            return {
+                active: String((collection && collection.summary_status) || '') === 'processing',
+                interrupted: false,
+                percent: 8,
+                label: '准备生成'
+            };
+        }
+        const status = String(job.status || '');
+        const phase = String(job.phase || 'queued');
+        const leaseUntil = Date.parse(String(job.lease_until || ''));
+        const leaseExpired = status === 'running'
+            && Number.isFinite(leaseUntil)
+            && Date.now() > leaseUntil;
+        if (status === 'failed' || leaseExpired) {
+            return {
+                active: false,
+                interrupted: true,
+                percent: 0,
+                label: '任务已中断，可重试'
+            };
+        }
+        if (status === 'success') {
+            return { active: false, interrupted: false, percent: 100, label: '生成完成' };
+        }
+        const completed = Math.max(0, Number(job.completed_modules) || 0);
+        const total = Math.max(0, Number(job.total_modules) || 0);
+        const phaseMeta = {
+            queued: { percent: 6, label: '等待生成' },
+            planning: { percent: 12, label: '正在规划内容结构' },
+            merging: { percent: 90, label: '正在合并主线总结' },
+            repairing: { percent: 96, label: '正在校验章节覆盖' }
+        };
+        if (phase === 'modules') {
+            const ratio = total > 0 ? completed / total : 0;
+            return {
+                active: true,
+                interrupted: false,
+                percent: 18 + Math.round(Math.min(1, ratio) * 68),
+                label: total > 0 ? `正在生成模块 ${completed}/${total}` : '正在生成模块'
+            };
+        }
+        const meta = phaseMeta[phase] || phaseMeta.queued;
+        return { active: true, interrupted: false, ...meta };
+    }
+
     function isSummaryGenerating(collectionId) {
         const state = summaryProgressState(collectionId);
         if (state && state.active) return true;
-        const status = currentCollection
-            && currentCollection.id === collectionId
-            && String(currentCollection.summary_status || '');
-        return status === 'processing';
+        if (!currentCollection || currentCollection.id !== collectionId) return false;
+        return summaryJobProgressMeta(currentCollection).active;
     }
 
     function summaryGenerationStorageKey(collectionId) {
@@ -564,6 +610,7 @@
             state.percent = Math.max(0, Math.min(100, Number(percent) || 0));
         }
         if (label) state.label = label;
+        if (label) state.baseLabel = label;
         summaryProgressByCollection.set(key, state);
         if (selectedCollectionKey() === key) renderVisibleSummaryProgress();
     }
@@ -578,7 +625,8 @@
             startedAt: Date.now(),
             timer: null,
             percent: 8,
-            label: '准备生成...'
+            label: '准备生成...',
+            baseLabel: '准备生成...'
         };
         summaryProgressByCollection.set(key, state);
         if (selectedCollectionKey() === key) renderVisibleSummaryProgress();
@@ -589,9 +637,7 @@
                 return;
             }
             const elapsedSeconds = Math.max(1, Math.floor((Date.now() - latest.startedAt) / 1000));
-            const percent = Math.min(92, 16 + elapsedSeconds * 3);
-            latest.percent = percent;
-            latest.label = `AI 生成中 ${elapsedSeconds}s`;
+            latest.label = `${latest.baseLabel || 'AI 生成中'} · ${elapsedSeconds}s`;
             summaryProgressByCollection.set(key, latest);
             if (selectedCollectionKey() === key) renderVisibleSummaryProgress();
         }, 1000);
@@ -2242,12 +2288,19 @@
         if (!collection || !collection.id) return;
         const status = String(collection.summary_status || '');
         const hasMarkdown = Boolean(collection.summary_markdown);
-        if (status === 'processing' || (wasSummaryGenerating(collection.id) && !hasMarkdown && status !== 'failed')) {
+        const progress = summaryJobProgressMeta(collection);
+        if (progress.interrupted || status === 'failed') {
+            rememberSummaryGenerating(collection.id, false);
+            stopSummaryProgress(collection.id, '任务已中断，可重试');
+            stopSummaryStatusPolling(collection.id);
+            return;
+        }
+        if (progress.active || (wasSummaryGenerating(collection.id) && !hasMarkdown && status !== 'failed')) {
             rememberSummaryGenerating(collection.id, true);
             if (!isSummaryGenerating(collection.id) || !summaryProgressState(collection.id)) {
                 startSummaryProgress(collection.id);
             }
-            updateSummaryProgress(collection.id, null, 'AI 生成中（可离开页面，完成后自动显示）');
+            updateSummaryProgress(collection.id, progress.percent, progress.label);
             startSummaryStatusPolling(collection.id);
             return;
         }
@@ -2266,6 +2319,7 @@
 
     let summaryPollTimer = null;
     let summaryPollCollectionId = '';
+    let summaryPollFailureCount = 0;
 
     function stopSummaryStatusPolling(collectionId) {
         if (collectionId && summaryPollCollectionId && collectionId !== summaryPollCollectionId) {
@@ -2276,6 +2330,7 @@
             summaryPollTimer = null;
         }
         summaryPollCollectionId = '';
+        summaryPollFailureCount = 0;
     }
 
     function startSummaryStatusPolling(collectionId) {
@@ -2295,6 +2350,7 @@
                     sources: detail.sources || currentCollection.sources
                 };
                 const status = String(detail.summary_status || '');
+                const progress = summaryJobProgressMeta(detail);
                 if (status === 'success' && detail.summary_markdown) {
                     rememberSummaryGenerating(key, false);
                     stopSummaryProgress(key, '生成完成');
@@ -2304,18 +2360,22 @@
                     render();
                     return;
                 }
-                if (status === 'failed') {
+                if (status === 'failed' || progress.interrupted) {
                     rememberSummaryGenerating(key, false);
-                    stopSummaryProgress(key, '生成失败');
+                    stopSummaryProgress(key, '任务已中断，可重试');
                     stopSummaryStatusPolling(key);
-                    showToast('全系列解读生成失败，请重试');
+                    showToast('任务已中断，可重试');
                     render();
                     return;
                 }
-                updateSummaryProgress(key, null, 'AI 生成中（可离开页面，完成后自动显示）');
+                summaryPollFailureCount = 0;
+                updateSummaryProgress(key, progress.percent, progress.label);
                 renderVisibleSummaryProgress();
             } catch (error) {
-                /* keep polling; transient network blips are expected */
+                summaryPollFailureCount += 1;
+                if (summaryPollFailureCount >= 3) {
+                    updateSummaryProgress(key, null, '连接异常，正在重试');
+                }
             }
         }, 4000);
     }
@@ -2508,7 +2568,11 @@
         }
         const summaryStatus = String(collection.summary_status || '');
         const workflow = String(collection.workflow_status || '');
-        if (summaryStatus === 'processing' || isSummaryGenerating(collection.id)) {
+        const summaryProgress = summaryJobProgressMeta(collection);
+        if (summaryProgress.interrupted || summaryStatus === 'failed') {
+            return { label: '解读已中断', tone: 'danger' };
+        }
+        if (summaryProgress.active || isSummaryGenerating(collection.id)) {
             return { label: '解读生成中', tone: 'working' };
         }
         if (summaryStatus === 'success' && collection.summary_markdown) {
@@ -3668,7 +3732,9 @@
         const ready = complete && sources.some((source) => source.task_status === 'success');
 
         const summaryStatus = String((currentCollection && currentCollection.summary_status) || '');
-        const generating = summaryStatus === 'processing' || isSummaryGenerating(currentCollection && currentCollection.id);
+        const summaryProgress = summaryJobProgressMeta(currentCollection);
+        const generating = summaryProgress.active || isSummaryGenerating(currentCollection && currentCollection.id);
+        const interrupted = summaryProgress.interrupted || summaryStatus === 'failed';
         if (els.summaryStatus) {
             els.summaryStatus.classList.remove('is-ready', 'is-working', 'is-failed');
             if (markdown) {
@@ -3677,8 +3743,8 @@
             } else if (generating) {
                 els.summaryStatus.textContent = '生成中';
                 els.summaryStatus.classList.add('is-working');
-            } else if (summaryStatus === 'failed') {
-                els.summaryStatus.textContent = '生成失败';
+            } else if (interrupted) {
+                els.summaryStatus.textContent = '已中断';
                 els.summaryStatus.classList.add('is-failed');
             } else {
                 els.summaryStatus.textContent = '等待生成';
@@ -3691,8 +3757,10 @@
             els.summaryDescription.textContent = markdown
                 ? '已从课前导览和课后复习两个场景提炼全集主线、章节作用和复习路径。'
                 : (generating
-                    ? '生成通常需要几分钟。可以离开本页，稍后再回来查看结果。'
-                    : (ready ? '所有源内容已解析完成，点击“生成全系列解读”建立全集视角。' : (complete ? '没有可用于生成全系列解读的逐字稿。' : '导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。')));
+                    ? `${summaryProgress.label}。可以离开本页，稍后再回来查看结果。`
+                    : (interrupted
+                        ? '上一次生成已中断，点击按钮即可从可用状态重新生成。'
+                        : (ready ? '所有源内容已解析完成，点击“生成全系列解读”建立全集视角。' : (complete ? '没有可用于生成全系列解读的逐字稿。' : '导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。'))));
         }
         const waitingText = ready ? '点击生成后展示。' : '解析完成后生成。';
         renderSummaryCard(els.summaryProblem, markdown ? summarizeMarkdownSection(markdown, ['这个系列解决什么问题', '解决什么问题', '中心问题'], 2) : [], waitingText);
@@ -5594,7 +5662,7 @@
         }
         const collectionId = currentCollection.id;
         const collectionTitle = currentCollection.title || '当前合集';
-        if (isSummaryGenerating(collectionId) && String(currentCollection.summary_status || '') === 'processing') {
+        if (summaryJobProgressMeta(currentCollection).active) {
             showToast('这个合集正在生成全系列解读，离开页面也不会中断');
             startSummaryStatusPolling(collectionId);
             return;
@@ -5633,7 +5701,8 @@
                 stopSummaryStatusPolling(collectionId);
                 showToast(`「${updatedCollection.title || collectionTitle}」全系列解读已生成`);
             } else {
-                updateSummaryProgress(collectionId, 20, 'AI 生成中（可离开页面，完成后自动显示）');
+                const progress = summaryJobProgressMeta(currentCollection);
+                updateSummaryProgress(collectionId, progress.percent, progress.label);
                 startSummaryStatusPolling(collectionId);
             }
         } catch (error) {

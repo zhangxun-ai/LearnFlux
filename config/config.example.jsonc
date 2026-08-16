@@ -249,6 +249,13 @@
         "summary_reasoning_effort": "high",     // 总结推理强度（v4-flash 下触发思考模式）
         "collection_summary_model": "deepseek-v4-pro",  // 全系列解读优先使用长上下文强模型
         "collection_summary_reasoning_effort": "high",  // 全系列解读推理强度
+        "collection_summary_module_model": "deepseek-v4-flash", // 模块阶段优先快速模型，最终合并仍使用强模型
+        "collection_summary_module_reasoning_effort": "high",   // 模块阶段推理强度
+        "collection_summary_module_concurrency": 3,      // 模块解读并发数；建议 2-4，避免供应商限流
+        "collection_summary_deadline_seconds": 720,      // 无进展截止时间（秒）；每完成模块或切换阶段都会续期
+        "collection_summary_heartbeat_seconds": 10,      // 持久化任务心跳间隔（秒）
+        "collection_summary_lease_seconds": 60,          // 心跳中断后多久判定任务失联（秒）
+        "collection_summary_poll_interval_seconds": 1,   // 后台 worker 空闲轮询间隔（秒）
         "visual_learning_outline_model": "deepseek-v4-pro", // 图解提纲：保留强模型与高推理保证全文结构质量
         "visual_learning_outline_reasoning_effort": "high",
         "visual_learning_render_model": "deepseek-v4-pro",  // 最终出图：同一强模型负责结构化表达

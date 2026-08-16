@@ -1,6 +1,7 @@
 import os
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -187,6 +188,10 @@ class LearningCollectionService:
         detail["metrics"] = self._build_metrics(detail["sources"])
         detail["workflow_status"] = self._collection_workflow_status(detail, detail["sources"])
         detail["export_status"] = "exported" if detail.get("exported_at") else "not_exported"
+        summary_job = self.repository.get_summary_job(collection_id)
+        if summary_job:
+            summary_job.pop("worker_id", None)
+        detail["summary_job"] = summary_job
         return detail
 
     def get_source_detail(self, collection_id: str, source_id: str) -> Dict[str, Any]:
@@ -528,14 +533,16 @@ class LearningCollectionService:
         return value if value > 0 else None
 
     def begin_summary_generation(self, collection_id: str) -> Dict[str, Any]:
-        """Validate readiness and mark summary as processing (durable across reloads).
-
-        Returns detail with ``summary_enqueue`` True only when a new job should start.
-        """
+        """Validate readiness and enqueue one durable, idempotent summary job."""
         detail = self.get_collection_detail(collection_id)
-        status = (detail.get("summary_status") or "").strip()
-        if status == "processing":
-            detail["summary_enqueue"] = False
+        active_job = detail.get("summary_job") or {}
+        if active_job.get("status") == "running" and self.repository.fail_expired_summary_job(
+            collection_id
+        ):
+            detail = self.get_collection_detail(collection_id)
+            active_job = detail.get("summary_job") or {}
+        if active_job.get("status") in {"queued", "running"}:
+            detail["summary_created"] = False
             return detail
 
         completed_statuses = {TaskStatus.SUCCESS, TaskStatus.NO_TRANSCRIPT}
@@ -548,12 +555,38 @@ class LearningCollectionService:
         if not sources:
             raise ValueError("no parsed sources available")
 
-        self.repository.mark_summary_processing(collection_id)
+        deadline_seconds = int(
+            self.llm_config.get("collection_summary_deadline_seconds", 720)
+        )
+        if active_job.get("status") == "failed":
+            if self.repository.requeue_summary_job(
+                active_job["job_id"],
+                deadline_seconds=deadline_seconds,
+            ):
+                detail = self.get_collection_detail(collection_id)
+                detail["summary_created"] = True
+                return detail
+            # Another retry may have requeued the same job after our initial read.
+            detail = self.get_collection_detail(collection_id)
+            active_job = detail.get("summary_job") or {}
+            if active_job.get("status") in {"queued", "running"}:
+                detail["summary_created"] = False
+                return detail
+
+        self.repository.enqueue_summary_job(
+            collection_id,
+            deadline_seconds=deadline_seconds,
+        )
         detail = self.get_collection_detail(collection_id)
-        detail["summary_enqueue"] = True
+        detail["summary_created"] = True
         return detail
 
-    def generate_summary(self, collection_id: str) -> Dict[str, Any]:
+    def generate_summary(
+        self,
+        collection_id: str,
+        *,
+        job_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Generate and persist full-series interpretation (safe to run in a worker/thread)."""
         detail = self.get_collection_detail(collection_id)
         completed_statuses = {TaskStatus.SUCCESS, TaskStatus.NO_TRANSCRIPT}
@@ -575,18 +608,40 @@ class LearningCollectionService:
             if self.summary_generator:
                 markdown = self.summary_generator(detail, sources)
             else:
-                markdown = self._generate_summary_with_llm(detail, sources)
+                markdown = self._generate_summary_with_llm(
+                    detail,
+                    sources,
+                    job_id=job_id,
+                )
+            if not str(markdown or "").strip():
+                raise ValueError("collection summary returned empty content")
+            if job_id:
+                self._ensure_summary_job_deadline(job_id)
             description = _derive_collection_description(markdown)
             self.repository.save_summary(collection_id, markdown, description=description)
+            if job_id:
+                self.repository.complete_summary_job(job_id)
             return self.get_collection_detail(collection_id)
         except Exception as exc:
-            self.repository.mark_summary_failed(collection_id, str(exc))
+            persisted_job = (
+                self.repository.get_summary_job_by_id(job_id) if job_id else None
+            )
+            if persisted_job:
+                self.repository.fail_summary_job(job_id, str(exc))
+                self.repository.mark_summary_failed(collection_id, str(exc))
+            elif not job_id:
+                self.repository.mark_summary_failed(collection_id, str(exc))
             raise
 
-    def generate_summary_job(self, collection_id: str) -> None:
+    def generate_summary_job(
+        self,
+        collection_id: str,
+        *,
+        job_id: Optional[str] = None,
+    ) -> None:
         """Background entrypoint: never raise into the ASGI worker after response."""
         try:
-            self.generate_summary(collection_id)
+            self.generate_summary(collection_id, job_id=job_id)
         except Exception as exc:
             logger.exception(
                 "collection summary generation failed: collection={} error={}",
@@ -914,7 +969,11 @@ class LearningCollectionService:
         return ready
 
     def _generate_summary_with_llm(
-        self, collection: Dict[str, Any], sources: List[Dict[str, Any]]
+        self,
+        collection: Dict[str, Any],
+        sources: List[Dict[str, Any]],
+        *,
+        job_id: Optional[str] = None,
     ) -> str:
         model = (
             self.llm_config.get("collection_summary_model")
@@ -934,6 +993,12 @@ class LearningCollectionService:
             sources,
             collection_direct_source_char_limit(self.llm_config),
         ):
+            if job_id:
+                self.repository.update_summary_job_progress(
+                    job_id,
+                    phase="merging",
+                    message="Generating final summary",
+                )
             prompt = build_collection_summary_prompt(collection, sources, content_mode="full")
             markdown = self._call_collection_llm_text(
                 model,
@@ -949,7 +1014,10 @@ class LearningCollectionService:
                 model,
                 reasoning_effort,
                 system_prompt,
+                job_id=job_id,
             )
+        if not str(markdown or "").strip():
+            raise ValueError("collection summary returned empty content")
         return self._repair_summary_coverage(
             collection,
             sources,
@@ -957,6 +1025,7 @@ class LearningCollectionService:
             model,
             reasoning_effort,
             system_prompt,
+            job_id=job_id,
         )
 
     def _generate_layered_summary_with_llm(
@@ -966,50 +1035,137 @@ class LearningCollectionService:
         model: str,
         reasoning_effort: Optional[str],
         system_prompt: str,
+        *,
+        job_id: Optional[str] = None,
     ) -> str:
-        plan_prompt = build_collection_module_plan_prompt(collection, sources)
-        plan_result = call_llm_api(
-            model=model,
-            prompt=plan_prompt,
-            reasoning_effort=reasoning_effort,
-            task_type="collection_module_plan",
-            system_prompt=system_prompt,
-            response_schema=COLLECTION_MODULE_PLAN_SCHEMA,
+        module_model = (
+            self.llm_config.get("collection_summary_module_model")
+            or self.llm_config.get("summary_model")
+            or model
         )
-        modules = normalize_collection_module_plan(
-            getattr(plan_result, "data", None) if getattr(plan_result, "success", False) else None,
-            sources,
-            int(self.llm_config.get(
-                "collection_module_target_source_count",
-                COLLECTION_MODULE_TARGET_SOURCE_COUNT,
-            )),
+        module_reasoning_effort = self.llm_config.get(
+            "collection_summary_module_reasoning_effort",
+            self.llm_config.get("summary_reasoning_effort", reasoning_effort),
         )
-        modules = split_oversized_collection_modules(
-            modules,
-            sources,
-            int(self.llm_config.get(
-                "collection_module_source_char_limit",
-                COLLECTION_MODULE_SOURCE_CHAR_LIMIT,
-            )),
-        )
-        module_markdowns = []
-        for module in modules:
-            module_prompt = build_collection_module_summary_prompt(
-                collection,
-                sources,
-                module,
+        modules = self.repository.list_summary_modules(job_id) if job_id else []
+        if not modules:
+            if job_id:
+                self.repository.update_summary_job_progress(
+                    job_id,
+                    phase="planning",
+                    message="Planning summary modules",
+                )
+                self._ensure_summary_job_deadline(job_id)
+            plan_prompt = build_collection_module_plan_prompt(collection, sources)
+            plan_result = call_llm_api(
+                model=model,
+                prompt=plan_prompt,
+                reasoning_effort=reasoning_effort,
+                task_type="collection_module_plan",
+                system_prompt=system_prompt,
+                response_schema=COLLECTION_MODULE_PLAN_SCHEMA,
             )
-            module_markdowns.append(
-                {
-                    **module,
-                    "markdown": self._call_collection_llm_text(
-                        model,
+            if job_id:
+                self._ensure_summary_job_deadline(job_id)
+            modules = normalize_collection_module_plan(
+                getattr(plan_result, "data", None)
+                if getattr(plan_result, "success", False)
+                else None,
+                sources,
+                int(
+                    self.llm_config.get(
+                        "collection_module_target_source_count",
+                        COLLECTION_MODULE_TARGET_SOURCE_COUNT,
+                    )
+                ),
+            )
+            modules = split_oversized_collection_modules(
+                modules,
+                sources,
+                int(
+                    self.llm_config.get(
+                        "collection_module_source_char_limit",
+                        COLLECTION_MODULE_SOURCE_CHAR_LIMIT,
+                    )
+                ),
+            )
+            modules = [{**module, "index": index} for index, module in enumerate(modules)]
+            if job_id:
+                self.repository.save_summary_plan(job_id, modules)
+
+        pending_modules = [module for module in modules if module.get("status") != "success"]
+        generated_markdowns: Dict[int, str] = {}
+        if pending_modules:
+            max_workers = max(
+                1,
+                min(
+                    len(pending_modules),
+                    int(self.llm_config.get("collection_summary_module_concurrency", 3)),
+                ),
+            )
+
+            def generate_module(module: Dict[str, Any]) -> tuple[int, str]:
+                module_index = int(module.get("index", module.get("module_index", 0)))
+                if job_id:
+                    self._ensure_summary_job_deadline(job_id)
+                    self.repository.mark_summary_module_running(job_id, module_index)
+                try:
+                    module_prompt = build_collection_module_summary_prompt(
+                        collection,
+                        sources,
+                        module,
+                    )
+                    module_markdown = self._call_collection_llm_text(
+                        module_model,
                         module_prompt,
-                        reasoning_effort,
+                        module_reasoning_effort,
                         "collection_module_summary",
                         system_prompt,
-                    ),
+                    )
+                    if job_id:
+                        self._ensure_summary_job_deadline(job_id)
+                    if not str(module_markdown or "").strip():
+                        raise ValueError(f"empty module summary: index={module_index}")
+                    if job_id:
+                        self.repository.complete_summary_module(
+                            job_id,
+                            module_index,
+                            module_markdown,
+                        )
+                    return module_index, module_markdown
+                except Exception as exc:
+                    if job_id:
+                        self.repository.fail_summary_module(job_id, module_index, str(exc))
+                    raise
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(generate_module, module): module
+                    for module in pending_modules
                 }
+                for future in as_completed(futures):
+                    module_index, module_markdown = future.result()
+                    generated_markdowns[module_index] = module_markdown
+
+        module_markdowns = (
+            self.repository.list_summary_modules(job_id) if job_id else modules
+        )
+        if not job_id:
+            module_markdowns = [
+                {
+                    **module,
+                    "markdown": generated_markdowns[
+                        int(module.get("index", module.get("module_index", 0)))
+                    ],
+                }
+                for module in modules
+            ]
+        else:
+            self._ensure_summary_job_deadline(job_id)
+            self.repository.update_summary_job_progress(
+                job_id,
+                phase="merging",
+                message="Merging module summaries",
             )
         final_prompt = build_layered_collection_summary_prompt(
             collection,
@@ -1032,10 +1188,19 @@ class LearningCollectionService:
         model: str,
         reasoning_effort: Optional[str],
         system_prompt: str,
+        *,
+        job_id: Optional[str] = None,
     ) -> str:
         missing = missing_source_positions(markdown, sources)
         if not missing:
             return markdown
+        if job_id:
+            self._ensure_summary_job_deadline(job_id)
+            self.repository.update_summary_job_progress(
+                job_id,
+                phase="repairing",
+                message=f"Repairing coverage for {len(missing)} sources",
+            )
         repair_prompt = build_collection_summary_repair_prompt(
             collection,
             sources,
@@ -1049,6 +1214,26 @@ class LearningCollectionService:
             "collection_summary_repair",
             system_prompt,
         )
+
+    def _ensure_summary_job_deadline(self, job_id: str) -> None:
+        job = self.repository.get_summary_job_by_id(job_id)
+        if not job:
+            raise ValueError("summary job not found")
+        if job.get("status") != "running":
+            raise RuntimeError("summary job is no longer active")
+        raw_deadline = str(job.get("deadline_at") or "").strip()
+        if not raw_deadline:
+            return
+        try:
+            deadline = datetime.fromisoformat(raw_deadline.replace("Z", "+00:00"))
+        except ValueError:
+            return
+        if deadline.tzinfo is not None:
+            now = datetime.now(timezone.utc)
+        else:
+            now = datetime.utcnow()
+        if now >= deadline:
+            raise TimeoutError("collection summary deadline exceeded")
 
     def _call_collection_llm_text(
         self,

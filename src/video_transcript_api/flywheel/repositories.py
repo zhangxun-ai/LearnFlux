@@ -23,6 +23,8 @@ from .models import (
 # --------------------------------------------------------------------------- #
 
 def _dt(value) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value
     return datetime.fromisoformat(value) if value else None
 
 

@@ -6,6 +6,7 @@
 
 import sqlite3
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -86,8 +87,10 @@ async def get_history(
     api_key = user_info.get("api_key", "")
     api_key_masked = audit_logger._mask_api_key(api_key)
     cache_manager = get_cache_manager()
-    cache_db_path = str(cache_manager.db_path)
-    marks_repository = ContentMarkRepository(db_path=cache_db_path)
+    is_postgres = getattr(cache_manager, "_is_postgres", False) is True
+    cache_db_path = str(cache_manager.db_path) if not is_postgres else None
+    database_source = cache_manager.database if is_postgres else cache_db_path
+    marks_repository = ContentMarkRepository(db_path=database_source)
     marks_repository.close()
 
     # 构建 WHERE 条件
@@ -103,11 +106,19 @@ async def get_history(
 
     if start_date:
         conditions.append("a.request_time >= ?")
-        params.append(f"{start_date} 00:00:00")
+        params.append(
+            datetime.fromisoformat(f"{start_date} 00:00:00")
+            if is_postgres
+            else f"{start_date} 00:00:00"
+        )
 
     if end_date:
         conditions.append("a.request_time <= ?")
-        params.append(f"{end_date} 23:59:59")
+        params.append(
+            datetime.fromisoformat(f"{end_date} 23:59:59")
+            if is_postgres
+            else f"{end_date} 23:59:59"
+        )
 
     # 平台和作者过滤来自 cache.db，只有在 JOIN 成功时才有效
     cache_conditions = []
@@ -171,7 +182,7 @@ async def get_history(
                         a.id DESC
                 ) AS rn
             FROM api_audit_logs a
-            LEFT JOIN cache.task_status t
+            LEFT JOIN {'' if is_postgres else 'cache.'}task_status t
                 ON a.task_id = t.task_id
                 OR (
                     a.task_id IS NULL
@@ -179,7 +190,7 @@ async def get_history(
                     AND a.video_url != ''
                     AND a.video_url = t.url
                 )
-            LEFT JOIN cache.content_marks m
+            LEFT JOIN {'' if is_postgres else 'cache.'}content_marks m
                 ON m.owner_type = 'transcript'
                AND m.owner_id = t.view_token
                AND m.user_key = a.api_key_masked
@@ -213,12 +224,16 @@ async def get_history(
     """
 
     def _run_query():
-        # 每次请求新建独立连接（不复用 thread-local），ATTACH 是连接级操作
-        conn = sqlite3.connect(audit_logger.db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
+        conn = (
+            cache_manager.database.connect()
+            if is_postgres
+            else sqlite3.connect(audit_logger.db_path)
+        )
         try:
-            conn.execute(f"ATTACH DATABASE ? AS cache", (cache_db_path,))
-            conn.execute("PRAGMA cache.query_only = 1")
+            if not is_postgres:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute(f"ATTACH DATABASE ? AS cache", (cache_db_path,))
+                conn.execute("PRAGMA cache.query_only = 1")
 
             cur = conn.cursor()
             cur.execute(count_sql, params)
@@ -302,14 +317,20 @@ async def get_filter_options(user_info: dict = Depends(verify_token)):
     api_key = user_info.get("api_key", "")
     api_key_masked = audit_logger._mask_api_key(api_key)
     cache_manager = get_cache_manager()
-    cache_db_path = str(cache_manager.db_path)
+    is_postgres = getattr(cache_manager, "_is_postgres", False) is True
+    cache_db_path = str(cache_manager.db_path) if not is_postgres else None
 
     def _run_query():
-        conn = sqlite3.connect(audit_logger.db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
+        conn = (
+            cache_manager.database.connect()
+            if is_postgres
+            else sqlite3.connect(audit_logger.db_path)
+        )
         try:
-            conn.execute("ATTACH DATABASE ? AS cache", (cache_db_path,))
-            conn.execute("PRAGMA cache.query_only = 1")
+            if not is_postgres:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("ATTACH DATABASE ? AS cache", (cache_db_path,))
+                conn.execute("PRAGMA cache.query_only = 1")
             cur = conn.cursor()
 
             # 历史 webhook 列表（按频次倒序）
@@ -327,23 +348,23 @@ async def get_filter_options(user_info: dict = Depends(verify_token)):
             cur.execute("""
                 SELECT t.platform, COUNT(*) as cnt
                 FROM api_audit_logs a
-                LEFT JOIN cache.task_status t ON a.task_id = t.task_id
+                LEFT JOIN {task_prefix}task_status t ON a.task_id = t.task_id
                 WHERE a.api_key_masked = ? AND t.platform IS NOT NULL
                 GROUP BY t.platform
                 ORDER BY cnt DESC
-            """, (api_key_masked,))
+            """.format(task_prefix="" if is_postgres else "cache."), (api_key_masked,))
             platforms = [row[0] for row in cur.fetchall()]
 
             # 历史频道/作者列表（按频次倒序）
             cur.execute("""
                 SELECT t.author, COUNT(*) as cnt
                 FROM api_audit_logs a
-                LEFT JOIN cache.task_status t ON a.task_id = t.task_id
+                LEFT JOIN {task_prefix}task_status t ON a.task_id = t.task_id
                 WHERE a.api_key_masked = ? AND t.author IS NOT NULL AND t.author != ''
                 GROUP BY t.author
                 ORDER BY cnt DESC
                 LIMIT 50
-            """, (api_key_masked,))
+            """.format(task_prefix="" if is_postgres else "cache."), (api_key_masked,))
             authors = [row[0] for row in cur.fetchall()]
 
             return webhooks, platforms, authors

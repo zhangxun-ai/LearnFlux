@@ -29,6 +29,7 @@ from ..transcriber.control_store import (
 from ..transcriber.online_runtime import OnlineRuntimeSettings
 from ..transcriber.object_store import LocalObjectStore, S3ObjectStore
 from ..transcriber.submission_guard import CloudSubmissionGuard
+from ..persistence import get_persistence_database
 
 # Lazy initialized runtime resources
 _task_queue: asyncio.Queue | None = None
@@ -67,7 +68,7 @@ def get_user_manager():
 @lru_cache
 def get_audit_logger():
     """Audit logger singleton."""
-    return _get_audit_logger_impl()
+    return _get_audit_logger_impl(get_persistence_database())
 
 
 @lru_cache
@@ -81,7 +82,9 @@ def get_transcription_control_store():
     """Return the single task/quote/usage authority for this process."""
     settings = get_online_runtime_settings()
     if settings.persistence_backend == "postgres":
-        return PostgresTranscriptionControlStore(settings.database_url)
+        return PostgresTranscriptionControlStore(
+            database=get_persistence_database()
+        )
     cache_dir = get_config().get("storage", {}).get("cache_dir", "./data/cache")
     return SQLiteTranscriptionControlStore(Path(cache_dir) / "cache.db")
 
@@ -96,11 +99,24 @@ def get_usage_repository():
 
 def get_transcription_control_database(cache_manager=None):
     """Resolve the selected control DB while preserving legacy local callers."""
+    return get_repository_database(cache_manager)
+
+
+def get_repository_database(cache_manager=None):
+    """Return a real database adapter or a concrete legacy SQLite path."""
+
     manager = cache_manager or get_cache_manager()
+    database = getattr(manager, "database", None)
+    if getattr(database, "dialect", None) in {"sqlite", "postgres"}:
+        return database
     repository = getattr(manager, "_task_status_repository", None)
-    if repository is not None and hasattr(repository, "database"):
-        return repository.database
-    return manager.db_path
+    repository_database = getattr(repository, "database", None)
+    if getattr(repository_database, "dialect", None) in {"sqlite", "postgres"}:
+        return repository_database
+    db_path = getattr(manager, "db_path", None)
+    if isinstance(db_path, (str, Path)):
+        return db_path
+    raise RuntimeError("persistence_database_unavailable")
 
 
 @lru_cache
@@ -116,8 +132,9 @@ def get_transcription_object_store():
 @lru_cache
 def get_cache_manager():
     cache_dir = get_config().get("storage", {}).get("cache_dir", "./data/cache")
-    manager = CacheManager(cache_dir)
-    if get_online_runtime_settings().persistence_backend == "postgres":
+    database = get_persistence_database()
+    manager = CacheManager(cache_dir, database=database)
+    if database is not None:
         manager.set_task_status_repository(get_transcription_control_store())
     return manager
 
@@ -141,7 +158,11 @@ def get_llm_coordinator():
     """获取 LLM 协调器（新架构）"""
     config = get_config()
     cache_dir = config.get("storage", {}).get("cache_dir", "./data/cache")
-    return LLMCoordinator(config_dict=config, cache_dir=cache_dir)
+    return LLMCoordinator(
+        config_dict=config,
+        cache_dir=cache_dir,
+        artifact_cache_manager=get_cache_manager(),
+    )
 
 
 def get_task_queue() -> asyncio.Queue:

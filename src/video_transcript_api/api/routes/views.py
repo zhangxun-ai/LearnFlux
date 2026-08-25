@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 import sys
 import threading
@@ -789,6 +790,38 @@ def resolve_export_file_path(cache_dir: str, export_type: str) -> Optional[Path]
     return None
 
 
+def _export_content_from_view(
+    view_data: Dict[str, Any], export_type: str
+) -> Optional[str]:
+    """Read an export section from PostgreSQL-backed data or legacy files."""
+
+    field_map = {
+        "calibrated": "llm_calibrated",
+        "summary": "summary",
+        "comment_insight": "comment_insight",
+    }
+    if export_type in field_map:
+        value = view_data.get(field_map[export_type])
+        if isinstance(value, str) and value:
+            return value
+    elif export_type == "transcript":
+        value = view_data.get("source_transcript")
+        if isinstance(value, str) and value:
+            return value
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False, indent=2)
+    else:
+        return None
+
+    cache_dir = view_data.get("cache_dir")
+    if not cache_dir or not os.path.exists(cache_dir):
+        return None
+    file_path = resolve_export_file_path(cache_dir, export_type)
+    if not file_path or not file_path.exists():
+        return None
+    return file_path.read_text(encoding="utf-8")
+
+
 def get_export_scope_sections(scope: str) -> tuple[str, ...]:
     """Return export section types for a user-facing export scope."""
     return _EXPORT_SCOPE_SECTIONS.get(scope, _EXPORT_SCOPE_SECTIONS["full"])
@@ -1037,24 +1070,21 @@ def handle_page_export(view_data: Dict[str, Any], export_type: str) -> Response:
             status_code=400,
         )
 
-    # 2. 获取缓存目录
-    cache_dir = view_data.get("cache_dir")
-    if not cache_dir or not os.path.exists(cache_dir):
-        return HTMLResponse(
-            content="<html><body><p>缓存文件不存在</p></body></html>",
-            status_code=404,
-        )
-
-    # 3. 根据导出类型确定文件路径
-    file_path = resolve_export_file_path(cache_dir, export_type)
-    if file_path is None:
+    supported_types = {"calibrated", "summary", "comment_insight", "transcript"}
+    if export_type not in supported_types:
         return HTMLResponse(
             content="<html><body><p>不支持的导出类型</p></body></html>",
             status_code=400,
         )
-
-    # 4. 检查文件存在
-    if not file_path or not file_path.exists():
+    try:
+        content = _export_content_from_view(view_data, export_type)
+    except Exception as exc:
+        logger.error(f"读取导出内容失败: type={export_type} error={exc}")
+        return HTMLResponse(
+            content="<html><body><p>读取文件失败</p></body></html>",
+            status_code=500,
+        )
+    if content is None:
         content_type_cn = {
             "calibrated": "校对文本",
             "summary": "总结文本",
@@ -1066,17 +1096,7 @@ def handle_page_export(view_data: Dict[str, Any], export_type: str) -> Response:
             status_code=404,
         )
 
-    # 5. 读取文件并渲染
-    try:
-        content = file_path.read_text(encoding="utf-8")
-    except Exception as exc:
-        logger.error("读取文件失败: %s, 错误: %s", file_path, exc)
-        return HTMLResponse(
-            content="<html><body><p>读取文件失败</p></body></html>",
-            status_code=500,
-        )
-
-    # 6. 将内容渲染为 HTML（Markdown -> HTML）
+    # 将内容渲染为 HTML（Markdown -> HTML）
     body_html = render_markdown_to_html(content)
 
     # 7. 构建完整 HTML 页面
@@ -1180,20 +1200,14 @@ def _normalize_export_content(export_type: str, content: str) -> str:
 
 def build_export_bundle_markdown(view_data: Dict[str, Any], scope: str) -> str:
     """Build a scoped Markdown export from cached section files."""
-    cache_dir = view_data.get("cache_dir")
-    if not cache_dir or not os.path.exists(cache_dir):
-        return ""
-
     sections = []
     for export_type in get_export_scope_sections(scope):
-        file_path = resolve_export_file_path(cache_dir, export_type)
-        if not file_path or not file_path.exists():
-            continue
-
         try:
-            content = file_path.read_text(encoding="utf-8")
+            content = _export_content_from_view(view_data, export_type)
         except Exception as exc:
-            logger.error("读取导出分段失败: %s, 错误: %s", file_path, exc)
+            logger.error(f"读取导出分段失败: {exc}")
+            continue
+        if content is None:
             continue
 
         content = _normalize_export_content(export_type, content).strip()
@@ -1255,26 +1269,24 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
             status_code=400,
         )
 
-    # 2. 获取缓存目录
-    cache_dir = view_data.get("cache_dir")
-    if not cache_dir or not os.path.exists(cache_dir):
-        return Response(
-            content="❌ 缓存文件不存在\n\n该文件可能已被清理。",
-            media_type="text/plain; charset=utf-8",
-            status_code=404,
-        )
-
-    # 3. 根据导出类型确定文件路径（优先 FunASR JSON，降级 CapsWriter TXT）
-    file_path = resolve_export_file_path(cache_dir, export_type)
-    if file_path is None:
+    supported_types = {"calibrated", "summary", "comment_insight", "transcript"}
+    if export_type not in supported_types:
         return Response(
             content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, comment_insight, transcript",
             media_type="text/plain; charset=utf-8",
             status_code=400,
         )
 
-    # 4. 检查文件是否存在
-    if not file_path or not file_path.exists():
+    try:
+        content = _export_content_from_view(view_data, export_type)
+    except Exception as exc:
+        logger.error(f"读取导出内容失败: type={export_type} error={exc}")
+        return Response(
+            content="❌ 读取文件失败，请稍后重试",
+            media_type="text/plain; charset=utf-8",
+            status_code=500,
+        )
+    if content is None:
         content_type_cn = {
             "calibrated": "校对文本",
             "summary": "总结文本",
@@ -1288,17 +1300,7 @@ def handle_raw_export(view_data: Dict[str, Any], export_type: str) -> Response:
             status_code=404,
         )
 
-    # 5. 读取文件内容
-    try:
-        content = file_path.read_text(encoding="utf-8")
-        content = _normalize_export_content(export_type, content)
-    except Exception as exc:
-        logger.error("读取文件失败: %s, 错误: %s", file_path, exc)
-        return Response(
-            content="❌ 读取文件失败，请稍后重试",
-            media_type="text/plain; charset=utf-8",
-            status_code=500,
-        )
+    content = _normalize_export_content(export_type, content)
 
     # 6. 返回纯文本响应，附带元数据头
     vt = view_data.get("view_token", "unknown")[:20]
@@ -1454,14 +1456,6 @@ async def export_content(view_token: str, export_type: str, request: Request):
                 status_code=404,
             )
 
-        cache_dir = view_data.get("cache_dir")
-        if not cache_dir or not os.path.exists(cache_dir):
-            return Response(
-                content="❌ 缓存文件不存在\n\n该文件可能已被清理。",
-                media_type="text/plain; charset=utf-8",
-                status_code=404,
-            )
-
         if export_type == "bundle":
             scope = request.query_params.get("scope", "full")
             content = build_export_bundle_markdown(view_data, scope)
@@ -1497,15 +1491,28 @@ async def export_content(view_token: str, export_type: str, request: Request):
                 },
             )
 
-        file_path = resolve_export_file_path(cache_dir, export_type)
-        if file_path is None:
+        supported_types = {
+            "calibrated", "summary", "comment_insight", "transcript"
+        }
+        if export_type not in supported_types:
             return Response(
                 content=f"❌ 不支持的导出类型: {export_type}\n\n支持的类型: calibrated, summary, comment_insight, transcript",
                 media_type="text/plain; charset=utf-8",
                 status_code=400,
             )
 
-        if not file_path or not file_path.exists():
+        try:
+            content = _export_content_from_view(view_data, export_type)
+        except Exception as exc:
+            logger.error(
+                "读取导出内容失败: type=%s error=%s", export_type, exc
+            )
+            return Response(
+                content="❌ 读取文件失败，请稍后重试",
+                media_type="text/plain; charset=utf-8",
+                status_code=500,
+            )
+        if content is None:
             content_type_cn = {
                 "calibrated": "校对文本",
                 "summary": "总结文本",
@@ -1518,16 +1525,7 @@ async def export_content(view_token: str, export_type: str, request: Request):
                 status_code=404,
             )
 
-        try:
-            content = file_path.read_text(encoding="utf-8")
-            content = _normalize_export_content(export_type, content)
-        except Exception as exc:
-            logger.error("读取文件失败: %s, 错误: %s", file_path, exc)
-            return Response(
-                content="❌ 读取文件失败，请稍后重试",
-                media_type="text/plain; charset=utf-8",
-                status_code=500,
-            )
+        content = _normalize_export_content(export_type, content)
 
         title = view_data.get("title", "未命名")
         platform = view_data.get("platform", "unknown")
@@ -1759,8 +1757,31 @@ async def view_transcript(
                 "duration_display": view_data.get("duration_display"),
             }
 
-            if cache_dir and os.path.exists(cache_dir):
-                cache_dir_path = Path(cache_dir)
+            source_transcript = view_data.get("source_transcript")
+            if isinstance(source_transcript, str):
+                stats["original_length"] = len(source_transcript)
+            elif isinstance(source_transcript, dict):
+                try:
+                    from ...transcriber import FunASRSpeakerClient
+
+                    stats["original_length"] = len(
+                        FunASRSpeakerClient().format_transcript_with_speakers(
+                            source_transcript
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Unable to measure PostgreSQL transcript: {exc}"
+                    )
+            calibrated_value = view_data.get("llm_calibrated")
+            if isinstance(calibrated_value, str):
+                stats["calibrated_length"] = len(calibrated_value)
+            summary_value = view_data.get("summary")
+            if isinstance(summary_value, str):
+                stats["summary_length"] = len(summary_value)
+
+            cache_dir_path = Path(cache_dir) if cache_dir else None
+            if cache_dir_path is not None and cache_dir_path.exists():
 
                 # 1. 计算原始转录字数
                 funasr_file = cache_dir_path / "transcript_funasr.json"
@@ -1818,7 +1839,16 @@ async def view_transcript(
                         logger.error(f"计算总结文本字数失败: {exc}")
 
             # 4. 读取校准质量统计
-            processed_file = cache_dir_path / "llm_processed.json" if cache_dir else None
+            processed_data = view_data.get("llm_processed")
+            if isinstance(processed_data, dict):
+                cal_stats = processed_data.get("calibration_stats")
+                if cal_stats:
+                    stats["calibration_stats"] = cal_stats
+            processed_file = (
+                cache_dir_path / "llm_processed.json"
+                if cache_dir_path is not None
+                else None
+            )
             if processed_file and processed_file.exists():
                 try:
                     import json
@@ -1830,9 +1860,14 @@ async def view_transcript(
                 except Exception as exc:
                     logger.error(f"读取校准统计失败: {exc}")
 
-            fallback_text = view_data.get("transcript", "")
-            transcript_path = Path(cache_dir) / "llm_calibrated.txt"
-            if transcript_path.exists():
+            fallback_text = (
+                view_data.get("llm_calibrated")
+                or view_data.get("transcript", "")
+            )
+            transcript_path = (
+                Path(cache_dir) / "llm_calibrated.txt" if cache_dir else None
+            )
+            if transcript_path is not None and transcript_path.exists():
                 fallback_text = transcript_path.read_text(encoding="utf-8")
 
             # 简化渲染逻辑：直接调用 render_with_cache_analysis

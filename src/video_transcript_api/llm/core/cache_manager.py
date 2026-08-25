@@ -13,13 +13,14 @@ logger = setup_logger(__name__)
 class CacheManager:
     """缓存管理器（关键信息和说话人映射）"""
 
-    def __init__(self, cache_dir: str):
+    def __init__(self, cache_dir: str, artifact_cache_manager=None):
         """初始化缓存管理器
 
         Args:
             cache_dir: 缓存目录路径（与现有系统一致）
         """
         self.cache_dir = Path(cache_dir)
+        self.artifact_cache_manager = artifact_cache_manager
 
     def _get_video_cache_dir(self, platform: str, media_id: str) -> Path:
         """获取视频缓存目录（复用现有逻辑）
@@ -52,6 +53,13 @@ class CacheManager:
         Returns:
             关键信息字典，如果不存在则返回 None
         """
+        if (
+            self.artifact_cache_manager is not None
+            and self.artifact_cache_manager._is_postgres
+        ):
+            return self.artifact_cache_manager.get_json_artifact(
+                platform, media_id, "key_info"
+            )
         cache_dir = self._get_video_cache_dir(platform, media_id)
         key_info_file = cache_dir / "key_info.json"
 
@@ -72,6 +80,18 @@ class CacheManager:
             media_id: 媒体 ID
             key_info: 关键信息字典
         """
+        if (
+            self.artifact_cache_manager is not None
+            and self.artifact_cache_manager._is_postgres
+        ):
+            self.artifact_cache_manager.save_json_artifact(
+                platform,
+                media_id,
+                "key_info",
+                "key_info.json",
+                key_info,
+            )
+            return
         cache_dir = self._get_video_cache_dir(platform, media_id)
         cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -95,6 +115,13 @@ class CacheManager:
         Returns:
             说话人映射字典，如果不存在则返回 None
         """
+        if (
+            self.artifact_cache_manager is not None
+            and self.artifact_cache_manager._is_postgres
+        ):
+            return self.artifact_cache_manager.get_json_artifact(
+                platform, media_id, "speaker_mapping"
+            )
         cache_dir = self._get_video_cache_dir(platform, media_id)
         mapping_file = cache_dir / "speaker_mapping.json"
 
@@ -117,6 +144,18 @@ class CacheManager:
             media_id: 媒体 ID
             speaker_mapping: 说话人映射字典
         """
+        if (
+            self.artifact_cache_manager is not None
+            and self.artifact_cache_manager._is_postgres
+        ):
+            self.artifact_cache_manager.save_json_artifact(
+                platform,
+                media_id,
+                "speaker_mapping",
+                "speaker_mapping.json",
+                speaker_mapping,
+            )
+            return
         cache_dir = self._get_video_cache_dir(platform, media_id)
         cache_dir.mkdir(parents=True, exist_ok=True)
 

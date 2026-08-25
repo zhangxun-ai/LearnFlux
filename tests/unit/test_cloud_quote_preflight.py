@@ -21,7 +21,7 @@ def cloud_config():
             "provider": "aliyun",
             "model": "fun-asr-2025-11-07",
             "price_cny_per_second": "0.00022",
-            "price_verified_at": "2026-07-21",
+            "price_verified_at": "2026-08-23",
             "poll_interval_seconds": 1,
             "poll_timeout_seconds": 300,
         }
@@ -410,3 +410,63 @@ def test_duplicate_cloud_confirmation_is_idempotently_accepted(tmp_path, monkeyp
 
     assert first_owner
     assert duplicate_owner is False
+
+
+def test_duplicate_cloud_confirmation_after_dispatch_is_idempotently_accepted(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "cache.db"
+    repository = CloudQuoteRepository(db_path)
+    repository.create(
+        NewCloudQuote(
+            task_id="task-confirm-dispatched",
+            media_ref="cloud_quotes/task/input.m4a",
+            media_sha256="0" * 64,
+            duration_seconds=Decimal("15"),
+            billable_seconds=15,
+            model="fun-asr-2025-11-07",
+            unit_price=Decimal("0.00022"),
+            max_cost=Decimal("0.00330"),
+        ),
+        token="quote-token",
+    )
+    monkeypatch.setattr(
+        transcription, "cache_manager", SimpleNamespace(db_path=db_path)
+    )
+
+    assert transcription.claim_cloud_quote_confirmation(
+        "task-confirm-dispatched", "quote-token", Decimal("0.00330")
+    )
+    repository.claim_queued("task-confirm-dispatched", "dispatcher")
+    repository.mark_consumed("task-confirm-dispatched", attempt_no=1)
+
+    assert transcription.claim_cloud_quote_confirmation(
+        "task-confirm-dispatched", "quote-token", Decimal("0.00330")
+    ) is False
+
+
+def test_unconfirmed_quote_still_rejects_a_wrong_confirmation_token(
+    tmp_path, monkeypatch
+):
+    db_path = tmp_path / "cache.db"
+    CloudQuoteRepository(db_path).create(
+        NewCloudQuote(
+            task_id="task-confirm-wrong-token",
+            media_ref="cloud_quotes/task/input.m4a",
+            media_sha256="0" * 64,
+            duration_seconds=Decimal("15"),
+            billable_seconds=15,
+            model="fun-asr-2025-11-07",
+            unit_price=Decimal("0.00022"),
+            max_cost=Decimal("0.00330"),
+        ),
+        token="correct-token",
+    )
+    monkeypatch.setattr(
+        transcription, "cache_manager", SimpleNamespace(db_path=db_path)
+    )
+
+    with pytest.raises(CloudQuoteConflict, match="quote_token_mismatch"):
+        transcription.claim_cloud_quote_confirmation(
+            "task-confirm-wrong-token", "wrong-token", Decimal("0.00330")
+        )

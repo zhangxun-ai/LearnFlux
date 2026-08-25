@@ -189,6 +189,11 @@
 }
 .hist-card:hover { box-shadow: 0 4px 14px var(--shadow-light); transform: translateY(-1px); }
 .hist-card[hidden] { display: none; }
+.hist-card.is-clickable { cursor: pointer; }
+.hist-card.is-clickable:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
 
 .hist-icon {
     flex-shrink: 0;
@@ -262,6 +267,34 @@
 .status-badge.s-running { background: var(--loading-bg); color: var(--loading-text); }
 .status-badge.s-failed  { background: var(--error-bg); color: var(--error-text); }
 .status-badge.s-queued  { background: var(--bg-tertiary); color: var(--text-secondary); }
+.status-badge.s-action  { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+
+.hist-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 420px;
+}
+.hist-progress-track {
+    flex: 1;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--bg-tertiary);
+}
+.hist-progress-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent-primary);
+    transition: width 0.25s ease;
+}
+.hist-progress-value {
+    min-width: 34px;
+    color: var(--text-tertiary);
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+}
 
 .hist-meta {
     display: flex;
@@ -304,6 +337,11 @@
     transition: all 0.15s ease;
 }
 .hist-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.hist-btn.primary {
+    background: var(--accent-primary);
+    color: #fff;
+}
+.hist-btn.primary:hover { filter: brightness(0.94); color: #fff; }
 .hist-btn.danger:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
 .hist-btn[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
 

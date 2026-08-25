@@ -38,6 +38,24 @@ def test_processing_page_reports_local_fallback_immediately_after_selection():
     assert "已选择本地免费，正在启动本地转录…" in source
 
 
+def test_processing_page_disables_cloud_confirmation_after_first_click():
+    source = (TEMPLATE_DIR / "processing.html").read_text(encoding="utf-8")
+
+    assert "let quoteActionPending = false;" in source
+    assert "if (quoteActionPending) return;" in source
+    assert "button.dataset.action = action;" in source
+    assert 'confirmButton.textContent = "已确认";' in source
+    assert "confirmButton.disabled = true;" in source
+    assert 'document.getElementById("progress-stage").textContent = "云端转录排队中";' in source
+    assert "确认已生效，请勿重复操作。" not in source
+    assert "云端转录已确认，正在排队" not in source
+    assert (
+        'quoteActionPending && progress.stage === "awaiting_cloud_confirmation"'
+        in source
+    )
+    assert 'progress.stage !== "awaiting_cloud_confirmation"' in source
+
+
 def test_processing_page_offers_a_confirmed_cancel_action():
     source = (TEMPLATE_DIR / "processing.html").read_text(encoding="utf-8")
 

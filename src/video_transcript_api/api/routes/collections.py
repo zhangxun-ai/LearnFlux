@@ -110,7 +110,10 @@ class LocalPathImportRequest(BaseModel):
 def get_collection_service() -> LearningCollectionService:
     control_database = get_transcription_control_database(cache_manager)
     repository = LearningCollectionRepository(db_path=control_database)
-    if getattr(repository.database, "dialect", "sqlite") == "postgres":
+    if (
+        getattr(repository.database, "dialect", "sqlite") == "postgres"
+        and cache_manager.db_path is not None
+    ):
         import_result = repository.import_legacy_sqlite_if_target_empty(
             cache_manager.db_path
         )

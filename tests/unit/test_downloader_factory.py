@@ -100,6 +100,7 @@ class TestXiaohongshuRouting:
         "https://xiaohongshu.com/explore/abc123",
         "https://xhslink.com/abc123",
         "http://xhslink.com/abc123",
+        "https://xhslink.cn/o/8oQdw7Hu4YC",
     ])
     def test_xiaohongshu_urls(self, url):
         downloader = create_downloader(url)

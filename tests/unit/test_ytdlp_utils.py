@@ -336,6 +336,59 @@ class TestBuildDownloadOpts:
 class TestCookieAvailability:
     """Test is_cookie_available and cookie path resolution."""
 
+    def test_browser_cookie_source_is_available_without_export_file(self):
+        """Browser cookies should be passed directly to yt-dlp."""
+        config = {
+            "ytdlp": {
+                "youtube_cookie": {
+                    "enabled": True,
+                    "source": "browser",
+                    "browser": "chrome",
+                }
+            }
+        }
+        builder = YtdlpConfigBuilder(config)
+
+        assert builder.is_cookie_available() is True
+        opts = builder.build_info_opts(use_cookie=True)
+        assert opts["cookiesfrombrowser"] == ("chrome",)
+        assert "cookiefile" not in opts
+        assert "extractor_args" not in opts
+
+    def test_browser_cookie_profile_is_forwarded_to_ytdlp(self):
+        """An optional profile path must remain part of the browser source."""
+        config = {
+            "ytdlp": {
+                "youtube_cookie": {
+                    "enabled": True,
+                    "source": "browser",
+                    "browser": "chrome",
+                    "browser_profile": "Default",
+                }
+            }
+        }
+        builder = YtdlpConfigBuilder(config)
+
+        opts = builder.build_download_opts("/tmp/test.%(ext)s", use_cookie=True)
+        assert opts["cookiesfrombrowser"] == ("chrome", "Default")
+
+    def test_unknown_browser_cookie_source_is_not_available(self):
+        """Invalid browser names must not be passed into yt-dlp."""
+        config = {
+            "ytdlp": {
+                "youtube_cookie": {
+                    "enabled": True,
+                    "source": "browser",
+                    "browser": "unknown-browser",
+                }
+            }
+        }
+        builder = YtdlpConfigBuilder(config)
+
+        assert builder.is_cookie_available() is False
+        opts = builder.build_info_opts(use_cookie=True)
+        assert "cookiesfrombrowser" not in opts
+
     def test_cookie_available_when_valid(self, tmp_path):
         future_ts = str(int(time.time()) + 86400)
         cookie_file = tmp_path / "cookies.txt"
@@ -433,6 +486,7 @@ class TestCookieAvailability:
         builder = YtdlpConfigBuilder(config)
         opts = builder.build_info_opts(use_cookie=False)
         assert "cookiefile" not in opts
+        assert "cookiesfrombrowser" not in opts
 
 
 class TestConfigSummary:
@@ -459,3 +513,19 @@ class TestConfigSummary:
         assert "Cookie enabled: True" in summary
         assert "Cookie file: /some/path.txt" in summary
         assert "Fallback mode: True" in summary
+
+    def test_summary_with_browser_cookie_enabled(self):
+        config = {
+            "ytdlp": {
+                "youtube_cookie": {
+                    "enabled": True,
+                    "source": "browser",
+                    "browser": "chrome",
+                }
+            }
+        }
+        builder = YtdlpConfigBuilder(config)
+
+        summary = builder.get_config_summary()
+        assert "Cookie source: browser" in summary
+        assert "Cookie browser: chrome" in summary

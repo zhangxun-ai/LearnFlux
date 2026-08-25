@@ -381,12 +381,22 @@ def claim_cloud_quote_confirmation(
     task_id: str, quote_token: str, accepted_cost: Decimal
 ) -> bool:
     """Atomically authorize one cloud continuation before returning HTTP 202."""
-    _, created = CloudQuoteRepository(
+    repository = CloudQuoteRepository(
         get_transcription_control_database(cache_manager)
-    ).confirm_and_queue(
-        task_id, quote_token, accepted_cost
     )
-    return created
+    try:
+        _, created = repository.confirm_and_queue(
+            task_id, quote_token, accepted_cost
+        )
+        return created
+    except CloudQuoteConflict:
+        # Once the dispatcher starts, the one-time token is intentionally
+        # cleared. A delayed duplicate click must still observe the original
+        # successful authorization instead of leaking quote_token_mismatch.
+        quote = repository.get(task_id)
+        if quote.status in {"confirmed_queued", "confirming", "consumed"}:
+            return False
+        raise
 
 
 def cancel_cloud_quote(task_id: str) -> bool:
@@ -857,7 +867,10 @@ def _queue_xiaohongshu_article_deep_learning(
     from ...flywheel.text_acquisition import fetch_note_detail, normalize_note_url
 
     normalized_url = normalize_note_url(url)
-    if "xiaohongshu.com" not in normalized_url and "xhslink.com" not in normalized_url:
+    if not any(
+        domain in normalized_url
+        for domain in ("xiaohongshu.com", "xhslink.com", "xhslink.cn")
+    ):
         return None
 
     fetcher = note_fetcher or fetch_note_detail

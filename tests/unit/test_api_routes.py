@@ -354,6 +354,7 @@ class TestUploadTranscribeEndpoint:
         assert audit_kwargs["task_id"] == "task-abc-123"
         assert audit_kwargs["status_code"] == 202
 
+
     def test_upload_transcribe_sets_local_file_title_for_processing_view(
         self, client, mock_cache_manager, tmp_path
     ):
@@ -402,6 +403,73 @@ class TestUploadTranscribeEndpoint:
         second_media_id = second_call.kwargs["media_id"]
         assert first_media_id == second_media_id
         assert first_media_id.startswith("local_")
+
+
+class TestConfirmCloudQuote:
+    """Tests for the paid cloud confirmation endpoint."""
+
+    def test_first_confirmation_reports_newly_accepted(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.get_task_by_id.return_value = {
+            "task_id": "task-cloud",
+            "owner_user_id": "test-user",
+            "status": "awaiting_cloud_confirmation",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.tasks.claim_cloud_quote_confirmation",
+            return_value=True,
+        ), patch(
+            "video_transcript_api.api.routes.tasks.get_cloud_asr_dispatcher"
+        ):
+            response = client.post(
+                "/api/task/task-cloud/cloud-confirm",
+                json={
+                    "quote_token": "fresh-token",
+                    "accepted_max_cost_cny": "0.10",
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.json()["data"] == {
+            "task_id": "task-cloud",
+            "already_confirmed": False,
+        }
+
+    def test_already_confirmed_request_returns_idempotent_success(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.get_task_by_id.return_value = {
+            "task_id": "task-cloud",
+            "owner_user_id": "test-user",
+            "status": "processing",
+        }
+
+        with patch(
+            "video_transcript_api.api.routes.tasks.claim_cloud_quote_confirmation",
+            return_value=False,
+        ) as confirm, patch(
+            "video_transcript_api.api.routes.tasks.get_cloud_asr_dispatcher"
+        ) as get_dispatcher:
+            response = client.post(
+                "/api/task/task-cloud/cloud-confirm",
+                json={
+                    "quote_token": "already-consumed-token",
+                    "accepted_max_cost_cny": "0.10",
+                },
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 202
+        assert body["message"] == "云端转录已确认，任务正在处理"
+        assert body["data"] == {
+            "task_id": "task-cloud",
+            "already_confirmed": True,
+        }
+        confirm.assert_called_once()
+        get_dispatcher.return_value.notify.assert_called_once_with("task-cloud")
 
 
 class TestGetTaskStatus:
@@ -463,6 +531,22 @@ class TestGetTaskStatus:
         assert body["data"]["progress"]["stage"] == "downloading"
         assert body["data"]["progress"]["percent"] == 22
 
+    def test_task_status_accepts_persisted_progress_json_during_cutover(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.get_task_by_id.return_value = self._row(
+            status="processing",
+            progress=None,
+            progress_json='{"stage":"transcribing","percent":64}',
+        )
+
+        body = client.get("/api/task/task-1").json()
+
+        assert body["data"]["progress"] == {
+            "stage": "transcribing",
+            "percent": 64,
+        }
+
     def test_task_calibrating_returns_202(self, client, mock_cache_manager):
         # NEW state: transcript done, LLM calibration still running.
         mock_cache_manager.get_task_by_id.return_value = self._row(status="calibrating")
@@ -495,6 +579,77 @@ class TestGetTaskStatus:
         assert body["code"] == 500
         assert body["data"]["status"] == "failed"
         assert body["data"]["error"] == "ASR timeout"
+
+
+class TestListRecentTasks:
+    """Tests for GET /api/tasks, the durable recent-task source."""
+
+    def test_returns_owner_scoped_tasks_with_sanitized_progress(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.list_recent_tasks.return_value = [
+            {
+                "task_id": "task-cloud",
+                "view_token": "view-cloud",
+                "url": "https://example.com/cloud",
+                "status": "awaiting_cloud_confirmation",
+                "title": "Cloud task",
+                "author": "",
+                "platform": "generic",
+                "use_speaker_recognition": 0,
+                "created_at": "2026-08-24T00:00:00+00:00",
+                "updated_at": "2026-08-24T00:01:00+00:00",
+                "completed_at": None,
+                "progress": {
+                    "stage": "awaiting_cloud_confirmation",
+                    "stage_label": "Waiting for cloud cost confirmation",
+                    "percent": 0,
+                    "evidence": {
+                        "cloud_quote": {
+                            "max_cost_cny": "0.10362",
+                            "quote_token": "must-not-leak",
+                        }
+                    },
+                },
+            }
+        ]
+
+        response = client.get("/api/tasks?limit=20&offset=0")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["data"]["items"][0]["task_id"] == "task-cloud"
+        quote = body["data"]["items"][0]["progress"]["evidence"]["cloud_quote"]
+        assert quote["max_cost_cny"] == "0.10362"
+        assert "quote_token" not in quote
+        assert body["data"]["has_more"] is False
+        mock_cache_manager.list_recent_tasks.assert_called_once_with(
+            owner_user_id="test-user",
+            include_unowned=False,
+            limit=21,
+            offset=0,
+        )
+
+    def test_reports_has_more_without_returning_the_probe_row(
+        self, client, mock_cache_manager
+    ):
+        mock_cache_manager.list_recent_tasks.return_value = [
+            {
+                "task_id": f"task-{index}",
+                "view_token": f"view-{index}",
+                "url": f"https://example.com/{index}",
+                "status": "success",
+            }
+            for index in range(3)
+        ]
+
+        body = client.get("/api/tasks?limit=2").json()
+
+        assert [item["task_id"] for item in body["data"]["items"]] == [
+            "task-0",
+            "task-1",
+        ]
+        assert body["data"]["has_more"] is True
 
 
 class TestDeleteTask:

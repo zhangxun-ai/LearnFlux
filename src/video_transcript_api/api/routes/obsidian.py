@@ -38,7 +38,7 @@ from ...obsidian.paths import (
 )
 from ...obsidian.service import ObsidianSyncService
 from ...study.repository import StudyRepository
-from ..context import get_cache_manager, get_config
+from ..context import get_cache_manager, get_config, get_repository_database
 from ..services.transcription import TranscribeResponse, verify_token
 
 router = APIRouter(prefix="/api/obsidian", tags=["obsidian"])
@@ -123,7 +123,9 @@ def get_obsidian_sync_service() -> ObsidianSyncService:
     return ObsidianSyncService(
         vault_id=str(settings["vault_id"]),
         vault_path=str(settings["vault_path"]),
-        repository=StudyRepository(db_path=str(cache_manager.db_path)),
+        repository=StudyRepository(
+            db_path=get_repository_database(cache_manager)
+        ),
         now_provider=lambda: datetime.now().astimezone().isoformat(
             timespec="seconds"
         ),
@@ -131,7 +133,10 @@ def get_obsidian_sync_service() -> ObsidianSyncService:
 
 
 def get_obsidian_knowledge_repository() -> ObsidianKnowledgeRepository:
-    return ObsidianKnowledgeRepository(get_cache_manager().db_path)
+    cache_manager = get_cache_manager()
+    return ObsidianKnowledgeRepository(
+        get_repository_database(cache_manager)
+    )
 
 
 def get_obsidian_knowledge_service() -> ObsidianKnowledgeService:

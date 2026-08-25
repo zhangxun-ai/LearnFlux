@@ -27,6 +27,7 @@ from ...flywheel.repositories import (
 )
 from ...flywheel.text_acquisition import acquire_text, normalize_note_url
 from ...utils.logging import setup_logger
+from ...persistence import get_persistence_database
 
 logger = setup_logger("flywheel_service")
 
@@ -40,7 +41,10 @@ def repos() -> dict:
     if _repos is None:
         with _lock:
             if _repos is None:
-                db = FlywheelDB()
+                db = FlywheelDB(
+                    get_persistence_database()
+                    or "./data/flywheel/flywheel.db"
+                )
                 prompt = SqlitePromptTemplateRepository(db)
                 prompt.seed_defaults(DEFAULT_PROMPTS)
                 for media_type, body in DEFAULT_PROMPTS.items():

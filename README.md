@@ -511,6 +511,7 @@ uv run --extra dev pytest
 | --- | --- |
 | [文档中心](docs/README.md) | 全部文档导航 |
 | [系统架构](docs/architecture.md) | 模块与数据流 |
+| [PostgreSQL 持久化与数据迁移](docs/guides/postgresql.md) | SQLite 无损迁移、验收与回滚 |
 | [API Quick Start](docs/guides/api/quickstart.md) | 下游客户端接入 |
 | [通知配置](docs/guides/notification.md) | 企微 / 飞书等通知 |
 | [多用户配置](docs/guides/multi_user_setup.md) | 多 Key / 多用户 |

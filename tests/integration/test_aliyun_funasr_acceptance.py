@@ -52,7 +52,7 @@ MANIFEST_PATH = (
 )
 RUN_ROOT = FIXTURE_ROOT / "aliyun_funasr_acceptance"
 PRICE = Decimal("0.00022")
-PRICE_VERIFIED_AT = "2026-07-21"
+PRICE_VERIFIED_AT = "2026-08-23"
 
 
 @dataclass(frozen=True)

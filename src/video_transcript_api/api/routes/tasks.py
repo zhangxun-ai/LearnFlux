@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import hashlib
+import json
 import os
 import uuid
 from decimal import Decimal, InvalidOperation
@@ -11,6 +12,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     UploadFile,
 )
@@ -71,6 +73,82 @@ def _require_task_owner(task_info: dict, user_info: dict, *, paid_action: bool) 
     if owner is None and not paid_action:
         return
     raise HTTPException(status_code=403, detail="task_access_denied")
+
+
+def _decode_task_progress(task_info: dict) -> dict | None:
+    """Read progress from either the API alias or the persisted JSON field."""
+
+    progress = task_info.get("progress")
+    if progress is None:
+        progress = task_info.get("progress_json")
+    if isinstance(progress, str):
+        try:
+            progress = json.loads(progress)
+        except (TypeError, ValueError):
+            return None
+    return dict(progress) if isinstance(progress, dict) else None
+
+
+def _history_progress(task_info: dict) -> dict | None:
+    """Return task-list progress without a cloud confirmation credential."""
+
+    raw_progress = _decode_task_progress(task_info)
+    if not raw_progress:
+        return None
+    progress = {
+        key: raw_progress[key]
+        for key in (
+            "stage",
+            "stage_label",
+            "percent",
+            "basis",
+            "confidence",
+            "eta_seconds",
+            "message",
+        )
+        if raw_progress.get(key) is not None
+    }
+    evidence = raw_progress.get("evidence")
+    if isinstance(evidence, dict):
+        quote = evidence.get("cloud_quote")
+        if isinstance(quote, dict):
+            safe_quote = {
+                key: quote[key]
+                for key in (
+                    "duration_seconds",
+                    "billable_seconds",
+                    "unit_price_cny_per_second",
+                    "max_cost_cny",
+                )
+                if quote.get(key) is not None
+            }
+            if safe_quote:
+                progress["evidence"] = {"cloud_quote": safe_quote}
+    return progress
+
+
+def _task_history_item(task_info: dict) -> dict:
+    """Build the stable, non-sensitive task summary consumed by the homepage."""
+
+    fields = (
+        "task_id",
+        "view_token",
+        "url",
+        "status",
+        "title",
+        "author",
+        "platform",
+        "use_speaker_recognition",
+        "created_at",
+        "updated_at",
+        "completed_at",
+        "error_message",
+    )
+    item = {field: task_info.get(field) for field in fields}
+    progress = _history_progress(task_info)
+    if progress:
+        item["progress"] = progress
+    return item
 
 
 @router.post("/transcribe", response_model=TranscribeResponse)
@@ -217,7 +295,10 @@ async def transcribe_video(
                         title = "Bilibili视频转录"
                     elif "xiaoyuzhoufm.com" in display_url:
                         title = "小宇宙播客转录"
-                    elif "xiaohongshu.com" in display_url or "xhslink.com" in display_url:
+                    elif any(
+                        domain in display_url
+                        for domain in ("xiaohongshu.com", "xhslink.com", "xhslink.cn")
+                    ):
                         title = "小红书内容转录"
                     elif "douyin.com" in display_url:
                         title = "抖音视频转录"
@@ -412,7 +493,7 @@ async def confirm_cloud_quote(
         raise HTTPException(status_code=404, detail="task_not_found")
     _require_task_owner(task_info, user_info, paid_action=True)
     try:
-        claim_cloud_quote_confirmation(
+        created = claim_cloud_quote_confirmation(
             task_id, request_body.quote_token, accepted_cost
         )
     except (CloudQuoteConflict, RuntimeError, ValueError) as exc:
@@ -424,8 +505,12 @@ async def confirm_cloud_quote(
         pass
     return TranscribeResponse(
         code=202,
-        message="云端转录确认已受理",
-        data={"task_id": task_id},
+        message=(
+            "云端转录确认已受理"
+            if created
+            else "云端转录已确认，任务正在处理"
+        ),
+        data={"task_id": task_id, "already_confirmed": not created},
     )
 
 
@@ -508,6 +593,37 @@ async def cancel_task(
     )
 
 
+@router.get("/tasks", response_model=TranscribeResponse)
+async def list_recent_tasks(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    user_info: dict = Depends(verify_token),
+):
+    """Return the authenticated user's durable recent transcription tasks."""
+
+    include_unowned = bool(
+        user_info.get("is_legacy") or user_info.get("user_id") == "legacy_user"
+    )
+    rows = cache_manager.list_recent_tasks(
+        owner_user_id=user_info.get("user_id"),
+        include_unowned=include_unowned,
+        limit=limit + 1,
+        offset=offset,
+    )
+    has_more = len(rows) > limit
+    items = [_task_history_item(row) for row in rows[:limit]]
+    return TranscribeResponse(
+        code=200,
+        message="最近任务",
+        data={
+            "items": items,
+            "limit": limit,
+            "offset": offset,
+            "has_more": has_more,
+        },
+    )
+
+
 @router.get("/task/{task_id}", response_model=TranscribeResponse)
 async def get_task_status(
     task_id: str,
@@ -559,8 +675,9 @@ async def get_task_status(
             "platform": task_info.get("platform"),
             "completed_at": task_info.get("completed_at"),
         }
-        if task_info.get("progress"):
-            data["progress"] = task_info.get("progress")
+        progress = _decode_task_progress(task_info)
+        if progress:
+            data["progress"] = progress
         if status == TaskStatus.FAILED:
             data["error"] = task_info.get("error_message") or "任务处理失败"
 

@@ -23,6 +23,34 @@
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
                 <span class="nav-label">边播边学</span>
             </a>
+            <div class="nav-branch {% if shell_path.startswith('/review') %}is-expanded{% endif %}">
+                <div class="nav-branch-row">
+                    <a class="nav-item {% if shell_path.startswith('/review') %}is-active{% endif %}" href="/review" data-nav-parent="true">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M7 7h5"/><path d="M12 17h5"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/></svg></span>
+                        <span class="nav-label">复盘</span>
+                    </a>
+                    <button class="nav-branch-toggle" type="button" aria-expanded="{% if shell_path.startswith('/review') %}true{% else %}false{% endif %}" aria-controls="nav-review-children" aria-label="{% if shell_path.startswith('/review') %}收起{% else %}展开{% endif %}复盘二级导航">
+                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                    </button>
+                </div>
+                <nav class="nav-subitems" id="nav-review-children" aria-label="复盘二级导航">
+                    <a class="nav-subitem {% if shell_path == '/review' or shell_path == '/review/' or shell_path == '/review/daily' or shell_path == '/review/daily/' %}is-active{% endif %}" href="/review/daily" data-aliases="/review" data-nav-match="exact" data-review-section="daily" {% if shell_path == '/review' or shell_path == '/review/' or shell_path == '/review/daily' or shell_path == '/review/daily/' %}aria-current="page"{% endif %}>
+                        <span class="nav-label">今日复盘</span>
+                    </a>
+                    <a class="nav-subitem {% if shell_path == '/review/weekly' or shell_path == '/review/weekly/' %}is-active{% endif %}" href="/review/weekly" data-nav-match="exact" data-review-section="weekly" {% if shell_path == '/review/weekly' or shell_path == '/review/weekly/' %}aria-current="page"{% endif %}>
+                        <span class="nav-label">周度复盘</span>
+                    </a>
+                    <a class="nav-subitem {% if shell_path == '/review/monthly' or shell_path == '/review/monthly/' %}is-active{% endif %}" href="/review/monthly" data-nav-match="exact" data-review-section="monthly" {% if shell_path == '/review/monthly' or shell_path == '/review/monthly/' %}aria-current="page"{% endif %}>
+                        <span class="nav-label">月度复盘</span>
+                    </a>
+                    <a class="nav-subitem {% if shell_path == '/review/annual' or shell_path == '/review/annual/' %}is-active{% endif %}" href="/review/annual" data-nav-match="exact" data-review-section="annual" {% if shell_path == '/review/annual' or shell_path == '/review/annual/' %}aria-current="page"{% endif %}>
+                        <span class="nav-label">年度复盘</span>
+                    </a>
+                    <a class="nav-subitem {% if shell_path == '/review/insights' or shell_path == '/review/insights/' %}is-active{% endif %}" href="/review/insights" data-nav-match="exact" data-review-section="insights" {% if shell_path == '/review/insights' or shell_path == '/review/insights/' %}aria-current="page"{% endif %}>
+                        <span class="nav-label">内在洞察</span>
+                    </a>
+                </nav>
+            </div>
         </div>
     </section>
     <section class="nav-group" data-group="flow" aria-labelledby="nav-flow-label">

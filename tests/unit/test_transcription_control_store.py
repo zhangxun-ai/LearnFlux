@@ -187,6 +187,79 @@ def test_cache_manager_uses_explicit_task_store_without_changing_local_default(
     assert task_by_view is not None
     assert task_by_view["task_id"] == created["task_id"]
     assert task_by_view["progress_json"]["stage"] == "acquiring_content"
+    assert task_by_view["progress"]["stage"] == "acquiring_content"
+    view_data = manager.get_view_data_by_token(created["view_token"])
+    assert view_data["status"] == "processing"
+    assert view_data["progress"]["stage"] == "acquiring_content"
+
+
+def test_explicit_task_store_initializes_progress_and_lists_by_owner(tmp_path) -> None:
+    store = _store(tmp_path)
+    owned = store.create_task(
+        url="https://example.com/owned",
+        platform="generic",
+        media_id="owned-1",
+        owner_user_id="user-1",
+    )
+    legacy = store.create_task(
+        url="https://example.com/legacy",
+        platform="generic",
+        media_id="legacy-1",
+    )
+    other = store.create_task(
+        url="https://example.com/other",
+        platform="generic",
+        media_id="other-1",
+        owner_user_id="user-2",
+    )
+
+    created = store.get_task_by_id(owned["task_id"])
+    assert created["progress"]["stage"] == "queued"
+    assert created["progress"]["percent"] == 0
+
+    private_items = store.list_recent_tasks(
+        owner_user_id="user-1",
+        include_unowned=False,
+        limit=20,
+        offset=0,
+    )
+    assert {item["task_id"] for item in private_items} == {owned["task_id"]}
+
+    legacy_items = store.list_recent_tasks(
+        owner_user_id="user-1",
+        include_unowned=True,
+        limit=20,
+        offset=0,
+    )
+    assert {item["task_id"] for item in legacy_items} == {
+        owned["task_id"],
+        legacy["task_id"],
+    }
+    assert other["task_id"] not in {item["task_id"] for item in legacy_items}
+
+
+def test_local_cache_manager_lists_tasks_by_owner_for_sqlite_compatibility(
+    tmp_path,
+) -> None:
+    manager = CacheManager(cache_dir=str(tmp_path / "cache"))
+    owned = manager.create_task(
+        url="https://example.com/sqlite-owned",
+        owner_user_id="user-1",
+    )
+    manager.create_task(
+        url="https://example.com/sqlite-other",
+        owner_user_id="user-2",
+    )
+
+    items = manager.list_recent_tasks(
+        owner_user_id="user-1",
+        include_unowned=False,
+        limit=20,
+        offset=0,
+    )
+
+    assert [item["task_id"] for item in items] == [owned["task_id"]]
+    assert items[0]["progress"]["stage"] == "queued"
 
 
 def test_no_transcript_is_terminal_in_the_explicit_task_store(tmp_path) -> None:

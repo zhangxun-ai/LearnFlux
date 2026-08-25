@@ -183,7 +183,7 @@ class URLExtractor {
         // 已知视频平台域名加分
         const videoDomains = [
             'youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv',
-            'xiaohongshu.com', 'xhslink.com', 'douyin.com', 'v.douyin.com',
+            'xiaohongshu.com', 'xhslink.com', 'xhslink.cn', 'douyin.com', 'v.douyin.com',
             'xiaoyuzhoufm.com', 'tiktok.com', 'vm.tiktok.com'
         ];
 
@@ -318,6 +318,34 @@ class APIManager {
         return await response.json();
     }
 
+    /**
+     * 获取 PostgreSQL/服务端保存的最近任务。
+     */
+    static async getTaskHistory(limit = APP_CONFIG.MAX_HISTORY_ITEMS, offset = 0) {
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+
+        if (!token) {
+            throw new Error('请先设置API访问令牌');
+        }
+
+        const query = new URLSearchParams({
+            limit: String(limit),
+            offset: String(offset)
+        });
+        const response = await fetch(`/api/tasks?${query.toString()}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: '查询失败' }));
+            throw new Error(errorData.message || errorData.detail || `HTTP ${response.status}`);
+        }
+
+        return await response.json();
+    }
+
     static async confirmCloudQuote(taskId, quoteToken, maxCost) {
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
         const response = await fetch(`/api/task/${encodeURIComponent(taskId)}/cloud-confirm`, {
@@ -440,6 +468,8 @@ class APIManager {
     }
 }
 
+let taskHistoryServerSyncPromise = null;
+
 /**
  * 任务历史管理类
  */
@@ -470,17 +500,9 @@ class TaskHistoryManager {
                 status: taskData.status || 'submitted'
             };
 
-            // 基于URL去重：相同URL只保留最新的记录
-            const existingUrlIndex = history.findIndex(task => task.url === newTask.url);
-            let isDuplicate = false;
-            let oldTask = null;
-
-            if (existingUrlIndex !== -1) {
-                // 如果已存在相同URL的任务，移除旧的记录
-                oldTask = history[existingUrlIndex];
-                history.splice(existingUrlIndex, 1);
-                isDuplicate = true;
-            }
+            // 每次提交都是独立任务。相同链接只提示重复，不再删除旧任务入口。
+            const oldTask = history.find(task => task.url === newTask.url) || null;
+            const isDuplicate = Boolean(oldTask);
 
             // 将新任务添加到最前面
             history.unshift(newTask);
@@ -510,6 +532,79 @@ class TaskHistoryManager {
      */
     static getHistory() {
         return StorageManager.get(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY) || [];
+    }
+
+    static timestampFromServer(value) {
+        if (!value) return Date.now();
+        const parsed = Date.parse(String(value));
+        return Number.isNaN(parsed) ? Date.now() : parsed;
+    }
+
+    static serverTaskToHistoryEntry(task, cached) {
+        const source = cached || {};
+        const url = task.url || source.url || '';
+        const type = (
+            url.startsWith('local://') && !isLocalMediaHistoryItem({ url, title: task.title })
+                ? 'file'
+                : 'video'
+        );
+        return Object.assign({}, source, {
+            id: task.task_id,
+            view_token: task.view_token,
+            url: url,
+            title: task.title || source.title || this.extractTitleFromURL(url),
+            author: task.author || source.author || '',
+            platform: task.platform || source.platform || '',
+            type: type,
+            timestamp: this.timestampFromServer(task.created_at),
+            status: task.status || source.status || 'queued',
+            progress: normalizeHistoryProgress(task.progress),
+            error_message: task.error_message || '',
+            completed_at: task.completed_at || null,
+            updated_at: task.updated_at || null,
+            useSpeakerRecognition: Boolean(task.use_speaker_recognition),
+            serverBacked: true
+        });
+    }
+
+    /**
+     * 用服务端任务表恢复最近解析；localStorage 仅保留为快速首屏缓存。
+     */
+    static async syncFromServer(options = {}) {
+        let token = null;
+        try { token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN); } catch (e) { return false; }
+        if (!token) return false;
+        if (taskHistoryServerSyncPromise) return taskHistoryServerSyncPromise;
+
+        taskHistoryServerSyncPromise = APIManager.getTaskHistory().then((response) => {
+            const raw = (response && (response.data || response)) || {};
+            const tasks = Array.isArray(raw.items) ? raw.items : [];
+            const cachedHistory = this.getHistory();
+            const serverEntries = tasks.map((task) => {
+                const cached = cachedHistory.find((entry) => entry && entry.id === task.task_id)
+                    || cachedHistory.find((entry) => entry && entry.view_token === task.view_token);
+                return this.serverTaskToHistoryEntry(task, cached);
+            });
+
+            // 帖子洞察等非转录产物暂时仍由各自模块管理；转录任务完全以服务端为准。
+            const clientOnlyEntries = cachedHistory.filter((entry) => (
+                entry && entry.result_id && !entry.view_token
+            ));
+            const merged = serverEntries.concat(clientOnlyEntries)
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                .slice(0, APP_CONFIG.MAX_HISTORY_ITEMS);
+
+            StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, merged);
+            if (options.render !== false) this.renderHistory();
+            return true;
+        }).catch((error) => {
+            console.warn('服务端任务历史同步失败，暂时使用浏览器缓存:', error.message);
+            return false;
+        }).finally(() => {
+            taskHistoryServerSyncPromise = null;
+        });
+
+        return taskHistoryServerSyncPromise;
     }
 
     /**
@@ -549,7 +644,7 @@ class TaskHistoryManager {
                 return 'YouTube视频';
             } else if (hostname.includes('bilibili.com')) {
                 return 'Bilibili视频';
-            } else if (hostname.includes('xiaohongshu.com')) {
+            } else if (hostname.includes('xiaohongshu.com') || hostname.includes('xhslink.')) {
                 return '小红书内容';
             } else if (hostname.includes('douyin.com')) {
                 return '抖音视频';
@@ -595,7 +690,7 @@ class TaskHistoryManager {
                 const statusOk = statusFilter === 'all'
                     || (statusFilter === 'done' && sc === 'done')
                     || (statusFilter === 'failed' && sc === 'failed')
-                    || (statusFilter === 'running' && (sc === 'running' || sc === 'queued'));
+                    || (statusFilter === 'running' && (sc === 'running' || sc === 'queued' || sc === 'action'));
                 return typeOk && statusOk && inDateRange(task.timestamp, dateFilter);
             })
             .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
@@ -979,7 +1074,7 @@ function classifyContent(url) {
         return { type: 'video', platform: 'weixin', label: '微信公众号', action: '深度学习解析', soon: false };
     }
     // 小红书内容
-    if (host === 'xiaohongshu.com' || host === 'xhslink.com') {
+    if (host === 'xiaohongshu.com' || host === 'xhslink.com' || host === 'xhslink.cn') {
         return { type: 'video', platform: 'xiaohongshu', label: '小红书内容', action: '深度学习解析', soon: false };
     }
     // 视频平台
@@ -1004,10 +1099,42 @@ function statusInfo(status, type) {
     const s = (status || '').toString().toLowerCase();
     if (type === 'post') return { cls: 'done', text: '已完成' };
     if (['done', 'completed', 'success', 'finished'].includes(s)) return { cls: 'done', text: '已完成' };
+    if (s === 'no_transcript') return { cls: 'failed', text: '无可转录内容' };
+    if (s === 'canceled') return { cls: 'failed', text: '已取消' };
     if (['failed', 'error', 'fail'].includes(s)) return { cls: 'failed', text: '失败' };
-    if (['processing', 'running', 'transcribing', 'in_progress'].includes(s)) return { cls: 'running', text: '处理中' };
-    if (['queued', 'pending', 'submitted'].includes(s)) return { cls: 'running', text: '处理中' };
+    if (s === 'awaiting_cloud_confirmation') return { cls: 'action', text: '待确认费用' };
+    if (['processing', 'running', 'transcribing', 'in_progress', 'calibrating'].includes(s)) return { cls: 'running', text: '处理中' };
+    if (['queued', 'pending', 'submitted'].includes(s)) return { cls: 'queued', text: '排队中' };
     return { cls: 'queued', text: '已提交' };
+}
+
+function normalizeHistoryProgress(rawProgress) {
+    if (!rawProgress || typeof rawProgress !== 'object' || Array.isArray(rawProgress)) return null;
+    const progress = {};
+    ['stage', 'stage_label', 'percent', 'basis', 'confidence', 'eta_seconds', 'message'].forEach((key) => {
+        if (rawProgress[key] !== undefined && rawProgress[key] !== null) progress[key] = rawProgress[key];
+    });
+    const evidence = rawProgress.evidence;
+    if (evidence && typeof evidence === 'object' && !Array.isArray(evidence)) {
+        const quote = evidence.cloud_quote;
+        if (quote && typeof quote === 'object' && !Array.isArray(quote)) {
+            progress.evidence = {
+                cloud_quote: {
+                    duration_seconds: quote.duration_seconds,
+                    billable_seconds: quote.billable_seconds,
+                    unit_price_cny_per_second: quote.unit_price_cny_per_second,
+                    max_cost_cny: quote.max_cost_cny
+                }
+            };
+        }
+    }
+    return progress;
+}
+
+function formatHistoryCost(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0) return '';
+    return amount.toFixed(2);
 }
 
 /** 相对时间 */
@@ -1105,6 +1232,13 @@ function buildHistoryCard(task) {
     const description = compactText(task.description || '', 140);
     const summaryPreview = compactText(task.summaryPreview || '', 180);
     const originalPreview = compactText(task.original_text || '', 140);
+    const progress = normalizeHistoryProgress(task.progress);
+    const progressValue = progress ? Number(progress.percent) : NaN;
+    const hasProgressValue = Number.isFinite(progressValue);
+    const progressPercent = hasProgressValue ? Math.max(0, Math.min(100, Math.round(progressValue))) : null;
+    const progressLabel = progress && (progress.stage_label || progress.message) || '';
+    const quote = progress && progress.evidence && progress.evidence.cloud_quote || {};
+    const quoteCost = formatHistoryCost(quote.max_cost_cny);
 
     const isLocalSource = String(task.url || '').startsWith('local://');
     let host = isLocalSource ? (task.title || '本地文件') : '链接';
@@ -1112,19 +1246,23 @@ function buildHistoryCard(task) {
         if (!isLocalSource) host = new URL(task.url).hostname.replace(/^www\./, '');
     } catch (e) { /* keep fallback */ }
 
-    // 动作按状态：失败→重试；处理中→禁用；成功→查看结果。
+    // 每个转录任务从创建起都使用同一个稳定页面；完成后该页面直接显示结果。
     // 仅「帖子洞察」产物（result_id）进入 /post；深度学习任务始终走 /view 或工作台。
+    const taskHref = task.view_token ? `/view/${encodeURIComponent(task.view_token)}` : '';
     let viewBtn;
-    if (st.cls === 'failed') {
+    if (task.result_id) {
         viewBtn = task.result_id
-            ? `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url || '')}">重试</a>`
-            : `<a class="hist-btn" href="/add_task_by_web">重试</a>`;
-    } else if (st.cls === 'running' || st.cls === 'queued') {
-        viewBtn = `<a class="hist-btn" aria-disabled="true">处理中</a>`;
-    } else if (task.result_id) {
-        viewBtn = `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">查看</a>`;
-    } else if (task.view_token) {
-        viewBtn = `<a class="hist-btn" href="/view/${task.view_token}" target="_blank">查看</a>`;
+            ? `<a class="hist-btn" href="/post?view=${encodeURIComponent(task.result_id)}">查看</a>`
+            : `<a class="hist-btn" href="/post?url=${encodeURIComponent(task.url || '')}">重试</a>`;
+    } else if (taskHref) {
+        const label = st.cls === 'done'
+            ? '查看结果'
+            : (st.cls === 'action'
+                ? '查看并确认'
+                : (st.cls === 'failed' ? '查看详情' : '查看进度'));
+        viewBtn = `<a class="hist-btn${st.cls === 'action' ? ' primary' : ''}" href="${escapeAttr(taskHref)}">${label}</a>`;
+    } else if (st.cls === 'failed') {
+        viewBtn = `<a class="hist-btn" href="/add_task_by_web">重试</a>`;
     } else {
         viewBtn = `<a class="hist-btn" href="/add_task_by_web">重新提交</a>`;
     }
@@ -1137,14 +1275,27 @@ function buildHistoryCard(task) {
     if (task.useSpeakerRecognition) tags.push('<span class="hist-feature-tag">说话人识别</span>');
     if (task.includeComments) tags.push('<span class="hist-feature-tag">评论洞察</span>');
 
-    let previewText = summaryPreview || description || originalPreview;
+    let previewText = '';
+    if (st.cls === 'action') {
+        previewText = quoteCost
+            ? `云端音频已准备好，预计费用上限 ¥${quoteCost}，确认后才会开始转录。`
+            : '云端音频已准备好，请确认费用后继续转录。';
+    } else if (st.cls === 'running' || st.cls === 'queued') {
+        previewText = progressLabel || '任务已保存，正在等待后台处理。';
+    } else {
+        previewText = summaryPreview || description || originalPreview;
+    }
     if (!previewText && histType === 'video' && task.view_token && st.cls === 'done' && !task.summaryPreviewLoaded) {
         previewText = '正在加载摘要预览...';
-    } else if (!previewText && st.cls === 'running') {
-        previewText = '任务完成后会显示内容摘要，方便回看和定位。';
     } else if (!previewText) {
         previewText = cls.action || '暂无内容预览';
     }
+    const progressHtml = (st.cls === 'running' || st.cls === 'queued') && progressPercent !== null
+        ? `<div class="hist-progress" aria-label="任务进度 ${progressPercent}%">
+                <div class="hist-progress-track"><span style="width: ${progressPercent}%"></span></div>
+                <span class="hist-progress-value">${progressPercent}%</span>
+           </div>`
+        : '';
 
     const card = document.createElement('div');
     card.className = 'hist-card fade-in';
@@ -1161,6 +1312,7 @@ function buildHistoryCard(task) {
                     </div>
                     ${author ? `<div class="hist-author">作者：${escapeHtml(author)}</div>` : ''}
                     <div class="hist-preview">${escapeHtml(previewText)}</div>
+                    ${progressHtml}
                     <div class="hist-meta">
                         <span class="hist-source">${isLocalSource ? escapeHtml(host) : `<a href="${escapeAttr(task.url)}" target="_blank" rel="noopener">${escapeHtml(host)}</a>`}</span>
                         <span class="hist-time">${timeStr}</span>
@@ -1174,6 +1326,22 @@ function buildHistoryCard(task) {
                     <button class="hist-btn danger" onclick="TaskHistoryManager.deleteTask('${jsAttr(task.id)}')">删除</button>
                 </div>
             `;
+    if (taskHref) {
+        card.classList.add('is-clickable');
+        card.setAttribute('role', 'link');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', `${st.cls === 'done' ? '查看结果' : '查看任务进度'}：${task.title || '未命名'}`);
+        const openTask = () => window.location.assign(taskHref);
+        card.addEventListener('click', (event) => {
+            if (event.target.closest('a, button, input, select, textarea')) return;
+            openTask();
+        });
+        card.addEventListener('keydown', (event) => {
+            if (event.target !== card || !['Enter', ' '].includes(event.key)) return;
+            event.preventDefault();
+            openTask();
+        });
+    }
     return card;
 }
 
@@ -1239,14 +1407,20 @@ function applyTaskStatusToEntry(entry, raw) {
             changed = true;
         }
     }
-    ['title', 'author', 'platform', 'view_token', 'completed_at'].forEach((key) => {
+    ['title', 'author', 'platform', 'view_token', 'completed_at', 'updated_at'].forEach((key) => {
         if (raw[key] && entry[key] !== raw[key]) {
             entry[key] = raw[key];
             changed = true;
         }
     });
-    if (raw.error_message && entry.error_message !== raw.error_message) {
-        entry.error_message = raw.error_message;
+    const errorMessage = raw.error_message || raw.error;
+    if (errorMessage && entry.error_message !== errorMessage) {
+        entry.error_message = errorMessage;
+        changed = true;
+    }
+    const nextProgress = normalizeHistoryProgress(raw.progress || raw.progress_json);
+    if (nextProgress && JSON.stringify(entry.progress || null) !== JSON.stringify(nextProgress)) {
+        entry.progress = nextProgress;
         changed = true;
     }
     return changed;
@@ -1985,11 +2159,6 @@ async function submitTranscription(event) {
             previewContainer.hidden = true;
             previewContainer.innerHTML = '';
 
-            // 3秒后跳转到查看页面
-            setTimeout(() => {
-                window.open(`/view/${response.data.view_token}`, '_blank');
-            }, 3000);
-
         } else {
             throw new Error(response.message || '提交失败');
         }
@@ -2129,6 +2298,17 @@ function initializePage() {
 
     // 渲染任务历史
     TaskHistoryManager.renderHistory();
+    TaskHistoryManager.syncFromServer();
+
+    // 从其他页面返回或重新激活标签页时，再从 PostgreSQL 恢复最新状态。
+    window.addEventListener('pageshow', () => {
+        TaskHistoryManager.syncFromServer();
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            TaskHistoryManager.syncFromServer();
+        }
+    });
 
     // 初始化主题系统
     ThemeManager.initialize();

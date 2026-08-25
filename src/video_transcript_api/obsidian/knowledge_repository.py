@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,17 +17,31 @@ class KnowledgeRevisionConflict(Exception):
 
 
 class ObsidianKnowledgeRepository:
-    def __init__(self, db_path: str | Path):
-        self.db_path = str(db_path)
+    def __init__(self, db_path: str | Path | object):
+        self.database = db_path if hasattr(db_path, "connect") else None
+        raw_path = getattr(db_path, "path", None) if self.database else db_path
+        self.db_path = str(raw_path) if raw_path else None
         self._initialize()
 
-    def _connection(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+    @contextmanager
+    def _connection(self):
+        if self.database is not None:
+            connection = self.database.connect()
+        else:
+            connection = sqlite3.connect(self.db_path)
+            connection.row_factory = sqlite3.Row
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _initialize(self) -> None:
-        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        if self.db_path:
+            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._connection() as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS obsidian_knowledge_bindings (

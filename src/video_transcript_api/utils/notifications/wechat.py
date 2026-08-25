@@ -255,7 +255,10 @@ class WechatNotifier:
         返回:
             str: 清洗后的URL
         """
-        if "xiaohongshu.com" in url or "xhslink.com" in url:
+        if any(
+            domain in url
+            for domain in ("xiaohongshu.com", "xhslink.com", "xhslink.cn")
+        ):
             # 只保留 xsec_token 参数
             if "?" in url:
                 base, query = url.split("?", 1)

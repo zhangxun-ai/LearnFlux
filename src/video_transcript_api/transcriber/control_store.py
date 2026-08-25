@@ -196,13 +196,18 @@ class _TranscriptionControlStore:
         task_id = str(uuid.uuid4())
         view_token = secrets.token_urlsafe(24)
         now = datetime.now(UTC)
+        progress = build_progress(
+            stage="queued",
+            basis="task_created",
+            confidence="high",
+        )
         with self.database.transaction() as connection:
             connection.execute(
                 """INSERT INTO task_status
                 (task_id, view_token, url, owner_user_id, status, platform,
                  media_id, use_speaker_recognition, download_url, source_file_path,
-                 created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)""",
+                 progress_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     task_id,
                     view_token,
@@ -213,6 +218,7 @@ class _TranscriptionControlStore:
                     int(use_speaker_recognition),
                     download_url,
                     source_file_path,
+                    json.dumps(progress, ensure_ascii=False),
                     _iso(now),
                     _iso(now),
                 ),
@@ -382,6 +388,41 @@ class _TranscriptionControlStore:
 
     def get_task_by_id(self, task_id: str) -> dict[str, object] | None:
         return self.get_task(task_id)
+
+    def list_recent_tasks(
+        self,
+        *,
+        owner_user_id: str | None,
+        include_unowned: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, object]]:
+        """Return recent tasks visible to one authenticated owner."""
+
+        safe_limit = max(1, min(int(limit), 500))
+        safe_offset = max(0, int(offset))
+        if owner_user_id and include_unowned:
+            where_sql = "(owner_user_id = ? OR owner_user_id IS NULL)"
+            parameters: tuple[object, ...] = (owner_user_id,)
+        elif owner_user_id:
+            where_sql = "owner_user_id = ?"
+            parameters = (owner_user_id,)
+        else:
+            where_sql = "owner_user_id IS NULL"
+            parameters = ()
+
+        connection = self.database.connect()
+        try:
+            rows = connection.execute(
+                f"""SELECT * FROM task_status
+                WHERE {where_sql}
+                ORDER BY created_at DESC, task_id DESC
+                LIMIT ? OFFSET ?""",
+                parameters + (safe_limit, safe_offset),
+            ).fetchall()
+        finally:
+            connection.close()
+        return [self._task_from_row(row) for row in rows]
 
     def update_task_progress(
         self,
@@ -866,9 +907,17 @@ class _TranscriptionControlStore:
         progress = task.get("progress_json")
         if isinstance(progress, str):
             try:
-                task["progress_json"] = json.loads(progress)
+                progress = json.loads(progress)
             except (TypeError, ValueError):
-                task["progress_json"] = None
+                progress = None
+        elif isinstance(progress, Mapping):
+            progress = dict(progress)
+        else:
+            progress = None
+        # Keep the storage-shaped key for internal compatibility while also
+        # exposing the API contract consumed by task and view routes.
+        task["progress_json"] = progress
+        task["progress"] = progress
         return task
 
     @staticmethod
@@ -897,5 +946,15 @@ class SQLiteTranscriptionControlStore(_TranscriptionControlStore):
 class PostgresTranscriptionControlStore(_TranscriptionControlStore):
     """PostgreSQL authority for SaaS transcription control state."""
 
-    def __init__(self, dsn: str, *, lease_seconds: int = 60) -> None:
-        super().__init__(PostgresControlDatabase(dsn), lease_seconds=lease_seconds)
+    def __init__(
+        self,
+        dsn: str | None = None,
+        *,
+        database: PostgresControlDatabase | None = None,
+        lease_seconds: int = 60,
+    ) -> None:
+        if database is None:
+            if not dsn:
+                raise ValueError("postgres_dsn_required")
+            database = PostgresControlDatabase(dsn)
+        super().__init__(database, lease_seconds=lease_seconds)

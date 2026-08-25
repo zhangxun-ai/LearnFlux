@@ -22,7 +22,13 @@ cd "$SCRIPT_DIR" || exit 1
 CONFIG_FILE="config/config.jsonc"
 PID_FILE="data/server.pid"
 LOG_FILE="data/logs/server.out.log"
-LAUNCHD_LABEL="com.codex.vta.devserver"
+LOG_FILE_ABS="$SCRIPT_DIR/$LOG_FILE"
+LAUNCHD_LABEL="${LEARNFLUX_LAUNCHD_LABEL:-com.learnflux.local}"
+LEGACY_LAUNCHD_LABEL="com.codex.vta.devserver"
+LAUNCH_AGENT_DIR="${LEARNFLUX_LAUNCH_AGENT_DIR:-${HOME}/Library/LaunchAgents}"
+LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/$LAUNCHD_LABEL.plist"
+PYTHON_BIN="${LEARNFLUX_PYTHON_BIN:-$(command -v python3 2>/dev/null || true)}"
+UV_BIN="${LEARNFLUX_UV_BIN:-$(command -v uv 2>/dev/null || true)}"
 STOP_TIMEOUT_SECONDS="${STOP_TIMEOUT_SECONDS:-10}"
 
 # 从配置读取端口（取第一个 "port": NNNN，即 api.port），读取失败回退 8000
@@ -54,14 +60,99 @@ alive_pids() {
     done
 }
 
-# 移除 Codex 调试时可能留下的 launchctl 临时服务，避免 kill 后被 launchd 拉起
-remove_launchd_job() {
-    if command -v launchctl >/dev/null 2>&1; then
-        launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" >/dev/null 2>&1 || return 0
-        warn "检测到 launchctl 临时服务，先移除: $LAUNCHD_LABEL"
-        launchctl remove "$LAUNCHD_LABEL" 2>/dev/null || true
-        sleep 1
+# macOS 使用正式的用户 LaunchAgent，避免服务依附于启动它的终端或 Codex 会话。
+use_launchd() {
+    command -v launchctl >/dev/null 2>&1 || return 1
+    [ "${LEARNFLUX_FORCE_LAUNCHD:-0}" = "1" ] || [ "$(uname -s)" = "Darwin" ]
+}
+
+launchd_domain() { printf 'gui/%s\n' "$(id -u)"; }
+
+launchd_job_loaded() {
+    local label="${1:-$LAUNCHD_LABEL}"
+    use_launchd || return 1
+    launchctl print "$(launchd_domain)/$label" >/dev/null 2>&1
+}
+
+install_launch_agent() {
+    if [ -z "$PYTHON_BIN" ] || [ ! -x "$PYTHON_BIN" ]; then
+        err "未找到可执行的 python3，无法生成 LaunchAgent 配置"
+        return 1
     fi
+    if [ -z "$UV_BIN" ] || [ ! -x "$UV_BIN" ]; then
+        err "未找到可执行的 uv，无法启动服务"
+        return 1
+    fi
+
+    mkdir -p "$LAUNCH_AGENT_DIR" "$(dirname "$LOG_FILE_ABS")"
+    "$PYTHON_BIN" - \
+        "$LAUNCH_AGENT_FILE" \
+        "$LAUNCHD_LABEL" \
+        "$SCRIPT_DIR" \
+        "$UV_BIN" \
+        "$LOG_FILE_ABS" \
+        "${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}" <<'PY'
+import os
+import plistlib
+import sys
+
+plist_path, label, working_dir, uv_bin, log_path, path_value = sys.argv[1:]
+service = {
+    "Label": label,
+    "ProgramArguments": [uv_bin, "run", "python", "main.py", "--start"],
+    "WorkingDirectory": working_dir,
+    "RunAtLoad": True,
+    "KeepAlive": True,
+    "ThrottleInterval": 5,
+    "ProcessType": "Interactive",
+    "StandardOutPath": log_path,
+    "StandardErrorPath": log_path,
+    "EnvironmentVariables": {
+        "PATH": path_value,
+        "PYTHONUNBUFFERED": "1",
+    },
+}
+temporary_path = f"{plist_path}.tmp"
+with open(temporary_path, "wb") as handle:
+    plistlib.dump(service, handle, sort_keys=False)
+os.replace(temporary_path, plist_path)
+PY
+    chmod 644 "$LAUNCH_AGENT_FILE"
+}
+
+start_launchd_service() {
+    local domain
+    domain="$(launchd_domain)"
+    install_launch_agent || return 1
+
+    if launchd_job_loaded "$LAUNCHD_LABEL"; then
+        launchctl kickstart -k "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1
+        return $?
+    fi
+
+    if launchctl bootstrap "$domain" "$LAUNCH_AGENT_FILE" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # 清理由同名旧配置造成的半加载状态后重试一次。
+    launchctl bootout "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1 || true
+    launchctl bootstrap "$domain" "$LAUNCH_AGENT_FILE" >/dev/null 2>&1
+}
+
+remove_launchd_jobs() {
+    local domain label
+    use_launchd || return 0
+    domain="$(launchd_domain)"
+
+    for label in "$LAUNCHD_LABEL" "$LEGACY_LAUNCHD_LABEL"; do
+        if launchd_job_loaded "$label"; then
+            warn "卸载后台服务: $label"
+            launchctl bootout "$domain/$label" >/dev/null 2>&1 \
+                || launchctl remove "$label" >/dev/null 2>&1 \
+                || true
+        fi
+    done
+    rm -f "$LAUNCH_AGENT_FILE"
 }
 
 # ---------- 启动 ----------
@@ -75,16 +166,25 @@ start() {
     mkdir -p "$(dirname "$LOG_FILE")" "$(dirname "$PID_FILE")"
     info "启动服务 (端口 $PORT) ..."
 
-    # 后台启动；stdout/stderr 追加到日志文件
-    nohup uv run python main.py --start >>"$LOG_FILE" 2>&1 &
-    echo $! > "$PID_FILE"
+    if use_launchd; then
+        info "使用 macOS LaunchAgent 保持服务持续运行"
+        if ! start_launchd_service; then
+            err "LaunchAgent 注册失败"
+            return 1
+        fi
+        rm -f "$PID_FILE"
+    else
+        # 非 macOS 平台保留后台启动路径。
+        nohup "$UV_BIN" run python main.py --start >>"$LOG_FILE" 2>&1 &
+        echo $! > "$PID_FILE"
+    fi
 
     # 等待端口就绪，最多约 30 秒
     local i=0
     while [ "$i" -lt 30 ]; do
         if is_running; then
             ok "启动成功  ->  http://localhost:$PORT"
-            info "日志: ./server.sh log    （文件: $LOG_FILE）"
+            info "日志: ./server.sh log    （文件: ${LOG_FILE}）"
             return 0
         fi
         sleep 1
@@ -93,20 +193,29 @@ start() {
 
     err "启动超时，端口 $PORT 未就绪。最近日志如下："
     tail -n 30 "$LOG_FILE" 2>/dev/null
-    # 清理可能挂起的进程
-    [ -f "$PID_FILE" ] && kill "$(cat "$PID_FILE")" 2>/dev/null
+    if use_launchd; then
+        remove_launchd_jobs
+    elif [ -f "$PID_FILE" ]; then
+        kill "$(cat "$PID_FILE")" 2>/dev/null
+    fi
     rm -f "$PID_FILE"
     return 1
 }
 
 # ---------- 停止 ----------
 stop() {
-    if ! is_running && [ ! -f "$PID_FILE" ]; then
+    local has_launchd=0
+    if launchd_job_loaded "$LAUNCHD_LABEL" \
+        || launchd_job_loaded "$LEGACY_LAUNCHD_LABEL" \
+        || [ -f "$LAUNCH_AGENT_FILE" ]; then
+        has_launchd=1
+    fi
+
+    if ! is_running && [ ! -f "$PID_FILE" ] && [ "$has_launchd" -eq 0 ]; then
         warn "服务未运行"
         return 0
     fi
     info "停止服务 ..."
-    remove_launchd_job
 
     # 收集要终止的 PID：端口监听者（真正占用 8000 的 uvicorn 进程）+ PID 文件记录的父进程
     local pids
@@ -116,6 +225,9 @@ stop() {
 $(cat "$PID_FILE" 2>/dev/null)"
     fi
     pids="$(printf '%s\n' "$pids" | grep -E '^[0-9]+$' | sort -u)"
+
+    # 先禁用 KeepAlive，再等待当前进程优雅退出。
+    remove_launchd_jobs
 
     if [ -z "$pids" ]; then
         rm -f "$PID_FILE"
@@ -163,6 +275,9 @@ status() {
     if is_running; then
         ok "运行中  (端口 $PORT, PID: $(listening_pids | tr '\n' ' '))"
         info "地址: http://localhost:$PORT"
+    elif launchd_job_loaded "$LAUNCHD_LABEL"; then
+        warn "LaunchAgent 已注册，但端口 $PORT 尚未就绪"
+        info "日志: $LOG_FILE"
     else
         warn "未运行"
     fi

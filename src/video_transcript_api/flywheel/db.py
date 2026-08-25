@@ -20,13 +20,19 @@ logger = setup_logger("flywheel_db")
 class FlywheelDB:
     """Owns the sqlite connection + schema. Cheap to construct; idempotent init."""
 
-    def __init__(self, db_path: str = "./data/flywheel/flywheel.db"):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, db_path: str | object = "./data/flywheel/flywheel.db"):
+        self.database = db_path if hasattr(db_path, "transaction") else None
+        self._is_postgres = getattr(self.database, "dialect", None) == "postgres"
+        raw_path = getattr(db_path, "path", None) if self.database else db_path
+        self.db_path = Path(raw_path) if raw_path else None
+        if self.db_path is not None:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
         self._init_schema()
 
     def _connection(self) -> sqlite3.Connection:
+        if self._is_postgres:
+            raise RuntimeError("postgres_connections_must_be_scoped")
         if not hasattr(self._local, "conn"):
             conn = sqlite3.connect(str(self.db_path))
             conn.row_factory = sqlite3.Row
@@ -40,6 +46,14 @@ class FlywheelDB:
 
     @contextmanager
     def cursor(self):
+        if self._is_postgres:
+            with self.database.transaction() as conn:
+                cur = conn.cursor()
+                try:
+                    yield cur
+                finally:
+                    cur.close()
+            return
         conn = self._connection()
         cur = conn.cursor()
         try:
@@ -157,6 +171,8 @@ class FlywheelDB:
             cur.execute("CREATE INDEX IF NOT EXISTS idx_prompt_media ON prompt_template(media_type, is_active)")
 
     def close(self):
+        if self._is_postgres:
+            return
         if hasattr(self._local, "conn"):
             self._local.conn.close()
             del self._local.conn

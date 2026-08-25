@@ -22,7 +22,12 @@ class LLMCoordinator:
     负责场景路由，统一入口接口，集成两个处理器
     """
 
-    def __init__(self, config_dict: dict, cache_dir: str):
+    def __init__(
+        self,
+        config_dict: dict,
+        cache_dir: str,
+        artifact_cache_manager=None,
+    ):
         """初始化协调器
 
         Args:
@@ -44,7 +49,10 @@ class LLMCoordinator:
             config=config_dict,  # 传递完整配置，以便读取 JSON 输出模式等设置
         )
 
-        self.cache_manager = CacheManager(cache_dir=cache_dir)
+        self.cache_manager = CacheManager(
+            cache_dir=cache_dir,
+            artifact_cache_manager=artifact_cache_manager,
+        )
 
         self.key_info_extractor = KeyInfoExtractor(
             llm_client=self.llm_client,

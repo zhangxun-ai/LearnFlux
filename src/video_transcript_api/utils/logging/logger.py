@@ -108,23 +108,37 @@ def load_config_overrides() -> dict:
     import json as _stdjson
     import sqlite3
 
+    from ...persistence import get_persistence_database
+
+    database = get_persistence_database()
     db_path = _config_db_path()
-    if not db_path.exists():
+    if database is None and not db_path.exists():
         return {}
     try:
-        conn = sqlite3.connect(str(db_path))
-        try:
-            _ensure_config_table(conn)
-            rows = conn.execute(
-                "SELECT config_key, config_value FROM config_overrides"
-            ).fetchall()
-        finally:
-            conn.close()
+        if database is not None:
+            conn = database.connect()
+            try:
+                _ensure_config_table(conn)
+                rows = conn.execute(
+                    "SELECT config_key, config_value FROM config_overrides"
+                ).fetchall()
+            finally:
+                conn.close()
+        else:
+            conn = sqlite3.connect(str(db_path))
+            try:
+                _ensure_config_table(conn)
+                rows = conn.execute(
+                    "SELECT config_key, config_value FROM config_overrides"
+                ).fetchall()
+            finally:
+                conn.close()
     except Exception:  # noqa: BLE001 - 配置库异常不应拖垮配置加载
         return {}
 
     flat: dict = {}
-    for key, raw in rows:
+    for row in rows:
+        key, raw = row[0], row[1]
         try:
             flat[key] = _stdjson.loads(raw)
         except Exception:  # noqa: BLE001 - 单条损坏按原始字符串处理
@@ -140,25 +154,39 @@ def save_config_overrides(overrides: dict) -> None:
     import json as _stdjson
     import sqlite3
     from datetime import datetime, timezone
+    from ...persistence import get_persistence_database
 
     db_path = _config_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
 
-    conn = sqlite3.connect(str(db_path))
-    try:
-        _ensure_config_table(conn)
-        for key, value in _flatten(overrides).items():
-            conn.execute(
-                "INSERT INTO config_overrides (config_key, config_value, updated_at) "
-                "VALUES (?, ?, ?) "
-                "ON CONFLICT(config_key) DO UPDATE SET "
-                "config_value=excluded.config_value, updated_at=excluded.updated_at",
-                (key, _stdjson.dumps(value, ensure_ascii=False), now),
-            )
-        conn.commit()
-    finally:
-        conn.close()
+    database = get_persistence_database()
+    if database is not None:
+        with database.transaction() as conn:
+            _ensure_config_table(conn)
+            for key, value in _flatten(overrides).items():
+                conn.execute(
+                    "INSERT INTO config_overrides (config_key, config_value, updated_at) "
+                    "VALUES (?, ?, ?) "
+                    "ON CONFLICT(config_key) DO UPDATE SET "
+                    "config_value=excluded.config_value, updated_at=excluded.updated_at",
+                    (key, _stdjson.dumps(value, ensure_ascii=False), now),
+                )
+    else:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            _ensure_config_table(conn)
+            for key, value in _flatten(overrides).items():
+                conn.execute(
+                    "INSERT INTO config_overrides (config_key, config_value, updated_at) "
+                    "VALUES (?, ?, ?) "
+                    "ON CONFLICT(config_key) DO UPDATE SET "
+                    "config_value=excluded.config_value, updated_at=excluded.updated_at",
+                    (key, _stdjson.dumps(value, ensure_ascii=False), now),
+                )
+            conn.commit()
+        finally:
+            conn.close()
 
     reset_config_cache()
 

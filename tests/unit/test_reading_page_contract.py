@@ -267,6 +267,7 @@ def test_app_shell_reconciles_the_canonical_navigation():
         "系列深度学习",
         "图解生成",
         "边播边学",
+        "复盘",
         "心流空间",
         "心流阅读",
         "心流写作",

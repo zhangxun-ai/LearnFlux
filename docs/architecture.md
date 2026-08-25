@@ -22,8 +22,8 @@
     └────┬────┘    └────┬────┘    └────┬───────┘
          │              │               │
     ┌────▼──────────────▼───────────────▼────┐
-    │         智能缓存系统                    │
-    │  (SQLite 元数据 + 文件系统)             │
+    │         智能缓存与持久化系统             │
+    │  (PostgreSQL / SQLite 兼容后端)          │
     │  + URL 解析层（提前缓存检测）           │
     └────────────────────────────────────────┘
 ```
@@ -164,12 +164,13 @@ LLMCoordinator.process(content, title, ...)
 
 ## 缓存系统
 
-### 双层存储架构
+### 可切换持久化架构
 
-- **SQLite 数据库**（`data/cache/cache.db`）：
-  - `video_cache` 表：联合主键 `(platform, media_id, use_speaker_recognition)`
-  - `task_status` 表：任务状态追踪（queued → processing → success/failed）
-- **文件系统**：存储实际内容（转录文本、LLM 校对/总结、结构化 JSON）
+- **PostgreSQL（推荐）**：统一存储任务、业务元数据和解析产物；解析内容按原始字节及 SHA-256 保存，不依赖 `data/cache/` 文件。
+- **SQLite（兼容模式）**：`data/cache/cache.db` 保存元数据，文件系统保存转录、LLM 校对/总结和结构化 JSON。
+- **原始媒体**：两种模式均不复制进数据库，只保留外部路径或哈希引用。
+
+版本化 PostgreSQL schema 位于 `src/video_transcript_api/persistence/migrations/postgres/`；现有 SQLite 安装的无损迁移与回滚流程见 [PostgreSQL 持久化与数据迁移](guides/postgresql.md)。
 
 ### 目录结构
 
@@ -192,7 +193,7 @@ data/cache/
 
 - 请求带说话人识别时，仅匹配对应缓存
 - 请求不带时，优先返回信息更丰富的说话人转录结果
-- 完整性验证：文件夹不存在时自动清理数据库记录
+- 完整性验证：PostgreSQL 校验解析产物哈希；SQLite 模式校验缓存文件夹
 - URL 解析优化：下载前提前检查缓存，支持短链接自动解析
 
 ---

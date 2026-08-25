@@ -937,6 +937,10 @@ def _should_backfill_summary(cache_data: dict, calibrate_only: bool) -> bool:
     if not calibrate_only:
         return False
 
+    if cache_data and cache_data.get("storage_backend") == "postgres":
+        summary = cache_data.get("llm_summary")
+        return not isinstance(summary, str) or not summary.strip()
+
     file_path = cache_data.get("file_path") if cache_data else None
     if not file_path:
         return False

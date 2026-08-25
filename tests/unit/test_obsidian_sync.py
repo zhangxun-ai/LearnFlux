@@ -84,6 +84,7 @@ def test_example_config_has_disabled_empty_obsidian_placeholders():
         "vault_path": "",
         "knowledge_raw_root": "raw",
         "knowledge_processed_root": "processed",
+        "review_root": "复盘",
     }
 
 

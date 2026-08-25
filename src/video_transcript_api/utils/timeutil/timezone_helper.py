@@ -89,7 +89,10 @@ def get_configured_timezone() -> timezone:
         logger.error(f"获取时区配置失败: {e}")
         return timezone(timedelta(hours=8))  # 默认UTC+8
 
-def format_datetime_with_timezone(dt_str: str, output_format: str = "%Y-%m-%d %H:%M:%S") -> str:
+def format_datetime_with_timezone(
+    dt_str: str | datetime,
+    output_format: str = "%Y-%m-%d %H:%M:%S",
+) -> str:
     """
     将数据库中的UTC时间字符串转换为配置时区的格式化字符串
     
@@ -115,20 +118,22 @@ def format_datetime_with_timezone(dt_str: str, output_format: str = "%Y-%m-%d %H
             "%Y-%m-%dT%H:%M:%S.%fZ",  # 2025-08-20T12:34:56.123456Z
         ]
         
-        utc_dt = None
-        for fmt in dt_formats:
-            try:
-                utc_dt = datetime.strptime(dt_str, fmt)
-                break
-            except ValueError:
-                continue
+        utc_dt = dt_str if isinstance(dt_str, datetime) else None
+        if utc_dt is None:
+            for fmt in dt_formats:
+                try:
+                    utc_dt = datetime.strptime(dt_str, fmt)
+                    break
+                except ValueError:
+                    continue
         
         if utc_dt is None:
             logger.warning(f"无法解析时间格式: {dt_str}")
             return dt_str  # 返回原始字符串
         
         # 设置为UTC时区
-        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+        if utc_dt.tzinfo is None:
+            utc_dt = utc_dt.replace(tzinfo=timezone.utc)
         
         # 转换到配置的时区
         target_tz = get_configured_timezone()

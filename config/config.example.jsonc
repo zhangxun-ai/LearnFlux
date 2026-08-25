@@ -95,7 +95,7 @@
         "model": "fun-asr-2025-11-07",
         "region": "cn-beijing",
         "price_cny_per_second": "0.00022",
-        "price_verified_at": "2026-07-21",
+        "price_verified_at": "2026-08-23",
         "poll_interval_seconds": 5,
         "poll_timeout_seconds": 3600
     },
@@ -424,7 +424,8 @@
         "vault_id": "",
         "vault_path": "",
         "knowledge_raw_root": "raw",
-        "knowledge_processed_root": "processed"
+        "knowledge_processed_root": "processed",
+        "review_root": "复盘"
     },
 
     // ============================================================
@@ -450,7 +451,10 @@
         "player_client": ["android_vr", "android_music", "android", "ios", "tv_embedded"],
         "youtube_cookie": {
             "enabled": false,            // 是否启用 Cookie
+            "source": "file",           // file: Netscape 文件；browser: 直接读取本机浏览器
             "file_path": "./config/youtube_cookies.txt",  // Cookie 文件路径
+            "browser": "chrome",        // source=browser 时使用的浏览器
+            "browser_profile": "",      // 可选，例如 Default；留空使用浏览器默认配置
             "fallback_without_cookie": true  // Cookie 失败时是否回退
         }
     },

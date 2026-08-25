@@ -9,6 +9,7 @@ import os
 import sys
 import requests
 import json
+import pytest
 
 
 from video_transcript_api.downloaders import create_downloader
@@ -60,6 +61,10 @@ def test_generic_downloader():
             print(f"[√] 正确使用了平台特定下载器")
 
 
+@pytest.mark.skipif(
+    os.environ.get("RUN_LIVE_API_TESTS") != "1",
+    reason="live API test is opt-in and must not write to a local service",
+)
 def test_api_with_generic_url():
     """测试API处理通用URL"""
     
@@ -105,7 +110,10 @@ def test_api_with_generic_url():
             
             # 提示用户检查任务状态
             print(f"\n可以通过以下命令检查任务状态:")
-            print(f"curl -H \"Authorization: Bearer {auth_token}\" http://{api_host}:{api_port}/api/task/{task_id}")
+            print(
+                "curl -H \"Authorization: Bearer <token>\" "
+                f"http://{api_host}:{api_port}/api/task/{task_id}"
+            )
         else:
             print(f"[×] API返回错误: {response.status_code}")
             

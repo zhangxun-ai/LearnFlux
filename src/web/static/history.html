@@ -28,12 +28,12 @@
     <meta name="apple-mobile-web-app-title" content="LearnFlux">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.webmanifest">
-            <link rel="stylesheet" href="/static/css/editorial.css?v=7de2e44e4358">
-    <link rel="stylesheet" href="/static/css/app-shell.css?v=7de2e44e4358">
-    <link rel="stylesheet" href="/static/css/styles.css?v=7de2e44e4358">
-    <script src="/static/js/pwa-register.js?v=7de2e44e4358" defer></script>
+            <link rel="stylesheet" href="/static/css/editorial.css?v=33e5ff837f4c">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=33e5ff837f4c">
+    <link rel="stylesheet" href="/static/css/styles.css?v=33e5ff837f4c">
+    <script src="/static/js/pwa-register.js?v=33e5ff837f4c" defer></script>
     <script src="/static/js/ui-features.js?v=05b7834ae213" defer></script>
-    <script src="/static/js/app-shell.js?v=7de2e44e4358" defer></script>
+    <script src="/static/js/app-shell.js?v=33e5ff837f4c" defer></script>
     <style>
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -526,8 +526,8 @@
         }
 
     </style>
-    <link rel="stylesheet" href="/static/css/product-linear.css?v=7de2e44e4358">
-    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=7de2e44e4358">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=33e5ff837f4c">
+    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=33e5ff837f4c">
 
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
@@ -567,6 +567,34 @@
                         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
                         <span class="nav-label">边播边学</span>
                     </a>
+                    <div class="nav-branch">
+                        <div class="nav-branch-row">
+                            <a class="nav-item" href="/review" data-nav-parent="true">
+                                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M7 7h5"/><path d="M12 17h5"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/></svg></span>
+                                <span class="nav-label">复盘</span>
+                            </a>
+                            <button class="nav-branch-toggle" type="button" aria-expanded="false" aria-controls="nav-review-children" aria-label="展开复盘二级导航">
+                                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                            </button>
+                        </div>
+                        <nav class="nav-subitems" id="nav-review-children" aria-label="复盘二级导航">
+                            <a class="nav-subitem" href="/review/daily" data-aliases="/review" data-nav-match="exact" data-review-section="daily">
+                                <span class="nav-label">今日复盘</span>
+                            </a>
+                            <a class="nav-subitem" href="/review/weekly" data-nav-match="exact" data-review-section="weekly">
+                                <span class="nav-label">周度复盘</span>
+                            </a>
+                            <a class="nav-subitem" href="/review/monthly" data-nav-match="exact" data-review-section="monthly">
+                                <span class="nav-label">月度复盘</span>
+                            </a>
+                            <a class="nav-subitem" href="/review/annual" data-nav-match="exact" data-review-section="annual">
+                                <span class="nav-label">年度复盘</span>
+                            </a>
+                            <a class="nav-subitem" href="/review/insights" data-nav-match="exact" data-review-section="insights">
+                                <span class="nav-label">内在洞察</span>
+                            </a>
+                        </nav>
+                    </div>
                 </div>
             </section>
             <section class="nav-group" data-group="flow" aria-labelledby="nav-flow-label">
@@ -634,13 +662,13 @@
     <section class="page-stage">
 <div class="container">
     <div class="header">
-        <h1>任务历史</h1>
+        <h1>历史记录</h1>
     </div>
 
     <!-- 访问令牌输入 -->
     <div class="auth-bar">
         <label>API 访问令牌</label>
-        <input type="password" id="apiKeyInput" placeholder="输入访问令牌后查看任务记录" autocomplete="off">
+        <input type="password" id="apiKeyInput" placeholder="输入访问令牌后查看历史记录" autocomplete="off">
         <button class="btn btn-primary" onclick="loadHistory()">查询</button>
         <span class="auth-status" id="authStatus" style="display:none"></span>
         <span style="flex:1"></span>
@@ -652,6 +680,19 @@
     <!-- 过滤栏 -->
     <div class="filter-bar" id="filterBar" style="display:none">
         <div class="filter-group">
+            <label>记录类别</label>
+            <select id="filterRecordType" onchange="updateRecordTypeFilterUI(); serializeFiltersToURL(); loadHistory(0)">
+                <option value="task">学习任务</option>
+                <option value="review_all">全部复盘</option>
+                <option value="daily">每日复盘</option>
+                <option value="weekly">周度复盘</option>
+                <option value="monthly">月度复盘</option>
+                <option value="annual">年度复盘</option>
+                <option value="experiment">行动实验</option>
+                <option value="insight">内在洞察</option>
+            </select>
+        </div>
+        <div class="filter-group">
             <label>开始日期</label>
             <input type="date" id="filterStartDate">
         </div>
@@ -659,13 +700,13 @@
             <label>结束日期</label>
             <input type="date" id="filterEndDate">
         </div>
-        <div class="filter-group">
+        <div class="filter-group task-history-only">
             <label>平台</label>
             <select id="filterPlatform">
                 <option value="">全部</option>
             </select>
         </div>
-        <div class="filter-group" style="position:relative">
+        <div class="filter-group task-history-only" style="position:relative">
             <label>频道</label>
             <div id="authorMultiSelect" class="multi-select" onclick="toggleAuthorDropdown(event)">
                 <span id="authorDisplay">全部</span>
@@ -686,9 +727,18 @@
                 <option value="all">全部</option>
                 <option value="processing">处理中</option>
                 <option value="failed">失败</option>
+                <option value="active">复盘进行中</option>
+                <option value="pending">洞察待确认</option>
+                <option value="observing">洞察继续观察</option>
+                <option value="accepted">洞察已认可</option>
+                <option value="rejected">洞察不认可</option>
+                <option value="disproved">洞察已被证伪</option>
+                <option value="planned">行动待实验</option>
+                <option value="completed">行动已完成</option>
+                <option value="stopped">行动已停止</option>
             </select>
         </div>
-        <div class="filter-group">
+        <div class="filter-group task-history-only">
             <label>已读</label>
             <select id="filterRead" onchange="serializeFiltersToURL(); applyReadFilter()">
                 <option value="all">全部</option>
@@ -696,7 +746,7 @@
                 <option value="read">已读</option>
             </select>
         </div>
-        <div class="filter-group">
+        <div class="filter-group task-history-only">
             <label>精华</label>
             <select id="filterMarked" onchange="serializeFiltersToURL(); loadHistory(0)">
                 <option value="all">全部</option>
@@ -717,14 +767,14 @@
 
     <!-- 统计条 -->
     <div class="stats-bar" id="statsBar" style="display:none">
-        <input type="checkbox" id="selectAllChk" class="row-checkbox" title="全选当页" onchange="toggleSelectAll(this.checked)">
+        <input type="checkbox" id="selectAllChk" class="row-checkbox task-history-only" title="全选当页" onchange="toggleSelectAll(this.checked)">
         <span id="totalCount"></span>
-        <span class="unread-badge" id="unreadBadge" style="display:none"></span>
-        <span id="selectedCount" style="display:none; color:var(--accent-primary); font-weight:600"></span>
-        <button class="btn btn-ghost" id="markSelectedBtn" onclick="markSelectedRead()" style="display:none; font-size:0.75rem; padding:3px 10px">
+        <span class="unread-badge task-history-only" id="unreadBadge" style="display:none"></span>
+        <span class="task-history-only" id="selectedCount" style="display:none; color:var(--accent-primary); font-weight:600"></span>
+        <button class="btn btn-ghost task-history-only" id="markSelectedBtn" onclick="markSelectedRead()" style="display:none; font-size:0.75rem; padding:3px 10px">
             标记已读
         </button>
-        <button class="btn btn-ghost" onclick="markAllRead()" style="font-size:0.75rem; padding:3px 10px">
+        <button class="btn btn-ghost task-history-only" onclick="markAllRead()" style="font-size:0.75rem; padding:3px 10px">
             全部标为已读
         </button>
     </div>
@@ -885,15 +935,18 @@ function serializeFiltersToURL() {
     const status    = get('filterStatus');
     const read      = get('filterRead');
     const marked    = get('filterMarked');
+    const recordType = get('filterRecordType');
 
     if (q)         params.set('q', q);
+    if (recordType && recordType !== 'task') params.set('record_type', recordType);
     if (startDate) params.set('start_date', startDate);
     if (endDate)   params.set('end_date', endDate);
     // webhook 含密钥，不写入 URL
     if (platform)  params.set('platform', platform);
     if (author)    params.set('author', author);
     // 默认值不写入 URL，保持简洁
-    if (status && status !== 'success') params.set('status', status);
+    const defaultStatus = recordType === 'task' ? 'success' : 'all';
+    if (status && status !== defaultStatus) params.set('status', status);
     if (read   && read   !== 'all')     params.set('read', read);
     if (marked && marked !== 'all')     params.set('marked', '1');
 
@@ -909,6 +962,7 @@ function loadFiltersFromURL() {
         if (val !== null) { const el = document.getElementById(id); if (el) el.value = val; }
     };
     set('filterQ',          'q');
+    set('filterRecordType', 'record_type');
     set('filterStartDate',  'start_date');
     set('filterEndDate',    'end_date');
     // webhook 不从 URL 读取
@@ -930,6 +984,26 @@ function loadFiltersFromURL() {
         const el = document.getElementById('filterMarked');
         if (el) el.value = 'marked';
     }
+    updateRecordTypeFilterUI(!params.has('status'));
+}
+
+function updateRecordTypeFilterUI(normalizeStatus = true) {
+    const type = document.getElementById('filterRecordType')?.value || 'task';
+    const isReview = type !== 'task';
+    document.querySelectorAll('.task-history-only').forEach(el => {
+        const group = el.classList.contains('filter-group') ? el : null;
+        if (group) group.style.display = isReview ? 'none' : '';
+        else if (isReview) el.style.display = 'none';
+        else if (el.id === 'selectAllChk' || (el.tagName === 'BUTTON' && el.id !== 'markSelectedBtn')) el.style.display = '';
+    });
+    const status = document.getElementById('filterStatus');
+    if (normalizeStatus && status) {
+        const taskValues = new Set(['success', 'all', 'processing', 'failed']);
+        if (isReview && taskValues.has(status.value)) status.value = 'all';
+        if (!isReview && !taskValues.has(status.value)) status.value = 'success';
+    }
+    const search = document.getElementById('filterQ');
+    if (search) search.placeholder = isReview ? '事实 / 意义 / 人物 / 洞察 / 行动...' : '标题 / 频道 / URL...';
 }
 
 function getAliasMap() {
@@ -981,9 +1055,16 @@ async function loadHistory(page = 0) {
 
     showListLoading();
 
-    // 先拿过滤选项（首次加载）
+    // 先恢复记录类型。复盘历史不依赖任务审计的筛选元数据。
     if (page === 0) {
-        await loadFilterOptions();
+        loadFiltersFromURL();
+        const recordType = document.getElementById('filterRecordType')?.value || 'task';
+        if (recordType === 'task') {
+            await loadFilterOptions();
+        } else {
+            document.getElementById('filterBar').style.display = 'flex';
+            document.getElementById('statsBar').style.display = 'flex';
+        }
     }
 
     await fetchHistory();
@@ -1097,6 +1178,7 @@ document.addEventListener('click', () => {
 // ===================== 过滤 =====================
 function applyFilter() { serializeFiltersToURL(); loadHistory(0); }
 function resetFilter() {
+    document.getElementById('filterRecordType').value = 'task';
     document.getElementById('filterStartDate').value = '';
     document.getElementById('filterEndDate').value = '';
     document.getElementById('filterPlatform').value = '';
@@ -1106,6 +1188,7 @@ function resetFilter() {
     document.getElementById('filterMarked').value = 'all';
     const qEl = document.getElementById('filterQ'); if (qEl) qEl.value = '';
     history.replaceState(null, '', window.location.pathname);  // 清空 URL 参数
+    updateRecordTypeFilterUI();
     loadHistory(0);
 }
 function changePage(delta) {
@@ -1118,7 +1201,8 @@ function changePage(delta) {
             (currentPage + 1) * PAGE_SIZE
         );
         selectedSet.clear(); updateSelectionUI();
-        renderList(pageItems);
+        if ((document.getElementById('filterRecordType')?.value || 'task') === 'task') renderList(pageItems);
+        else renderReviewList(pageItems);
         renderPagination();
     } else {
         fetchHistory();
@@ -1141,6 +1225,8 @@ async function apiFetch(url, params = {}) {
 let _filteredItems = null;
 
 async function fetchHistory() {
+    const recordType = document.getElementById('filterRecordType')?.value || 'task';
+    if (recordType !== 'task') return fetchReviewHistory(recordType);
     const readFilter = document.getElementById('filterRead')?.value || 'all';
     const isReadFiltered = readFilter !== 'all';
 
@@ -1208,6 +1294,67 @@ async function fetchHistory() {
             showError('网络错误，请稍后重试');
         }
     }
+}
+
+async function fetchReviewHistory(recordType) {
+    const params = {limit: 200};
+    const startDate = document.getElementById('filterStartDate').value;
+    const endDate = document.getElementById('filterEndDate').value;
+    const status = document.getElementById('filterStatus').value;
+    const keyword = document.getElementById('filterQ')?.value.trim() || '';
+    if (recordType !== 'review_all') params.record_type = recordType;
+    if (startDate) params.start_date = startDate;
+    if (endDate) params.end_date = endDate;
+    if (status && status !== 'all') params.status = status;
+    if (keyword) params.keyword = keyword;
+    try {
+        const res = await apiFetch('/api/reviews/search', params);
+        if (res.code !== 200) { showError(res.message || '复盘记录查询失败'); return; }
+        _filteredItems = res.data.items || [];
+        totalItems = _filteredItems.length;
+        const pageItems = _filteredItems.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+        renderReviewList(pageItems);
+        renderPagination();
+        document.getElementById('totalCount').textContent = `共 ${totalItems} 条复盘记录`;
+        document.getElementById('unreadBadge').style.display = 'none';
+    } catch (e) {
+        if (e.message === '401') showError('访问令牌无效或已过期');
+        else showError('复盘记录查询失败，请稍后重试');
+    }
+}
+
+function reviewRecordLabel(type) {
+    return ({daily:'每日', weekly:'周度', monthly:'月度', annual:'年度', experiment:'行动实验', insight:'内在洞察'})[type] || type;
+}
+
+function reviewRecordTitle(item) {
+    return item.title || item.statement || item.month_key || item.week_start || item.year_key || item.review_date || '复盘记录';
+}
+
+function reviewRecordDate(item) {
+    return item.review_date || item.week_start || item.month_key || item.year_key || (item.updated_at || '').slice(0, 10);
+}
+
+function reviewRecordURL(item) {
+    const tab = ({daily:'daily', weekly:'weekly', monthly:'monthly', annual:'annual', experiment:'weekly', insight:'insights'})[item.record_type] || 'daily';
+    const params = new URLSearchParams({tab, source_type: item.record_type, source_id: item.id});
+    if (item.review_date) params.set('date', item.review_date);
+    if (item.week_start) params.set('date', item.week_start);
+    if (item.month_key) params.set('month', item.month_key);
+    if (item.year_key) params.set('year', item.year_key);
+    return `/review?${params.toString()}`;
+}
+
+function renderReviewList(items) {
+    const area = document.getElementById('listArea');
+    if (!items.length) {
+        area.innerHTML = `<div class="state-box"><div class="icon">○</div><div>暂无符合条件的复盘记录。空月份和中断不会被视为失败。</div></div>`;
+        return;
+    }
+    area.innerHTML = `<div class="task-list">${items.map(item => {
+        const excerpt = item.fact || item.quick_meaning || item.summary || item.statement || item.result || JSON.stringify(item).slice(0, 180);
+        return `<a class="task-row task-card" href="${esc(reviewRecordURL(item))}" style="display:block;text-decoration:none;color:inherit"><div class="task-header"><div class="task-meta"><div class="task-title">${esc(reviewRecordTitle(item))}</div><div class="task-subtitle"><span>${esc(reviewRecordDate(item))}</span><span>·</span><span>${esc(reviewRecordLabel(item.record_type))}</span></div></div><span class="task-status status-completed">${esc(item.status || '已保存')}</span></div><div class="task-body"><div class="task-url">${esc(excerpt)}</div></div></a>`;
+    }).join('')}</div>`;
 }
 
 // ===================== 渲染 =====================
@@ -1486,8 +1633,10 @@ function tryLoadMainPageToken() {
         try {
             const reversed = encoded.split('').reverse().join('');
             const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.replace(ENCRYPT_KEY, '');
-        } catch (e) { return ''; }
+            return decoded.endsWith(ENCRYPT_KEY)
+                ? decoded.slice(0, -ENCRYPT_KEY.length)
+                : encoded;
+        } catch (e) { return encoded; }
     }
     const raw = localStorage.getItem('vta_bearer_token');
     return raw ? simpleDecrypt(raw) : '';

@@ -134,7 +134,7 @@ def fetch_note_detail(url: str, *, api_request: Optional[ApiRequest] = None) -> 
     """Fetch a single note's type/title/body/stats via TikHub (tries several endpoints)."""
     url = normalize_note_url(url)
     note_id = _note_id_from_url(url)
-    if not note_id and "xhslink.com" in url:
+    if not note_id and ("xhslink.com" in url or "xhslink.cn" in url):
         url = normalize_note_url(_resolve_short_url(url))
         note_id = _note_id_from_url(url)
     if not note_id:

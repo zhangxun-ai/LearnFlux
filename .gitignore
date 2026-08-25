@@ -28,6 +28,7 @@ data/logs/
 # 本地 Agent / 设计运行产物
 .superpowers/
 .playwright-cli/
+/tmp/
 data/xianyu_listing_assets/
 
 # 数据目录

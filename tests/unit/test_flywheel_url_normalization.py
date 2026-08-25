@@ -39,6 +39,7 @@ SHORT_CANONICAL_URL = (
     "https://www.xiaohongshu.com/discovery/item/6a2fd6d1000000001702f4b6"
     "?xsec_token=tok123"
 )
+SHORT_CN_SHARE_TEXT = "https://xhslink.cn/o/8oQdw7Hu4YC"
 
 
 @pytest.mark.unit
@@ -84,6 +85,35 @@ def test_fetch_note_detail_resolves_xhslink_share_text(monkeypatch):
         "/api/v1/xiaohongshu/web_v3/fetch_note_detail",
         {"note_id": "6a2fd6d1000000001702f4b6", "xsec_token": "tok123"},
     )
+
+
+@pytest.mark.unit
+def test_fetch_note_detail_resolves_xhslink_cn(monkeypatch):
+    def fake_resolve(url):
+        assert url == SHORT_CN_SHARE_TEXT
+        return SHORT_CANONICAL_URL
+
+    def fake_api_request(_endpoint, _params):
+        return {
+            "code": 0,
+            "data": [{
+                "note_list": [{
+                    "title": "Current share domain",
+                    "desc": "Body",
+                    "type": "normal",
+                    "user": {"nickname": "Author"},
+                }],
+            }],
+        }
+
+    monkeypatch.setattr(text_acquisition, "_resolve_short_url", fake_resolve)
+
+    detail = text_acquisition.fetch_note_detail(
+        SHORT_CN_SHARE_TEXT,
+        api_request=fake_api_request,
+    )
+
+    assert detail.note_id == "6a2fd6d1000000001702f4b6"
 
 
 @pytest.mark.unit
@@ -188,6 +218,7 @@ def test_workbench_keeps_xiaohongshu_in_deep_learning_flow():
 
     assert "platform: 'xiaohongshu'" in js
     assert "label: '小红书内容'" in js
+    assert "host === 'xhslink.cn'" in js
     assert "action: '深度学习解析'" in js
     assert "label: '小红书视频'" not in js
     assert "type: 'flywheel'" not in js

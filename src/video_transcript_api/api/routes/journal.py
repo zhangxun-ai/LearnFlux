@@ -5,7 +5,12 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from ...journal import JournalRepository, JournalService
-from ..context import get_cache_manager, get_config, get_logger
+from ..context import (
+    get_cache_manager,
+    get_config,
+    get_logger,
+    get_repository_database,
+)
 from ..services.transcription import TranscribeResponse, verify_token
 
 logger = get_logger()
@@ -38,7 +43,9 @@ class JournalReviewRequest(BaseModel):
 
 def get_journal_service() -> JournalService:
     return JournalService(
-        repository=JournalRepository(db_path=str(cache_manager.db_path)),
+        repository=JournalRepository(
+            db_path=get_repository_database(cache_manager)
+        ),
         llm_config=get_config().get("llm", {}) or {},
     )
 

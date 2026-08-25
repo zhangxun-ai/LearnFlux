@@ -9,7 +9,12 @@ from ...reading.repository import ReadingDataError
 from ...reading.assets import ReadingAssetError
 from ...reading.service import ReadingService
 from ...reading.source_files import ReadingSourceError
-from ..context import get_cache_manager, get_config, get_static_dir
+from ..context import (
+    get_cache_manager,
+    get_config,
+    get_repository_database,
+    get_static_dir,
+)
 from ..services.transcription import verify_token
 
 
@@ -42,7 +47,7 @@ def get_reading_service() -> ReadingService:
     storage = config.get("storage", {}) or {}
     source_root = Path(storage.get("source_files_dir") or "./data/source_files")
     return ReadingService(
-        db_path=str(get_cache_manager().db_path),
+        db_path=get_repository_database(get_cache_manager()),
         source_root=source_root,
     )
 

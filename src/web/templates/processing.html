@@ -125,6 +125,11 @@
         margin-top: 18px;
     }
 
+    .quote-action-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+    }
+
     .cancel-confirm-dialog {
         width: min(420px, calc(100vw - 32px));
         margin: auto;
@@ -339,7 +344,64 @@
     const cancelConfirmDialog = document.getElementById("cancel-confirm-dialog");
     let quoteActionsLoading = false;
     let quoteActionsLoaded = false;
+    let quoteActionPending = false;
     let cancellationPending = false;
+
+    function showQuoteActionFeedback(message) {
+        if (!quoteActions) return;
+        const feedback = document.createElement("div");
+        feedback.id = "cloud-quote-feedback";
+        feedback.setAttribute("role", "status");
+        feedback.textContent = message;
+        quoteActions.hidden = false;
+        quoteActions.replaceChildren(feedback);
+    }
+
+    function readableQuoteActionError(message) {
+        const knownErrors = {
+            quote_token_mismatch: "报价状态已变化，请重新加载后确认",
+            quote_not_confirmable: "该报价已处理，请查看最新任务进度",
+            quote_expired: "报价已过期，请刷新报价",
+            quote_amount_mismatch: "报价金额已变化，请刷新报价",
+        };
+        return knownErrors[message] || message || "操作失败，请重试";
+    }
+
+    function showQuoteActionError(error) {
+        quoteActionPending = false;
+        quoteActionsLoaded = false;
+        showQuoteActionFeedback(`操作未成功：${readableQuoteActionError(error.message)}`);
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.textContent = "重新加载报价";
+        retry.style.margin = "12px 6px 0 0";
+        retry.onclick = () => {
+            quoteActions.textContent = "";
+            loadCloudQuoteActions();
+        };
+        quoteActions.appendChild(retry);
+    }
+
+    function setQuoteActionPending(selectedButton, action) {
+        quoteActions.querySelectorAll("button[data-action]").forEach((button) => {
+            button.disabled = true;
+        });
+        selectedButton.textContent = action === "cloud-confirm"
+            ? "确认中…"
+            : "处理中…";
+    }
+
+    function markCloudQuoteConfirmed() {
+        const confirmButton = quoteActions.querySelector(
+            'button[data-action="cloud-confirm"]'
+        );
+        if (!confirmButton) return;
+        confirmButton.textContent = "已确认";
+        confirmButton.disabled = true;
+        quoteActions.querySelectorAll("button[data-action]").forEach((button) => {
+            if (button !== confirmButton) button.hidden = true;
+        });
+    }
 
     function returnAfterCancellation() {
         if (document.referrer) {
@@ -356,7 +418,7 @@
     }
 
     async function loadCloudQuoteActions() {
-        if (!quoteActions || quoteActionsLoading || quoteActionsLoaded) return;
+        if (!quoteActions || quoteActionsLoading || quoteActionsLoaded || quoteActionPending) return;
         quoteActionsLoading = true;
         quoteActions.hidden = false;
         quoteActions.textContent = "正在从认证任务接口读取云端报价…";
@@ -383,24 +445,42 @@
                 const button = document.createElement("button");
                 button.type = "button";
                 button.textContent = label;
+                button.dataset.action = action;
+                button.className = "quote-action-button";
                 button.style.margin = "12px 6px 0 0";
                 button.onclick = async () => {
-                    const controls = quoteActions.querySelectorAll("button");
-                    controls.forEach((control) => { control.disabled = true; });
-                    const originalLabel = button.textContent;
-                    button.textContent = "处理中…";
+                    if (quoteActionPending) return;
+                    quoteActionPending = true;
+                    if (cancelTaskButton) cancelTaskButton.disabled = true;
+                    if (action === "cloud-confirm") {
+                        setQuoteActionPending(button, action);
+                    } else {
+                        const pendingMessage = action === "cloud-use-local"
+                            ? "已选择本地免费，正在启动本地转录…"
+                            : "正在刷新报价…";
+                        showQuoteActionFeedback(pendingMessage);
+                    }
                     try {
                         await postQuoteAction(`/api/task/${encodeURIComponent(taskId)}/${action}`, body);
+                        if (action === "cloud-confirm") {
+                            markCloudQuoteConfirmed();
+                            document.getElementById("progress-stage").textContent = "云端转录排队中";
+                            const messageNode = document.getElementById("progress-message");
+                            messageNode.textContent = "";
+                            messageNode.style.display = "none";
+                            if (cancelTaskButton) cancelTaskButton.disabled = false;
+                            pollProgress();
+                            return;
+                        }
                         if (action === "cloud-use-local") {
-                            quoteActions.textContent = "已选择本地免费，正在启动本地转录…";
+                            if (cancelTaskButton) cancelTaskButton.disabled = false;
                             pollProgress();
                             return;
                         }
                         window.location.reload();
                     } catch (error) {
-                        button.textContent = originalLabel;
-                        controls.forEach((control) => { control.disabled = false; });
-                        alert(error.message);
+                        if (cancelTaskButton) cancelTaskButton.disabled = false;
+                        showQuoteActionError(error);
                     }
                 };
                 quoteActions.appendChild(button);
@@ -450,8 +530,14 @@
 
     function updateProgress(progress, data) {
         if (!progress) return;
+        if (quoteActionPending && progress.stage === "awaiting_cloud_confirmation") return;
         if (progress.stage === "awaiting_cloud_confirmation") {
             loadCloudQuoteActions();
+        } else if (progress.stage !== "awaiting_cloud_confirmation" && quoteActions) {
+            quoteActions.hidden = true;
+            quoteActions.textContent = "";
+            quoteActionPending = false;
+            quoteActionsLoaded = false;
         }
         const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
         document.getElementById("progress-stage").textContent = progress.stage_label || progress.stage || "处理中";

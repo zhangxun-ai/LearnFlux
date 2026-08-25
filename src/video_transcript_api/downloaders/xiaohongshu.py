@@ -127,7 +127,10 @@ class XiaohongshuDownloader(BaseDownloader):
         Returns:
             是否可以处理
         """
-        return "xiaohongshu.com" in url or "xhslink.com" in url
+        return any(
+            domain in url
+            for domain in ("xiaohongshu.com", "xhslink.com", "xhslink.cn")
+        )
 
     def extract_note_id(self, url: str) -> str:
         """从 URL 中提取笔记 ID 的公共方法。
@@ -155,6 +158,16 @@ class XiaohongshuDownloader(BaseDownloader):
     # 笔记 ID 提取（保持不变）
     # ------------------------------------------------------------------
 
+    def _resolve_content_url(self, url: str) -> str:
+        """Resolve Xiaohongshu short links before reading URL parameters."""
+        if "xhslink.com" not in url and "xhslink.cn" not in url:
+            return url
+
+        logger.info(f"Resolving xiaohongshu short link: {url}")
+        resolved_url = self.resolve_short_url(url)
+        logger.info(f"Resolved to full URL: {resolved_url}")
+        return resolved_url
+
     def _extract_note_id(self, url: str) -> str:
         """从 URL 中提取笔记 ID。
 
@@ -167,11 +180,7 @@ class XiaohongshuDownloader(BaseDownloader):
         Raises:
             ValueError: 无法提取笔记 ID
         """
-        # 解析短链接
-        if "xhslink.com" in url:
-            logger.info(f"Resolving xiaohongshu short link: {url}")
-            url = self.resolve_short_url(url)
-            logger.info(f"Resolved to full URL: {url}")
+        url = self._resolve_content_url(url)
 
         # 尝试多种模式提取笔记ID
         patterns = [
@@ -216,7 +225,8 @@ class XiaohongshuDownloader(BaseDownloader):
         Raises:
             ValueError: 所有端点均失败
         """
-        note_id = self._extract_note_id(url)
+        resolved_url = self._resolve_content_url(url)
+        note_id = self._extract_note_id(resolved_url)
 
         # 实例缓存命中
         if note_id in self._cached_video_info:
@@ -228,7 +238,7 @@ class XiaohongshuDownloader(BaseDownloader):
         for config in _ENDPOINT_CONFIGS:
             name = config["name"]
             try:
-                result = self._try_endpoint(url, note_id, config)
+                result = self._try_endpoint(resolved_url, note_id, config)
                 # 成功 — 缓存并返回
                 self._cached_video_info[note_id] = result
                 logger.info(f"Endpoint '{name}' succeeded for note {note_id}")
@@ -475,6 +485,9 @@ class XiaohongshuDownloader(BaseDownloader):
 
         # 视频 URL — 收集所有候选以便下载时逐个尝试
         all_video_urls = self._extract_all_matches(data, _VIDEO_URL_PATHS)
+        for candidate_url in self._extract_stream_urls(data):
+            if candidate_url not in all_video_urls:
+                all_video_urls.append(candidate_url)
         if not all_video_urls:
             self._save_debug_response(data, f"no_video_url_{endpoint_name}", note_id)
             raise ValueError(
@@ -572,6 +585,53 @@ class XiaohongshuDownloader(BaseDownloader):
             if value is not None and value != "" and value not in seen:
                 seen.add(value)
                 results.append(value)
+        return results
+
+    @classmethod
+    def _extract_stream_urls(cls, data: Any) -> list[str]:
+        """Extract URLs from streams whose codec keys are API-defined.
+
+        Xiaohongshu may use stable names such as ``h264`` or opaque keys such
+        as ``EF4`` and ``EF5``. Iterate the stream groups instead of relying on
+        a fixed codec name, while preserving the API response order.
+        """
+        stream_paths = [
+            ("video_info_v2", "media", "stream"),
+            ("video", "media", "stream"),
+            ("video_info", "media", "stream"),
+        ]
+        results: list[str] = []
+        seen: set[str] = set()
+
+        for path in stream_paths:
+            stream = cls._extract_by_path(data, path)
+            if not isinstance(stream, dict):
+                continue
+
+            for entries in stream.values():
+                if isinstance(entries, dict):
+                    entries = [entries]
+                if not isinstance(entries, (list, tuple)):
+                    continue
+
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    backup_urls = entry.get("backup_urls")
+                    if isinstance(backup_urls, (list, tuple)):
+                        candidates = [*backup_urls, entry.get("master_url")]
+                    else:
+                        candidates = [entry.get("master_url")]
+
+                    for candidate in candidates:
+                        if (
+                            isinstance(candidate, str)
+                            and candidate
+                            and candidate not in seen
+                        ):
+                            seen.add(candidate)
+                            results.append(candidate)
+
         return results
 
     # ------------------------------------------------------------------

@@ -113,8 +113,9 @@ def test_postgres_runtime_shares_one_control_store_with_task_quote_and_usage(
         usage_repository = object()
 
     class FakeCacheManager:
-        def __init__(self, cache_dir):
+        def __init__(self, cache_dir, database=None):
             self.cache_dir = cache_dir
+            self.database = database
             self.task_repository = None
 
         def set_task_status_repository(self, repository):
@@ -123,17 +124,21 @@ def test_postgres_runtime_shares_one_control_store_with_task_quote_and_usage(
     fake_store = FakeStore()
     monkeypatch.setattr(context, "get_online_runtime_settings", lambda: settings)
     monkeypatch.setattr(context, "get_config", lambda: {"storage": {"cache_dir": "cache"}})
+    monkeypatch.setattr(
+        context, "get_persistence_database", lambda: fake_store.database
+    )
     monkeypatch.setattr(context, "CacheManager", FakeCacheManager)
     monkeypatch.setattr(
         context,
         "PostgresTranscriptionControlStore",
-        lambda database_url: fake_store,
+        lambda *, database: fake_store,
     )
     context.get_transcription_control_store.cache_clear()
     context.get_cache_manager.cache_clear()
     try:
         manager = context.get_cache_manager()
 
+        assert manager.database is fake_store.database
         assert manager.task_repository is fake_store
         assert context.get_cloud_quote_repository() is fake_store.quote_repository
         assert context.get_usage_repository() is fake_store.usage_repository

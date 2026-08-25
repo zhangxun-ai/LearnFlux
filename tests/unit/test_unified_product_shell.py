@@ -23,6 +23,7 @@ STATIC_SHELL_CANDIDATES = (
     "visual-learning.html",
     "focus-studio.html",
     "reading.html",
+    "review.html",
     "trend-radar.html",
     "history.html",
     "settings.html",
@@ -127,6 +128,12 @@ assert.equal(shell.isNavItemActive('/view/token-1', {
 assert.equal(shell.isNavItemActive('/flywheel', {
   href: '/trend-radar', aliases: [],
 }), false);
+assert.equal(shell.isNavItemActive('/review/weekly', {
+  href: '/review/daily', aliases: ['/review'], exact: true,
+}), false);
+assert.equal(shell.isNavItemActive('/review/', {
+  href: '/review/daily', aliases: ['/review'], exact: true,
+}), true);
 
 const activeLink = {
   querySelector: (selector) => selector === '.nav-label'
@@ -134,7 +141,9 @@ const activeLink = {
     : null,
 };
 const sidebar = {
-  querySelector: (selector) => selector === '.nav-item.is-active' ? activeLink : null,
+  querySelector: (selector) => selector === '.nav-subitem.is-active, .nav-item.is-active'
+    ? activeLink
+    : null,
 };
 const documentStub = {title: 'localhost:8000/view/token-1'};
 assert.equal(
@@ -142,6 +151,33 @@ assert.equal(
   '单篇深度学习 · LearnFlux',
 );
 assert.equal(documentStub.title, '单篇深度学习 · LearnFlux');
+
+const branchClasses = new Set();
+const branchToggle = {
+  attributes: {},
+  setAttribute(name, value) { this.attributes[name] = value; },
+};
+const branchSubitems = {hidden: false};
+const branch = {
+  classList: {
+    toggle: (name, active) => active ? branchClasses.add(name) : branchClasses.delete(name),
+  },
+  querySelector: (selector) => ({
+    '.nav-branch-toggle': branchToggle,
+    '.nav-subitems': branchSubitems,
+    '[data-nav-parent="true"] .nav-label': {textContent: '复盘'},
+  })[selector] || null,
+};
+assert.equal(shell.setNavigationBranchExpanded(branch, false), false);
+assert.equal(branchClasses.has('is-expanded'), false);
+assert.equal(branchToggle.attributes['aria-expanded'], 'false');
+assert.equal(branchToggle.attributes['aria-label'], '展开复盘二级导航');
+assert.equal(branchSubitems.hidden, true);
+assert.equal(shell.setNavigationBranchExpanded(branch, true), true);
+assert.equal(branchClasses.has('is-expanded'), true);
+assert.equal(branchToggle.attributes['aria-expanded'], 'true');
+assert.equal(branchToggle.attributes['aria-label'], '收起复盘二级导航');
+assert.equal(branchSubitems.hidden, false);
 """
         result = subprocess.run(
             ["node", "-e", node_test, str(APP_SHELL)],
@@ -168,6 +204,55 @@ shell.applyFeatureVisibility(root, {reading: true, trend_radar: false});
 assert.equal(elements[0].hidden, false);
 assert.equal(elements[1].hidden, true);
 assert.equal(elements[2].hidden, true);
+"""
+        result = subprocess.run(
+            ["node", "-e", node_test, str(APP_SHELL)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, result.stderr
+
+    def test_review_parent_is_contextual_and_one_child_owns_current_page(self):
+        node_test = r"""
+const assert = require('node:assert/strict');
+global.document = { body: null };
+const shell = require(process.argv[1]);
+
+function link(href, dataset = {}) {
+  const classes = new Set();
+  return {
+    dataset: {aliases: '', ...dataset},
+    attributes: {},
+    classList: {
+      toggle: (name, active) => active ? classes.add(name) : classes.delete(name),
+      contains: (name) => classes.has(name),
+    },
+    getAttribute: (name) => name === 'href' ? href : null,
+    setAttribute(name, value) { this.attributes[name] = value; },
+    removeAttribute(name) { delete this.attributes[name]; },
+  };
+}
+
+const parent = link('/review', {navParent: 'true'});
+const daily = link('/review/daily', {aliases: '/review', navMatch: 'exact'});
+const weekly = link('/review/weekly', {navMatch: 'exact'});
+const links = [parent, daily, weekly];
+const sidebar = {
+  querySelectorAll: (selector) => {
+    assert.equal(selector, '.nav-item, .nav-subitem');
+    return links;
+  },
+};
+
+shell.reconcileNavigation(sidebar, '/review/weekly');
+assert.equal(parent.classList.contains('is-active'), true);
+assert.equal(parent.attributes['aria-current'], undefined);
+assert.equal(daily.classList.contains('is-active'), false);
+assert.equal(daily.attributes['aria-current'], undefined);
+assert.equal(weekly.classList.contains('is-active'), true);
+assert.equal(weekly.attributes['aria-current'], 'page');
 """
         result = subprocess.run(
             ["node", "-e", node_test, str(APP_SHELL)],
@@ -211,8 +296,19 @@ class TestNavigationMarkup:
         ]
         assert navigation["items"]["trend_radar"]["feature"] == "trend_radar"
         assert navigation["items"]["trend_radar"]["href"] == "/trend-radar"
+        review_children = navigation["items"]["review"]["children"]
+        assert [child["label"] for child in review_children] == [
+            "今日复盘", "周度复盘", "月度复盘", "年度复盘", "内在洞察",
+        ]
         assert "PRODUCT_NAV_START" in partial
         assert "PRODUCT_NAV_END" in partial
+        assert 'class="nav-branch-toggle"' in partial
+        assert 'aria-controls="nav-review-children"' in partial
+        assert (
+            '<nav class="nav-subitems" id="nav-review-children" '
+            'aria-label="复盘二级导航">'
+        ) in partial
+        assert partial.count("data-review-section=") == 5
         assert 'data-feature="trend_radar"' in partial
         assert re.search(r'<a[^>]*data-feature="trend_radar"[^>]*\shidden(?:\s|>)', partial)
 
@@ -236,6 +332,9 @@ class TestNavigationMarkup:
                 assert f'data-group="{group_id}"' in html, filename
                 assert f'aria-controls="nav-{group_id}-items"' in html, filename
                 assert f'id="nav-{group_id}-items"' in html, filename
+            assert html.count('class="nav-branch-toggle"') == 1, filename
+            assert 'aria-controls="nav-review-children"' in html, filename
+            assert 'id="nav-review-children"' in html, filename
 
     def test_root_home_is_marketing_landing_without_product_shell(self):
         from video_transcript_api.api.routes.views import _HOME_HTML

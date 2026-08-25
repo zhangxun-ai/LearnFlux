@@ -20,13 +20,19 @@ logger = setup_logger("visual_learning_repository")
 class VisualLearningRepository:
     """Persist versioned visual documents and generation state."""
 
-    def __init__(self, db_path: str):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, db_path: str | object):
+        self.database = db_path if hasattr(db_path, "transaction") else None
+        self._is_postgres = getattr(self.database, "dialect", None) == "postgres"
+        raw_path = getattr(db_path, "path", None) if self.database else db_path
+        self.db_path = Path(raw_path) if raw_path else None
+        if self.db_path is not None:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
         self._init_database()
 
     def _get_connection(self) -> sqlite3.Connection:
+        if self._is_postgres:
+            raise RuntimeError("postgres_connections_must_be_scoped")
         if not hasattr(self._local, "connection"):
             connection = sqlite3.connect(str(self.db_path))
             connection.row_factory = sqlite3.Row
@@ -39,6 +45,14 @@ class VisualLearningRepository:
 
     @contextmanager
     def _get_cursor(self):
+        if self._is_postgres:
+            with self.database.transaction() as connection:
+                cursor = connection.cursor()
+                try:
+                    yield cursor
+                finally:
+                    cursor.close()
+            return
         connection = self._get_connection()
         cursor = connection.cursor()
         try:
@@ -79,6 +93,8 @@ class VisualLearningRepository:
         return result
 
     def close(self) -> None:
+        if self._is_postgres:
+            return
         connection = getattr(self._local, "connection", None)
         if connection is not None:
             connection.close()
@@ -162,7 +178,7 @@ class VisualLearningRepository:
                 ),
             )
             cursor.execute(
-                "SELECT rowid, * FROM visual_documents WHERE request_key = ?",
+                "SELECT * FROM visual_documents WHERE request_key = ?",
                 (effective_key,),
             )
             row = cursor.fetchone()
@@ -291,7 +307,7 @@ class VisualLearningRepository:
     def get_document(self, document_id: str) -> Optional[dict[str, Any]]:
         with self._get_cursor() as cursor:
             cursor.execute(
-                "SELECT rowid, * FROM visual_documents WHERE id = ?",
+                "SELECT * FROM visual_documents WHERE id = ?",
                 (document_id,),
             )
             row = cursor.fetchone()
@@ -308,10 +324,10 @@ class VisualLearningRepository:
         with self._get_cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT rowid, * FROM visual_documents
+                SELECT * FROM visual_documents
                 WHERE owner_type = ? AND owner_id = ? AND document_type = ?
                 {status_clause}
-                ORDER BY updated_at DESC, rowid DESC
+                ORDER BY updated_at DESC, id DESC
                 LIMIT 1
                 """,
                 (owner_type, owner_id, document_type),
@@ -333,9 +349,9 @@ class VisualLearningRepository:
         with self._get_cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT rowid, * FROM visual_documents
+                SELECT * FROM visual_documents
                 WHERE {' AND '.join(conditions)}
-                ORDER BY updated_at DESC, rowid DESC
+                ORDER BY updated_at DESC, id DESC
                 """,
                 parameters,
             )
@@ -356,9 +372,9 @@ class VisualLearningRepository:
         with self._get_cursor() as cursor:
             cursor.execute(
                 f"""
-                SELECT rowid, * FROM visual_documents
+                SELECT * FROM visual_documents
                 WHERE {' AND '.join(conditions)}
-                ORDER BY updated_at DESC, rowid DESC
+                ORDER BY updated_at DESC, id DESC
                 LIMIT ?
                 """,
                 parameters,

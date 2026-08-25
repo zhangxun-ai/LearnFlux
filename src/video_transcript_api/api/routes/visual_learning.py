@@ -7,7 +7,13 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from .collections import get_collection_service
-from ..context import get_cache_manager, get_config, get_logger, get_static_dir
+from ..context import (
+    get_cache_manager,
+    get_config,
+    get_logger,
+    get_repository_database,
+    get_static_dir,
+)
 from ..services.transcription import verify_token
 from ...study.repository import StudyRepository
 from ...study.service import StudyService
@@ -40,14 +46,15 @@ def get_visual_learning_service() -> VisualLearningService:
     cache_manager = get_cache_manager()
     storage = config.get("storage", {}) or {}
     source_root = storage.get("source_files_dir") or "./data/source_files"
+    database = get_repository_database(cache_manager)
     study_service = StudyService(
         cache_manager=cache_manager,
-        repository=StudyRepository(str(cache_manager.db_path)),
+        repository=StudyRepository(database),
         source_root=source_root,
         llm_config=config.get("llm", {}) or {},
     )
     return VisualLearningService(
-        repository=VisualLearningRepository(str(cache_manager.db_path)),
+        repository=VisualLearningRepository(database),
         source_resolver=StudySourceResolver(study_service),
         llm_config=config.get("llm", {}) or {},
         collection_source_resolver=CollectionSourceResolver(

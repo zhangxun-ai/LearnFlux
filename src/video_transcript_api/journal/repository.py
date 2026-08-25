@@ -13,13 +13,19 @@ logger = setup_logger("journal_repository")
 class JournalRepository:
     """SQLite repository for Focus Studio journal entries and AI reviews."""
 
-    def __init__(self, db_path: str):
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, db_path: str | object):
+        self.database = db_path if hasattr(db_path, "transaction") else None
+        self._is_postgres = getattr(self.database, "dialect", None) == "postgres"
+        raw_path = getattr(db_path, "path", None) if self.database else db_path
+        self.db_path = Path(raw_path) if raw_path else None
+        if self.db_path is not None:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
         self._init_database()
 
     def _get_connection(self) -> sqlite3.Connection:
+        if self._is_postgres:
+            raise RuntimeError("postgres_connections_must_be_scoped")
         if not hasattr(self._local, "connection"):
             self._local.connection = sqlite3.connect(str(self.db_path))
             self._local.connection.row_factory = sqlite3.Row
@@ -31,6 +37,14 @@ class JournalRepository:
 
     @contextmanager
     def _get_cursor(self):
+        if self._is_postgres:
+            with self.database.transaction() as conn:
+                cursor = conn.cursor()
+                try:
+                    yield cursor
+                finally:
+                    cursor.close()
+            return
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -43,6 +57,8 @@ class JournalRepository:
             cursor.close()
 
     def close(self):
+        if self._is_postgres:
+            return
         conn = getattr(self._local, "connection", None)
         if conn is not None:
             conn.close()

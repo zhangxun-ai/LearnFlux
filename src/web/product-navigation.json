@@ -1,6 +1,6 @@
 {
   "groups": [
-    {"id": "core", "label": "核心工具", "items": ["single_study", "collections", "visual_learning", "study_player"]},
+    {"id": "core", "label": "核心工具", "items": ["single_study", "collections", "visual_learning", "study_player", "review"]},
     {"id": "flow", "label": "心流空间", "items": ["reading", "focus_studio"]},
     {"id": "insight", "label": "洞察与分析", "items": ["post_insight", "trend_radar", "flywheel"]},
     {"id": "system", "label": "系统", "bottom": true, "items": ["history", "settings"]}
@@ -33,6 +33,45 @@
       "feature": "study_player",
       "matches": ["/study"],
       "svg": "<polygon points=\"5 3 19 12 5 21 5 3\"/>"
+    },
+    "review": {
+      "label": "复盘",
+      "href": "/review",
+      "matches": ["/review"],
+      "children": [
+        {
+          "label": "今日复盘",
+          "href": "/review/daily",
+          "aliases": ["/review"],
+          "matches": ["/review", "/review/daily"],
+          "section": "daily"
+        },
+        {
+          "label": "周度复盘",
+          "href": "/review/weekly",
+          "matches": ["/review/weekly"],
+          "section": "weekly"
+        },
+        {
+          "label": "月度复盘",
+          "href": "/review/monthly",
+          "matches": ["/review/monthly"],
+          "section": "monthly"
+        },
+        {
+          "label": "年度复盘",
+          "href": "/review/annual",
+          "matches": ["/review/annual"],
+          "section": "annual"
+        },
+        {
+          "label": "内在洞察",
+          "href": "/review/insights",
+          "matches": ["/review/insights"],
+          "section": "insights"
+        }
+      ],
+      "svg": "<path d=\"M12 3v18\"/><path d=\"M7 7h5\"/><path d=\"M12 17h5\"/><circle cx=\"7\" cy=\"7\" r=\"2\"/><circle cx=\"17\" cy=\"17\" r=\"2\"/>"
     },
     "reading": {
       "label": "心流阅读",

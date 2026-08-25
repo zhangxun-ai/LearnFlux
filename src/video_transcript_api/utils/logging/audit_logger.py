@@ -26,26 +26,31 @@ class AuditLogger:
     避免每次请求新建/关闭连接的开销。
     """
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str | object = None):
         """
         初始化审计日志记录器
 
         Args:
             db_path: SQLite数据库文件路径，默认为 data/audit.db
         """
+        self.database = db_path if hasattr(db_path, "transaction") else None
+        self._is_postgres = getattr(self.database, "dialect", None) == "postgres"
         if db_path is None:
             project_root = Path(__file__).resolve().parents[4]
             data_dir = project_root / "data"
             data_dir.mkdir(parents=True, exist_ok=True)
             db_path = data_dir / "audit.db"
 
-        self.db_path = str(db_path)
+        raw_path = getattr(db_path, "path", None) if self.database else db_path
+        self.db_path = str(raw_path) if raw_path else None
         self._local = threading.local()
         self._init_database()
         logger.info(f"审计日志记录器初始化完成，数据库路径: {self.db_path}")
 
     def _get_connection(self) -> sqlite3.Connection:
         """获取当前线程的数据库连接（复用已有连接）"""
+        if self._is_postgres:
+            raise RuntimeError("postgres_connections_must_be_scoped")
         if not hasattr(self._local, 'connection'):
             self._local.connection = sqlite3.connect(self.db_path)
             # 启用 WAL 模式提升并发读写性能
@@ -58,6 +63,14 @@ class AuditLogger:
     @contextmanager
     def _get_cursor(self):
         """获取数据库游标的上下文管理器，自动 commit/rollback"""
+        if self._is_postgres:
+            with self.database.transaction() as conn:
+                cursor = conn.cursor()
+                try:
+                    yield cursor
+                finally:
+                    cursor.close()
+            return
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -116,6 +129,10 @@ class AuditLogger:
             cursor: 数据库游标
         """
         version = self._get_schema_version(cursor)
+
+        if self._is_postgres and version == 0:
+            self._set_schema_version(cursor, CURRENT_SCHEMA_VERSION)
+            return
 
         if version < 1:
             self._migrate_v1(cursor)
@@ -427,7 +444,7 @@ _audit_logger = None
 _audit_logger_lock = threading.Lock()
 
 
-def get_audit_logger() -> AuditLogger:
+def get_audit_logger(database=None) -> AuditLogger:
     """
     获取全局审计日志记录器实例（单例模式）
 
@@ -439,6 +456,6 @@ def get_audit_logger() -> AuditLogger:
     if _audit_logger is None:
         with _audit_logger_lock:
             if _audit_logger is None:
-                _audit_logger = AuditLogger()
+                _audit_logger = AuditLogger(database)
 
     return _audit_logger

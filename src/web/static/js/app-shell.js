@@ -44,6 +44,13 @@
 
     function isNavItemActive(pathname, item) {
         const matches = [item.href, ...(item.aliases || [])].filter(Boolean);
+        if (item.exact === true) {
+            const normalizedPath = pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname;
+            return matches.some((match) => {
+                const normalizedMatch = match.length > 1 ? match.replace(/\/$/, '') : match;
+                return normalizedPath === normalizedMatch;
+            });
+        }
         return matches.some((match) => (
             pathname === match || (match !== '/' && pathname.startsWith(`${match}/`))
         ));
@@ -51,7 +58,7 @@
 
     function reconcileNavigation(sidebar, pathname) {
         if (!sidebar || typeof sidebar.querySelectorAll !== 'function') return;
-        sidebar.querySelectorAll('.nav-item').forEach((link) => {
+        sidebar.querySelectorAll('.nav-item, .nav-subitem').forEach((link) => {
             const aliases = (link.dataset.aliases || '')
                 .split(',')
                 .map((value) => value.trim())
@@ -59,9 +66,12 @@
             const active = isNavItemActive(pathname, {
                 href: link.getAttribute('href'),
                 aliases,
+                exact: link.dataset.navMatch === 'exact',
             });
             link.classList.toggle('is-active', active);
-            if (active) link.setAttribute('aria-current', 'page');
+            if (active && link.dataset.navParent !== 'true') {
+                link.setAttribute('aria-current', 'page');
+            }
             else link.removeAttribute('aria-current');
         });
     }
@@ -70,12 +80,33 @@
         if (!sidebar || !documentRoot || typeof sidebar.querySelector !== 'function') {
             return '';
         }
-        const activeLink = sidebar.querySelector('.nav-item.is-active');
+        const activeLink = sidebar.querySelector('.nav-subitem.is-active, .nav-item.is-active');
         const label = activeLink ? navLabel(activeLink) : '';
         if (!label) return documentRoot.title || '';
         const title = `${label} · LearnFlux`;
         documentRoot.title = title;
         return title;
+    }
+
+    function setNavigationBranchExpanded(branch, expanded) {
+        if (!branch || typeof branch.querySelector !== 'function') return false;
+        const toggle = branch.querySelector('.nav-branch-toggle');
+        const subitems = branch.querySelector('.nav-subitems');
+        if (!toggle || !subitems) return false;
+
+        const nextExpanded = Boolean(expanded);
+        branch.classList.toggle('is-expanded', nextExpanded);
+        toggle.setAttribute('aria-expanded', String(nextExpanded));
+        subitems.hidden = !nextExpanded;
+
+        const label = branch
+            .querySelector('[data-nav-parent="true"] .nav-label')
+            ?.textContent?.trim() || '导航';
+        toggle.setAttribute(
+            'aria-label',
+            `${nextExpanded ? '收起' : '展开'}${label}二级导航`
+        );
+        return nextExpanded;
     }
 
     const exported = {
@@ -84,6 +115,7 @@
         isNavItemActive,
         normalizeShellState,
         reconcileNavigation,
+        setNavigationBranchExpanded,
         syncProductPageTitle,
     };
 
@@ -219,11 +251,29 @@
         return clone.textContent.trim();
     }
 
-    sidebar.querySelectorAll('.nav-item').forEach((link) => {
+    sidebar.querySelectorAll('.nav-item, .nav-subitem').forEach((link) => {
         const label = navLabel(link);
         if (!label) return;
         link.dataset.label = label;
         if (!link.getAttribute('aria-label')) link.setAttribute('aria-label', label);
+    });
+
+    sidebar.querySelectorAll('.nav-branch-toggle').forEach((control) => {
+        const branch = control.closest('.nav-branch');
+        if (!branch) return;
+        const activeBranch = Boolean(
+            branch.querySelector('.nav-item[data-nav-parent="true"].is-active')
+        );
+        setNavigationBranchExpanded(
+            branch,
+            activeBranch || control.getAttribute('aria-expanded') === 'true'
+        );
+        control.addEventListener('click', () => {
+            setNavigationBranchExpanded(
+                branch,
+                control.getAttribute('aria-expanded') !== 'true'
+            );
+        });
     });
 
     const groupControls = [...sidebar.querySelectorAll('.nav-group-toggle')];
@@ -255,7 +305,9 @@
 
     groupControls.forEach((control) => {
         const group = control.closest('.nav-group');
-        if (group?.querySelector('.nav-item.is-active')) group.classList.add('has-active-item');
+        if (group?.querySelector('.nav-item.is-active, .nav-subitem.is-active')) {
+            group.classList.add('has-active-item');
+        }
         control.addEventListener('click', () => {
             if (shellState.mode === 'rail' && !media.matches) return;
             const groupId = groupIdFor(control);
@@ -288,7 +340,8 @@
         lastFocus = document.activeElement;
         body.classList.add('sidebar-drawer-open');
         mobileButton.setAttribute('aria-expanded', 'true');
-        const active = sidebar.querySelector('.nav-item.is-active:not([hidden])')
+        const active = sidebar.querySelector('.nav-subitem.is-active:not([hidden])')
+            || sidebar.querySelector('.nav-item.is-active:not([hidden])')
             || sidebar.querySelector('a:not([hidden]), button:not([hidden])');
         active?.focus({preventScroll: true});
     }

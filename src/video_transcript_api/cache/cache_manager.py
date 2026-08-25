@@ -12,31 +12,51 @@ import threading
 from ..utils.logging import setup_logger
 from ..utils.task_status import TERMINAL_STATUSES, TaskStatus
 from ..utils.task_progress import build_progress
+from ..persistence.artifacts import PostgresArtifactStore
+from ..transcriber.control_database import SQLiteControlDatabase
 
 logger = setup_logger("cache_manager")
 
 
 class CacheManager:
     """
-    管理视频转录缓存的类
-    使用 SQLite 数据库存储元数据，文件系统存储实际内容
+    管理视频转录缓存的类。
+
+    SQLite 模式使用数据库元数据和文件产物；PostgreSQL 模式将元数据与
+    解析产物统一持久化到数据库，只保留原始媒体的外部路径引用。
     """
 
-    def __init__(self, cache_dir: str = "./data/cache", db_path: str = None):
+    def __init__(
+        self,
+        cache_dir: str = "./data/cache",
+        db_path: str = None,
+        database=None,
+    ):
         """
         初始化缓存管理器
 
         Args:
             cache_dir: 缓存文件目录
             db_path: SQLite 数据库路径，默认为 cache_dir/cache.db
+            database: 可选的共享数据库适配器
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        if db_path is None:
-            self.db_path = self.cache_dir / "cache.db"
+        if database is None:
+            if db_path is None:
+                self.db_path = self.cache_dir / "cache.db"
+            else:
+                self.db_path = Path(db_path)
+            self.database = SQLiteControlDatabase(self.db_path)
         else:
-            self.db_path = Path(db_path)
+            self.database = database
+            raw_path = getattr(database, "path", None)
+            self.db_path = Path(raw_path) if raw_path else None
+        self._is_postgres = getattr(self.database, "dialect", "sqlite") == "postgres"
+        self._artifact_store = (
+            PostgresArtifactStore(self.database) if self._is_postgres else None
+        )
 
         # 使用线程本地存储来管理数据库连接
         self._local = threading.local()
@@ -51,6 +71,8 @@ class CacheManager:
 
     def _get_connection(self) -> sqlite3.Connection:
         """获取当前线程的数据库连接"""
+        if self._is_postgres:
+            raise RuntimeError("postgres_connections_must_be_scoped")
         if not hasattr(self._local, 'connection'):
             self._local.connection = sqlite3.connect(str(self.db_path))
             self._local.connection.row_factory = sqlite3.Row
@@ -64,6 +86,14 @@ class CacheManager:
     @contextmanager
     def _get_cursor(self):
         """获取数据库游标的上下文管理器"""
+        if self._is_postgres:
+            with self.database.transaction() as conn:
+                cursor = conn.cursor()
+                try:
+                    yield cursor
+                finally:
+                    cursor.close()
+            return
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -135,6 +165,8 @@ class CacheManager:
 
     def _migrate_database(self):
         """执行数据库迁移"""
+        if self._is_postgres:
+            return
         try:
             with self._get_cursor() as cursor:
                 # 获取表的创建SQL语句
@@ -382,6 +414,20 @@ class CacheManager:
         Returns:
             Dict: 包含缓存信息的字典
         """
+        if self._is_postgres:
+            return self._save_cache_postgres(
+                platform=platform,
+                url=url,
+                media_id=media_id,
+                use_speaker_recognition=use_speaker_recognition,
+                transcript_data=transcript_data,
+                transcript_type=transcript_type,
+                title=title,
+                author=author,
+                description=description,
+                extra_json_data=extra_json_data,
+                source_language=source_language,
+            )
         try:
             # 获取文件存储路径
             file_path = self._get_file_path(platform, media_id)
@@ -414,9 +460,17 @@ class CacheManager:
             # 保存到数据库
             with self._get_cursor() as cursor:
                 cursor.execute('''
-                    INSERT OR REPLACE INTO video_cache
+                    INSERT INTO video_cache
                     (platform, url, title, author, description, media_id, use_speaker_recognition, files_loc, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(platform, media_id, use_speaker_recognition)
+                    DO UPDATE SET
+                        url = excluded.url,
+                        title = excluded.title,
+                        author = excluded.author,
+                        description = excluded.description,
+                        files_loc = excluded.files_loc,
+                        updated_at = CURRENT_TIMESTAMP
                 ''', (platform, url, title, author, description, media_id, use_speaker_recognition, files_loc))
 
             logger.info(f"缓存保存成功: {platform}/{media_id}, 说话人识别: {use_speaker_recognition}")
@@ -430,6 +484,112 @@ class CacheManager:
 
         except Exception as e:
             logger.error(f"保存缓存失败: {e}")
+            return None
+
+    def _save_cache_postgres(
+        self,
+        *,
+        platform: str,
+        url: str,
+        media_id: str,
+        use_speaker_recognition: bool,
+        transcript_data: Any,
+        transcript_type: str,
+        title: str,
+        author: str,
+        description: str,
+        extra_json_data: Optional[Dict[str, Any]],
+        source_language: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Persist cache metadata and parsed bytes atomically in PostgreSQL."""
+
+        try:
+            logical_path = self._get_file_path(platform, media_id)
+            files_loc = logical_path.relative_to(self.cache_dir).as_posix()
+            artifacts = []
+            if transcript_type == "funasr":
+                original_name = "transcript_funasr.json"
+                artifacts.append(
+                    self._artifact_store.build(
+                        "transcript_funasr",
+                        original_name,
+                        json.dumps(
+                            transcript_data, ensure_ascii=False, indent=2
+                        ).encode("utf-8"),
+                    )
+                )
+            else:
+                original_name = "transcript_capswriter.txt"
+                artifacts.append(
+                    self._artifact_store.build(
+                        "transcript_capswriter", original_name, str(transcript_data)
+                    )
+                )
+                if extra_json_data:
+                    artifacts.append(
+                        self._artifact_store.build(
+                            "transcript_capswriter_json",
+                            "transcript_capswriter.json",
+                            json.dumps(
+                                extra_json_data, ensure_ascii=False, indent=2
+                            ).encode("utf-8"),
+                        )
+                    )
+            if source_language:
+                artifacts.append(
+                    self._artifact_store.build(
+                        "source_language",
+                        "source_language.txt",
+                        source_language.strip(),
+                    )
+                )
+            with self._get_cursor() as cursor:
+                row = cursor.execute(
+                    """
+                    INSERT INTO video_cache(
+                        platform, url, title, author, description, media_id,
+                        use_speaker_recognition, files_loc, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(platform, media_id, use_speaker_recognition)
+                    DO UPDATE SET
+                        url = excluded.url,
+                        title = excluded.title,
+                        author = excluded.author,
+                        description = excluded.description,
+                        files_loc = excluded.files_loc,
+                        updated_at = CURRENT_TIMESTAMP
+                    RETURNING id
+                    """,
+                    (
+                        platform,
+                        url,
+                        title,
+                        author,
+                        description,
+                        media_id,
+                        int(use_speaker_recognition),
+                        files_loc,
+                    ),
+                ).fetchone()
+                cache_id = int(row["id"])
+                for artifact in artifacts:
+                    self._artifact_store.put_with_connection(
+                        cursor, cache_id, artifact
+                    )
+            logger.info(
+                "Cache saved to PostgreSQL: "
+                f"{platform}/{media_id}, speaker={use_speaker_recognition}"
+            )
+            return {
+                "id": cache_id,
+                "platform": platform,
+                "media_id": media_id,
+                "files_loc": files_loc,
+                "transcript_file": None,
+                "storage_backend": "postgres",
+            }
+        except Exception as exc:
+            logger.error(f"Failed to save PostgreSQL cache: {exc}")
             return None
 
     def get_cache(self,
@@ -487,6 +647,9 @@ class CacheManager:
 
                 # 转换为字典
                 cache_data = dict(row)
+
+                if self._is_postgres:
+                    return self._hydrate_postgres_cache(cache_data, cursor)
 
                 # 获取文件路径
                 files_loc = Path(cache_data['files_loc'])
@@ -563,10 +726,87 @@ class CacheManager:
             logger.error(f"获取缓存失败: {e}")
             return None
 
+    def _hydrate_postgres_cache(self, cache_data, cursor) -> Optional[Dict[str, Any]]:
+        """Hydrate one cache row from PostgreSQL artifact bytes."""
+
+        rows = cursor.execute(
+            """
+            SELECT artifact_type, original_name, content,
+                   content_sha256, byte_size
+            FROM transcription_artifacts
+            WHERE cache_id = ?
+            """,
+            (cache_data["id"],),
+        ).fetchall()
+        artifacts = {str(row["artifact_type"]): bytes(row["content"]) for row in rows}
+
+        if "transcript_funasr" in artifacts:
+            cache_data["transcript_data"] = json.loads(
+                artifacts["transcript_funasr"].decode("utf-8")
+            )
+            cache_data["transcript_type"] = "funasr"
+        elif "transcript_capswriter" in artifacts:
+            cache_data["transcript_data"] = artifacts[
+                "transcript_capswriter"
+            ].decode("utf-8")
+            cache_data["transcript_type"] = "capswriter"
+        else:
+            logger.warning(
+                f"PostgreSQL cache has no transcript: id={cache_data['id']}"
+            )
+            return None
+
+        cache_data["source_transcript"] = cache_data["transcript_data"]
+        text_fields = {
+            "transcript_zh": "zh_translation",
+            "source_language": "source_language",
+            "llm_calibrated": "llm_calibrated",
+            "llm_summary": "llm_summary",
+            "comment_insight": "comment_insight",
+        }
+        for artifact_type, field in text_fields.items():
+            raw = artifacts.get(artifact_type)
+            if raw is not None:
+                cache_data[field] = raw.decode("utf-8")
+        if "transcript_zh" in artifacts:
+            cache_data["translation_language"] = "zh"
+        json_fields = {
+            "transcript_capswriter_json": "transcript_capswriter_json",
+            "llm_processed": "llm_processed",
+            "comment_samples": "comment_samples",
+            "key_info": "key_info",
+            "speaker_mapping": "speaker_mapping",
+        }
+        for artifact_type, field in json_fields.items():
+            raw = artifacts.get(artifact_type)
+            if raw is not None:
+                cache_data[field] = json.loads(raw.decode("utf-8"))
+        cache_data.setdefault("comment_samples", [])
+        cache_data["file_path"] = None
+        cache_data["storage_backend"] = "postgres"
+        cache_data["artifact_types"] = sorted(artifacts)
+        logger.info(
+            "PostgreSQL cache hit: "
+            f"{cache_data.get('platform')}/{cache_data.get('media_id')}, "
+            f"speaker={cache_data.get('use_speaker_recognition')}"
+        )
+        return cache_data
+
     def save_zh_translation(self, platform: str, media_id: str, text: str) -> str:
         """Atomically save Chinese translation without touching source artifacts."""
         if not isinstance(text, str) or not text.strip():
             raise ValueError("translation_must_not_be_empty")
+        if self._is_postgres:
+            cache_id = self._artifact_store.find_cache_id(platform, media_id)
+            if cache_id is None:
+                raise FileNotFoundError("source_transcript_not_found")
+            self._artifact_store.put(
+                cache_id,
+                self._artifact_store.build(
+                    "transcript_zh", "transcript_zh.txt", text
+                ),
+            )
+            return f"postgresql://transcription_artifacts/{cache_id}/transcript_zh"
         with self._get_cursor() as cursor:
             row = cursor.execute(
                 "SELECT files_loc FROM video_cache WHERE platform=? AND media_id=? "
@@ -588,6 +828,48 @@ class CacheManager:
             if temporary.exists():
                 temporary.unlink()
         return str(target)
+
+    def get_json_artifact(
+        self, platform: str, media_id: str, artifact_type: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return an auxiliary JSON artifact for the LLM pipeline."""
+
+        if self._is_postgres:
+            cache_id = self._artifact_store.find_cache_id(platform, media_id)
+            if cache_id is None:
+                return None
+            artifact = self._artifact_store.get_all(cache_id).get(artifact_type)
+            return artifact.json() if artifact else None
+        cache_data = self.get_cache(platform=platform, media_id=media_id)
+        if not cache_data:
+            return None
+        value = cache_data.get(artifact_type)
+        return value if isinstance(value, dict) else None
+
+    def save_json_artifact(
+        self,
+        platform: str,
+        media_id: str,
+        artifact_type: str,
+        original_name: str,
+        value: Dict[str, Any],
+    ) -> bool:
+        """Save an auxiliary JSON artifact without creating a media copy."""
+
+        if not self._is_postgres:
+            return False
+        cache_id = self._artifact_store.find_cache_id(platform, media_id)
+        if cache_id is None:
+            return False
+        self._artifact_store.put(
+            cache_id,
+            self._artifact_store.build(
+                artifact_type,
+                original_name,
+                json.dumps(value, ensure_ascii=False, indent=2),
+            ),
+        )
+        return True
 
     def delete_task_and_cache(self, task_id: str) -> Optional[Dict[str, int]]:
         """Delete a terminal task and invalidate every cache variant for its media.
@@ -617,30 +899,31 @@ class CacheManager:
                 )
                 cache_rows = cursor.fetchall()
 
-        cache_root = self.cache_dir.resolve()
-        cache_paths = set()
-        for row in cache_rows:
-            cache_path = (cache_root / row["files_loc"]).resolve()
-            if cache_path == cache_root or cache_root not in cache_path.parents:
-                raise RuntimeError(f"缓存路径不安全，拒绝删除: {row['files_loc']}")
-            cache_paths.add(cache_path)
+        if not self._is_postgres:
+            cache_root = self.cache_dir.resolve()
+            cache_paths = set()
+            for row in cache_rows:
+                cache_path = (cache_root / row["files_loc"]).resolve()
+                if cache_path == cache_root or cache_root not in cache_path.parents:
+                    raise RuntimeError(f"缓存路径不安全，拒绝删除: {row['files_loc']}")
+                cache_paths.add(cache_path)
 
-        for cache_path in cache_paths:
-            if cache_path.exists():
-                shutil.rmtree(cache_path)
+            for cache_path in cache_paths:
+                if cache_path.exists():
+                    shutil.rmtree(cache_path)
 
         with self._get_cursor() as cursor:
             if platform and media_id:
-                cursor.execute(
-                    "DELETE FROM video_cache WHERE platform = ? AND media_id = ?",
-                    (platform, media_id),
-                )
-                deleted_caches = cursor.rowcount
                 cursor.execute(
                     "DELETE FROM task_status WHERE platform = ? AND media_id = ?",
                     (platform, media_id),
                 )
                 deleted_tasks = cursor.rowcount
+                cursor.execute(
+                    "DELETE FROM video_cache WHERE platform = ? AND media_id = ?",
+                    (platform, media_id),
+                )
+                deleted_caches = cursor.rowcount
             else:
                 deleted_caches = 0
                 cursor.execute("DELETE FROM task_status WHERE task_id = ?", (task_id,))
@@ -681,6 +964,11 @@ class CacheManager:
             if not cache_data:
                 logger.warning(f"未找到缓存记录: {platform}/{media_id}")
                 return False
+
+            if self._is_postgres:
+                return self._save_postgres_llm_result(
+                    cache_data, llm_type, content
+                )
 
             # 获取文件路径
             file_path = Path(cache_data['file_path'])
@@ -737,6 +1025,57 @@ class CacheManager:
         except Exception as e:
             logger.error(f"保存 LLM 结果失败: {e}")
             return False
+
+    def _save_postgres_llm_result(
+        self,
+        cache_data: Dict[str, Any],
+        llm_type: str,
+        content: Union[str, Dict],
+    ) -> bool:
+        definitions = {
+            "calibrated": ("llm_calibrated", "llm_calibrated.txt", "text"),
+            "summary": ("llm_summary", "llm_summary.txt", "text"),
+            "structured": ("llm_processed", "llm_processed.json", "json"),
+            "comment_insight": (
+                "comment_insight",
+                "comment_insight.txt",
+                "text",
+            ),
+            "comment_samples": (
+                "comment_samples",
+                "comment_samples.json",
+                "json",
+            ),
+        }
+        definition = definitions.get(llm_type)
+        if definition is None:
+            logger.error(f"未知的 LLM 类型: {llm_type}")
+            return False
+        artifact_type, original_name, content_type = definition
+        if content_type == "text":
+            if not isinstance(content, str):
+                logger.error(f"{llm_type} 类型要求 content 为字符串")
+                return False
+            payload = content
+        else:
+            if llm_type == "structured":
+                if not isinstance(content, dict):
+                    logger.error("structured 类型要求 content 为字典")
+                    return False
+                content = {"format_version": "v2", **content}
+            elif not isinstance(content, (list, dict)):
+                logger.error("comment_samples 类型要求 content 为 list/dict")
+                return False
+            payload = json.dumps(content, ensure_ascii=False, indent=2)
+        self._artifact_store.put(
+            int(cache_data["id"]),
+            self._artifact_store.build(artifact_type, original_name, payload),
+        )
+        logger.info(
+            "LLM result saved to PostgreSQL: "
+            f"cache_id={cache_data['id']} type={llm_type}"
+        )
+        return True
 
     def list_cache(self,
                    platform: str = None,
@@ -798,8 +1137,18 @@ class CacheManager:
                 """)
                 speaker_stats = {bool(row['use_speaker_recognition']): row['count'] for row in cursor.fetchall()}
 
-                # 计算缓存目录大小
-                cache_size = sum(f.stat().st_size for f in self.cache_dir.rglob('*') if f.is_file())
+                if self._is_postgres:
+                    cursor.execute(
+                        "SELECT COALESCE(SUM(byte_size), 0) AS total_bytes "
+                        "FROM transcription_artifacts"
+                    )
+                    cache_size = int(cursor.fetchone()["total_bytes"])
+                else:
+                    cache_size = sum(
+                        f.stat().st_size
+                        for f in self.cache_dir.rglob('*')
+                        if f.is_file()
+                    )
 
                 return {
                     "total_records": total,
@@ -823,6 +1172,33 @@ class CacheManager:
             deleted_count = 0
 
             with self._get_cursor() as cursor:
+                if self._is_postgres:
+                    cursor.execute(
+                        """
+                        SELECT v.id
+                        FROM video_cache v
+                        LEFT JOIN transcription_artifacts a
+                          ON a.cache_id = v.id
+                         AND a.artifact_type IN (
+                             'transcript_funasr', 'transcript_capswriter'
+                         )
+                        GROUP BY v.id
+                        HAVING COUNT(a.artifact_type) = 0
+                        """
+                    )
+                    invalid_records = [row["id"] for row in cursor.fetchall()]
+                    if invalid_records:
+                        placeholders = ",".join("?" for _ in invalid_records)
+                        cursor.execute(
+                            f"UPDATE task_status SET cache_id = NULL "
+                            f"WHERE cache_id IN ({placeholders})",
+                            invalid_records,
+                        )
+                        cursor.execute(
+                            f"DELETE FROM video_cache WHERE id IN ({placeholders})",
+                            invalid_records,
+                        )
+                    return len(invalid_records)
                 # 获取所有缓存记录
                 cursor.execute("SELECT id, files_loc FROM video_cache")
                 records = cursor.fetchall()
@@ -883,12 +1259,21 @@ class CacheManager:
 
                 records_to_delete = cursor.fetchall()
 
-                # 删除文件
-                for record in records_to_delete:
-                    file_path = self.cache_dir / Path(record['files_loc'])
-                    if file_path.exists():
-                        import shutil
-                        shutil.rmtree(file_path)
+                if not self._is_postgres:
+                    for record in records_to_delete:
+                        file_path = self.cache_dir / Path(record['files_loc'])
+                        if file_path.exists():
+                            import shutil
+                            shutil.rmtree(file_path)
+
+                if self._is_postgres and records_to_delete:
+                    ids = [record["id"] for record in records_to_delete]
+                    placeholders = ",".join("?" for _ in ids)
+                    cursor.execute(
+                        f"UPDATE task_status SET cache_id = NULL "
+                        f"WHERE cache_id IN ({placeholders})",
+                        ids,
+                    )
 
                 # 删除数据库记录
                 cursor.execute("DELETE FROM video_cache WHERE updated_at < ?", (cutoff_date,))
@@ -903,7 +1288,7 @@ class CacheManager:
 
     def close(self):
         """关闭数据库连接"""
-        if hasattr(self._local, 'connection'):
+        if not self._is_postgres and hasattr(self._local, 'connection'):
             self._local.connection.close()
 
     # ========== 任务状态管理方法 ==========
@@ -1618,6 +2003,50 @@ class CacheManager:
             logger.error(f"获取任务信息失败: {e}")
             return None
 
+    def list_recent_tasks(
+        self,
+        *,
+        owner_user_id: str = None,
+        include_unowned: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Return durable recent tasks scoped to the authenticated owner."""
+
+        if self._task_status_repository is not None:
+            return self._task_status_repository.list_recent_tasks(
+                owner_user_id=owner_user_id,
+                include_unowned=include_unowned,
+                limit=limit,
+                offset=offset,
+            )
+
+        safe_limit = max(1, min(int(limit), 500))
+        safe_offset = max(0, int(offset))
+        if owner_user_id and include_unowned:
+            where_sql = "(owner_user_id = ? OR owner_user_id IS NULL)"
+            parameters = (owner_user_id,)
+        elif owner_user_id:
+            where_sql = "owner_user_id = ?"
+            parameters = (owner_user_id,)
+        else:
+            where_sql = "owner_user_id IS NULL"
+            parameters = ()
+
+        try:
+            with self._get_cursor() as cursor:
+                cursor.execute(
+                    f"""SELECT * FROM task_status
+                    WHERE {where_sql}
+                    ORDER BY created_at DESC, task_id DESC
+                    LIMIT ? OFFSET ?""",
+                    parameters + (safe_limit, safe_offset),
+                )
+                return [self._decode_task_row(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"查询最近任务失败: {e}")
+            raise
+
     def get_task_by_view_token(self, view_token: str) -> Optional[Dict[str, Any]]:
         """
         根据view_token获取任务信息
@@ -1649,7 +2078,7 @@ class CacheManager:
                             ELSE 7
                         END,
                         created_at DESC,
-                        rowid DESC
+                        task_id DESC
                     LIMIT 1
                 """, (view_token,))
                 row = cursor.fetchone()
@@ -1813,7 +2242,10 @@ class CacheManager:
                         'summary_missing': summary_missing,
                         'summary_pending': summary_pending,
                         'transcript': transcript,
+                        'llm_calibrated': cache_data.get('llm_calibrated'),
+                        'llm_processed': cache_data.get('llm_processed'),
                         'source_transcript': cache_data.get('source_transcript'),
+                        'transcript_type': cache_data.get('transcript_type'),
                         'source_language': cache_data.get('source_language'),
                         'zh_translation': cache_data.get('zh_translation'),
                         'translation_language': cache_data.get('translation_language'),

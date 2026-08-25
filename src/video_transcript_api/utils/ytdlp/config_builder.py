@@ -22,6 +22,18 @@ DEFAULT_RETRIES = 10
 DEFAULT_FRAGMENT_RETRIES = 10
 DEFAULT_EXTRACTOR_RETRIES = 5
 
+SUPPORTED_COOKIE_BROWSERS = {
+    'brave',
+    'chrome',
+    'chromium',
+    'edge',
+    'firefox',
+    'opera',
+    'safari',
+    'vivaldi',
+    'whale',
+}
+
 # Optimized player client order for best success rate (2024)
 DEFAULT_PLAYER_CLIENTS = [
     'android_vr',
@@ -76,7 +88,12 @@ class YtdlpConfigBuilder:
         cookie_config = self.ytdlp_config.get('youtube_cookie', {})
         return {
             'enabled': cookie_config.get('enabled', False),
+            'source': str(cookie_config.get('source', 'file')).strip().lower(),
             'file_path': cookie_config.get('file_path', './config/youtube_cookies.txt'),
+            'browser': str(cookie_config.get('browser', 'chrome')).strip().lower(),
+            'browser_profile': str(
+                cookie_config.get('browser_profile', '') or ''
+            ).strip(),
             'fallback_without_cookie': cookie_config.get('fallback_without_cookie', True),
         }
 
@@ -94,6 +111,17 @@ class YtdlpConfigBuilder:
         if not cookie_config['enabled']:
             logger.info("[ytdlp] YouTube cookie not enabled, using cookie-less mode")
             self._cookie_validated = True
+            return None
+
+        if cookie_config['source'] == 'browser':
+            browser = cookie_config['browser']
+            self._cookie_validated = True
+            if browser not in SUPPORTED_COOKIE_BROWSERS:
+                logger.error(f"[ytdlp] Unsupported cookie browser: {browser}")
+                return None
+            logger.info(
+                f"[ytdlp] YouTube browser cookie enabled: browser={browser}"
+            )
             return None
 
         file_path = cookie_config['file_path']
@@ -142,6 +170,12 @@ class YtdlpConfigBuilder:
         if not cookie_config['enabled']:
             return False
 
+        if cookie_config['source'] == 'browser':
+            return cookie_config['browser'] in SUPPORTED_COOKIE_BROWSERS
+
+        if cookie_config['source'] != 'file':
+            return False
+
         # Validate if not done yet
         if not self._cookie_validated:
             self.validate_cookie_on_startup()
@@ -166,10 +200,10 @@ class YtdlpConfigBuilder:
         Returns:
             Absolute path to cookie file if valid, None otherwise.
         """
-        if not self.is_cookie_available():
+        cookie_config = self._get_cookie_config()
+        if cookie_config['source'] != 'file' or not self.is_cookie_available():
             return None
 
-        cookie_config = self._get_cookie_config()
         file_path = cookie_config['file_path']
 
         # Convert to absolute path
@@ -178,6 +212,40 @@ class YtdlpConfigBuilder:
             path = Path.cwd() / path
 
         return str(path)
+
+    def get_cookie_browser(self) -> tuple[str, ...] | None:
+        """Return the yt-dlp browser cookie specification when configured."""
+        cookie_config = self._get_cookie_config()
+        if cookie_config['source'] != 'browser' or not self.is_cookie_available():
+            return None
+
+        browser = cookie_config['browser']
+        profile = cookie_config['browser_profile']
+        if profile:
+            return browser, profile
+        return browser,
+
+    def _apply_cookie_source(self, opts: dict, *, use_cookie: bool) -> None:
+        """Attach the configured cookie source to a yt-dlp option mapping."""
+        if not use_cookie:
+            return
+
+        browser = self.get_cookie_browser()
+        if browser:
+            opts['cookiesfrombrowser'] = browser
+            # Let the installed yt-dlp select its current authenticated
+            # YouTube clients. The anonymous client overrides above include
+            # ``player_skip=webpage`` and can suppress every player response
+            # when account cookies are present.
+            opts.pop('extractor_args', None)
+            logger.debug("[ytdlp] Using browser cookies")
+            return
+
+        cookie_path = self.get_cookie_file_path()
+        if cookie_path:
+            opts['cookiefile'] = cookie_path
+            opts.pop('extractor_args', None)
+            logger.debug("[ytdlp] Using cookie file")
 
     def _get_player_clients(self) -> list[str]:
         """Get player client list from config or use defaults.
@@ -223,12 +291,7 @@ class YtdlpConfigBuilder:
         opts['extract_flat'] = False
         opts['skip_download'] = True
 
-        # Add cookie if requested and available
-        if use_cookie:
-            cookie_path = self.get_cookie_file_path()
-            if cookie_path:
-                opts['cookiefile'] = cookie_path
-                logger.debug(f"[ytdlp] Using cookie file for info extraction")
+        self._apply_cookie_source(opts, use_cookie=use_cookie)
 
         return opts
 
@@ -264,12 +327,7 @@ class YtdlpConfigBuilder:
         opts['skip_unavailable_fragments'] = False
         opts['hls_prefer_native'] = True
 
-        # Add cookie if requested and available
-        if use_cookie:
-            cookie_path = self.get_cookie_file_path()
-            if cookie_path:
-                opts['cookiefile'] = cookie_path
-                logger.debug(f"[ytdlp] Using cookie file for download")
+        self._apply_cookie_source(opts, use_cookie=use_cookie)
 
         return opts
 
@@ -298,7 +356,11 @@ class YtdlpConfigBuilder:
         lines.append(f"  - Cookie enabled: {cookie_config['enabled']}")
 
         if cookie_config['enabled']:
-            lines.append(f"  - Cookie file: {cookie_config['file_path']}")
+            lines.append(f"  - Cookie source: {cookie_config['source']}")
+            if cookie_config['source'] == 'browser':
+                lines.append(f"  - Cookie browser: {cookie_config['browser']}")
+            else:
+                lines.append(f"  - Cookie file: {cookie_config['file_path']}")
             lines.append(f"  - Fallback mode: {cookie_config['fallback_without_cookie']}")
 
             if self._cookie_validation_result:

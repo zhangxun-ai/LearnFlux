@@ -111,6 +111,21 @@ class TestExtractNoteId:
             result = downloader._extract_note_id("https://xhslink.com/abc123")
             assert result == "6501a1234b5c6d7e8f901234"
 
+    def test_cn_short_link_resolved(self, downloader):
+        """The current xhslink.cn share domain should resolve like xhslink.com."""
+        with patch.object(
+            downloader,
+            "resolve_short_url",
+            return_value=(
+                "https://www.xiaohongshu.com/discovery/item/"
+                "6a8846bc000000002a031bb5"
+            ),
+        ):
+            result = downloader._extract_note_id(
+                "https://xhslink.cn/o/8oQdw7Hu4YC"
+            )
+            assert result == "6a8846bc000000002a031bb5"
+
     def test_invalid_url_raises(self, downloader):
         with pytest.raises(ValueError, match="Failed to extract note ID"):
             downloader._extract_note_id("https://example.com/nothing")
@@ -229,6 +244,40 @@ class TestValidateResponse:
 
 class TestMultiEndpointFallback:
     """Test get_video_info multi-endpoint retry logic."""
+
+    def test_cn_short_link_uses_token_from_resolved_url(self, downloader):
+        """The resolved URL token must be forwarded to the web V3 endpoint."""
+        short_url = "https://xhslink.cn/o/8oQdw7Hu4YC"
+        resolved_url = (
+            "https://www.xiaohongshu.com/discovery/item/"
+            "6a8846bc000000002a031bb5"
+            "?xsec_token=token-from-resolved-url"
+        )
+        response = _make_api_response(SAMPLE_V3_DATA)
+
+        with (
+            patch.object(
+                downloader,
+                "resolve_short_url",
+                return_value=resolved_url,
+            ) as mock_resolve,
+            patch.object(
+                downloader,
+                "make_api_request",
+                return_value=response,
+            ) as mock_api,
+        ):
+            result = downloader.get_video_info(short_url)
+
+        mock_resolve.assert_called_once_with(short_url)
+        assert mock_api.call_args_list[0].args == (
+            _ENDPOINT_CONFIGS[0]["path"],
+            {
+                "note_id": "6a8846bc000000002a031bb5",
+                "xsec_token": "token-from-resolved-url",
+            },
+        )
+        assert result["download_url"] == "https://cdn.example.com/video.mp4"
 
     def test_first_endpoint_succeeds(self, downloader):
         """First endpoint returns valid data, no further endpoints called."""
@@ -451,6 +500,9 @@ class TestCanHandle:
 
     def test_xhslink_com(self, downloader):
         assert downloader.can_handle("https://xhslink.com/abc")
+
+    def test_xhslink_cn(self, downloader):
+        assert downloader.can_handle("https://xhslink.cn/o/abc")
 
     def test_unrelated_url(self, downloader):
         assert not downloader.can_handle("https://www.youtube.com/watch?v=abc")
@@ -689,6 +741,52 @@ class TestRealWorldResponseFormats:
         assert result["author"] == "苏越越"
         assert result["download_url"] == "http://sns-v8.rednotecdn.com/video.mp4"
         assert "http://sns-v10.rednotecdn.com/video.mp4" in result["_candidate_urls"]
+
+    def test_web_v3_supports_dynamic_stream_codec_keys(self, downloader):
+        """Web V3 may return stream keys such as EF4/EF5 instead of h264."""
+        note_card = {
+            "title": "Dynamic stream codecs",
+            "user": {"nickname": "TestUser"},
+            "type": "video",
+            "video": {
+                "media": {
+                    "stream": {
+                        "EF4": [{
+                            "backup_urls": [
+                                "https://cdn.example.com/ef4-backup.mp4"
+                            ],
+                            "master_url": "https://cdn.example.com/ef4-master.mp4",
+                        }],
+                        "EF5": [{
+                            "backup_urls": [
+                                "https://cdn.example.com/ef5-backup.mp4"
+                            ],
+                            "master_url": "https://cdn.example.com/ef5-master.mp4",
+                        }],
+                    }
+                }
+            },
+        }
+        api_response = _make_api_response(note_card)
+
+        with patch.object(
+            downloader, "make_api_request", return_value=api_response
+        ) as mock_api:
+            result = downloader.get_video_info(
+                "https://www.xiaohongshu.com/discovery/item/"
+                "6a8846bc000000002a031bb5?xsec_token=tok123"
+            )
+
+        assert mock_api.call_count == 1
+        assert result["download_url"] == (
+            "https://cdn.example.com/ef4-backup.mp4"
+        )
+        assert result["_candidate_urls"] == [
+            "https://cdn.example.com/ef4-backup.mp4",
+            "https://cdn.example.com/ef4-master.mp4",
+            "https://cdn.example.com/ef5-backup.mp4",
+            "https://cdn.example.com/ef5-master.mp4",
+        ]
 
     def test_app_note_widgets_context_fallback(self, downloader):
         """Simulate app_note: no video_info_v2, fallback to widgets_context audio."""

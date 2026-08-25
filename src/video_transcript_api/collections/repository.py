@@ -28,8 +28,12 @@ class _ConnectionCursor:
         self.connection = connection
         self._result = None
 
-    def execute(self, statement: str, parameters=()):
-        self._result = self.connection.execute(statement, parameters)
+    def execute(self, statement: str, parameters=None):
+        self._result = (
+            self.connection.execute(statement)
+            if parameters is None
+            else self.connection.execute(statement, parameters)
+        )
         return self
 
     @property

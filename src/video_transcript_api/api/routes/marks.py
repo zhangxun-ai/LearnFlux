@@ -3,7 +3,11 @@ from functools import lru_cache
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...marks import ContentMarkRepository
-from ..context import get_audit_logger, get_cache_manager
+from ..context import (
+    get_audit_logger,
+    get_cache_manager,
+    get_repository_database,
+)
 from ..services.transcription import TranscribeResponse, verify_token
 
 cache_manager = get_cache_manager()
@@ -14,7 +18,9 @@ router = APIRouter(prefix="/api/marks", tags=["marks"])
 
 @lru_cache
 def get_marks_repository() -> ContentMarkRepository:
-    return ContentMarkRepository(db_path=str(cache_manager.db_path))
+    return ContentMarkRepository(
+        db_path=get_repository_database(cache_manager)
+    )
 
 
 def _user_key(user_info: dict) -> str:

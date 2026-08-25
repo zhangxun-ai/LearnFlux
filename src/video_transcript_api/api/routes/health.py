@@ -92,15 +92,22 @@ async def health_check():
 
 
 def _check_sqlite() -> Dict[str, Any]:
-    """检查 SQLite 数据库连通性"""
+    """Check the selected persistence backend (legacy name kept for API tests)."""
     try:
         cache_manager = get_cache_manager()
+        if getattr(cache_manager, "_is_postgres", False) is True:
+            conn = cache_manager.database.connect()
+            try:
+                conn.execute("SELECT 1").fetchone()
+            finally:
+                conn.close()
+            return {"healthy": True, "backend": "postgres"}
         conn = sqlite3.connect(str(cache_manager.db_path))
         cursor = conn.cursor()
         cursor.execute("SELECT 1")
         cursor.close()
         conn.close()
-        return {"healthy": True}
+        return {"healthy": True, "backend": "sqlite"}
     except Exception as e:
         logger.warning(f"SQLite health check failed: {e}")
         return {"healthy": False, "error": str(e)}

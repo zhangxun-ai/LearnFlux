@@ -115,6 +115,30 @@ class TestURLParserBasic:
         assert result.platform == "xiaohongshu"
         assert result.video_id == "64abc123def456gh7890ijkl"
 
+    def test_xiaohongshu_cn_short_url(self):
+        """The current xhslink.cn share domain should resolve as Xiaohongshu."""
+        parser = URLParser()
+        with patch("requests.head") as mock_head:
+            mock_response = Mock()
+            mock_response.url = (
+                "https://www.xiaohongshu.com/discovery/item/"
+                "6a8846bc000000002a031bb5"
+            )
+            mock_head.return_value = mock_response
+
+            result = parser.parse("https://xhslink.cn/o/8oQdw7Hu4YC")
+
+        assert result.platform == "xiaohongshu"
+        assert result.video_id == "6a8846bc000000002a031bb5"
+        assert result.is_short_url
+
+    def test_extract_platform_xiaohongshu_cn_short_url(self):
+        parser = URLParser()
+        assert (
+            parser.extract_platform("https://xhslink.cn/o/8oQdw7Hu4YC")
+            == "xiaohongshu"
+        )
+
     def test_xiaoyuzhou_url(self):
         """Test Xiaoyuzhou URL"""
         parser = URLParser()

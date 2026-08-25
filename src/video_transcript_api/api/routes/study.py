@@ -11,7 +11,14 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
-from ..context import get_audit_logger, get_cache_manager, get_config, get_logger, get_user_manager
+from ..context import (
+    get_audit_logger,
+    get_cache_manager,
+    get_config,
+    get_logger,
+    get_repository_database,
+    get_user_manager,
+)
 from ..services.transcription import TranscribeResponse, process_local_upload, verify_token
 from ...obsidian.service import (
     ObsidianConflict,
@@ -100,7 +107,9 @@ def get_source_root() -> Path:
 def get_study_service() -> StudyService:
     return StudyService(
         cache_manager=cache_manager,
-        repository=StudyRepository(db_path=str(cache_manager.db_path)),
+        repository=StudyRepository(
+            db_path=get_repository_database(cache_manager)
+        ),
         source_root=get_source_root(),
         llm_config=config.get("llm", {}) or {},
     )

@@ -96,6 +96,13 @@ SCHEMA: list[dict[str, Any]] = [
          {"key": "feishu.webhook", "label": "飞书 Webhook", "type": "secret"},
          {"key": "feishu.secret", "label": "飞书签名密钥", "type": "secret"},
      ]},
+    {"title": "Obsidian 复盘同步", "icon": "🗂️", "tier": "advanced",
+     "desc": "可选：把复盘以 LearnFlux 管理区形式同步到同机 Obsidian Vault。",
+     "fields": [
+         {"key": "obsidian.enabled", "label": "启用 Obsidian 同步", "type": "bool"},
+         {"key": "obsidian.vault_path", "label": "Vault 绝对路径", "type": "str"},
+         {"key": "obsidian.review_root", "label": "复盘根目录", "type": "str"},
+     ]},
     {"title": "性能与其它", "icon": "🧩", "tier": "advanced",
      "desc": "并发与开关，按需调整。",
      "fields": [

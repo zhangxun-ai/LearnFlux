@@ -76,7 +76,7 @@ class URLParser:
         ],
         'xiaohongshu': [
             r'xiaohongshu\.com/(?:explore|discovery/item|items)/(\w+)',  # 主域名
-            r'xhslink\.com/(\w+)',  # 短链接（需要解析）
+            r'xhslink\.(?:com|cn)/(?:o/)?(\w+)',  # 短链接（需要解析）
         ],
         'twitter': [
             # X / Twitter 推文链接：x.com 或 twitter.com 的 /<user>/status/<id>
@@ -95,6 +95,7 @@ class URLParser:
         'youtu.be': 'youtube',
         'v.douyin.com': 'douyin',
         'xhslink.com': 'xiaohongshu',
+        'xhslink.cn': 'xiaohongshu',
     }
 
     def parse(self, url: str, timeout: int = 10) -> ParsedURL:
@@ -288,7 +289,11 @@ class URLParser:
             return 'douyin'
         elif 'xiaoyuzhoufm.com' in url_lower:
             return 'xiaoyuzhou'
-        elif 'xiaohongshu.com' in url_lower or 'xhslink.com' in url_lower:
+        elif (
+            'xiaohongshu.com' in url_lower
+            or 'xhslink.com' in url_lower
+            or 'xhslink.cn' in url_lower
+        ):
             return 'xiaohongshu'
         # 边界匹配，避免 netflix.com 等把 'x.com' 当子串误判为 twitter
         elif re.search(r'(?<!\w)(?:x|twitter)\.com', url_lower):

@@ -34,6 +34,7 @@ from .context import (
     get_llm_queue,
     get_static_dir,
     get_temp_manager,
+    get_repository_database,
     get_transcription_control_store,
     get_workspace_dir,
     get_executor,
@@ -61,6 +62,7 @@ from .routes import (
     obsidian,
     post_insight,
     reading,
+    reviews,
     settings,
     study,
     tasks,
@@ -172,7 +174,7 @@ def _recover_reading_deletions(
 ) -> None:
     source_root, _ = _source_cleanup_paths(storage_config)
     service = ReadingService(
-        db_path=cache_manager.db_path,
+        db_path=get_repository_database(cache_manager),
         source_root=source_root,
     )
     try:
@@ -253,6 +255,7 @@ def create_app() -> FastAPI:
     app.include_router(flywheel.router)
     app.include_router(trend_radar.router)
     app.include_router(reading.router)
+    app.include_router(reviews.router)
     app.include_router(settings.router)
 
     @app.on_event("startup")
@@ -268,7 +271,10 @@ def create_app() -> FastAPI:
                 "Skipping orphan task recovery: another API instance owns the runtime lock"
             )
         else:
-            Path(cache_manager.db_path).parent.mkdir(parents=True, exist_ok=True)
+            if cache_manager.db_path is not None:
+                Path(cache_manager.db_path).parent.mkdir(
+                    parents=True, exist_ok=True
+                )
             control_store = get_transcription_control_store()
             usage_repository = control_store.usage_repository
             quote_repository = control_store.quote_repository
@@ -333,7 +339,7 @@ def create_app() -> FastAPI:
                     logger,
                 )
             except Exception as exc:
-                logger.exception("Reading deletion recovery failed: %s", exc)
+                logger.exception(f"Reading deletion recovery failed: {exc}")
 
             try:
                 _run_source_file_cleanup(

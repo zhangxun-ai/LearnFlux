@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from psycopg import IntegrityError as PostgresIntegrityError
+
 from .schemas import (
     FocusMaterial,
     ReadingAnnotation,
@@ -34,10 +36,16 @@ class ReadingDataError(ValueError):
 class ReadingRepository:
     """Persist owner-isolated reading state without web framework dependencies."""
 
-    def __init__(self, db_path: str | Path) -> None:
-        self.db_path = Path(db_path)
-        self._connection = sqlite3.connect(self.db_path)
-        self._connection.row_factory = sqlite3.Row
+    def __init__(self, db_path: str | Path | object) -> None:
+        if hasattr(db_path, "connect") and hasattr(db_path, "transaction"):
+            self.database = db_path
+            self.db_path = None
+            self._connection = db_path.connect()
+        else:
+            self.database = None
+            self.db_path = Path(db_path)
+            self._connection = sqlite3.connect(self.db_path)
+            self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._create_schema()
 
@@ -185,8 +193,10 @@ class ReadingRepository:
             )
 
     @staticmethod
-    def _now() -> datetime:
-        return datetime.now(UTC)
+    def _now() -> str:
+        """Return a portable ISO timestamp for the repository's TEXT columns."""
+
+        return datetime.now(UTC).isoformat(timespec="microseconds")
 
     @staticmethod
     def _id() -> str:
@@ -409,7 +419,7 @@ class ReadingRepository:
                    VALUES (?, ?, ?)""",
                 (run_id, source_page, analysis_id),
             )
-        except sqlite3.IntegrityError as exc:
+        except (sqlite3.IntegrityError, PostgresIntegrityError) as exc:
             raise ReadingDataError("page snapshot already exists") from exc
         self._connection.commit()
 
@@ -593,7 +603,7 @@ class ReadingRepository:
         document_id: str,
         run_id: str,
         resolution: dict[str, Any],
-        created_at: datetime,
+        created_at: str,
     ) -> None:
         target_type = resolution.get("target_type")
         status = resolution.get("status")
@@ -674,7 +684,7 @@ class ReadingRepository:
         params: list[Any] = [self._now()]
         if older_than is not None:
             conditions.append("updated_at < ?")
-            params.append(older_than)
+            params.append(older_than.isoformat(timespec="microseconds"))
         cursor = self._connection.execute(
             "UPDATE reading_documents "
             "SET status = 'needs_ocr', parse_error = 'ocr_interrupted', updated_at = ? "
@@ -709,7 +719,7 @@ class ReadingRepository:
             "id": self._id(),
             "source_path": source_path,
             "asset_dir": asset_dir,
-            "created_at": self._now().isoformat(),
+            "created_at": self._now(),
         }
         with self._connection:
             self._connection.execute(

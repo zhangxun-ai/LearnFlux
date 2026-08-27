@@ -165,8 +165,10 @@
                     <p id="review-description">选一件触动你的事，依次写下当时的反应与现在的理解。</p>
                 </div>
                 <div class="review-page-actions">
-                    <button class="review-button review-button-quiet" id="review-guide-open" type="button">复盘指南</button>
-                    <button class="review-button review-button-quiet" id="review-search-open" type="button">搜索记录</button>
+                    <button class="review-icon-button" id="review-guide-open" type="button" aria-label="打开复盘指南" title="复盘指南">?</button>
+                    <button class="review-icon-button" id="review-search-open" type="button" aria-label="搜索复盘记录" title="搜索记录">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+                    </button>
                     <button class="review-button review-button-primary" id="review-primary-action" type="button">新增事件</button>
                 </div>
             </header>
@@ -195,19 +197,12 @@
     <dialog class="review-dialog review-search-dialog" id="review-search-dialog" aria-labelledby="review-search-title">
         <div class="review-dialog-panel review-search-panel">
             <header class="review-dialog-header">
-                <div><h2 id="review-search-title">搜索记录</h2><p>按时间或内容找到以前的复盘。</p></div>
+                <div><h2 id="review-search-title">搜索记录</h2><p>输入记得的词，留空可以查看最近记录。</p></div>
                 <button class="review-dialog-close" type="button" data-dialog-close aria-label="关闭">×</button>
             </header>
             <form class="review-search-form" id="review-search-form">
-                <label class="review-field review-field-wide"><span>关键词</span><input name="keyword" type="search" placeholder="搜索事实、意义、洞察或行动"></label>
-                <label class="review-field"><span>开始日期</span><input name="start_date" type="date"></label>
-                <label class="review-field"><span>结束日期</span><input name="end_date" type="date"></label>
-                <label class="review-field"><span>记录类型</span><select name="record_type"><option value="">全部</option><option value="daily">每日</option><option value="weekly">周度</option><option value="monthly">月度</option><option value="annual">年度</option><option value="insight">洞察</option><option value="experiment">行动实验</option></select></label>
-                <label class="review-field"><span>意义</span><select name="meaning_type"><option value="">全部</option><option value="discovery">发现</option><option value="learning">学习</option><option value="decision">决心</option><option value="joy">快乐</option><option value="hunch">预感</option></select></label>
-                <label class="review-field"><span>情绪</span><input name="emotion" placeholder="例如：担心"></label>
-                <label class="review-field"><span>洞察层级</span><select name="insight_tier"><option value="">全部</option><option value="branch">枝叶</option><option value="trunk">树干</option><option value="root">树根</option></select></label>
-                <label class="review-field"><span>状态</span><select name="status"><option value="">全部</option><option value="active">进行中</option><option value="pending">待确认</option><option value="observing">继续观察</option><option value="accepted">我认可</option><option value="rejected">我不认可</option><option value="disproved">已被证伪</option><option value="planned">待实验</option><option value="completed">已完成</option><option value="stopped">已停止</option></select></label>
-                <button class="review-button review-button-primary" type="submit">搜索</button>
+                <label class="review-field review-search-field"><span class="sr-only">搜索内容</span><input name="keyword" type="search" placeholder="搜索事件、想法或行动" autocomplete="off" autofocus></label>
+                <button class="review-button review-button-primary" type="submit">查找</button>
             </form>
             <div class="review-search-results" id="review-search-results" aria-live="polite"></div>
         </div>
@@ -230,6 +225,16 @@
                 <button class="review-dialog-close" type="button" data-dialog-close aria-label="关闭">×</button>
             </header>
             <div id="review-help-content"></div>
+        </div>
+    </dialog>
+
+    <dialog class="review-dialog review-example-dialog" id="review-example-dialog" aria-labelledby="review-example-title">
+        <div class="review-dialog-panel review-example-panel">
+            <header class="review-dialog-header">
+                <div><h2 id="review-example-title">填写案例</h2><p>只作参考，不会写入或覆盖你的记录。</p></div>
+                <button class="review-dialog-close" type="button" data-dialog-close aria-label="关闭">×</button>
+            </header>
+            <div id="review-example-content"></div>
         </div>
     </dialog>
 

@@ -9,16 +9,9 @@
         daily: '今日复盘', weekly: '周度复盘', monthly: '月度复盘',
         annual: '年度复盘', insights: '内在洞察',
     };
-    const TAB_DESCRIPTIONS = {
-        daily: '选一件触动你的事，依次写下当时的反应与现在的理解。',
-        weekly: '回看七天记录，完成聚焦、连接、抽象与行动实验。',
-        monthly: '用内心、行动、结果与备注，留下这个月最重要的内容。',
-        annual: '把十二个月放在同一张表里，看见跨越时间的联结。',
-        insights: '从枝叶到树干再到根系，逐层整理对自己的认识。',
-    };
-    const MEANING_LABELS = {
-        discovery: '发现', learning: '学习', decision: '决心',
-        joy: '快乐', hunch: '预感', '': '暂时没有新的意义', custom: '自定义',
+    const TAB_KICKERS = {
+        daily: '今天', weekly: '本周', monthly: '全年视图',
+        annual: '回看这一年', insights: '来自长期记录',
     };
     const EMOTIONS = ['快乐', '信任', '恐惧', '惊讶', '悲伤', '厌恶', '愤怒', '期待', '安心', '困惑', '委屈', '疲惫'];
     const AI_PURPOSES = {
@@ -40,6 +33,14 @@
             title: '意义：写你现在真正认可的理解',
             body: '意义可以是发现、学习、决断、喜悦或一个尚未证实的直觉。它不必积极，也没有标准答案。',
             example: '例：我并不是不会表达，而是在多人场合需要更明确的开场锚点。',
+        },
+        emotion: {
+            title: '不知道怎么表达情绪？',
+            body: '先从最接近的词开始，不必一次选得很准确。几种看似矛盾的感受也可以同时存在。',
+            example: '既期待接下来的机会，也担心自己准备不足，可以同时选择“期待”和“恐惧”，再用自己的话补充。',
+            image: '/static/images/review/emotion-wheel.png',
+            image_alt: '普鲁奇克情绪轮盘，展示八种基本情绪、强弱变化与相邻情绪形成的复合感受',
+            image_caption: '《复盘自己：从记录到蜕变的行动指南》图 3-4',
         },
         past: {
             title: '当时：让原始反应被看见',
@@ -88,6 +89,91 @@
         },
     };
 
+    const REVIEW_EXAMPLES = {
+        daily: {
+            title: '每日复盘案例',
+            subject: '团队氛围低迷时，找到自己能做的事',
+            context: '一位实践者感觉团队抱怨变多，却一直不知道从哪里开始改变。',
+            sections: [
+                {
+                    title: '事件',
+                    fields: [
+                        ['什么事件让你内心有所触动？', '业绩不佳，团队氛围低迷。抱怨与相互指责的声音越来越多。'],
+                    ],
+                },
+                {
+                    title: '第一步 · 如实记录',
+                    fields: [
+                        ['事件发生时，我在想什么、感受什么？', '为什么大家这么爱抱怨？真让人烦躁。'],
+                        ['当时我采取了什么行动？', '没有采取行动。'],
+                        ['这个行动带来了什么结果？', '抱怨的人越来越多。'],
+                    ],
+                },
+                {
+                    title: '第二步 · 意义重塑',
+                    fields: [
+                        ['回顾后，我重新注意到了什么？', '我看到大家可能觉得自己的努力被浪费，因此感到无力。我可以更多地肯定成员的努力。'],
+                        ['从现在开始，我可以采取什么具体行动？', '在部门例会上介绍成员的新尝试，营造一起点赞的氛围。'],
+                        ['这些行动可能会带来怎样的结果？', '发言的成员感到开心，团队逐渐恢复良好氛围。'],
+                    ],
+                },
+            ],
+        },
+        weekly: {
+            title: '周度复盘案例',
+            subject: '从一本书和一封邮件开始的联结',
+            context: '一位技术工作者读到一本好书后，给素未谋面的作者写信，后来促成了一场约 80 人参加的内部分享会。',
+            sections: [
+                {
+                    title: '01 · 聚焦',
+                    fields: [
+                        ['本周最影响我的三件事', '读到一本把复杂技术讲清楚的书；给退休专家发出真诚邮件；原本约 4 人的分享会扩大到约 80 人。'],
+                    ],
+                },
+                {
+                    title: '02 · 找联系',
+                    fields: [
+                        ['这些事情之间的联系', '被内容打动 → 主动表达受到的启发 → 得到专家回应 → 分享机会扩大 → 同事开始来请教。'],
+                    ],
+                },
+                {
+                    title: '03 · 看模式',
+                    fields: [
+                        ['这周让我更了解自己的什么？', '当我把真实的感动具体表达出来，并先发出一次邀请时，知识、他人与自己的专业信心会产生新的联结。'],
+                    ],
+                },
+                {
+                    title: '04 · 具体化',
+                    fields: [
+                        ['下一次，我准备怎么做？', '遇到真正有价值的内容时，写一封说明具体触动与邀请目的的邮件，先尝试组织一次小范围分享。'],
+                    ],
+                },
+            ],
+        },
+        monthly: {
+            title: '月度复盘案例',
+            subject: '4 月的想法，在之后几个月形成结果',
+            context: '原书的年度表把“内心、行动、结果、备注”分别记录，再回看跨月发生的联结，不强迫它们在同一个月形成因果。',
+            sections: [
+                {
+                    title: '4 月',
+                    fields: [
+                        ['内心', '工作坊也许就是我可以为之努力一生的工作；对离职者增多感到焦虑。'],
+                        ['行动', '在部门提议设立新媒体部门；购入自行车，开始运动。'],
+                        ['结果', '领导力工作坊大受欢迎，好评如潮。'],
+                        ['回看后想留下的话', '对今后的职业发展感到迷茫。'],
+                    ],
+                },
+                {
+                    title: '跨月联结',
+                    fields: [
+                        ['从想法到结果', '4 月提出设立新媒体部门 → 6 月新部门正式启动 → 8 月新媒体部门在公司会议上获得好评。'],
+                    ],
+                },
+            ],
+        },
+    };
+
     const today = localISODate();
     const initialParams = new URLSearchParams(window.location.search);
     const legacyGuideRequested = /^\/review\/guide\/?$/.test(window.location.pathname)
@@ -102,9 +188,16 @@
         year: initialYear,
         preferences: {newbie_mode: true, week_start_day: 0, obsidian_root: '复盘'},
         daily: null,
+        dailyEventId: null,
         weekly: null,
+        weeklyStep: 1,
+        weeklyDrafts: new Map(),
         monthly: null,
+        monthlyDrafts: new Map(),
         annual: null,
+        annualDrafts: new Map(),
+        draftVersions: new Map(),
+        savesInFlight: new Set(),
         insights: [],
         insightOverview: null,
         insightSources: [],
@@ -122,6 +215,10 @@
     window.LearnFluxReviewState = state;
 
     const elements = {
+        workspace: document.querySelector('.review-workspace'),
+        pageHeading: document.querySelector('.review-page-heading'),
+        pageActions: document.querySelector('.review-page-actions'),
+        contextBar: document.querySelector('.review-context-bar'),
         view: document.getElementById('review-view'),
         status: document.getElementById('review-page-status'),
         saveState: document.getElementById('review-save-state'),
@@ -146,6 +243,9 @@
         helpDialog: document.getElementById('review-help-dialog'),
         helpTitle: document.getElementById('review-help-title'),
         helpContent: document.getElementById('review-help-content'),
+        exampleDialog: document.getElementById('review-example-dialog'),
+        exampleTitle: document.getElementById('review-example-title'),
+        exampleContent: document.getElementById('review-example-content'),
         emotionDialog: document.getElementById('review-emotion-dialog'),
         emotionGrid: document.getElementById('review-emotion-grid'),
         emotionCustom: document.getElementById('review-emotion-custom'),
@@ -249,11 +349,11 @@
         return '已保存到 LearnFlux';
     }
 
-    function toast(message) {
+    function toast(message, duration = 3200) {
         clearTimeout(state.toastTimer);
         elements.toast.textContent = message;
         elements.toast.hidden = false;
-        state.toastTimer = setTimeout(() => { elements.toast.hidden = true; }, 3200);
+        state.toastTimer = setTimeout(() => { elements.toast.hidden = true; }, duration);
     }
 
     function openDialog(dialog) {
@@ -262,6 +362,12 @@
 
     function closeDialog(dialog) {
         if (dialog?.open) dialog.close();
+    }
+
+    function openSearch() {
+        document.querySelectorAll('.review-more-menu[open]').forEach((menu) => menu.removeAttribute('open'));
+        openDialog(elements.searchDialog);
+        requestAnimationFrame(() => elements.searchForm.elements.keyword.focus({preventScroll: true}));
     }
 
     function draftKey(id) { return `${DRAFT_PREFIX}${id}`; }
@@ -283,7 +389,38 @@
         try { localStorage.removeItem(draftKey(id)); } catch (error) {}
     }
 
+    function draftVersionKey(type, key) { return `${type}:${key}`; }
+
+    function draftVersion(type, key) {
+        return state.draftVersions.get(draftVersionKey(type, key)) || 0;
+    }
+
+    function markDraftChanged(type, key) {
+        const versionKey = draftVersionKey(type, key);
+        state.draftVersions.set(versionKey, (state.draftVersions.get(versionKey) || 0) + 1);
+    }
+
+    function clearDraftVersion(type, key) {
+        state.draftVersions.delete(draftVersionKey(type, key));
+    }
+
     function updateTabChrome() {
+        elements.workspace.dataset.reviewTab = state.tab;
+        if (state.tab === 'daily') {
+            if (elements.periodControls.parentElement !== elements.contextBar) {
+                elements.contextBar.prepend(elements.periodControls);
+            }
+            if (elements.saveState.parentElement !== elements.contextBar) {
+                elements.contextBar.append(elements.saveState);
+            }
+        } else {
+            if (elements.periodControls.parentElement !== elements.pageActions) {
+                elements.pageActions.insertBefore(elements.periodControls, elements.primary);
+            }
+            if (elements.saveState.parentElement !== elements.pageHeading) {
+                elements.pageHeading.append(elements.saveState);
+            }
+        }
         document.querySelectorAll('[data-review-section]').forEach((link) => {
             const active = link.dataset.reviewSection === state.tab;
             link.classList.toggle('is-active', active);
@@ -306,17 +443,30 @@
         }
         const actions = {
             daily: '新增事件', weekly: '保存本周', monthly: '保存本月',
-            annual: '保存年度总结', insights: '新增洞察',
+            annual: '保存年度总结', insights: '整理一条洞察',
         };
         elements.primary.textContent = actions[state.tab];
+        elements.primary.hidden = state.tab === 'daily';
         elements.title.textContent = TAB_LABELS[state.tab];
-        elements.description.textContent = TAB_DESCRIPTIONS[state.tab];
+        elements.description.textContent = TAB_KICKERS[state.tab];
+        elements.description.hidden = state.tab === 'daily';
+        const currentPeriod = state.tab === 'daily' || state.tab === 'weekly'
+            ? state.date === today
+            : state.tab === 'monthly'
+                ? state.month === today.slice(0, 7)
+                : state.tab === 'annual'
+                    ? state.year === today.slice(0, 4)
+                    : true;
+        elements.periodToday.hidden = currentPeriod;
         document.title = `${TAB_LABELS[state.tab]} · LearnFlux`;
         document.querySelector('.topbar-page-title').textContent = `复盘 / ${TAB_LABELS[state.tab]}`;
     }
 
     async function selectTab(tab, {replace = false} = {}) {
         if (!TABS.includes(tab)) tab = 'daily';
+        if (state.tab === 'weekly') syncWeeklyDraftFromView();
+        if (state.tab === 'monthly') captureMonthlyDraft();
+        if (state.tab === 'annual') captureAnnualDraft();
         state.tab = tab;
         const target = new URL(window.location.href);
         target.pathname = `/review/${tab}`;
@@ -365,6 +515,9 @@
     async function loadDaily() {
         state.daily = await api(`/api/reviews/daily-events?date=${encodeURIComponent(state.date)}`);
         state.daily.items = state.daily.items.map(readDraft);
+        if (!state.daily.items.some((item) => item.id === state.dailyEventId)) {
+            state.dailyEventId = state.daily.items[0]?.id || null;
+        }
         renderDaily();
         const restored = state.daily.items.some((item) => item._draft);
         setSaveState(
@@ -373,86 +526,109 @@
         );
     }
 
+    function activeDailyItem() {
+        const items = state.daily?.items || [];
+        return items.find((item) => item.id === state.dailyEventId) || items[0] || null;
+    }
+
     function renderDaily() {
         const items = state.daily?.items || [];
         if (!items.length) {
-            elements.view.innerHTML = `<div class="review-empty"><div><h2>今天还没有复盘记录</h2><p>选一件触动你的事，从客观事实开始填写。</p><button class="review-button review-button-primary" type="button" data-action="add-daily">记录第一件事</button></div></div>`;
+            state.dailyEventId = null;
+            elements.view.innerHTML = `<div class="review-empty"><div><h2>今天还没有复盘记录</h2><p>选一件触动你的事，从客观事实开始填写。</p><div class="review-empty-actions"><button class="review-button review-button-primary" type="button" data-action="add-daily">记录第一件事</button><button class="review-example-trigger" type="button" data-action="open-example">查看填写案例</button></div></div></div>`;
             return;
         }
-        elements.view.innerHTML = `<div class="review-stack">${items.map(renderDailyCard).join('')}</div>`;
-    }
-
-    function meaningOptions(selected) {
-        return Object.entries(MEANING_LABELS).map(([value, label]) => (
-            `<option value="${escapeAttr(value)}"${value === selected ? ' selected' : ''}>${escapeHTML(label)}</option>`
-        )).join('');
-    }
-
-    function meaningTypesMarkup(item) {
-        const selected = item.meaning_types?.length
-            ? item.meaning_types
-            : item.meaning_type !== undefined ? [item.meaning_type] : [];
-        return Object.entries(MEANING_LABELS).map(([value, label]) => `<label class="review-choice-chip"><input type="checkbox" data-meaning-type value="${escapeAttr(value)}"${selected.includes(value) ? ' checked' : ''}><span>${escapeHTML(label)}</span></label>`).join('');
+        const current = activeDailyItem();
+        state.dailyEventId = current.id;
+        elements.view.innerHTML = `<div class="review-daily-workspace">
+            ${renderDailyCard(current, items)}
+        </div>`;
     }
 
     function emotionsMarkup(values) {
         const names = (values || []).map((value) => typeof value === 'string' ? value : value?.name).filter(Boolean);
-        return names.length
-            ? names.map((name) => `<span class="review-chip">${escapeHTML(name)}</span>`).join('')
-            : '<span class="review-chip">尚未选择情绪</span>';
+        return names.map((name) => `<span class="review-chip">${escapeHTML(name)}</span>`).join('');
     }
 
-    function renderDailyCard(item, index) {
+    function renderDailyCard(item, items = []) {
         const past = item.past || {};
         const present = item.present || {};
         const savedAt = item._draft ? '本地草稿' : formatTime(item.updated_at);
+        const assistReady = Boolean(String(item.fact || '').trim() && String(past.thoughts || '').trim());
+        const thoughtsId = `review-past-thoughts-${escapeAttr(item.id)}`;
+        const meaningId = `review-present-meaning-${escapeAttr(item.id)}`;
+        const currentIndex = Math.max(0, items.findIndex((record) => record.id === item.id));
+        const pager = items.length > 1 ? `<nav class="review-record-pager" aria-label="切换今日记录">
+            <button type="button" data-action="shift-daily" data-shift="-1" aria-label="上一条记录"${currentIndex === 0 ? ' disabled' : ''}>←</button>
+            <span>第 ${currentIndex + 1} / ${items.length} 条</span>
+            <button type="button" data-action="shift-daily" data-shift="1" aria-label="下一条记录"${currentIndex === items.length - 1 ? ' disabled' : ''}>→</button>
+        </nav>` : '';
         return `<article class="review-event-card review-daily-template" data-event-id="${escapeAttr(item.id)}">
-            <header class="review-event-header">
-                <div class="review-event-heading"><span>第 ${index + 1} 件</span><input class="review-title-input" data-field="title" value="${escapeAttr(item.title)}" placeholder="给这件事起一个便于回看的名字" aria-label="事件标题"></div>
-                <details class="review-more-menu"><summary>更多</summary><div>
-                    <button type="button" data-action="source" data-source-type="daily" data-source-id="${escapeAttr(item.id)}">查看来源</button>
-                    <button type="button" data-ai="daily_reframe" data-ai-source-id="${escapeAttr(item.id)}">AI 辅助</button>
-                    <button type="button" data-action="duplicate-daily">复制事件</button>
-                    <button class="is-danger" type="button" data-action="delete-daily">删除事件</button>
-                </div></details>
-            </header>
-            <label class="review-event-prompt"><span>事件</span><strong>什么事件让你内心有所触动？ <button class="review-help-trigger" type="button" data-help="fact" aria-label="查看事件字段帮助">?</button></strong><textarea data-field="fact" placeholder="只写实际发生、可以观察到的内容">${escapeHTML(item.fact)}</textarea></label>
+            <section class="review-event-prompt">
+                <header>
+                    <div><span>事件</span><div class="review-prompt-title"><h2>什么事件让你内心有所触动？</h2><button class="review-help-trigger" type="button" data-help="fact" aria-label="查看客观事实填写帮助">?</button></div><p>只写客观发生的事，不加入感受或评价 <button class="review-example-trigger" type="button" data-action="open-example">查看填写案例</button></p></div>
+                    <div class="review-event-actions">
+                        <button class="review-icon-button review-event-tool" type="button" data-action="open-search" aria-label="搜索复盘记录" title="搜索记录"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button>
+                        <button class="review-icon-button review-event-tool" type="button" data-action="add-daily" aria-label="记录另一件事" title="记录另一件事"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+                        <details class="review-more-menu review-event-menu">
+                            <summary aria-label="记录操作">•••</summary>
+                            <div><button class="is-danger" type="button" data-action="delete-daily">删除记录</button></div>
+                        </details>
+                    </div>
+                </header>
+                ${pager}
+                <textarea rows="3" data-field="fact" aria-label="什么事件让你内心有所触动？">${escapeHTML(item.fact)}</textarea>
+            </section>
             <div class="review-daily-columns">
                 <section class="review-daily-lane is-past">
-                    <header><span>当时</span><h3>事件发生时的理解</h3></header>
-                    <label class="review-template-field"><span class="review-template-kind">意义</span><strong>当时你如何理解这件事？有什么感受？</strong><textarea data-field="past.thoughts" placeholder="如实写下当时的想法和感受">${escapeHTML(past.thoughts)}</textarea></label>
-                    <label class="review-template-field"><span class="review-template-kind">行动</span><strong>当时你采取了什么行动？</strong><textarea data-field="past.action" placeholder="没有采取行动也可以留空">${escapeHTML(past.action)}</textarea></label>
-                    <label class="review-template-field"><span class="review-template-kind">结果</span><strong>当时的行动带来了什么结果？</strong><textarea data-field="past.result" placeholder="尚未出现结果也可以留空">${escapeHTML(past.result)}</textarea></label>
+                    <header><span>第一步</span><h3>如实记录</h3></header>
+                    <div class="review-method-flow">
+                        <div class="review-template-field">
+                            <div class="review-template-heading"><label for="${thoughtsId}">事件发生时，我在想什么、感受什么？</label><button class="review-help-trigger" type="button" data-help="emotion" aria-label="不知道怎么表达情绪时查看情绪轮盘">?</button></div>
+                            <small>不修饰，也不判断好坏</small>
+                            <textarea id="${thoughtsId}" rows="4" data-field="past.thoughts">${escapeHTML(past.thoughts)}</textarea>
+                            <div class="review-field-tools review-emotion-tools"><div class="review-emotions" data-emotion-list>${emotionsMarkup(item.emotions)}</div><button class="review-inline-action" type="button" data-action="choose-emotions">选择情绪词</button></div>
+                        </div>
+                        <label class="review-template-field"><strong>当时我采取了什么行动？</strong><small>如果没有，可以留空</small><textarea rows="3" data-field="past.action">${escapeHTML(past.action)}</textarea></label>
+                        <label class="review-template-field"><strong>这个行动带来了什么结果？</strong><small>如果还没有明显结果，可以留空</small><textarea rows="3" data-field="past.result">${escapeHTML(past.result)}</textarea></label>
+                    </div>
                 </section>
                 <section class="review-daily-lane is-present">
-                    <header><span>现在</span><h3>重新看这件事</h3></header>
-                    <label class="review-template-field"><span class="review-template-kind">意义</span><strong>现在重新看，你发现了什么？ <button class="review-help-trigger" type="button" data-help="meaning" aria-label="查看意义重塑帮助">?</button></strong><textarea data-field="quick_meaning" placeholder="写下你现在真正认可的理解">${escapeHTML(item.quick_meaning || present.new_view)}</textarea></label>
-                    <label class="review-template-field"><span class="review-template-kind">行动</span><strong>从现在开始，你可以采取什么具体行动？</strong><textarea data-field="present.action" placeholder="写成自己现在可以做到的行动">${escapeHTML(present.action)}</textarea></label>
-                    <label class="review-template-field"><span class="review-template-kind">结果</span><strong>这些行动可能会带来怎样的结果？</strong><textarea data-field="present.expected_result" placeholder="写下可以观察到的结果">${escapeHTML(present.expected_result)}</textarea></label>
+                    <header><span>第二步</span><h3>意义重塑</h3></header>
+                    <div class="review-method-flow">
+                        <div class="review-template-field">
+                            <div class="review-template-heading"><label for="${meaningId}">回顾事件和左侧记录后，我重新注意到了什么？</label><button class="review-help-trigger" type="button" data-help="meaning" aria-label="查看意义重塑填写帮助">?</button></div>
+                            <small>可以是对事件的新看法，也可以是对自己的新发现</small>
+                            <textarea id="${meaningId}" rows="5" data-field="quick_meaning">${escapeHTML(item.quick_meaning || present.new_view)}</textarea>
+                            <div class="review-field-tools"><button class="review-inline-action" type="button" data-ai="daily_reframe" data-ai-source-id="${escapeAttr(item.id)}" data-daily-assist${assistReady ? '' : ' hidden'}>获得一个新视角候选</button></div>
+                        </div>
+                        <label class="review-template-field"><strong>从现在开始，我可以采取什么具体行动？</strong><small>只写从现在开始、仅靠自己可以做到的事</small><textarea rows="4" data-field="present.action">${escapeHTML(present.action)}</textarea></label>
+                        <label class="review-template-field"><strong>这些行动可能会带来怎样的结果？</strong><small>行动后可以回来补充实际结果；没有发生也算结果</small><textarea rows="3" data-field="present.expected_result">${escapeHTML(present.expected_result)}</textarea></label>
+                    </div>
                     <details class="review-inline-result">
                         <summary>已经行动？补充实际结果</summary>
                         <label class="review-field"><span>后来实际发生了什么 <button class="review-help-trigger" type="button" data-help="actual" aria-label="查看实际结果帮助">?</button></span><textarea data-field="present.actual_result" placeholder="如实记录结果，也可以写未执行">${escapeHTML(present.actual_result || present.result)}</textarea></label>
                     </details>
                 </section>
             </div>
-            <details class="review-template-extras">
-                <summary>人物、关键词与情绪（可选）</summary>
-                <div class="review-extras-grid">
-                    <label class="review-field"><span>当时真正想要什么</span><textarea data-field="past.desire" placeholder="可选">${escapeHTML(past.desire)}</textarea></label>
-                    <label class="review-field"><span>现在看见了自己的什么</span><textarea data-field="present.self_discovery" placeholder="可选">${escapeHTML(present.self_discovery)}</textarea></label>
-                    <label class="review-field"><span>涉及人物 <button class="review-help-trigger" type="button" data-help="people" aria-label="查看人物和关键词帮助">?</button></span><input data-list-field="people" value="${escapeAttr((item.people || []).join('、'))}" placeholder="用顿号或逗号分开"></label>
-                    <label class="review-field"><span>关键词</span><input data-list-field="keywords" value="${escapeAttr((item.keywords || []).join('、'))}" placeholder="例如：周会、表达"></label>
+            <details class="review-record-organizer">
+                <summary><span>整理记录（可选）</span><small>以后按名称、人物或主题查找</small></summary>
+                <div class="review-organizer-grid">
+                    <label class="review-field"><span>记录名称</span><input class="review-title-input" data-field="title" value="${escapeAttr(item.title)}" placeholder="例如：没有先说结论的评审会"></label>
+                    <label class="review-field"><span>涉及人物</span><input data-list-field="people" value="${escapeAttr((item.people || []).join('、'))}" placeholder="用顿号或逗号分开"></label>
+                    <label class="review-field"><span>主题</span><input data-list-field="keywords" value="${escapeAttr((item.keywords || []).join('、'))}" placeholder="例如：周会、表达"></label>
                 </div>
-                <fieldset class="review-choice-field"><legend>这次意义更接近什么（可多选）</legend><div class="review-meaning-types">${meaningTypesMarkup(item)}</div><label class="review-field"><span>自定义</span><input data-field="meaning_custom" value="${escapeAttr(item.meaning_custom)}" placeholder="可选"></label></fieldset>
-                <div class="review-emotions" data-emotion-list>${emotionsMarkup(item.emotions)}</div>
-                <button class="review-button review-button-small review-button-quiet" type="button" data-action="choose-emotions">选择情绪</button>
             </details>
-            <footer class="review-card-footer"><span data-card-status>${escapeHTML(savedAt)}</span></footer>
+            <span class="sr-only" data-card-status>${escapeHTML(savedAt)}</span>
         </article>`;
     }
 
     function collectDailyCard(card) {
-        const payload = {past: {}, present: {}};
+        const item = state.daily.items.find((entry) => entry.id === card.dataset.eventId);
+        const payload = {
+            past: {...(item?.past || {})},
+            present: {...(item?.present || {})},
+        };
         card.querySelectorAll('[data-field]').forEach((input) => {
             const [group, field] = input.dataset.field.split('.');
             if (field && (group === 'past' || group === 'present')) payload[group][field] = input.value;
@@ -461,18 +637,41 @@
         card.querySelectorAll('[data-list-field]').forEach((input) => {
             payload[input.dataset.listField] = String(input.value || '').split(/[、,，\n]+/).map((value) => value.trim()).filter(Boolean);
         });
-        payload.meaning_types = [...card.querySelectorAll('[data-meaning-type]:checked')].map((input) => input.value);
-        payload.meaning_type = payload.meaning_types[0] || '';
         payload.present.new_view = payload.quick_meaning || '';
-        const item = state.daily.items.find((entry) => entry.id === card.dataset.eventId);
         payload.emotions = item?.emotions || [];
         return payload;
+    }
+
+    function updateDailyAssist(card) {
+        const button = card.querySelector('[data-daily-assist]');
+        if (!button) return;
+        const fact = card.querySelector('[data-field="fact"]')?.value.trim();
+        const thoughts = card.querySelector('[data-field="past.thoughts"]')?.value.trim();
+        button.hidden = !(fact && thoughts);
+    }
+
+    function selectDailyEvent(id) {
+        if (!state.daily?.items.some((item) => item.id === id)) return;
+        state.daily.items = state.daily.items.map(readDraft);
+        state.dailyEventId = id;
+        renderDaily();
+    }
+
+    function shiftDailyEvent(direction) {
+        const items = state.daily?.items || [];
+        const currentIndex = items.findIndex((item) => item.id === state.dailyEventId);
+        const target = items[currentIndex + direction];
+        if (target) selectDailyEvent(target.id);
     }
 
     function scheduleDailySave(card) {
         const id = card.dataset.eventId;
         const payload = collectDailyCard(card);
         writeDraft(id, payload);
+        const index = state.daily.items.findIndex((item) => item.id === id);
+        if (index >= 0) {
+            state.daily.items[index] = {...state.daily.items[index], ...payload, _draft: true};
+        }
         card.querySelector('[data-card-status]').textContent = '本地草稿';
         setSaveState('saving', '正在自动保存…');
         clearTimeout(state.saveTimers.get(id));
@@ -494,6 +693,7 @@
             clearDraft(id);
             card.querySelector('[data-card-status]').textContent = `已保存 ${formatTime(updated.updated_at)}`;
             setSaveState('saved', syncLabel(data.sync));
+            if (state.tab === 'daily') toast('已保存', 1800);
         } catch (error) {
             card.querySelector('[data-card-status]').textContent = '保存失败，草稿仍在本机';
             setSaveState('error', '自动保存失败 · 本地草稿已保留');
@@ -510,10 +710,11 @@
             });
             state.daily = state.daily || {items: []};
             state.daily.items.push(data.record);
+            state.dailyEventId = data.record.id;
             renderDaily();
             setSaveState('saved', syncLabel(data.sync));
             const card = elements.view.querySelector(`[data-event-id="${CSS.escape(data.record.id)}"]`);
-            card?.querySelector('.review-title-input')?.focus();
+            card?.querySelector('[data-field="fact"]')?.focus();
         } catch (error) {
             setSaveState('error', '创建失败');
             toast(error.message);
@@ -526,6 +727,7 @@
         try {
             await api(`/api/reviews/daily-events/${encodeURIComponent(id)}`, {method: 'DELETE'});
             state.daily.items = state.daily.items.filter((item) => item.id !== id);
+            state.dailyEventId = state.daily.items[0]?.id || null;
             clearDraft(id);
             renderDaily();
             setSaveState('saved', '事件已删除');
@@ -536,6 +738,7 @@
         try {
             const data = await api(`/api/reviews/daily-events/${encodeURIComponent(card.dataset.eventId)}/duplicate`, {method: 'POST'});
             state.daily.items.push(data.record);
+            state.dailyEventId = data.record.id;
             renderDaily();
             setSaveState('saved', syncLabel(data.sync));
             toast('已复制为新的独立事件');
@@ -571,38 +774,120 @@
 
     async function loadWeekly() {
         state.weekly = await api(`/api/reviews/weekly/${encodeURIComponent(state.date)}`);
+        const draft = state.weeklyDrafts.get(state.weekly.period.start);
+        if (draft) state.weekly.record = {...(state.weekly.record || {}), ...draft};
+        state.weeklyStep = 1;
         renderWeekly();
-        setSaveState('saved', '本周来源已聚合');
+        setSaveState(draft ? 'dirty' : 'saved', draft ? '已恢复本周未保存内容' : '本周来源已聚合');
+    }
+
+    function weeklyStepButton(number, title) {
+        const active = state.weeklyStep === number;
+        const done = state.weeklyStep > number;
+        return `<button type="button" data-weekly-step="${number}" class="${active ? 'is-active' : ''}${done ? ' is-done' : ''}" aria-current="${active ? 'step' : 'false'}"><span>${done ? '✓' : number}</span><strong>${escapeHTML(title)}</strong></button>`;
+    }
+
+    function weeklySourceRows(data, focusIds) {
+        const byDay = groupBy(data.daily_events || [], (item) => item.review_date);
+        const start = new Date(`${data.period.start}T12:00:00`);
+        return Array.from({length: 7}, (_, offset) => {
+            const day = new Date(start);
+            day.setDate(start.getDate() + offset);
+            const key = localISODate(day);
+            const items = byDay[key] || [];
+            if (!items.length) {
+                return `<div class="review-week-source is-empty"><span><b>${escapeHTML(weekdayLabel(key))}</b><small>${escapeHTML(key.slice(5))}</small></span><strong>没有记录</strong><i aria-hidden="true"></i></div>`;
+            }
+            return items.map((item) => {
+                const selected = focusIds.includes(item.id);
+                return `<label class="review-week-source${selected ? ' is-selected' : ''}"><span><b>${escapeHTML(weekdayLabel(key))}</b><small>${escapeHTML(key.slice(5))}</small></span><strong>${escapeHTML(item.title || compactText(item.fact || item.quick_meaning, 44) || '未命名事件')}</strong><input type="checkbox" data-focus-source="${escapeAttr(item.id)}"${selected ? ' checked' : ''}><i aria-hidden="true">${selected ? '✓' : ''}</i></label>`;
+            }).join('');
+        }).join('');
+    }
+
+    function weeklyPanel(number, kicker, title, description, body) {
+        return `<section class="review-week-panel${state.weeklyStep === number ? ' is-active' : ''}" data-week-panel="${number}" tabindex="-1"><header><span>${escapeHTML(kicker)}</span><h2>${escapeHTML(title)}</h2><p>${escapeHTML(description)} <button class="review-example-trigger" type="button" data-action="open-example">查看填写案例</button></p></header>${body}</section>`;
+    }
+
+    function setWeeklyStep(step) {
+        syncWeeklyDraftFromView();
+        state.weeklyStep = Math.max(1, Math.min(4, Number(step) || 1));
+        elements.view.querySelectorAll('[data-weekly-step]').forEach((button) => {
+            const number = Number(button.dataset.weeklyStep);
+            button.classList.toggle('is-active', number === state.weeklyStep);
+            button.classList.toggle('is-done', number < state.weeklyStep);
+            button.setAttribute('aria-current', number === state.weeklyStep ? 'step' : 'false');
+            const marker = button.querySelector('span');
+            if (marker) marker.textContent = number < state.weeklyStep ? '✓' : String(number);
+        });
+        elements.view.querySelectorAll('[data-week-panel]').forEach((panel) => {
+            panel.classList.toggle('is-active', Number(panel.dataset.weekPanel) === state.weeklyStep);
+        });
+        const footer = elements.view.querySelector('.review-week-footer');
+        if (footer) {
+            const [previous, status, next] = footer.children;
+            previous.disabled = state.weeklyStep === 1;
+            status.textContent = `第 ${state.weeklyStep} 步，共 4 步`;
+            next.disabled = state.weeklyStep === 4;
+        }
+        elements.view.querySelector('.review-week-result')?.classList.toggle('is-visible', state.weeklyStep === 4);
+        const panel = elements.view.querySelector(`[data-week-panel="${state.weeklyStep}"]`);
+        panel?.focus({preventScroll: true});
+        panel?.scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+
+    function weeklyDraftKey() {
+        return state.weekly?.period?.start || state.date;
+    }
+
+    function syncWeeklyDraftFromView(markDirty = false) {
+        if (state.tab !== 'weekly' || !state.weekly || !elements.view.querySelector('.review-weekly-workspace')) return;
+        const current = state.weekly.record || {focus_ids: [], abstraction: {}, summary: ''};
+        const abstraction = {...(current.abstraction || {})};
+        const summaryInput = document.getElementById('review-week-summary');
+        elements.view.querySelectorAll('[data-abstraction-level]').forEach((input) => {
+            abstraction[input.dataset.abstractionLevel] = input.value;
+        });
+        state.weekly.record = {
+            ...current,
+            focus_ids: selectedWeeklyIds(),
+            abstraction,
+            summary: summaryInput ? summaryInput.value : current.summary || '',
+        };
+        const key = weeklyDraftKey();
+        if (markDirty || state.weeklyDrafts.has(key)) {
+            state.weeklyDrafts.set(key, {...state.weekly.record});
+            if (markDirty) markDraftChanged('weekly', key);
+        }
     }
 
     function renderWeekly() {
         const data = state.weekly;
         const record = data.record || {focus_ids: [], abstraction: {}, summary: ''};
         const focusIds = record.focus_ids || [];
-        const byDay = groupBy(data.daily_events || [], (item) => item.review_date);
-        const start = new Date(`${data.period.start}T12:00:00`);
-        const days = Array.from({length: 7}, (_, offset) => {
-            const day = new Date(start);
-            day.setDate(start.getDate() + offset);
-            return localISODate(day);
-        });
-        const dailyRows = days.map((day) => {
-            const items = byDay[day] || [];
-            return `<section class="review-source-day"><h4><span>${escapeHTML(day.slice(5))}</span>${weekdayLabel(day)}</h4><div>${items.map((item) => `<label class="review-source-event"><input type="checkbox" data-focus-source="${escapeAttr(item.id)}"${focusIds.includes(item.id) ? ' checked' : ''}><span><strong>${escapeHTML(item.title || '未命名事件')}</strong><p>${escapeHTML(compactText(item.fact || item.quick_meaning, 90))}</p></span></label>`).join('') || '<p class="review-source-empty">暂无记录</p>'}</div></section>`;
+        const selectedCards = focusIds.map((id) => renderFocusItem(id, data.daily_events)).join('');
+        const selectedContext = focusIds.map((id) => {
+            const item = (data.daily_events || []).find((entry) => entry.id === id);
+            return `<article><span>${escapeHTML(item?.review_date?.slice(5) || '')}</span><strong>${escapeHTML(item?.title || compactText(item?.fact, 52) || '来源事件')}</strong></article>`;
         }).join('');
-        elements.view.innerHTML = `<div class="review-week-sheet">
-            <section class="review-week-reflection" aria-label="周度复盘">
-                <header class="review-sheet-heading"><h2>本周复盘</h2><p>${escapeHTML(data.period.start)} 至 ${escapeHTML(data.period.end)}</p></header>
-                ${weeklyStep(1, '聚焦', '从右侧选择 1-3 件真正重要的事', `<ul class="review-focus-list" id="review-focus-list">${focusIds.map((id) => renderFocusItem(id, data.daily_events)).join('') || '<li class="review-source-empty">从右侧每日记录中勾选</li>'}</ul>`, 'focus')}
-                ${weeklyStep(2, '连接', '寻找直接、间接或意外的联结', renderConnections(data.connections || []), 'connection', 'weekly_connections')}
-                ${weeklyStep(3, '抽象', '从枝叶逐步靠近树干和根系', renderAbstraction(record.abstraction || {}), 'abstraction', 'weekly_abstraction')}
-                ${weeklyStep(4, '行动实验', '把认可的理解变成一个可验证的行动', renderExperiments(data.experiments || []), 'experiment', 'action_experiment')}
-                <section class="review-week-summary"><label class="review-field"><span>本周总结</span><textarea id="review-week-summary" placeholder="这一周最值得留下的是什么？">${escapeHTML(record.summary || '')}</textarea></label></section>
-            </section>
-            <aside class="review-week-daily" aria-label="本周每日记录">
-                <header class="review-sheet-heading"><h2>每日记录</h2><button class="review-help-trigger" type="button" data-help="focus" aria-label="查看聚焦帮助">?</button></header>
-                ${dailyRows}
-            </aside>
+        const abstractions = record.abstraction || {};
+        const takeaway = record.summary || [...Array(8)].map((_, index) => abstractions[String(8 - index)] || abstractions[8 - index]).find(Boolean) || '完成四步后，在这里留下本周最重要的理解。';
+        const nextExperiment = (data.experiments || []).find((item) => !['completed', 'stopped'].includes(item.status)) || data.experiments?.[0];
+        const stepOne = `<ul class="review-selected-events review-focus-list" id="review-focus-list">${selectedCards || '<li class="review-source-empty">从左侧选择一条仍让你有感受的记录。</li>'}</ul>`;
+        const stepTwo = `<div class="review-connection-map">${selectedContext || '<p class="review-source-empty">先在第一步选择记录。</p>'}<i aria-hidden="true"></i></div>${renderConnections(data.connections || [])}`;
+        const stepThree = `<div class="review-level-choices" aria-label="观察层级"><div class="is-selected"><span>1–3</span><strong>靠近事实</strong></div><div><span>4–6</span><strong>寻找模式</strong></div><div><span>7–8</span><strong>需要长期证据</strong></div></div>${renderAbstraction(abstractions)}`;
+        const stepFour = `${renderExperiments(data.experiments || [])}<label class="review-field review-week-summary"><span>本周带走的一句话</span><textarea id="review-week-summary" placeholder="这一周最值得留下的是什么？">${escapeHTML(record.summary || '')}</textarea></label>`;
+        elements.view.innerHTML = `<div class="review-weekly-workspace">
+            <aside class="review-week-source-rail" aria-label="本周每日记录"><header><div><span>每日记录</span><strong>选择最重要的事</strong></div><b data-weekly-selected-count>${focusIds.length}/3</b></header><div class="review-week-source-list">${weeklySourceRows(data, focusIds)}</div></aside>
+            <article class="review-week-flow" aria-label="周度复盘四步流程">
+                <nav class="review-week-stepper" aria-label="周度复盘步骤">${weeklyStepButton(1, '聚焦')}${weeklyStepButton(2, '找联系')}${weeklyStepButton(3, '看模式')}${weeklyStepButton(4, '具体化')}</nav>
+                ${weeklyPanel(1, '01 · 聚焦', '本周最影响我的三件事', '不是选“最正确”的事，只选现在仍让你有感受的事。', stepOne)}
+                ${weeklyPanel(2, '02 · 找联系', '这些事情之间，哪里很像？', '先描述你看见的重复，不急着解释原因。', stepTwo)}
+                ${weeklyPanel(3, '03 · 看模式', '这周让我更了解自己的什么？', '先从靠近事实的层级开始，深层判断需要更长时间。', stepThree)}
+                ${weeklyPanel(4, '04 · 具体化', '下一次，我准备怎么做？', '行动要足够具体，也必须在自己的控制范围内。', stepFour)}
+                <footer class="review-week-footer"><button type="button" data-action="shift-weekly-step" data-shift="-1"${state.weeklyStep === 1 ? ' disabled' : ''}>← 上一步</button><span>第 ${state.weeklyStep} 步，共 4 步</span><button class="is-primary" type="button" data-action="shift-weekly-step" data-shift="1"${state.weeklyStep === 4 ? ' disabled' : ''}>下一步 →</button></footer>
+            </article>
+            <aside class="review-week-result${state.weeklyStep === 4 ? ' is-visible' : ''}"><span>本周带走</span><blockquote>“${escapeHTML(takeaway)}”</blockquote><strong>下一步</strong><p>${escapeHTML(nextExperiment?.first_step || nextExperiment?.what || '还没有行动实验。')}</p><small>${escapeHTML(nextExperiment?.review_date || data.period.end)}</small></aside>
         </div>`;
     }
 
@@ -695,22 +980,52 @@
             current.push(id);
         } else if (!selected && exists) current.splice(current.indexOf(id), 1);
         state.weekly.record = {...(state.weekly.record || {}), focus_ids: current};
+        const key = weeklyDraftKey();
+        state.weeklyDrafts.set(key, {...state.weekly.record});
+        markDraftChanged('weekly', key);
+        setSaveState('dirty', '本周有未保存更改');
         const list = document.getElementById('review-focus-list');
         list.innerHTML = current.map((sourceId) => renderFocusItem(sourceId, state.weekly.daily_events)).join('') || '<li class="review-chip">从右侧勾选本周聚焦</li>';
+        const checkbox = elements.view.querySelector(`[data-focus-source="${CSS.escape(id)}"]`);
+        const source = checkbox?.closest('.review-week-source');
+        source?.classList.toggle('is-selected', current.includes(id));
+        const mark = source?.querySelector('i');
+        if (mark) mark.textContent = current.includes(id) ? '✓' : '';
+        const count = elements.view.querySelector('[data-weekly-selected-count]');
+        if (count) count.textContent = `${current.length}/3`;
     }
 
     async function saveWeekly() {
-        const focusIds = selectedWeeklyIds();
-        const abstraction = {};
-        elements.view.querySelectorAll('[data-abstraction-level]').forEach((input) => { abstraction[input.dataset.abstractionLevel] = input.value; });
-        const payload = {focus_ids: focusIds, abstraction, summary: document.getElementById('review-week-summary')?.value || '', status: 'active'};
+        syncWeeklyDraftFromView();
+        const record = state.weekly.record || {};
+        const payload = {focus_ids: record.focus_ids || [], abstraction: record.abstraction || {}, summary: record.summary || '', status: 'active'};
+        const savedDate = state.date;
+        const savedKey = weeklyDraftKey();
+        const saveId = draftVersionKey('weekly', savedKey);
+        if (state.savesInFlight.has(saveId)) return;
+        state.savesInFlight.add(saveId);
+        const savedVersion = draftVersion('weekly', savedKey);
         try {
             setSaveState('saving', '正在保存周度复盘…');
-            const data = await api(`/api/reviews/weekly/${encodeURIComponent(state.date)}`, {method: 'PUT', body: JSON.stringify(payload)});
-            state.weekly.record = data.record;
-            setSaveState('saved', syncLabel(data.sync));
+            const data = await api(`/api/reviews/weekly/${encodeURIComponent(savedDate)}`, {method: 'PUT', body: JSON.stringify(payload)});
+            const unchanged = draftVersion('weekly', savedKey) === savedVersion;
+            if (unchanged) {
+                state.weeklyDrafts.delete(savedKey);
+                clearDraftVersion('weekly', savedKey);
+            }
+            if (state.tab === 'weekly' && weeklyDraftKey() === savedKey && unchanged) {
+                state.weekly.record = data.record;
+                setSaveState('saved', syncLabel(data.sync));
+            } else if (state.tab === 'weekly' && weeklyDraftKey() === savedKey) {
+                setSaveState('dirty', '保存期间有新更改，请再保存一次');
+            }
             toast('周度复盘已保存');
-        } catch (error) { setSaveState('error', '保存失败'); toast(error.message); }
+        } catch (error) {
+            if (state.tab === 'weekly' && weeklyDraftKey() === savedKey) setSaveState('error', '保存失败');
+            toast(error.message);
+        } finally {
+            state.savesInFlight.delete(saveId);
+        }
     }
 
     async function createConnection(form) {
@@ -765,20 +1080,85 @@
 
     async function loadMonthly() {
         state.monthly = await api(`/api/reviews/monthly/${encodeURIComponent(state.month)}`);
+        const draft = state.monthlyDrafts.get(state.month);
+        if (draft) state.monthly.record = {...(state.monthly.record || {}), ...draft};
         renderMonthly();
-        setSaveState('saved', '本月来源已聚合');
+        setSaveState(draft ? 'dirty' : 'saved', draft ? '已恢复本月未保存内容' : '本月来源已聚合');
+    }
+
+    function collectMonthlyDraft() {
+        if (state.tab !== 'monthly' || !elements.view.querySelector('.review-monthly-workspace')) return null;
+        const draft = {};
+        elements.view.querySelectorAll('[data-month-field]').forEach((input) => {
+            draft[input.dataset.monthField] = parseLines(input.value);
+        });
+        draft.cross_month = parseLines(document.getElementById('review-month-cross')?.value);
+        draft.affirmation = document.getElementById('review-month-affirmation')?.value || '';
+        return draft;
+    }
+
+    function captureMonthlyDraft(markDirty = false) {
+        if (!markDirty && !state.monthlyDrafts.has(state.month)) return;
+        const draft = collectMonthlyDraft();
+        if (!draft) return;
+        state.monthlyDrafts.set(state.month, draft);
+        if (markDirty) markDraftChanged('monthly', state.month);
+        if (state.monthly?.record) state.monthly.record = {...state.monthly.record, ...draft};
+    }
+
+    function compactMonthCell(value) {
+        const first = Array.isArray(value)
+            ? value.map((item) => typeof item === 'string' ? item : item?.text || item?.title || '').find(Boolean)
+            : '';
+        return first ? escapeHTML(compactText(first, 54)) : '<span class="is-blank">—</span>';
+    }
+
+    function monthlyYearRecords() {
+        const year = state.month.slice(0, 4);
+        const records = new Map((state.monthly.monthly_reviews || [])
+            .filter((item) => String(item.month_key || '').startsWith(`${year}-`))
+            .map((item) => [item.month_key, item]));
+        if (state.monthly.record) records.set(state.month, state.monthly.record);
+        return Array.from({length: 12}, (_, index) => {
+            const monthKey = `${year}-${String(index + 1).padStart(2, '0')}`;
+            return {monthKey, record: records.get(monthKey) || {inner: [], actions: [], results: [], notes: []}};
+        });
+    }
+
+    async function selectMonthlyMonth(month) {
+        if (!/^\d{4}-\d{2}$/.test(month) || month === state.month) return;
+        captureMonthlyDraft();
+        state.month = month;
+        updateTabChrome();
+        await loadMonthly();
+    }
+
+    function renderMonthlyConnectionOverview() {
+        const connection = (state.monthly.connections || [])[0];
+        if (!connection) {
+            return '<div class="review-month-connection is-empty"><span>跨月</span><i aria-hidden="true">→</i><span>联结</span><p>保存至少两个月后，可以在下方建立真实的跨月联结。</p></div>';
+        }
+        const sourceId = connection.source_id || connection.source_ids?.[0] || '';
+        const targetId = connection.target_id || connection.source_ids?.[1] || '';
+        return `<div class="review-month-connection"><span>${escapeHTML(connectionEndpointLabel('monthly', sourceId))}</span><i aria-hidden="true">${connection.direction === 'bidirectional' ? '↔' : connection.direction === 'reverse' ? '←' : '→'}</i><span>${escapeHTML(connectionEndpointLabel('monthly', targetId))}</span><p>${escapeHTML(connection.description || connection.title || '已记录一条跨月联结')}</p></div>`;
     }
 
     function renderMonthly() {
         const record = state.monthly.record || {};
         const columns = [
-            ['inner', '内心', '本月的重要发现、情绪、想法等内心声音'],
-            ['actions', '行动', '本月实际采取的行动'],
-            ['results', '结果', '本月已经看见的成果或反馈'],
-            ['notes', '备注', '新的发现、想尝试的事或需要记住的背景'],
+            ['inner', '内心', '这个月真正牵动我的事'],
+            ['actions', '行动', '我实际做过什么'],
+            ['results', '结果', '现实发生了什么变化'],
+            ['notes', '回看后想留下的话', '新的发现、想尝试的事或需要记住的背景'],
         ];
+        const year = state.month.slice(0, 4);
+        const monthNumber = Number(state.month.slice(5));
+        const yearRows = monthlyYearRecords().map(({monthKey, record: monthRecord}, index) => `<tr class="${monthKey === state.month ? 'is-active' : ''}${monthKey > today.slice(0, 7) ? ' is-future' : ''}" data-action="select-month" data-month="${escapeAttr(monthKey)}"><th scope="row"><button type="button" data-action="select-month" data-month="${escapeAttr(monthKey)}"${monthKey === state.month ? ' aria-current="true"' : ''}>${index + 1}月</button></th><td>${compactMonthCell(monthRecord.inner)}</td><td>${compactMonthCell(monthRecord.actions)}</td><td>${compactMonthCell(monthRecord.results)}</td><td>${compactMonthCell(monthRecord.notes)}</td></tr>`).join('');
         const sourceLinks = state.monthly.daily_events.slice(0, 80).map((item) => `<button class="review-source-link" type="button" data-action="source" data-source-type="daily" data-source-id="${escapeAttr(item.id)}"><span>${escapeHTML(item.review_date)}</span>${escapeHTML(item.title || '未命名事件')}</button>`).join('');
-        elements.view.innerHTML = `<div class="review-month-page"><section class="review-month-sheet" aria-label="${escapeAttr(state.month)} 月度复盘模板"><header class="review-sheet-heading"><h2>${escapeHTML(state.month)} 月度复盘</h2><p>每栏记录 1-3 件最重要的事，四栏不必互为因果。</p></header><div class="review-month-grid">${columns.map(([key, title, hint]) => `<label class="review-month-column"><span>${title}</span><small>${hint}</small><textarea class="review-textarea" data-month-field="${key}" placeholder="每行一条">${escapeHTML(lines(record[key]))}</textarea></label>`).join('')}</div></section><details class="review-secondary-panel"><summary>跨月联结与本月确认</summary><div class="review-secondary-content"><label class="review-field"><span>跨月联结（每行一条）</span><textarea id="review-month-cross" placeholder="例如：三月的想法在五月进入行动">${escapeHTML(lines(record.cross_month))}</textarea></label><label class="review-field"><span>给这个月的自己一句确认</span><textarea id="review-month-affirmation" placeholder="写下你真正认可的投入、选择或坚持">${escapeHTML(record.affirmation || '')}</textarea></label>${renderMonthlyConnections()}</div></details><details class="review-secondary-panel"><summary>本月记录来源</summary><div class="review-source-list">${sourceLinks || '<p class="review-source-empty">本月暂无每日记录</p>'}</div></details></div>`;
+        elements.view.innerHTML = `<div class="review-month-page"><div class="review-monthly-workspace">
+            <section class="review-year-overview"><header><div><span>${escapeHTML(year)}</span><h2>这一年发生了什么变化</h2></div><p>点击月份继续编辑</p></header><div class="review-year-table-wrap"><table class="review-year-table"><thead><tr><th>月份</th><th>内心</th><th>行动</th><th>结果</th><th>备注</th></tr></thead><tbody>${yearRows}</tbody></table></div>${renderMonthlyConnectionOverview()}</section>
+            <aside class="review-month-editor" aria-label="${escapeAttr(state.month)} 月度复盘模板"><header><div><span>${escapeHTML(year)} 年</span><h2>${monthNumber} 月</h2></div><button class="review-example-trigger" type="button" data-action="open-example">查看填写案例</button></header>${columns.map(([key, title, hint]) => `<label class="review-field"><span>${escapeHTML(title)}</span><small>${escapeHTML(hint)}</small><textarea data-month-field="${key}" placeholder="每行一条">${escapeHTML(lines(record[key]))}</textarea></label>`).join('')}</aside>
+        </div><details class="review-secondary-panel"><summary>跨月联结与本月确认</summary><div class="review-secondary-content"><label class="review-field"><span>跨月联结（每行一条）</span><textarea id="review-month-cross" placeholder="例如：三月的想法在五月进入行动">${escapeHTML(lines(record.cross_month))}</textarea></label><label class="review-field"><span>给这个月的自己一句确认</span><textarea id="review-month-affirmation" placeholder="写下你真正认可的投入、选择或坚持">${escapeHTML(record.affirmation || '')}</textarea></label>${renderMonthlyConnections()}</div></details><details class="review-secondary-panel"><summary>本月记录来源</summary><div class="review-source-list">${sourceLinks || '<p class="review-source-empty">本月暂无每日记录</p>'}</div></details></div>`;
     }
 
     function renderMonthlyConnections() {
@@ -789,46 +1169,126 @@
     }
 
     async function saveMonthly() {
-        const payload = {};
-        elements.view.querySelectorAll('[data-month-field]').forEach((input) => { payload[input.dataset.monthField] = parseLines(input.value); });
-        payload.cross_month = parseLines(document.getElementById('review-month-cross')?.value);
-        payload.affirmation = document.getElementById('review-month-affirmation')?.value || '';
+        const payload = collectMonthlyDraft() || {};
         payload.status = 'active';
+        const savedMonth = state.month;
+        const saveId = draftVersionKey('monthly', savedMonth);
+        if (state.savesInFlight.has(saveId)) return;
+        state.savesInFlight.add(saveId);
+        const savedVersion = draftVersion('monthly', savedMonth);
         try {
             setSaveState('saving', '正在保存月度复盘…');
-            const data = await api(`/api/reviews/monthly/${encodeURIComponent(state.month)}`, {method: 'PUT', body: JSON.stringify(payload)});
-            state.monthly.record = data.record;
-            const existing = state.monthly.monthly_reviews.findIndex((item) => item.id === data.record.id);
-            if (existing >= 0) state.monthly.monthly_reviews[existing] = data.record;
-            else state.monthly.monthly_reviews.unshift(data.record);
-            setSaveState('saved', syncLabel(data.sync));
+            const data = await api(`/api/reviews/monthly/${encodeURIComponent(savedMonth)}`, {method: 'PUT', body: JSON.stringify(payload)});
+            const unchanged = draftVersion('monthly', savedMonth) === savedVersion;
+            if (unchanged) {
+                state.monthlyDrafts.delete(savedMonth);
+                clearDraftVersion('monthly', savedMonth);
+            }
+            if (state.tab === 'monthly' && state.month === savedMonth && unchanged) {
+                state.monthly.record = data.record;
+                const existing = state.monthly.monthly_reviews.findIndex((item) => item.id === data.record.id);
+                if (existing >= 0) state.monthly.monthly_reviews[existing] = data.record;
+                else state.monthly.monthly_reviews.unshift(data.record);
+                setSaveState('saved', syncLabel(data.sync));
+            } else if (state.tab === 'monthly' && state.month === savedMonth) {
+                setSaveState('dirty', '保存期间有新更改，请再保存一次');
+            }
             toast('月度复盘已保存');
-        } catch (error) { setSaveState('error', '保存失败'); toast(error.message); }
+        } catch (error) {
+            if (state.tab === 'monthly' && state.month === savedMonth) setSaveState('error', '保存失败');
+            toast(error.message);
+        } finally {
+            state.savesInFlight.delete(saveId);
+        }
     }
 
     async function loadAnnual() {
         state.annual = await api(`/api/reviews/annual/${encodeURIComponent(state.year)}`);
+        const draft = state.annualDrafts.get(state.year);
+        if (draft) state.annual.record = {...(state.annual.record || {}), ...draft};
         renderAnnual();
-        setSaveState('saved', '十二个月来源已聚合');
+        setSaveState(draft ? 'dirty' : 'saved', draft ? '已恢复本年未保存内容' : '十二个月来源已聚合');
     }
 
-    function renderAnnual(keyword = '') {
-        const record = state.annual.record || {};
-        const normalizedKeyword = keyword.trim();
-        const cell = (items) => {
-            const values = items || [];
-            return values.length ? `<ul>${values.map((value) => `<li>${highlight(value, normalizedKeyword)}</li>`).join('')}</ul>` : '<span class="review-empty-cell">空</span>';
+    function collectAnnualDraft() {
+        if (state.tab !== 'annual' || !elements.view.querySelector('.review-annual-workspace')) return null;
+        return {
+            keywords: parseLines(document.getElementById('review-annual-keywords')?.value),
+            summary: document.getElementById('review-annual-summary')?.value || '',
         };
+    }
+
+    function captureAnnualDraft(markDirty = false) {
+        if (!markDirty && !state.annualDrafts.has(state.year)) return;
+        const draft = collectAnnualDraft();
+        if (!draft) return;
+        state.annualDrafts.set(state.year, draft);
+        if (markDirty) markDraftChanged('annual', state.year);
+        if (state.annual?.record) state.annual.record = {...state.annual.record, ...draft};
+    }
+
+    async function selectAnnualYear(year) {
+        if (!/^\d{4}$/.test(year) || year === state.year) return;
+        captureAnnualDraft();
+        state.year = year;
+        updateTabChrome();
+        await loadAnnual();
+    }
+
+    function annualMonthItems(field, limit = 6) {
+        const items = [];
+        (state.annual.months || []).forEach((month) => {
+            const monthNumber = Number(String(month.month_key || '').slice(-2));
+            (month[field] || []).forEach((value) => {
+                const text = typeof value === 'string' ? value : value?.text || value?.title || '';
+                if (text && items.length < limit) items.push(`<li><span>${monthNumber}月</span>${escapeHTML(text)}</li>`);
+            });
+        });
+        return items.join('');
+    }
+
+    function annualWatchItems(record) {
+        const values = [];
+        (record.cross_month || []).forEach((item) => {
+            const text = typeof item === 'string' ? item : item?.text || item?.title || item?.description || '';
+            if (text) values.push(text);
+        });
+        (state.annual.connections || []).forEach((item) => {
+            const text = item.description || item.title || '';
+            if (text) values.push(text);
+        });
+        if (!values.length) {
+            [...(state.annual.months || [])].reverse().some((month) => {
+                const note = (month.notes || []).find(Boolean);
+                if (note) values.push(note);
+                return Boolean(note);
+            });
+        }
+        return values.slice(0, 3);
+    }
+
+    function renderAnnual() {
+        const record = state.annual.record || {};
         const aiCandidates = (state.annual.ai_candidates || []).map((item) => {
             const candidate = item.confirmed_content || item.candidate || {};
             return `<article class="review-ai-candidate"><span class="review-meta-text">${item.status === 'confirmed' ? '已确认候选' : '待确认候选'}</span><p><strong>${escapeHTML(candidate.statement || '')}</strong></p><div class="review-emotions">${(candidate.evidence || []).map((evidence) => `<button class="review-chip is-source" type="button" data-action="source" data-source-type="${escapeAttr(evidence.source_type || 'monthly')}" data-source-id="${escapeAttr(evidence.source_id)}">${escapeHTML(evidence.record_date || shortId(evidence.source_id))}</button>`).join('')}</div><p class="review-ai-uncertainty">${escapeHTML(candidate.uncertainty_note || '仍需更多来源验证')}</p></article>`;
         }).join('');
-        const rows = state.annual.months.map((month) => {
+        const months = state.annual.months.map((month) => {
             const monthNumber = Number(String(month.month_key || '').slice(-2)) || '';
             const monthLabel = monthNumber ? `${monthNumber}月` : month.month_key;
-            return `<tr><th scope="row">${month.id ? `<button class="review-month-source" type="button" data-action="source" data-source-type="monthly" data-source-id="${escapeAttr(month.id)}">${escapeHTML(monthLabel)}</button>` : escapeHTML(monthLabel)}</th><td>${cell(month.inner)}</td><td>${cell(month.actions)}</td><td>${cell(month.results)}</td><td>${cell(month.notes)}</td></tr>`;
+            const active = month.month_key === today.slice(0, 7);
+            const empty = !month.id || month.status === 'empty';
+            return `<button type="button" data-action="open-annual-month" data-month="${escapeAttr(month.month_key)}" class="${active ? 'is-current' : ''}${empty ? ' is-empty' : ''}"><span>${escapeHTML(monthLabel)}</span><i aria-hidden="true"></i></button>`;
         }).join('');
-        elements.view.innerHTML = `<div class="review-annual-page"><section class="review-annual-sheet"><header class="review-sheet-heading"><h2>${escapeHTML(state.year)} 年度复盘</h2><p>一页掌握全年动向。点击月份可以回到对应记录。</p></header><div class="review-annual-surface"><table class="review-annual-table"><thead><tr><th>月份</th><th>内心</th><th>行动</th><th>结果</th><th>备注</th></tr></thead><tbody>${rows}</tbody></table></div></section><section class="review-annual-summary"><header><h2>年度关键词与总结</h2><button class="review-button review-button-small review-button-quiet" type="button" data-ai="annual_summary">从月度记录寻找候选</button></header><div class="review-annual-summary-fields"><label class="review-field"><span>关键词（每行一个）</span><textarea id="review-annual-keywords" placeholder="例如：表达、运动、边界">${escapeHTML(lines(record.keywords))}</textarea></label><label class="review-field"><span>这一年最值得留下的理解</span><textarea id="review-annual-summary">${escapeHTML(record.summary || '')}</textarea></label></div></section><details class="review-secondary-panel"><summary>查看跨月联结</summary><div class="review-secondary-content review-connection-list">${(state.annual.connections || []).map(renderConnectionCard).join('') || '<p class="review-source-empty">本年度暂无跨月联结</p>'}</div></details>${aiCandidates ? `<details class="review-secondary-panel"><summary>查看已保存的年度候选</summary><div class="review-secondary-content review-ai-candidates">${aiCandidates}</div></details>` : ''}</div>`;
+        const keywords = (record.keywords || []).map((item) => `<span>${escapeHTML(item)}</span>`).join('');
+        const changes = `${annualMonthItems('inner', 3)}${annualMonthItems('results', 3)}`;
+        const actions = annualMonthItems('actions');
+        const watch = annualWatchItems(record);
+        elements.view.innerHTML = `<div class="review-annual-page"><div class="review-annual-workspace">
+            <article class="review-annual-lead"><span>${escapeHTML(state.year)} · 年度总结</span><textarea id="review-annual-summary" aria-label="这一年的核心理解" rows="3" placeholder="回看十二个月后，什么理解最值得留下？">${escapeHTML(record.summary || '')}</textarea><div class="review-annual-keywords">${keywords || '<span class="is-empty">尚未提炼关键词</span>'}</div><details class="review-annual-keyword-editor"><summary>编辑年度关键词</summary><label class="review-field"><span>每行一个关键词</span><textarea id="review-annual-keywords" placeholder="例如：表达、运动、边界">${escapeHTML(lines(record.keywords))}</textarea></label><button class="review-button review-button-small review-button-quiet" type="button" data-ai="annual_summary">从月度记录寻找候选</button></details></article>
+            <section class="review-year-trace"><header><h2>十二个月</h2><span>有记录的月份会形成轨迹</span></header><div>${months}</div></section>
+            <div class="review-annual-columns"><section><span>发生的变化</span><ul>${changes || '<li class="is-empty">还没有月度内心或结果记录</li>'}</ul></section><section><span>我真正做过的事</span><ul>${actions || '<li class="is-empty">还没有月度行动记录</li>'}</ul></section><section class="is-watch"><span>继续观察</span>${watch.length ? `<ul>${watch.map((item) => `<li>${escapeHTML(item)}</li>`).join('')}</ul>` : '<p>还没有形成需要继续观察的跨月线索。</p>'}</section></div>
+        </div><details class="review-secondary-panel"><summary>查看跨月联结</summary><div class="review-secondary-content review-connection-list">${(state.annual.connections || []).map(renderConnectionCard).join('') || '<p class="review-source-empty">本年度暂无跨月联结</p>'}</div></details>${aiCandidates ? `<details class="review-secondary-panel"><summary>查看已保存的年度候选</summary><div class="review-secondary-content review-ai-candidates">${aiCandidates}</div></details>` : ''}</div>`;
     }
 
     function highlight(value, keyword) {
@@ -839,18 +1299,33 @@
     }
 
     async function saveAnnual() {
-        const payload = {
-            keywords: parseLines(document.getElementById('review-annual-keywords')?.value),
-            summary: document.getElementById('review-annual-summary')?.value || '',
-            status: 'active',
-        };
+        const payload = {...(collectAnnualDraft() || {}), status: 'active'};
+        const savedYear = state.year;
+        const saveId = draftVersionKey('annual', savedYear);
+        if (state.savesInFlight.has(saveId)) return;
+        state.savesInFlight.add(saveId);
+        const savedVersion = draftVersion('annual', savedYear);
         try {
             setSaveState('saving', '正在保存年度复盘…');
-            const data = await api(`/api/reviews/annual/${encodeURIComponent(state.year)}`, {method: 'PUT', body: JSON.stringify(payload)});
-            state.annual.record = data.record;
-            setSaveState('saved', syncLabel(data.sync));
+            const data = await api(`/api/reviews/annual/${encodeURIComponent(savedYear)}`, {method: 'PUT', body: JSON.stringify(payload)});
+            const unchanged = draftVersion('annual', savedYear) === savedVersion;
+            if (unchanged) {
+                state.annualDrafts.delete(savedYear);
+                clearDraftVersion('annual', savedYear);
+            }
+            if (state.tab === 'annual' && state.year === savedYear && unchanged) {
+                state.annual.record = data.record;
+                setSaveState('saved', syncLabel(data.sync));
+            } else if (state.tab === 'annual' && state.year === savedYear) {
+                setSaveState('dirty', '保存期间有新更改，请再保存一次');
+            }
             toast('年度复盘已保存');
-        } catch (error) { setSaveState('error', '保存失败'); toast(error.message); }
+        } catch (error) {
+            if (state.tab === 'annual' && state.year === savedYear) setSaveState('error', '保存失败');
+            toast(error.message);
+        } finally {
+            state.savesInFlight.delete(saveId);
+        }
     }
 
     async function loadInsights() {
@@ -864,29 +1339,29 @@
 
     function renderInsights(showForm = false) {
         const levels = [
-            ['branch', 1, '自己的状态', '本周你的头脑、内心和身体状态怎么样？'],
-            ['branch', 2, '内心最在意的事', '当下你最在意的事情有哪些？'],
-            ['branch', 3, '重要人物', '对你来说，生活中的重要人物是谁？'],
-            ['trunk', 4, '兴趣所在', '你最近在关注什么？'],
-            ['trunk', 5, '优势和特长', '你的优势和特长是什么？'],
-            ['trunk', 6, '思维模式和行为模式', '你惯常的思维模式或行为模式有哪些？'],
-            ['root', 7, '信念和固有观念', '促使你形成这些模式的根源是什么？'],
-            ['root', 8, '想法和愿望', '你真正渴望的是什么，想成为怎样的人？'],
-        ];
-        const tiers = [
-            ['branch', '枝叶可见期', '从当下可见的状态开始'],
-            ['trunk', '树干可见期', '从多次记录中寻找稳定倾向'],
-            ['root', '根系可见期', '只有跨周期证据充分时才下探'],
+            [1, '自己的状态', '枝叶'], [2, '内心最在意的事', '枝叶'], [3, '重要人物', '枝叶'],
+            [4, '兴趣所在', '树干'], [5, '优势和特长', '树干'], [6, '思维与行为模式', '树干'],
+            [7, '信念和固有观念', '根系'], [8, '想法和愿望', '根系'],
         ];
         const overview = state.insightOverview || {};
         const tierLabels = {branch: '枝叶', trunk: '树干', root: '树根'};
         const suitable = (overview.suitable_tiers || []).map((tier) => tierLabels[tier]).join('、') || '继续积累事实记录';
         const next = overview.next_tier ? tierLabels[overview.next_tier] : '可继续验证已有洞察';
-        const bands = tiers.map(([tier, title, subtitle]) => `<section class="review-insight-band is-${tier}"><header><h2>${title}</h2><p>${subtitle}</p></header><div class="review-insight-levels">${levels.filter(([levelTier]) => levelTier === tier).map(([, level, levelTitle, prompt]) => {
-            const items = state.insights.filter((item) => Number(item.level) === level);
-            return `<article class="review-insight-level"><header><span>${level}</span><div><h3>${escapeHTML(levelTitle)}</h3><p>${escapeHTML(prompt)}</p></div></header><div class="review-insight-grid">${items.map(renderInsightCard).join('') || '<p class="review-source-empty">尚未形成洞察</p>'}</div></article>`;
-        }).join('')}</div></section>`).join('');
-        elements.view.innerHTML = `<div class="review-insight-page"><section class="review-insight-note"><div><strong>当前可整理：${escapeHTML(suitable)}</strong><p>进入${escapeHTML(next)}前，需要更多跨周期记录与反例。</p></div><button class="review-button review-button-quiet" type="button" data-ai="inner_insight">从记录寻找候选</button></section>${showForm ? renderInsightForm() : ''}<section class="review-insight-map" aria-label="八个抽象化层级">${bands}</section></div>`;
+        const maxLevel = Number(overview.max_level || 0);
+        const nextLimit = ({branch: 3, trunk: 6, root: 8})[overview.next_tier] || maxLevel;
+        const depthRows = levels.map(([level, label, tier]) => {
+            const status = level <= maxLevel ? 'available' : level <= nextLimit ? 'observing' : 'locked';
+            const statusLabel = status === 'available' ? '可整理' : status === 'observing' ? '积累中' : '锁定';
+            return `<li class="is-${status}"><span>${level}</span><div><strong>${escapeHTML(label)}</strong><small>${escapeHTML(tier)}</small></div><i aria-hidden="true">${statusLabel}</i></li>`;
+        }).join('');
+        const weeks = overview.span_days ? Math.max(1, Math.ceil(Number(overview.span_days) / 7)) : 0;
+        const countLabel = weeks ? `已积累 ${weeks} 周记录` : `已有 ${Number(overview.daily_events || 0)} 条记录`;
+        const cards = state.insights.map(renderInsightCard).join('') || '<div class="review-empty review-insight-empty"><div><h2>还没有形成洞察</h2><p>先积累每日记录；重复出现后，再决定它是否属于你。</p></div></div>';
+        elements.view.innerHTML = `<div class="review-insight-page"><div class="review-insights-workspace">
+            <section class="review-insight-overview"><div><span>${escapeHTML(countLabel)}</span><h2>先看见重复，再决定它是否属于你</h2></div><div><p>目前适合整理${escapeHTML(suitable)}。进入${escapeHTML(next)}前，需要更多时间、来源与反例。</p><button class="review-text-button" type="button" data-ai="inner_insight">从记录寻找候选</button></div></section>
+            ${showForm ? renderInsightForm() : ''}
+            <div class="review-insight-layout"><section class="review-insight-list">${cards}</section><aside class="review-insight-depth"><header><span>观察深度</span><h2>八个层级</h2></header><ol>${depthRows}</ol></aside></div>
+        </div></div>`;
     }
 
     function renderInsightForm() {
@@ -898,7 +1373,9 @@
         const strength = item.evidence_strength || {};
         const span = item.evidence_span || {};
         const evidence = (item.evidence || []).map((entry) => typeof entry === 'string' ? `<li>${escapeHTML(entry)}</li>` : `<li>${entry.source_id ? `<button class="review-chip is-source" type="button" data-action="source" data-source-type="${escapeAttr(entry.source_type || 'daily')}" data-source-id="${escapeAttr(entry.source_id)}">${escapeHTML(entry.record_date || shortId(entry.source_id))}</button>` : ''} ${escapeHTML(entry.observation || entry.text || entry.source_excerpt || '')}</li>`).join('');
-        return `<article class="review-insight-card"><header><span class="review-meta-text">${escapeHTML(categoryLabel(item.category))}，${escapeHTML(statusLabel(item.status))}</span><button class="review-text-button" type="button" data-action="source" data-source-type="insight" data-source-id="${escapeAttr(item.id)}">来源</button></header><h4>${escapeHTML(item.statement)}</h4><details class="review-inline-evidence"><summary>证据与验证</summary><p>${escapeHTML(strength.label || '证据较少')}，独立来源 ${strength.independent_sources || item.source_ids?.length || 0} 条，反例 ${item.counter_evidence?.length || 0} 条${span.days ? `，跨 ${span.days} 天` : ''}</p>${evidence ? `<ul>${evidence}</ul>` : ''}<p class="review-ai-uncertainty">仍不确定：${escapeHTML(item.uncertainty_note || '需要更多现实记录')}</p>${item.verification_experiment ? `<p><strong>验证行动：</strong>${escapeHTML(item.verification_experiment)}</p>` : ''}<label class="review-field"><span>我的状态</span><select data-insight-status="${escapeAttr(item.id)}"><option value="pending"${['pending', 'candidate'].includes(item.status) ? ' selected' : ''}>待确认</option><option value="observing"${item.status === 'observing' ? ' selected' : ''}>继续观察</option><option value="accepted"${['accepted', 'recognized', 'verified'].includes(item.status) ? ' selected' : ''}>我认可</option><option value="rejected"${item.status === 'rejected' ? ' selected' : ''}>我不认可</option><option value="disproved"${item.status === 'disproved' ? ' selected' : ''}>已被证伪</option></select></label></details></article>`;
+        const counter = (item.counter_evidence || []).map((entry) => typeof entry === 'string' ? entry : entry?.text || entry?.observation || '').filter(Boolean).join('；');
+        const sourceCount = strength.independent_sources || item.source_ids?.length || item.evidence?.length || 0;
+        return `<article class="review-insight-card"><header><span>L${Number(item.level) || '—'} · ${escapeHTML(categoryLabel(item.category))}</span><b>${escapeHTML(statusLabel(item.status))}</b></header><h2>${escapeHTML(item.statement)}</h2><div class="review-insight-sources"><strong>${sourceCount} 条来源${span.days ? ` · 跨 ${span.days} 天` : ''}</strong>${evidence ? `<ul>${evidence}</ul>` : '<p>暂未引用具体来源</p>'}</div><details><summary>反例与下一次观察</summary><div><span>仍不能确定</span><p>${escapeHTML(counter || item.uncertainty_note || '需要更多现实记录')}</p><span>下一次观察</span><p>${escapeHTML(item.verification_experiment || '继续记录与这条判断不一致的情况。')}</p><span>我的状态</span><label class="review-insight-status"><select data-insight-status="${escapeAttr(item.id)}"><option value="pending"${['pending', 'candidate'].includes(item.status) ? ' selected' : ''}>待确认</option><option value="observing"${item.status === 'observing' ? ' selected' : ''}>继续观察</option><option value="accepted"${['accepted', 'recognized', 'verified'].includes(item.status) ? ' selected' : ''}>我认可</option><option value="rejected"${item.status === 'rejected' ? ' selected' : ''}>我不认可</option><option value="disproved"${item.status === 'disproved' ? ' selected' : ''}>已被证伪</option></select><button class="review-text-button" type="button" data-action="source" data-source-type="insight" data-source-id="${escapeAttr(item.id)}">查看来源</button></label></div></details></article>`;
     }
 
     function categoryLabel(value) {
@@ -1001,8 +1478,18 @@
         const item = HELP[key];
         if (!item) return;
         elements.helpTitle.textContent = item.title;
-        elements.helpContent.innerHTML = `<p>${escapeHTML(item.body)}</p><div class="review-causality-note"><strong>例子：</strong><span>${escapeHTML(item.example)}</span></div>`;
+        const figure = item.image ? `<figure class="review-help-figure"><img src="${escapeAttr(item.image)}" alt="${escapeAttr(item.image_alt || '')}"><figcaption>${escapeHTML(item.image_caption || '')}</figcaption></figure>` : '';
+        elements.helpContent.innerHTML = `<div class="review-help-copy"><p>${escapeHTML(item.body)}</p>${figure}<div class="review-causality-note"><strong>例子：</strong><span>${escapeHTML(item.example)}</span></div></div>`;
         openDialog(elements.helpDialog);
+    }
+
+    function openExample() {
+        const example = REVIEW_EXAMPLES[state.tab];
+        if (!example) return;
+        elements.exampleTitle.textContent = example.title;
+        const sections = example.sections.map((section) => `<section class="review-example-section"><h4>${escapeHTML(section.title)}</h4><dl>${section.fields.map(([label, value]) => `<div><dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd></div>`).join('')}</dl></section>`).join('');
+        elements.exampleContent.innerHTML = `<article class="review-example-case"><header><h3>${escapeHTML(example.subject)}</h3><p>${escapeHTML(example.context)}</p></header><div class="review-example-sections">${sections}</div><footer>依据《复盘自己：从记录到蜕变的行动指南》案例整理</footer></article>`;
+        openDialog(elements.exampleDialog);
     }
 
     async function openSource(type, id) {
@@ -1104,7 +1591,19 @@
                 method: 'POST', body: JSON.stringify({content: candidate, create_insight: createInsight}),
             });
             card.innerHTML = `<div class="review-causality-note"><strong>已由你确认：</strong><span>${escapeHTML(data.candidate.confirmed_content.statement || '')}${data.insight ? ' · 已加入洞察树' : ''}${data.applied_to ? ' · 已追加到年度总结' : ''}</span></div>`;
-            if (data.applied_to && state.tab === 'annual') await loadAnnual();
+            if (data.applied_to?.type === 'annual') {
+                const year = data.applied_to.year;
+                const statement = String(data.candidate.confirmed_content.statement || '').trim();
+                const draft = state.annualDrafts.get(year);
+                if (draft && statement && !String(draft.summary || '').includes(statement)) {
+                    state.annualDrafts.set(year, {
+                        ...draft,
+                        summary: `${String(draft.summary || '').trim()}\n- ${statement}`.trim(),
+                    });
+                    markDraftChanged('annual', year);
+                }
+                if (state.tab === 'annual' && state.year === year) await loadAnnual();
+            }
             toast(createInsight ? '候选已确认并加入洞察树' : data.applied_to ? '候选已确认并追加到年度总结' : '候选已确认');
         } catch (error) { toast(error.message); }
     }
@@ -1119,13 +1618,39 @@
 
     async function searchReviews(form) {
         const values = Object.fromEntries(new FormData(form));
-        const query = new URLSearchParams();
+        const query = new URLSearchParams({limit: '30'});
         Object.entries(values).forEach(([key, value]) => { if (value) query.append(key, value); });
         elements.searchResults.innerHTML = '<div class="review-loading">正在搜索…</div>';
         try {
             const data = await api(`/api/reviews/search?${query.toString()}`);
-            elements.searchResults.innerHTML = data.items.length ? data.items.map((item) => `<button class="review-search-result" type="button" data-action="source" data-source-type="${escapeAttr(item.record_type)}" data-source-id="${escapeAttr(item.id)}"><header><strong>${escapeHTML(searchTitle(item))}</strong><span class="review-chip">${escapeHTML(recordTypeLabel(item.record_type))}</span></header><p>${escapeHTML(searchPreview(item))}</p></button>`).join('') : '<div class="review-empty review-search-empty"><div><p>没有找到符合条件的记录。</p></div></div>';
+            elements.searchResults.innerHTML = data.items.length ? data.items.map((item) => `<button class="review-search-result" type="button" data-action="open-search-result" data-record-type="${escapeAttr(item.record_type)}" data-record-id="${escapeAttr(item.id)}" data-review-date="${escapeAttr(item.review_date || '')}" data-week-start="${escapeAttr(item.week_start || '')}" data-month-key="${escapeAttr(item.month_key || '')}" data-year-key="${escapeAttr(item.year_key || '')}"><header><strong>${escapeHTML(searchTitle(item))}</strong><span class="review-chip">${escapeHTML(recordTypeLabel(item.record_type))}</span></header><p>${escapeHTML(searchPreview(item))}</p></button>`).join('') : '<div class="review-empty review-search-empty"><div><p>没有找到符合条件的记录。</p></div></div>';
         } catch (error) { elements.searchResults.innerHTML = renderError(error.message); }
+    }
+
+    async function openSearchResult(button) {
+        const type = button.dataset.recordType;
+        const id = button.dataset.recordId;
+        closeDialog(elements.searchDialog);
+        if (type === 'daily' && button.dataset.reviewDate) {
+            state.date = button.dataset.reviewDate;
+            state.dailyEventId = id;
+            return selectTab('daily');
+        }
+        if (type === 'weekly' && button.dataset.weekStart) {
+            state.date = button.dataset.weekStart;
+            return selectTab('weekly');
+        }
+        if (type === 'monthly' && button.dataset.monthKey) {
+            if (state.tab === 'monthly') return selectMonthlyMonth(button.dataset.monthKey);
+            state.month = button.dataset.monthKey;
+            return selectTab('monthly');
+        }
+        if (type === 'annual' && button.dataset.yearKey) {
+            if (state.tab === 'annual') return selectAnnualYear(button.dataset.yearKey);
+            state.year = button.dataset.yearKey;
+            return selectTab('annual');
+        }
+        return openSource(type, id);
     }
 
     function searchTitle(item) {
@@ -1182,6 +1707,9 @@
     }
 
     function shiftPeriod(direction) {
+        if (state.tab === 'weekly') syncWeeklyDraftFromView();
+        if (state.tab === 'monthly') captureMonthlyDraft();
+        if (state.tab === 'annual') captureAnnualDraft();
         if (state.tab === 'daily' || state.tab === 'weekly') {
             const date = new Date(`${state.date}T12:00:00`);
             date.setDate(date.getDate() + direction * (state.tab === 'weekly' ? 7 : 1));
@@ -1225,7 +1753,18 @@
         if (button.dataset.ai) return openAI(button.dataset.ai, button.dataset.aiSourceId || '');
         if (action === 'retry') return loadCurrentView();
         if (action === 'add-daily') return addDaily();
+        if (action === 'shift-daily') return shiftDailyEvent(Number(button.dataset.shift || 0));
+        if (action === 'open-search') return openSearch();
+        if (action === 'open-guide') return openGuide();
+        if (action === 'open-example') return openExample();
         if (action === 'source') return openSource(button.dataset.sourceType, button.dataset.sourceId);
+        if (button.dataset.weeklyStep) return setWeeklyStep(button.dataset.weeklyStep);
+        if (action === 'shift-weekly-step') return setWeeklyStep(state.weeklyStep + Number(button.dataset.shift || 0));
+        if (action === 'select-month') return selectMonthlyMonth(button.dataset.month);
+        if (action === 'open-annual-month') {
+            state.month = button.dataset.month;
+            return selectTab('monthly');
+        }
         const dailyCard = button.closest('[data-event-id]');
         if (action === 'delete-daily') return deleteDaily(dailyCard);
         if (action === 'duplicate-daily') return duplicateDaily(dailyCard);
@@ -1301,7 +1840,22 @@
 
     function handleViewInput(event) {
         const card = event.target.closest('[data-event-id]');
-        if (card && event.target.matches('[data-field], [data-list-field], [data-meaning-type]')) scheduleDailySave(card);
+        if (card && event.target.matches('[data-field], [data-list-field], [data-meaning-type]')) {
+            updateDailyAssist(card);
+            scheduleDailySave(card);
+        }
+        if (event.target.matches('[data-abstraction-level], #review-week-summary')) {
+            syncWeeklyDraftFromView(true);
+            setSaveState('dirty', '本周有未保存更改');
+        }
+        if (event.target.matches('[data-month-field], #review-month-cross, #review-month-affirmation')) {
+            captureMonthlyDraft(true);
+            setSaveState('dirty', '本月有未保存更改');
+        }
+        if (event.target.matches('#review-annual-summary, #review-annual-keywords')) {
+            captureAnnualDraft(true);
+            setSaveState('dirty', '本年有未保存更改');
+        }
         if (event.target.id === 'review-annual-filter') renderAnnual(event.target.value);
     }
 
@@ -1345,7 +1899,11 @@
         event.preventDefault();
         const list = target.parentElement;
         const dragged = list.querySelector(`[data-focus-id="${CSS.escape(state.draggedFocusId)}"]`);
-        if (dragged) list.insertBefore(dragged, target);
+        if (dragged) {
+            list.insertBefore(dragged, target);
+            syncWeeklyDraftFromView(true);
+            setSaveState('dirty', '本周有未保存更改');
+        }
     }
 
     function bindEvents() {
@@ -1359,17 +1917,23 @@
         elements.periodPrev.addEventListener('click', () => shiftPeriod(-1));
         elements.periodNext.addEventListener('click', () => shiftPeriod(1));
         elements.periodToday.addEventListener('click', () => {
+            if (state.tab === 'weekly') syncWeeklyDraftFromView();
+            if (state.tab === 'monthly') captureMonthlyDraft();
+            if (state.tab === 'annual') captureAnnualDraft();
             state.date = today; state.month = today.slice(0, 7); state.year = today.slice(0, 4);
             updateTabChrome(); loadCurrentView();
         });
         elements.periodInput.addEventListener('change', () => {
+            if (state.tab === 'weekly') syncWeeklyDraftFromView();
+            if (state.tab === 'monthly') captureMonthlyDraft();
+            if (state.tab === 'annual') captureAnnualDraft();
             if (state.tab === 'daily' || state.tab === 'weekly') state.date = elements.periodInput.value;
             else if (state.tab === 'monthly') state.month = elements.periodInput.value;
             else if (state.tab === 'annual') state.year = elements.periodInput.value;
             loadCurrentView();
         });
         elements.newbie.addEventListener('change', savePreferences);
-        elements.searchOpen.addEventListener('click', () => openDialog(elements.searchDialog));
+        elements.searchOpen.addEventListener('click', openSearch);
         elements.searchForm.addEventListener('submit', (event) => { event.preventDefault(); searchReviews(event.target); });
         elements.view.addEventListener('click', handleViewClick);
         elements.view.addEventListener('input', handleViewInput);
@@ -1379,10 +1943,18 @@
         elements.view.addEventListener('dragstart', handleDragStart);
         elements.view.addEventListener('dragover', handleDragOver);
         document.addEventListener('click', (event) => {
+            document.querySelectorAll('.review-more-menu[open]').forEach((menu) => {
+                if (!menu.contains(event.target)) menu.removeAttribute('open');
+            });
             const close = event.target.closest('[data-dialog-close]');
             if (close) closeDialog(close.closest('dialog'));
+            const searchResult = event.target.closest('[data-action="open-search-result"]');
+            if (searchResult) return openSearchResult(searchResult);
             const source = event.target.closest('[data-action="source"]');
-            if (source && !elements.view.contains(source)) openSource(source.dataset.sourceType, source.dataset.sourceId);
+            if (source && !elements.view.contains(source)) {
+                if (elements.searchResults.contains(source)) closeDialog(elements.searchDialog);
+                openSource(source.dataset.sourceType, source.dataset.sourceId);
+            }
             const action = event.target.closest('[data-action]')?.dataset.action;
             if (action === 'run-ai') runAI();
             const candidate = event.target.closest('[data-candidate-id]');
@@ -1390,6 +1962,9 @@
             if (action === 'confirm-ai-insight') confirmAI(candidate, true);
             if (action === 'dismiss-ai') dismissAI(candidate);
         });
+        document.querySelectorAll('.review-dialog').forEach((dialog) => dialog.addEventListener('click', (event) => {
+            if (event.target === dialog) closeDialog(dialog);
+        }));
         elements.emotionGrid.addEventListener('click', (event) => {
             const button = event.target.closest('[data-emotion]');
             if (!button) return;

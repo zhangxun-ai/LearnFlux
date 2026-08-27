@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="color-scheme" content="light">
+    <title>LearnFlux UI Lab · 学习工作台结构探索</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/css/ui-lab.css?v={{ asset_version }}">
+</head>
+<body class="ui-lab-page">
+    <div id="ui-lab" class="ui-lab" data-variant="a" data-preview="auto" data-content-state="success">
+        <header class="lab-toolbar">
+            <div class="lab-identity">
+                <span class="lab-wordmark" aria-hidden="true">LF</span>
+                <div>
+                    <strong>LearnFlux UI Lab</strong>
+                    <span>本机结构实验 · 不连接正式数据</span>
+                </div>
+            </div>
+
+            <div class="lab-control-cluster" aria-label="结构方案">
+                <span class="lab-control-label">方案</span>
+                <div class="lab-segmented" id="variant-switcher">
+                    <button type="button" data-variant-choice="a" aria-pressed="true">A 专注</button>
+                    <button type="button" data-variant-choice="b" aria-pressed="false">B 高效</button>
+                    <button type="button" data-variant-choice="c" aria-pressed="false">C 研究</button>
+                </div>
+            </div>
+
+            <div class="lab-control-cluster" aria-label="预览宽度">
+                <span class="lab-control-label">画布</span>
+                <div class="lab-segmented" id="viewport-switcher">
+                    <button type="button" data-preview-choice="auto" aria-pressed="true">自适应</button>
+                    <button type="button" data-preview-choice="desktop" aria-pressed="false">桌面</button>
+                    <button type="button" data-preview-choice="mobile" aria-pressed="false">手机</button>
+                </div>
+            </div>
+
+            <button class="lab-compare-toggle" id="compare-toggle" type="button" aria-pressed="false">
+                三案同屏
+            </button>
+        </header>
+
+        <main class="lab-page">
+            <section class="lab-direction" aria-labelledby="direction-name">
+                <div class="lab-direction-head">
+                    <div>
+                        <span class="lab-eyebrow" id="direction-code">方案 A</span>
+                        <h1 id="direction-name">专注长桌</h1>
+                    </div>
+                    <p id="direction-summary">把当前内容放在最中心，其他工具在需要时出现。</p>
+                    <span class="lab-safety-badge">MOCK DATA · MEMORY ONLY</span>
+                </div>
+
+                <div class="lab-explanation-grid">
+                    <section class="lab-explanation" aria-labelledby="plain-language-title">
+                        <h2 id="plain-language-title">普通用户会感受到什么</h2>
+                        <dl id="plain-language-list"></dl>
+                    </section>
+                    <section class="lab-explanation" aria-labelledby="design-parameters-title">
+                        <h2 id="design-parameters-title">设计与实现参数</h2>
+                        <dl id="design-parameters-list" class="lab-parameter-list"></dl>
+                    </section>
+                </div>
+            </section>
+
+            <section class="lab-stage" aria-label="学习工作台预览">
+                <div class="lab-stage-toolbar">
+                    <div class="lab-state-switch" id="state-switcher" aria-label="内容状态">
+                        <span>状态</span>
+                        <button type="button" data-state-choice="success" aria-pressed="true">成功</button>
+                        <button type="button" data-state-choice="loading" aria-pressed="false">加载</button>
+                        <button type="button" data-state-choice="empty" aria-pressed="false">空数据</button>
+                        <button type="button" data-state-choice="error" aria-pressed="false">错误</button>
+                    </div>
+                    <div class="lab-stage-meta">
+                        <span id="current-canvas-label">自适应画布</span>
+                        <span aria-hidden="true">·</span>
+                        <span>快捷键 A / B / C</span>
+                    </div>
+                </div>
+
+                <div class="lab-canvas-wrap" id="single-preview">
+                    <div class="lab-variant-surface" id="lab-variant-surface" data-variant="a">
+                        <article class="lab-workspace" id="lab-workspace" aria-label="LearnFlux 模拟学习工作台">
+                            <aside class="workspace-nav" aria-label="模拟全局导航">
+                                <div class="workspace-brand">
+                                    <span aria-hidden="true">LF</span>
+                                    <strong>LearnFlux</strong>
+                                </div>
+                                <nav class="workspace-nav-list">
+                                    <button class="is-active" type="button" aria-current="page">
+                                        <span aria-hidden="true">01</span><strong>当前学习</strong>
+                                    </button>
+                                    <button type="button"><span aria-hidden="true">02</span><strong>学习库</strong></button>
+                                    <button type="button"><span aria-hidden="true">03</span><strong>系列</strong></button>
+                                    <button type="button"><span aria-hidden="true">04</span><strong>图解</strong></button>
+                                    <button type="button"><span aria-hidden="true">05</span><strong>复盘</strong></button>
+                                </nav>
+                                <div class="workspace-nav-foot">
+                                    <span>今日学习</span>
+                                    <strong>42 分钟</strong>
+                                </div>
+                            </aside>
+
+                            <div class="workspace-body">
+                                <header class="workspace-topbar">
+                                    <div class="workspace-location">
+                                        <button class="workspace-mobile-menu" type="button" aria-label="打开导航">菜单</button>
+                                        <span>产品与 AI 的工作方式</span>
+                                        <span aria-hidden="true">/</span>
+                                        <strong>第 3 讲</strong>
+                                    </div>
+                                    <div class="workspace-status">
+                                        <span class="status-dot" aria-hidden="true"></span>
+                                        <span>学习进度已恢复</span>
+                                        <button type="button">退出学习</button>
+                                    </div>
+                                </header>
+
+                                <main class="workspace-main">
+                                    <header class="content-head">
+                                        <div class="content-context">
+                                            <span>视频课程</span>
+                                            <span>38:24</span>
+                                            <span>第 3 / 12 讲</span>
+                                        </div>
+                                        <h2 data-lab-field="title"></h2>
+                                        <p data-lab-field="summary"></p>
+                                        <div class="progress-row" aria-label="学习进度 62%">
+                                            <div class="progress-copy">
+                                                <strong>学习进度</strong>
+                                                <span><b data-lab-field="currentTime"></b> / <b data-lab-field="duration"></b></span>
+                                            </div>
+                                            <div class="progress-track" aria-hidden="true"><i></i></div>
+                                            <strong data-lab-field="progress"></strong>
+                                        </div>
+                                    </header>
+
+                                    <section class="learning-panel media-panel" aria-labelledby="media-title">
+                                        <header class="panel-head">
+                                            <div>
+                                                <span class="panel-kicker">当前内容</span>
+                                                <h3 id="media-title">课程视频</h3>
+                                            </div>
+                                            <span class="panel-meta">画面仅为灰度结构占位</span>
+                                        </header>
+                                        <div class="mock-media">
+                                            <div class="mock-slide">
+                                                <span>CHAPTER 03 · PRODUCT LOOP</span>
+                                                <strong>从功能堆叠<br>回到学习闭环</strong>
+                                                <p>触发 → 行动 → 反馈 → 下一次使用</p>
+                                            </div>
+                                            <button class="media-play" id="media-play" type="button" aria-label="模拟播放">
+                                                <span aria-hidden="true">▶</span>
+                                            </button>
+                                            <span class="media-caption" id="media-caption">好的产品不是功能更多，而是让一个重要任务更容易完成。</span>
+                                        </div>
+                                        <div class="media-controls">
+                                            <button id="media-control-play" type="button">播放</button>
+                                            <span id="media-current-time">14:32</span>
+                                            <button class="media-timeline" id="media-timeline" type="button" aria-label="模拟进度条，点击向前跳转">
+                                                <i></i>
+                                            </button>
+                                            <span>38:24</span>
+                                            <button type="button">1.0×</button>
+                                        </div>
+                                    </section>
+
+                                    <section class="learning-panel transcript-panel" aria-labelledby="transcript-title">
+                                        <header class="panel-head transcript-panel-head">
+                                            <div>
+                                                <span class="panel-kicker">学习主线</span>
+                                                <h3 id="transcript-title">同步逐字稿</h3>
+                                            </div>
+                                            <label class="transcript-search">
+                                                <span class="sr-only">搜索逐字稿</span>
+                                                <input id="transcript-search" type="search" placeholder="搜索逐字稿">
+                                            </label>
+                                        </header>
+                                        <div class="transcript-list" id="transcript-list" aria-live="polite"></div>
+                                    </section>
+
+                                    <aside class="learning-panel research-panel" aria-labelledby="research-title">
+                                        <header class="panel-head research-panel-head">
+                                            <div>
+                                                <span class="panel-kicker">学习辅助</span>
+                                                <h3 id="research-title">研究台</h3>
+                                            </div>
+                                            <span class="memory-label">仅本页内存</span>
+                                        </header>
+                                        <div class="research-tabs" role="tablist" aria-label="研究台面板">
+                                            <button id="ai-tab" type="button" role="tab" aria-selected="true" aria-controls="ai-panel" data-research-tab="ai">AI 问答</button>
+                                            <button id="notes-tab" type="button" role="tab" aria-selected="false" aria-controls="notes-panel" data-research-tab="notes">学习笔记</button>
+                                        </div>
+
+                                        <section class="research-content ai-panel" id="ai-panel" role="tabpanel" aria-labelledby="ai-tab">
+                                            <div class="ai-message is-user">
+                                                <span>我的问题</span>
+                                                <p data-lab-field="question"></p>
+                                            </div>
+                                            <div class="ai-message is-assistant">
+                                                <span>AI 解读</span>
+                                                <p data-lab-field="answerIntro"></p>
+                                                <ol id="answer-points"></ol>
+                                                <button class="quote-action" type="button">定位到 14:32</button>
+                                            </div>
+                                            <div class="ai-composer">
+                                                <label for="ai-input">继续追问</label>
+                                                <textarea id="ai-input" rows="3" placeholder="输入问题，只会在本页内模拟回应"></textarea>
+                                                <div>
+                                                    <span id="ai-status">不会调用正式 AI</span>
+                                                    <button id="ai-send" type="button">模拟发送</button>
+                                                </div>
+                                            </div>
+                                        </section>
+
+                                        <section class="research-content notes-panel" id="notes-panel" role="tabpanel" aria-labelledby="notes-tab" hidden>
+                                            <label for="notes-input">这节课的笔记</label>
+                                            <textarea id="notes-input" rows="13"></textarea>
+                                            <div class="note-actions">
+                                                <span id="note-status">模拟内容已载入</span>
+                                                <button id="note-save" type="button" disabled>模拟保存</button>
+                                            </div>
+                                            <p class="note-safety">刷新页面后恢复初始模拟笔记，不写入 localStorage 或数据库。</p>
+                                        </section>
+                                    </aside>
+
+                                    <section class="workspace-state" id="workspace-state" hidden aria-live="polite">
+                                        <div class="state-mark" aria-hidden="true"></div>
+                                        <span id="state-kicker">加载学习内容</span>
+                                        <h3 id="state-title">正在准备你的学习工作台</h3>
+                                        <p id="state-description">正在载入媒体、逐字稿和学习记录。</p>
+                                        <button id="state-action" type="button">重新载入模拟状态</button>
+                                    </section>
+                                </main>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+
+                <section class="lab-comparison" id="comparison-preview" hidden aria-label="三个方案同屏比较">
+                    <header>
+                        <div>
+                            <span class="lab-eyebrow">同一份 DOM 与模拟数据</span>
+                            <h2>只比较结构变量</h2>
+                        </div>
+                        <p>三个缩略画布均由当前工作台克隆生成，交互被禁用，避免内容漂移。</p>
+                    </header>
+                    <div class="comparison-grid" id="comparison-grid"></div>
+                </section>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/ui-lab.js?v={{ asset_version }}"></script>
+</body>
+</html>

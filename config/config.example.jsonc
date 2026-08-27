@@ -5,7 +5,8 @@
     "api": {
         "port": 8000,                    // 服务监听端口
         "host": "0.0.0.0",               // 服务监听地址，0.0.0.0 表示所有网卡
-        "auth_token": "your-auth-token-here"  // API 访问令牌
+        "auth_token": "your-auth-token-here", // API 访问令牌
+        "ui_lab_enabled": false           // 仅本地开发时显式开启 UI 实验区
     },
 
     // ============================================================

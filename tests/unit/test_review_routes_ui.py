@@ -129,6 +129,7 @@ def test_review_navigation_and_frontend_contracts():
     html = (static_dir / "review.html").read_text(encoding="utf-8")
     css = (static_dir / "css" / "review.css").read_text(encoding="utf-8")
     javascript = (static_dir / "js" / "review.js").read_text(encoding="utf-8")
+    emotion_wheel = static_dir / "images" / "review" / "emotion-wheel.png"
 
     for label in ("今日复盘", "周度复盘", "月度复盘", "年度复盘", "内在洞察"):
         assert label in html
@@ -147,6 +148,22 @@ def test_review_navigation_and_frontend_contracts():
     assert 'id="review-guide-open"' in html
     assert 'id="review-guide-dialog"' in html
     assert "复盘指南" in html
+    assert 'id="review-example-dialog"' in html
+    assert 'id="review-example-title"' in html
+    assert 'id="review-example-content"' in html
+    search_form = html.split('id="review-search-form"', 1)[1].split("</form>", 1)[0]
+    assert 'name="keyword"' in search_form
+    assert "autofocus" in search_form
+    for field_name in (
+        "start_date",
+        "end_date",
+        "record_type",
+        "meaning_type",
+        "emotion",
+        "insight_tier",
+        "status",
+    ):
+        assert f'name="{field_name}"' not in search_form
 
     assert "review-daily-template" in css
     assert "review-week-sheet" in css
@@ -165,6 +182,125 @@ def test_review_navigation_and_frontend_contracts():
     assert "⌘ / Ctrl + Enter" not in javascript
     assert "行动后回来记录实际结果" not in javascript
     assert "已经行动？补充实际结果" in javascript
+    assert "review-daily-workspace" in javascript
+    assert "review-record-rail" not in javascript
+    assert 'data-action="select-daily"' not in javascript
+    assert 'data-action="shift-daily"' in javascript
+    assert "review-event-actions" in javascript
+    assert "openSearch" in javascript
+    assert "openSearchResult" in javascript
+    assert 'data-action="open-search-result"' in javascript
+    assert "event.target === dialog" in javascript
+    assert "什么事件让你内心有所触动？" in javascript
+    assert "事件发生时，我在想什么、感受什么？" in javascript
+    assert "当时我采取了什么行动？" in javascript
+    assert "这个行动带来了什么结果？" in javascript
+    assert "回顾事件和左侧记录后，我重新注意到了什么？" in javascript
+    assert "从现在开始，我可以采取什么具体行动？" in javascript
+    assert "这些行动可能会带来怎样的结果？" in javascript
+    assert "第一步" in javascript and "如实记录" in javascript
+    assert "第二步" in javascript and "意义重塑" in javascript
+    assert "第 ${index + 1} 件" not in javascript
+    daily_card = javascript.split("function renderDailyCard", 1)[1].split(
+        "function collectDailyCard", 1
+    )[0]
+    weekly_panel = javascript.split("function weeklyPanel", 1)[1].split(
+        "function setWeeklyStep", 1
+    )[0]
+    monthly_view = javascript.split("function renderMonthly()", 1)[1].split(
+        "function renderMonthlyConnections", 1
+    )[0]
+    assert 'data-action="open-example"' in daily_card
+    assert 'data-action="open-example"' in weekly_panel
+    assert 'data-action="open-example"' in monthly_view
+    assert "查看填写案例" in daily_card
+    assert "查看填写案例" in weekly_panel
+    assert "查看填写案例" in monthly_view
+    assert 'data-help="emotion"' in daily_card
+    assert "选择情绪词" in daily_card
+    assert "整理记录（可选）" in daily_card
+    assert "以后按名称、人物或主题查找" in daily_card
+    assert 'data-action="delete-daily"' in daily_card
+    assert 'data-action="source"' not in daily_card
+    assert "复制记录" not in daily_card
+    assert "如何区分事实" not in daily_card
+    assert "如何理解意义重塑" not in daily_card
+    assert "当时真正想要什么" not in daily_card
+    assert "现在看见了自己的什么" not in daily_card
+    assert "这次意义更接近什么" not in daily_card
+    assert "/static/images/review/emotion-wheel.png" in javascript
+    assert "每日复盘案例" in javascript
+    assert "周度复盘案例" in javascript
+    assert "月度复盘案例" in javascript
+    assert "团队氛围低迷时，找到自己能做的事" in javascript
+    assert "从一本书和一封邮件开始的联结" in javascript
+    assert "4 月的想法，在之后几个月形成结果" in javascript
+    assert "依据《复盘自己：从记录到蜕变的行动指南》案例整理" in javascript
+    assert "function openExample" in javascript
+    assert "open-example" in javascript
+    example_source = javascript.split("const REVIEW_EXAMPLES", 1)[1].split(
+        "const today", 1
+    )[0]
+    assert "一键套用" not in example_source
+    assert "复制案例" not in example_source
+    assert "past: {...(item?.past || {})}" in javascript
+    assert "present: {...(item?.present || {})}" in javascript
+    assert "payload.meaning_types =" not in javascript
+    assert emotion_wheel.exists()
+    assert emotion_wheel.stat().st_size > 100_000
+    assert '.review-workspace[data-review-tab="daily"]' in css
+    assert ".review-daily-workspace" in css
+    assert ".review-record-rail" not in css
+    assert ".review-template-field:not(:last-child)::after" not in css
+    assert "review-weekly-workspace" in javascript
+    assert "function syncWeeklyDraftFromView" in javascript
+    assert "weeklyDrafts: new Map()" in javascript
+    assert "syncWeeklyDraftFromView();\n        state.weeklyStep" in javascript
+    assert "renderWeekly();\n        elements.view.querySelector(`[data-week-panel" not in javascript
+    assert "monthlyDrafts: new Map()" in javascript
+    assert "function captureMonthlyDraft" in javascript
+    assert "captureMonthlyDraft(true);" in javascript
+    assert "if (!markDirty && !state.monthlyDrafts.has(state.month)) return;" in javascript
+    assert "captureMonthlyDraft();\n        state.month = month" in javascript
+    assert "if (state.tab === 'monthly') return selectMonthlyMonth(button.dataset.monthKey);" in javascript
+    assert "annualDrafts: new Map()" in javascript
+    assert "function captureAnnualDraft" in javascript
+    assert "function selectAnnualYear" in javascript
+    assert "captureAnnualDraft(true);" in javascript
+    assert "if (state.tab === 'annual') return selectAnnualYear(button.dataset.yearKey);" in javascript
+    assert "const savedKey = weeklyDraftKey();" in javascript
+    assert "state.weeklyDrafts.delete(savedKey)" in javascript
+    assert "const savedMonth = state.month;" in javascript
+    assert "state.monthlyDrafts.delete(savedMonth)" in javascript
+    assert "const savedYear = state.year;" in javascript
+    assert "state.annualDrafts.delete(savedYear)" in javascript
+    assert "data.applied_to?.type === 'annual'" in javascript
+    assert "state.annualDrafts.set(year" in javascript
+    assert "draftVersions: new Map()" in javascript
+    assert "savesInFlight: new Set()" in javascript
+    assert "function markDraftChanged" in javascript
+    assert "const savedVersion = draftVersion('weekly', savedKey);" in javascript
+    assert "const savedVersion = draftVersion('monthly', savedMonth);" in javascript
+    assert "const savedVersion = draftVersion('annual', savedYear);" in javascript
+    assert "保存期间有新更改，请再保存一次" in javascript
+    assert 'data-weekly-step="${number}"' in javascript
+    assert "选择最重要的事" in javascript
+    assert "找联系" in javascript
+    assert "看模式" in javascript
+    assert "具体化" in javascript
+    assert "review-year-overview" in javascript
+    assert 'data-action="select-month"' in javascript
+    assert "这一年发生了什么变化" in javascript
+    assert "review-annual-lead" in javascript
+    assert 'data-action="open-annual-month"' in javascript
+    assert "有记录的月份会形成轨迹" in javascript
+    assert "review-insight-overview" in javascript
+    assert "review-insight-depth" in javascript
+    assert "先看见重复，再决定它是否属于你" in javascript
+    assert ".review-weekly-workspace" in css
+    assert ".review-year-overview" in css
+    assert ".review-annual-lead" in css
+    assert ".review-insight-depth" in css
     assert "history.pushState" in javascript
     assert "window.addEventListener('popstate'" in javascript
     assert "window.addEventListener('hashchange'" not in javascript

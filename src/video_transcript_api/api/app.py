@@ -67,6 +67,7 @@ from .routes import (
     study,
     tasks,
     trend_radar,
+    ui_lab,
     users,
     views,
     visual_learning,
@@ -257,6 +258,8 @@ def create_app() -> FastAPI:
     app.include_router(reading.router)
     app.include_router(reviews.router)
     app.include_router(settings.router)
+    if ui_lab.ui_lab_enabled(config):
+        app.include_router(ui_lab.router)
 
     @app.on_event("startup")
     async def startup_event():

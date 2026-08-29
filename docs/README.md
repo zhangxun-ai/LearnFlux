@@ -76,44 +76,44 @@ docs/
 
 ### LLM 相关
 
-- [LLM 工程指南](docs/development/llm/engineering_guide.md)
+- [LLM 工程指南](development/llm/engineering_guide.md)
   - 基础架构设计
   - Prompt 工程与 Prefix Cache 优化
   - 结构化输出（JSON）
   - Reasoning Effort 配置
   - 错误处理与可观测性
 
-- [LLM 重构方案](docs/development/archive/refactoring_plan.md)
+- [LLM 重构方案](development/archive/refactoring_plan.md)
   - 模块化架构设计方案
   - 统一校对思路
   - 核心组件设计
 
-- [LLM 重构完成报告](docs/development/archive/refactoring_completed.md)
+- [LLM 重构完成报告](development/archive/refactoring_completed.md)
   - 重构实施总结
   - 测试结果
   - 使用示例
 
-- [LLM 总结功能设计](docs/development/archive/summary_feature_design.md)
+- [LLM 总结功能设计](development/archive/summary_feature_design.md)
   - 总结功能恢复设计
   - 架构对比
   - 实施步骤
 
-- [结构化校对指南](docs/development/llm/structured_calibration_guide.md)
+- [结构化校对指南](development/llm/structured_calibration_guide.md)
   - 结构化校对流程
   - 配置说明
   - 使用示例
 
-- [Manus 上下文工程](docs/development/llm/manus_context_engineering.md)
+- [Manus 上下文工程](development/llm/manus_context_engineering.md)
   - KV 缓存优化
   - 状态机管理
   - 文件系统作为上下文
   - 注意力操控
 
-- [Gemini OpenAI 兼容](docs/development/llm/gemini_openai_compat.md)
+- [Gemini OpenAI 兼容](development/llm/gemini_openai_compat.md)
   - Gemini API 的 OpenAI 兼容模式
   - Thinking 配置
 
-- [JSON 输出模式](docs/development/llm/json_output.md)
+- [JSON 输出模式](development/llm/json_output.md)
   - JSON Schema 结构化输出
   - 模式选择与配置
   - Self-Correction 重试机制

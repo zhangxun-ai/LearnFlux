@@ -395,6 +395,16 @@ uv run --extra dev pytest
 
 阶段性设计和历史方案保存在 `docs/superpowers/` 与 `docs/development/archive/`。遇到冲突时，以当前代码、`config/config.example.jsonc` 和测试为准。
 
+## 项目来源与致谢
+
+LearnFlux 基于 [VideoTranscriptAPI](https://github.com/zlxlabs/VideoTranscriptAPI) 的早期版本持续演进而来。感谢原作者 [@zj1123581321](https://github.com/zj1123581321) 提供的视频解析、转录与 API 基础实现。
+
+本仓库保留了原项目的 Git 提交历史，以及对应的版权和许可声明。LearnFlux 在此基础上继续扩展 AI 学习、系列知识、阅读写作、Obsidian 同步等能力。
+
+## AI 辅助开发说明
+
+本项目开发过程中使用 OpenAI Codex 协助代码生成、重构、测试和文档整理。产品方向、技术决策、代码审查、发布与维护由项目维护者负责。
+
 ## 许可证
 
 本项目使用 **MIT License + Commons Clause**。

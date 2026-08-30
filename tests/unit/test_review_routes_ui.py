@@ -114,6 +114,32 @@ def test_review_owner_isolation_and_explicit_delete(tmp_path):
     assert client.delete(f"/api/reviews/daily-events/{event['id']}").status_code == 404
 
 
+def test_partial_daily_record_can_be_reopened_and_edited(tmp_path):
+    client = _client(tmp_path)
+    created = client.post(
+        "/api/reviews/daily-events",
+        json={
+            "review_date": "2026-08-20",
+            "fact": "Only the part I can describe for now",
+            "past": {},
+            "present": {},
+        },
+    ).json()["data"]["record"]
+
+    reopened = client.get("/api/reviews/daily-events?date=2026-08-20")
+    assert reopened.status_code == 200
+    assert reopened.json()["data"]["items"][0]["id"] == created["id"]
+    assert reopened.json()["data"]["items"][0]["quick_meaning"] == ""
+
+    updated = client.patch(
+        f"/api/reviews/daily-events/{created['id']}",
+        json={"quick_meaning": "I found the missing thought later"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["data"]["record"]["fact"] == created["fact"]
+    assert updated.json()["data"]["record"]["quick_meaning"] == "I found the missing thought later"
+
+
 def test_review_navigation_and_frontend_contracts():
     navigation = json.loads(
         reviews.get_static_dir().parent.joinpath("product-navigation.json").read_text(encoding="utf-8")
@@ -151,6 +177,8 @@ def test_review_navigation_and_frontend_contracts():
     assert 'id="review-example-dialog"' in html
     assert 'id="review-example-title"' in html
     assert 'id="review-example-content"' in html
+    assert '<h2 id="review-search-title">历史记录</h2>' in html
+    assert "打开以前的记录继续编辑" in html
     search_form = html.split('id="review-search-form"', 1)[1].split("</form>", 1)[0]
     assert 'name="keyword"' in search_form
     assert "autofocus" in search_form
@@ -188,6 +216,7 @@ def test_review_navigation_and_frontend_contracts():
     assert 'data-action="shift-daily"' in javascript
     assert "review-event-actions" in javascript
     assert "openSearch" in javascript
+    assert "searchReviews(elements.searchForm);" in javascript
     assert "openSearchResult" in javascript
     assert 'data-action="open-search-result"' in javascript
     assert "event.target === dialog" in javascript
@@ -221,6 +250,7 @@ def test_review_navigation_and_frontend_contracts():
     assert "整理记录（可选）" in daily_card
     assert "以后按名称、人物或主题查找" in daily_card
     assert 'data-action="delete-daily"' in daily_card
+    assert "历史记录" in daily_card
     assert 'data-action="source"' not in daily_card
     assert "复制记录" not in daily_card
     assert "如何区分事实" not in daily_card
@@ -249,6 +279,12 @@ def test_review_navigation_and_frontend_contracts():
     assert emotion_wheel.exists()
     assert emotion_wheel.stat().st_size > 100_000
     assert '.review-workspace[data-review-tab="daily"]' in css
+    daily_hidden_rules = css.split(
+        '.review-workspace[data-review-tab="daily"] .review-page-heading p,', 1
+    )[1].split("{", 1)[0]
+    assert ".review-save-state" not in daily_hidden_rules
+    assert "自动保存已开启" in javascript
+    assert "正在自动保存" in javascript
     assert ".review-daily-workspace" in css
     assert ".review-record-rail" not in css
     assert ".review-template-field:not(:last-child)::after" not in css

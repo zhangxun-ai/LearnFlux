@@ -336,7 +336,7 @@
     function setSaveState(kind, message) {
         elements.saveState.className = `review-save-state${kind ? ` is-${kind}` : ''}`;
         elements.saveState.innerHTML = '<span class="review-state-mark" aria-hidden="true"></span><span></span>';
-        elements.saveState.firstElementChild.textContent = kind === 'error' ? '!' : kind === 'saving' ? '…' : '✓';
+        elements.saveState.firstElementChild.textContent = kind === 'error' ? '!' : kind === 'saving' ? '…' : kind === 'dirty' ? '•' : '✓';
         elements.saveState.lastElementChild.textContent = message;
     }
 
@@ -367,6 +367,7 @@
     function openSearch() {
         document.querySelectorAll('.review-more-menu[open]').forEach((menu) => menu.removeAttribute('open'));
         openDialog(elements.searchDialog);
+        searchReviews(elements.searchForm);
         requestAnimationFrame(() => elements.searchForm.elements.keyword.focus({preventScroll: true}));
     }
 
@@ -520,9 +521,12 @@
         }
         renderDaily();
         const restored = state.daily.items.some((item) => item._draft);
+        const periodLabel = state.date === today ? '今天' : '该日';
         setSaveState(
-            restored ? 'saving' : 'saved',
-            restored ? `已恢复本地草稿 · 今天 ${state.daily.total} 件` : `今天已记录 ${state.daily.total} 件`,
+            restored ? 'dirty' : 'saved',
+            restored
+                ? '已恢复本地草稿 · 继续编辑后自动保存'
+                : `自动保存已开启 · ${periodLabel}已记录 ${state.daily.total} 件`,
         );
     }
 
@@ -568,7 +572,7 @@
                 <header>
                     <div><span>事件</span><div class="review-prompt-title"><h2>什么事件让你内心有所触动？</h2><button class="review-help-trigger" type="button" data-help="fact" aria-label="查看客观事实填写帮助">?</button></div><p>只写客观发生的事，不加入感受或评价 <button class="review-example-trigger" type="button" data-action="open-example">查看填写案例</button></p></div>
                     <div class="review-event-actions">
-                        <button class="review-icon-button review-event-tool" type="button" data-action="open-search" aria-label="搜索复盘记录" title="搜索记录"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button>
+                        <button class="review-history-button" type="button" data-action="open-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>历史记录</span></button>
                         <button class="review-icon-button review-event-tool" type="button" data-action="add-daily" aria-label="记录另一件事" title="记录另一件事"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
                         <details class="review-more-menu review-event-menu">
                             <summary aria-label="记录操作">•••</summary>
@@ -692,8 +696,7 @@
             if (index >= 0) state.daily.items[index] = updated;
             clearDraft(id);
             card.querySelector('[data-card-status]').textContent = `已保存 ${formatTime(updated.updated_at)}`;
-            setSaveState('saved', syncLabel(data.sync));
-            if (state.tab === 'daily') toast('已保存', 1800);
+            setSaveState('saved', `自动保存 · ${syncLabel(data.sync)} · ${formatTime(updated.updated_at)}`);
         } catch (error) {
             card.querySelector('[data-card-status]').textContent = '保存失败，草稿仍在本机';
             setSaveState('error', '自动保存失败 · 本地草稿已保留');
@@ -1623,7 +1626,7 @@
         elements.searchResults.innerHTML = '<div class="review-loading">正在搜索…</div>';
         try {
             const data = await api(`/api/reviews/search?${query.toString()}`);
-            elements.searchResults.innerHTML = data.items.length ? data.items.map((item) => `<button class="review-search-result" type="button" data-action="open-search-result" data-record-type="${escapeAttr(item.record_type)}" data-record-id="${escapeAttr(item.id)}" data-review-date="${escapeAttr(item.review_date || '')}" data-week-start="${escapeAttr(item.week_start || '')}" data-month-key="${escapeAttr(item.month_key || '')}" data-year-key="${escapeAttr(item.year_key || '')}"><header><strong>${escapeHTML(searchTitle(item))}</strong><span class="review-chip">${escapeHTML(recordTypeLabel(item.record_type))}</span></header><p>${escapeHTML(searchPreview(item))}</p></button>`).join('') : '<div class="review-empty review-search-empty"><div><p>没有找到符合条件的记录。</p></div></div>';
+            elements.searchResults.innerHTML = data.items.length ? data.items.map((item) => `<button class="review-search-result" type="button" data-action="open-search-result" data-record-type="${escapeAttr(item.record_type)}" data-record-id="${escapeAttr(item.id)}" data-review-date="${escapeAttr(item.review_date || '')}" data-week-start="${escapeAttr(item.week_start || '')}" data-month-key="${escapeAttr(item.month_key || '')}" data-year-key="${escapeAttr(item.year_key || '')}"><header><strong>${escapeHTML(searchTitle(item))}</strong><span class="review-chip">${escapeHTML(recordTypeLabel(item.record_type))}</span></header><p>${escapeHTML(searchPreview(item))}</p><footer><span>${escapeHTML(searchPeriodLabel(item))}</span><strong>${item.record_type === 'daily' ? '打开继续编辑' : '打开记录'} →</strong></footer></button>`).join('') : '<div class="review-empty review-search-empty"><div><p>没有找到符合条件的记录。</p></div></div>';
         } catch (error) { elements.searchResults.innerHTML = renderError(error.message); }
     }
 
@@ -1655,6 +1658,10 @@
 
     function searchTitle(item) {
         return item.title || item.statement || item.month_key || item.week_start || item.year_key || item.review_date || '复盘记录';
+    }
+
+    function searchPeriodLabel(item) {
+        return item.review_date || item.week_start || item.month_key || item.year_key || formatTime(item.updated_at);
     }
 
     function searchPreview(item) {

@@ -12,13 +12,11 @@ def test_home_page_exposes_local_video_study_entry():
     assert "数据不用于模型训练" not in _HOME_HTML
 
 
-def test_home_page_keeps_opportunity_entry_inside_flywheel():
+def test_home_page_omits_removed_insight_product_card():
     from video_transcript_api.api.routes.views import _HOME_HTML
 
-    assert "选题机会" in _HOME_HTML
-    assert 'href="/flywheel"' in _HOME_HTML
-    assert "机会雷达" not in _HOME_HTML
-    assert "/flywheel#opportunities" not in _HOME_HTML
+    assert 'href="/flywheel"' not in _HOME_HTML
+    assert "IP 对标工作流" not in _HOME_HTML
 
 
 def test_workbench_opens_local_file_panel_from_study_hash():

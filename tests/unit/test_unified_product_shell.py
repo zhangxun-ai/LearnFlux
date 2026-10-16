@@ -41,19 +41,14 @@ const assert = require('node:assert/strict');
 const features = require(process.argv[1]);
 assert.deepEqual(Object.keys(features), [
   'collections',
-  'visual_learning',
   'study_player',
   'reading',
   'focus_studio',
-  'post_insight',
-  'trend_radar',
-  'flywheel',
   'history',
 ]);
 assert.ok(Object.isFrozen(features));
 for (const value of Object.values(features)) assert.equal(typeof value, 'boolean');
-assert.equal(features.trend_radar, false);
-const optionallyDisabled = new Set(['reading', 'trend_radar']);
+const optionallyDisabled = new Set(['reading']);
 for (const [key, value] of Object.entries(features)) {
   if (!optionallyDisabled.has(key)) assert.equal(value, true, key);
 }
@@ -294,8 +289,8 @@ class TestNavigationMarkup:
         assert [group["id"] for group in navigation["groups"]] == [
             "core", "flow", "insight", "system",
         ]
-        assert navigation["items"]["trend_radar"]["feature"] == "trend_radar"
-        assert navigation["items"]["trend_radar"]["href"] == "/trend-radar"
+        for removed_item in ("visual_learning", "post_insight", "trend_radar", "flywheel"):
+            assert removed_item not in navigation["items"]
         review_children = navigation["items"]["review"]["children"]
         assert [child["label"] for child in review_children] == [
             "今日复盘", "周度复盘", "月度复盘", "年度复盘", "内在洞察",
@@ -309,8 +304,8 @@ class TestNavigationMarkup:
             'aria-label="复盘二级导航">'
         ) in partial
         assert partial.count("data-review-section=") == 5
-        assert 'data-feature="trend_radar"' in partial
-        assert re.search(r'<a[^>]*data-feature="trend_radar"[^>]*\shidden(?:\s|>)', partial)
+        for removed_label in ("图解生成", "帖子洞察", "趋势雷达", "IP 对标"):
+            assert removed_label not in partial
 
         for template_name in ("base.html", "flywheel.html"):
             template = (TEMPLATE_ROOT / template_name).read_text(encoding="utf-8")
@@ -323,12 +318,9 @@ class TestNavigationMarkup:
             assert html.count("PRODUCT_NAV_START") == 1, filename
             assert html.count("PRODUCT_NAV_END") == 1, filename
             assert html.index("ui-features.js") < html.index("app-shell.js"), filename
-            assert 'data-feature="trend_radar"' in html, filename
-            assert re.search(
-                r'<a[^>]*data-feature="trend_radar"[^>]*\shidden(?:\s|>)',
-                html,
-            ), filename
-            for group_id in ("core", "flow", "insight", "system"):
+            for removed_label in ("图解生成", "帖子洞察", "趋势雷达", "IP 对标"):
+                assert removed_label not in navigation, filename
+            for group_id in ("core", "flow", "system"):
                 assert f'data-group="{group_id}"' in html, filename
                 assert f'aria-controls="nav-{group_id}-items"' in html, filename
                 assert f'id="nav-{group_id}-items"' in html, filename
@@ -530,7 +522,6 @@ class TestFeatureEntryCoverage:
             "/collections",
             "/visual-learning",
             "/reading",
-            "/flywheel",
             "/study",
         ):
             assert f'href="{href}"' in _HOME_HTML, href

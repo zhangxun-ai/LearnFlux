@@ -89,13 +89,6 @@ SCHEMA: list[dict[str, Any]] = [
          {"key": "youtube_api_server.base_url", "label": "YouTube Server 地址", "type": "str"},
          {"key": "youtube_api_server.api_key", "label": "YouTube Server 密钥", "type": "secret"},
      ]},
-    {"title": "通知", "icon": "📢", "tier": "advanced",
-     "desc": "可选：任务完成 / 长任务提醒的推送渠道。",
-     "fields": [
-         {"key": "wechat.webhook", "label": "企业微信 Webhook", "type": "secret"},
-         {"key": "feishu.webhook", "label": "飞书 Webhook", "type": "secret"},
-         {"key": "feishu.secret", "label": "飞书签名密钥", "type": "secret"},
-     ]},
     {"title": "Obsidian 复盘同步", "icon": "🗂️", "tier": "advanced",
      "desc": "可选：把复盘以 LearnFlux 管理区形式同步到同机 Obsidian Vault。",
      "fields": [
@@ -120,7 +113,7 @@ _FIELD_TYPE: dict[str, str] = {f["key"]: f["type"] for g in SCHEMA for f in g["f
 # 视为“未配置”的占位值（来自 config.example.jsonc）
 _PLACEHOLDERS = {
     "", "your-auth-token-here", "your-llm-api-key-here", "your-tikhub-api-key-here",
-    "your-api.com/v1", "https://your-api.com/v1", "your-webhook-url-here",
+    "your-api.com/v1", "https://your-api.com/v1",
     "your-api-key-here", "http://your-youtube-api-server:8000",
 }
 _SECRET_TYPES = {"secret"}

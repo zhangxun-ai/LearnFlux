@@ -307,7 +307,7 @@ BBDown serve -l http://0.0.0.0:12450
 
 API服务器不支持HTTPS配置，如果有需要请自行使用nginx等反向代理进行配置
 
-API详细请参考[json-api-doc.md](./json-api-doc.md)
+BBDown 的[上游仓库](https://github.com/nilaoda/BBDown)已归档，仅供查阅历史资料；本指南中的接口说明以本项目当前实现为准。
 </details>
 
 # 演示

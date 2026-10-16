@@ -54,14 +54,17 @@ def test_visual_learning_workbench_uses_existing_ingestion_and_visual_apis():
     assert "evidenceMeta" in js
 
 
-def test_app_shell_adds_visual_learning_navigation():
+def test_app_shell_omits_removed_visual_learning_navigation():
     js = (PROJECT_ROOT / "src/web/static/js/app-shell.js").read_text(encoding="utf-8")
     navigation = json.loads(
         (PROJECT_ROOT / "src/web/product-navigation.json").read_text(encoding="utf-8")
     )
 
-    assert navigation["items"]["visual_learning"]["href"] == "/visual-learning"
-    assert navigation["items"]["visual_learning"]["label"] == "图解生成"
+    assert "visual_learning" not in navigation["items"]
+    assert not any(
+        item.get("href") == "/visual-learning"
+        for item in navigation["items"].values()
+    )
     assert "replaceChildren" not in js
 
 

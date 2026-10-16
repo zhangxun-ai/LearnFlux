@@ -681,9 +681,9 @@ def test_structured_calibration():
 4. 逐步废弃旧的 `llm_segmented._calibrate_json_segmented()`
 
 **相关文档**：
-- [LLM 重构方案](./refactoring_plan.md)
+- [LLM 重构方案](../archive/refactoring_plan.md)
 - [LLM 工程指南](./engineering_guide.md)
-- [LLM 重构完成报告](./refactoring_completed.md)
+- [LLM 重构完成报告](../archive/refactoring_completed.md)
 
 ---
 

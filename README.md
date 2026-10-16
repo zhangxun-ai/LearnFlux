@@ -1,8 +1,8 @@
 # LearnFlux
 
-> 把视频、音频和文档，变成可理解、可追问、可复习、可沉淀的学习资产。
+> 将视频、音频、文档和文字整理成逐字稿、总结与学习笔记，并支持按时间轴复习和持续复盘。
 
-LearnFlux 是一个可自托管的 AI 学习工作台。它把平台链接、本地音视频、文档或已有文本推进成一条完整学习链路：
+LearnFlux 是一个可自托管的 AI 学习工作台。导入平台链接、本地音视频、文档或已有文本后，可以生成逐字稿和 AI 解读，再按时间轴复习、整理笔记并定期复盘：
 
 **导入 → 转录 / 解析 → AI 校对与解读 → 边播边学 / 心流阅读 → 图解与笔记 → 定期复盘 → Obsidian 沉淀**
 
@@ -16,11 +16,11 @@ LearnFlux 是一个可自托管的 AI 学习工作台。它把平台链接、本
 
 ## 为什么用 LearnFlux
 
-- **不止拿到字幕**：保留时间轴，生成校对稿、总结、难点解释、问答和视觉图解。
+- **保留内容上下文**：逐字稿保留时间轴，可生成校对稿、总结、难点解释、问答和图解。
 - **支持多种来源**：YouTube、Bilibili、抖音、小红书、小宇宙、微信视频号、音视频直链、本地文件和文档。
-- **把内容组织成体系**：支持单篇学习、系列课程、知识地图、心流阅读和心流写作。
-- **从学习走向行动**：提供今日、周度、月度、年度复盘，记录证据、洞察与可验证的行动实验。
-- **数据由自己掌控**：默认使用本地 SQLite 和文件系统，也可迁移到 PostgreSQL；笔记可同步到 Obsidian。
+- **支持持续学习**：按单篇或系列组织内容，并用知识地图、心流阅读和心流写作继续整理。
+- **记录复盘和行动**：提供今日、周度、月度、年度复盘，记录证据、洞察和行动实验。
+- **数据保存在自己的环境**：默认使用本地 SQLite 和文件系统，也可迁移到 PostgreSQL；笔记可同步到 Obsidian。
 - **可被 Agent 调用**：仓库内置 agentskills.io 标准 skill，可供 Claude Code、OpenClaw、Hermes 等工具调用。
 
 LearnFlux 更适合个人学习者、内容研究者和希望自托管知识工作流的开发者。它不是开箱即用的多租户商业 SaaS，目前也不包含计费、完整团队权限和托管式 GPU 转录服务。
@@ -42,6 +42,29 @@ LearnFlux 更适合个人学习者、内容研究者和希望自托管知识工�
 git clone https://github.com/zhangxun-ai/LearnFlux.git
 cd LearnFlux
 bash scripts/bootstrap.sh
+```
+
+需要编程 Agent 帮你检查本机环境、安装缺少的依赖并启动服务时，可复制[macOS 本地快速启动提示词](docs/prompts/macos-local-quick-start.md)给能访问终端的 Agent。
+
+如果不运行初始化脚本，也可以手动复制配置模板：
+
+```bash
+cp config/config.example.jsonc config/config.jsonc
+```
+
+云端 ASR、PostgreSQL 或 S3 才需要额外创建 `.env`：
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+配置模板不含真实密钥，但其中的端口、服务监听地址和模型等示例值仍需按你的环境检查。首次启动前，至少要设置 `api.auth_token`；需要 AI 或社媒解析时，再按[配置与 API Key 指南](docs/guides/configuration.md)填写对应密钥和模型参数。不要把 `config/config.jsonc`、`.env` 或 `config/users.json` 上传到 GitHub。
+
+macOS / Linux 上建议限制配置文件的本机读取权限：
+
+```bash
+chmod 600 config/config.jsonc
 ```
 
 Apple Silicon Mac 可以同时安装本机 `mlx-whisper`：
@@ -75,7 +98,7 @@ uv sync --extra dev
 openssl rand -hex 32
 ```
 
-`api.auth_token` 必须先在配置文件中设置。系统设置页会用它验证管理员身份，但不会替你创建或修改这个口令。
+`api.auth_token` 必须先在配置文件中设置。系统设置页会用它验证管理员身份，但不会替你创建或修改这个口令。CLI、Agent 和其它 API 客户端使用标准 `Authorization: Bearer ...`。
 
 ### 3. 选择转录方式
 
@@ -192,12 +215,6 @@ FunASR 示例：
 - AI 只生成候选，用户编辑并确认后才进入正式复盘数据
 - 4W1H 行动实验、成功信号、复查日期与结果记录
 
-### 洞察与研究
-
-- 帖子正文、评论样本和高赞回复分析
-- IP 对标、内容机会与创作草稿
-- 趋势雷达路由已提供，但当前在产品导航中默认隐藏，适合开发或实验使用
-
 ## 界面预览
 
 | 单篇深度学习 | 系列深度学习 |
@@ -208,9 +225,11 @@ FunASR 示例：
 | :---: | :---: |
 | <img src="docs/images/03-study-player.png" alt="边播边学" width="420" /> | <img src="docs/images/04-visual-learning.png" alt="图解生成" width="420" /> |
 
-| 心流阅读 | IP 对标 |
+| 心流阅读 | 心流写作 |
 | :---: | :---: |
-| <img src="docs/images/07-reading.png" alt="心流阅读" width="420" /> | <img src="docs/images/09-flywheel.png" alt="IP 对标" width="420" /> |
+| <img src="docs/images/07-reading.png" alt="心流阅读" width="420" /> | <img src="docs/images/10-focus-studio.png" alt="心流写作" width="420" /> |
+
+单篇学习和边播边学支持生成内容图解；系列学习支持系列级图解。
 
 ## 产品入口
 
@@ -218,24 +237,33 @@ FunASR 示例：
 | --- | --- | --- | --- |
 | 核心工具 | 单篇深度学习 | `/add_task_by_web` | 导入链接、文件或文字，完成转录与 AI 解读 |
 | 核心工具 | 系列深度学习 | `/collections` | 管理课程 / 专题，生成系列解读和知识地图 |
-| 核心工具 | 图解生成 | `/visual-learning` | 把文字或文档转换成视觉图解 |
 | 核心工具 | 边播边学 | `/study` | 播放、字幕、解读和笔记按时间轴联动 |
 | 核心工具 | 复盘 | `/review` | 今日、周、月、年复盘与内在洞察 |
 | 心流空间 | 心流阅读 | `/reading` | 导入文档、沉浸阅读、标记和摘录 |
 | 心流空间 | 心流写作 | `/static/focus-studio.html` | 写作、材料整理与本地草稿 |
-| 洞察与分析 | 帖子洞察 | `/post` | 提炼帖子正文、评论与可信度 |
-| 洞察与分析 | IP 对标 | `/flywheel` | 研究账号内容并生成机会和草稿 |
 | 系统 | 历史记录 | `/static/history.html` | 回看任务与复盘记录 |
-| 系统 | 系统设置 | `/settings` | 配置 LLM、TikHub、ASR、通知和 Obsidian |
+| 系统 | 系统设置 | `/settings` | 配置 LLM、TikHub、ASR 和 Obsidian |
 
 ## 常用配置
 
-配置模板：[`config/config.example.jsonc`](config/config.example.jsonc)。真实配置默认位于被 Git 忽略的 `config/config.jsonc`。
+配置模板：[`config/config.example.jsonc`](config/config.example.jsonc)。真实配置默认位于被 Git 忽略的 `config/config.jsonc`。如何复制模板、申请密钥和填写字段见[配置与 API Key 指南](docs/guides/configuration.md)。
+
+常见凭据与获取入口：
+
+| 服务 | 什么时候需要 | 必填项 | 获取入口 |
+| --- | --- | --- | --- |
+| 大模型 API | AI 校对、总结、问答、图解和复盘 | `llm.api_key`、`llm.base_url`、所选模型对应的 `llm.*_model` | [OpenAI](https://platform.openai.com/api-keys)、[DeepSeek](https://api-docs.deepseek.com/zh-cn/)、[Gemini](https://aistudio.google.com/apikey)、[阿里云百炼](https://help.aliyun.com/zh/model-studio/get-api-key) |
+| TikHub | 抖音、小红书及部分社媒解析 | `tikhub.api_key`；通常保留模板中的 `tikhub.base_url` | [TikHub 用户中心](https://user.tikhub.io/dashboard/api) |
+| 阿里云百炼云端 ASR | 明确启用付费云端转录时 | `.env` 中的 `DASHSCOPE_API_KEY`、`DASHSCOPE_WORKSPACE_ID`、`DASHSCOPE_API_HOST` | [API Key 指南](https://help.aliyun.com/zh/model-studio/get-api-key)、[Workspace ID 指南](https://help.aliyun.com/zh/model-studio/obtain-the-app-id-and-workspace-id) |
+
+其他按需凭据包括远程 YouTube API Server Key，以及仅在选择 PostgreSQL / S3 时需要的数据库或对象存储凭据。具体字段、用途和填写位置见[配置指南](docs/guides/configuration.md)。
+
+设置页预置 OpenAI、DeepSeek、Google Gemini、Moonshot / Kimi、智谱 GLM、阿里云百炼、火山方舟和 SiliconFlow；也支持填写其他 OpenAI 兼容服务商。各服务商官方 Key 页面均列在[配置指南](docs/guides/configuration.md)。
 
 | 配置 | 什么时候需要 | 说明 |
 | --- | --- | --- |
 | `api.auth_token` | 始终 | Web 管理口令与 API Bearer Token |
-| `llm.api_key`、`llm.base_url` | AI 校对、总结、问答、图解、复盘分析 | 支持 OpenAI 兼容接口 |
+| `llm.api_key`、`llm.base_url` | AI 校对、总结、问答、图解和复盘分析 | 支持 OpenAI 兼容接口 |
 | `tikhub.api_key` | 抖音、小红书和部分社媒研究 | TikHub API 密钥 |
 | `local_whisper.*` | Apple Silicon 本机转录 | 启用后普通转录优先走本机 |
 | `capswriter.server_url` | 使用 CapsWriter | 默认示例为 `ws://localhost:6016` |
@@ -253,7 +281,7 @@ FunASR 示例：
 | `LEARNFLUX_OBJECT_BACKEND` | `local` | 切换本地文件 / S3 对象存储 |
 | `DASHSCOPE_API_KEY` | 空 | 阿里云百炼转录 |
 
-完整模板见 [`.env.example`](.env.example)。PostgreSQL 切换前请严格执行[迁移、验收与回滚指南](docs/guides/postgresql.md)。
+环境变量清单见 [`.env.example`](.env.example)。切换 PostgreSQL 前请按[迁移、验收与回滚指南](docs/guides/postgresql.md)完成迁移和验收。
 
 ## 部署与运维
 
@@ -327,9 +355,9 @@ curl -s "http://localhost:8000/api/task/TASK_ID" \
 ## 数据与安全
 
 - 默认元数据存储在 `data/` 下的 SQLite，转录、缓存、日志和源文件也默认保存在本机。
-- 不要提交 `config/config.jsonc`、`config/users.json`、`.env`、API Key、Webhook 或真实转录数据。
+- 不要提交 `config/config.jsonc`、`config/users.json`、`.env`、访问令牌、API Key 或真实转录数据。
 - 公网部署前必须设置强 `api.auth_token`，并使用反向代理、HTTPS、防火墙和访问控制。
-- 当前项目未内置完整的公网速率限制，不能只依赖 Bearer Token 抵御资源耗尽攻击。
+- 当前项目没有覆盖所有公网部署场景的速率限制；公网部署还需要在反向代理或网关配置访问限制。
 - 云端 ASR 密钥只放环境变量；付费路径会先生成报价，确认后才提交。
 - 处理第三方内容时，请遵守平台条款、隐私要求和版权规则。
 - 生产数据请建立独立备份，并在 PostgreSQL / S3 切换前完成可回滚验收。
@@ -386,11 +414,12 @@ uv run --extra dev pytest
 | 文档 | 内容 |
 | --- | --- |
 | [文档中心](docs/README.md) | 全部用户与开发文档导航 |
+| [配置与 API Key 指南](docs/guides/configuration.md) | 配置文件复制、API Key 来源、字段与环境变量 |
+| [macOS 本地快速启动提示词](docs/prompts/macos-local-quick-start.md) | 让本机 Agent 检查依赖、准备配置并启动服务 |
 | [系统架构](docs/architecture.md) | 核心模块、处理流程与持久化 |
 | [API Quick Start](docs/guides/api/quickstart.md) | 认证、提交、轮询与结果获取 |
 | [PostgreSQL 指南](docs/guides/postgresql.md) | 迁移、验收与回滚 |
-| [多用户配置](docs/guides/multi_user_setup.md) | 多 API Key 与用户配置 |
-| [通知配置](docs/guides/notification.md) | 企业微信与飞书通知 |
+| [多用户配置](docs/guides/multi_user_setup.md) | 本地静态 API Token 配置 |
 | [复盘模块方案](docs/review_module_plan.md) | 数据模型、AI 确认边界与 Obsidian 规则 |
 
 阶段性设计和历史方案保存在 `docs/superpowers/` 与 `docs/development/archive/`。遇到冲突时，以当前代码、`config/config.example.jsonc` 和测试为准。
@@ -424,4 +453,4 @@ LearnFlux 基于 [VideoTranscriptAPI](https://github.com/zlxlabs/VideoTranscript
 uv run --extra dev pytest tests/unit
 ```
 
-第一次使用时，先跑通一条公开短视频或一份小文档，再逐步开启合集、图解、Obsidian、复盘和洞察能力。这样最容易定位配置问题。
+第一次使用时，先跑通一条公开短视频或一份小文档，再逐步开启合集、图解、Obsidian 和复盘能力。这样最容易定位配置问题。

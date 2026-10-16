@@ -290,7 +290,7 @@ A: 查看日志中的警告信息，检查是否有 "文本为空" 或 "tokens �
 ## 10. 参考资料
 
 - [Loguru 官方文档](https://loguru.readthedocs.io/)
-- [FunASR 日志指南](./guides/api/funasr_spk_server_client_api.md)
+- [FunASR 日志指南](../guides/api/funasr_spk_server_client_api.md)
 
 ---
 

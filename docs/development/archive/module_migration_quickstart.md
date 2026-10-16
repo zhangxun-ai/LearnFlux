@@ -243,5 +243,5 @@ src/video_transcript_api/
 ## 📚 相关文档
 
 - [详细迁移方案](./module_migration_plan.md)
-- [LLM 架构文档](./llm/refactoring_completed.md)
-- [项目架构总览](../../README.md#架构概览)
+- [LLM 架构文档](./refactoring_completed.md)
+- [项目架构总览](../../architecture.md)

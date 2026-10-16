@@ -16,7 +16,6 @@ STATIC_PAGES = {
     "study.html": ("page-study", "product-linear-core.css"),
     "visual-learning.html": ("page-visual-learning", "product-linear-core.css"),
     "focus-studio.html": ("page-focus", "product-linear-core.css"),
-    "trend-radar.html": ("page-trend", "product-linear-insights.css"),
     "history.html": ("page-history", "product-linear-system.css"),
     "settings.html": ("page-settings", "product-linear-system.css"),
 }
@@ -27,7 +26,6 @@ PAGE_ANCHORS = {
     "study.html": ("study-library", "study-player", "tab-transcript", "/static/js/study.js"),
     "visual-learning.html": ("visual-text-panel", "visual-output", "visual-evidence-drawer", "js/visual-learning-workbench.js"),
     "focus-studio.html": ("focus-editor", "mixer-zone", "journal-sidecar", "/static/js/focus-studio.js"),
-    "trend-radar.html": ("matrix-panel", "trend-list", "trend-detail", "/static/js/trend-radar.js"),
     "history.html": ("filterBar", "listArea", "paginationBar", "/static/js/app-shell.js"),
     "settings.html": ("groups", "save-btn", "toast", "/static/js/app-shell.js"),
 }

@@ -300,6 +300,6 @@ uv run python scripts/rollback_imports.py
 
 ## 🔗 相关文档
 
-- [LLM 架构设计](./llm/refactoring_completed.md)
-- [缓存系统设计](../guides/cache_system.md)（待创建）
-- [风控模块设计](./risk_control.md)
+- [LLM 架构设计](./refactoring_completed.md)
+- 缓存系统设计（该方案编写时计划补充，当前未单独成文）
+- [风控模块设计](../risk_control.md)

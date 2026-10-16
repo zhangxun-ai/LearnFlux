@@ -14,7 +14,7 @@ Authorization: Bearer <your-api-key>
 
 API Key 由服务管理员分配，格式为 `sk-<user>-xxxxxxxxxx`（在 `config/users.json` 中配置）。如需获取，请联系管理员创建账号。
 
-> 单用户模式下，Key 即 `config/config.jsonc` 里的 `api.auth_token`；多用户模式下每个 Key 可绑定独立的企微 / 飞书 webhook。
+> 单用户模式下，Key 即 `config/config.jsonc` 里的 `api.auth_token`；多用户模式下，Key 由服务管理员在 `config/users.json` 中配置。
 
 ---
 
@@ -53,7 +53,7 @@ queued ──► processing ──► calibrating ──► success
 > ✅ **状态语义**：`/api/task` 返回 `success`(HTTP 200) 表示**全流程已完成**（含 LLM 校对/总结，产物已落盘），此时 `?raw=calibrated` 可直接取到内容。
 > `calibrating` 表示转录已完成、校对/总结仍在进行（仍返回 202，继续轮询）。
 > 状态以服务端数据库为准，**服务重启不丢**；崩溃中断的任务会在重启时被标记为 `failed`。
-> 如果只想被动接收结果，配置 webhook 即可——任务全部完成后会推送「任务完成」消息和查看链接。
+> 客户端可轮询 `/api/task/{id}` 获取任务进度，并在完成后读取结果。
 
 ### 1. 提交转录任务
 
@@ -74,17 +74,7 @@ curl -X POST https://your-domain.com/api/transcribe \
 | `url` | string | 是 | 视频/音频平台链接，同时用于元数据解析、缓存去重和生成 view_token |
 | `use_speaker_recognition` | bool | 否 | 是否启用说话人识别（FunASR），默认 `false`（普通转录走 CapsWriter） |
 | `download_url` | string | 否 | 自定义直链下载地址；提供后跳过平台解析，`url` 仅用于取元数据 |
-| `wechat_webhook` | string | 否 | 本次任务的企业微信 Webhook，覆盖用户级配置 |
-| `feishu_webhook` | string | 否 | 本次任务的飞书 Webhook，覆盖用户级配置 |
-| `notification_config` | object | 否 | 通知渠道配置，见下方 |
 | `metadata_override` | object | 否 | 覆盖/补充元数据，见下方 |
-
-`notification_config` 字段（用于按单次请求指定推送渠道）：
-
-| 子参数 | 类型 | 说明 |
-|--------|------|------|
-| `channel` | string | 渠道：`wechat` / `feishu` / 不填（默认全部已配置渠道） |
-| `webhook` | string | 自定义 webhook URL（写入对应 channel） |
 
 `metadata_override` 字段（平台解析失败时作为覆盖，解析成功时作为补充）：
 
@@ -93,8 +83,6 @@ curl -X POST https://your-domain.com/api/transcribe \
 | `title` | string | 自定义标题（≤200 字） |
 | `author` | string | 自定义作者（≤200 字） |
 | `description` | string | 自定义描述（≤2000 字） |
-
-> webhook URL 会做 SSRF 安全校验，内网 / 非法地址会被拒绝（HTTP 422）。
 
 **响应示例**（HTTP 202）：
 
@@ -232,7 +220,7 @@ print(f"Calibrated ({len(text)} chars):\n{text[:500]}")
 
 | 端点 | 方法 | 认证 | 说明 |
 |------|------|------|------|
-| `/api/recalibrate` | POST | 是（需 `recalibrate` 权限） | 复用已有转录重新跑 LLM 校对，body：`{"view_token": "...", "wechat_webhook": "可选"}`，复用原 view_token |
+| `/api/recalibrate` | POST | 是（需 `recalibrate` 权限） | 复用已有转录重新跑 LLM 校对，body：`{"view_token": "..."}`，复用原 view_token |
 | `/api/users/profile` | GET | 是 | 当前用户信息（api_key 脱敏返回） |
 | `/api/audit/stats` | GET | 是 | 调用统计 |
 | `/api/audit/calls` | GET | 是 | 调用记录 |
@@ -245,6 +233,5 @@ print(f"Calibrated ({len(text)} chars):\n{text[:500]}")
 ## 补充说明
 
 - **交互式文档**：`https://your-domain.com/docs`（Swagger UI），可在线调试。
-- **推送通知**：配置 `wechat_webhook` / `feishu_webhook`（或 `notification_config`）后，任务创建时推送查看链接，全部完成后推送总结 + 「任务完成」消息。校对文本超长（>5000 字）时通知里只放链接，不塞全文。
 - **缓存去重**：相同 `平台 + 媒体 ID + 是否说话人识别` 的任务会命中缓存，秒回历史结果。
 - **并发限制**：服务端有任务队列，队满返回 HTTP 503，客户端应稍后重试。

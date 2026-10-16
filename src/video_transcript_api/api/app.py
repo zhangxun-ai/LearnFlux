@@ -55,18 +55,15 @@ from .services.progress_notifications import process_progress_reminders
 from .routes import (
     audit,
     collections,
-    flywheel,
     health,
     journal,
     marks,
     obsidian,
-    post_insight,
     reading,
     reviews,
     settings,
     study,
     tasks,
-    trend_radar,
     ui_lab,
     users,
     views,
@@ -252,9 +249,6 @@ def create_app() -> FastAPI:
     app.include_router(journal.router)
     app.include_router(marks.router)
     app.include_router(collections.router)
-    app.include_router(post_insight.router)
-    app.include_router(flywheel.router)
-    app.include_router(trend_radar.router)
     app.include_router(reading.router)
     app.include_router(reviews.router)
     app.include_router(settings.router)

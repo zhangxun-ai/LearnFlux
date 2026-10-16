@@ -14,7 +14,6 @@ SHELL_SOURCES = (
     PROJECT_ROOT / "src/web/static/study.html",
     PROJECT_ROOT / "src/web/static/focus-studio.html",
     PROJECT_ROOT / "src/web/static/visual-learning.html",
-    PROJECT_ROOT / "src/web/static/trend-radar.html",
     PROJECT_ROOT / "src/web/static/history.html",
     PROJECT_ROOT / "src/web/static/settings.html",
     PROJECT_ROOT / "src/web/templates/base.html",

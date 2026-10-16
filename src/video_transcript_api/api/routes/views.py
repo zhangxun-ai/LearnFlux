@@ -678,8 +678,8 @@ _HOME_HTML = """\
     </section>
 
     <section class="features-section" id="features">
-        <h2 class="section-title">高价值特性</h2>
-        <p class="section-sub">不止转录，而是完整的学习与洞察闭环</p>
+        <h2 class="section-title">主要功能</h2>
+        <p class="section-sub">导入内容后，可继续完成学习和复盘</p>
         <div class="features-grid">
             <a class="feature-card" href="/add_task_by_web">
                 <div class="feat-icon">单</div>
@@ -705,11 +705,6 @@ _HOME_HTML = """\
                 <div class="feat-icon">流</div>
                 <h3>沉浸式心流空间</h3>
                 <p>免打扰阅读与写作环境，配合 AI 润色，让你从信息噪音里回到思考本身。</p>
-            </a>
-            <a class="feature-card" href="/flywheel">
-                <div class="feat-icon">IP</div>
-                <h3>内容趋势与选题机会</h3>
-                <p>拆解社媒高赞图文与对标账号逻辑，辅助创作者在 IP 对标工作流内发现选题机会。</p>
             </a>
         </div>
     </section>

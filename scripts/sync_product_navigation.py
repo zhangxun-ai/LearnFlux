@@ -26,7 +26,6 @@ STATIC_TARGETS = {
     STATIC_ROOT / "focus-studio.html": "focus_studio",
     STATIC_ROOT / "reading.html": "reading",
     STATIC_ROOT / "review.html": "review",
-    STATIC_ROOT / "trend-radar.html": "trend_radar",
     STATIC_ROOT / "history.html": "history",
     STATIC_ROOT / "settings.html": "settings",
 }
@@ -36,7 +35,6 @@ DIRECT_STATIC = {
 }
 JINJA_TARGETS = (
     TEMPLATE_ROOT / "base.html",
-    TEMPLATE_ROOT / "flywheel.html",
 )
 VIEWS_PATH = PROJECT_ROOT / "src" / "video_transcript_api" / "api" / "routes" / "views.py"
 PARTIAL_PATH = TEMPLATE_ROOT / "partials" / "product_navigation.html"

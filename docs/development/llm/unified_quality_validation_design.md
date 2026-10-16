@@ -967,8 +967,8 @@ def validate(
 ### C. 参考资料
 
 - [LLM 工程指南](./engineering_guide.md)
-- [质量验证打分机制](../../guides/quality_scoring.md)
-- [配置文件说明](../../../config/README.md)
+- [质量分析设计](../../designs/quality-deep-dive.md)
+- [配置与 API Key 指南](../../guides/configuration.md)
 
 ---
 

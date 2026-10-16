@@ -24,26 +24,6 @@
     },
 
     // ============================================================
-    // 趋势机会雷达配置（手动触发，默认单次预算不超过 $5）
-    // ============================================================
-    "trend_radar": {
-        "max_run_budget_usd": 5.0,       // 单次报告最高预算，路由也会强制限制到 $5
-        "request_cost_usd": 0.01,        // TikHub 单请求保守估算；知道实际价格后可下调
-        "llm_reserved_usd": 0.2,         // DeepSeek 终审预留估算；实际还会按预算比例收敛
-        "llm_reserved_max_ratio": 0.1,   // 小预算时最多把 10% 留给 LLM，其余给 TikHub 采集
-        "report_dir": "./data/trend_radar/reports",
-        "llm_model": null,               // 为空时复用 summary_model
-        "llm_reasoning_effort": null,    // 为空时复用 summary_reasoning_effort
-        "collector": {
-            "sources": ["x", "xiaohongshu", "douyin"],
-            "x_country": "UnitedStates",
-            "max_keywords_per_topic": 3,
-            "max_items_per_call": 25,
-            "x_elite_accounts": []       // 可放英文 X 高质量账号 screen_name，作为精英信号源
-        }
-    },
-
-    // ============================================================
     // 微信视频号配置（可选）
     // ============================================================
     "wechat_channels": {
@@ -143,36 +123,18 @@
     // LongCut 本地学习工作台集成（可选）
     // ============================================================
     "longcut": {
-        "enabled": true,                  // YouTube 结果页是否显示「用 LongCut 深度学习」
+        "enabled": false,                 // 安装并配置 LongCut 后再启用
         "base_url": "http://localhost:3000", // LongCut 本地服务地址
-        "project_dir": "/Users/zhanghanting/ai-sass/longcut/longcut", // LongCut 项目根目录
+        "project_dir": "",               // LongCut 项目根目录；也可通过 LONGCUT_PROJECT_DIR 环境变量提供
         "script_name": "server.sh",       // LongCut 启停脚本
         "auto_start": true,               // 点击入口时若服务未运行，是否自动启动
         "startup_timeout_seconds": 30     // 等待 LongCut 就绪的最长时间
     },
 
     // ============================================================
-    // 企业微信通知配置
-    // ============================================================
-    "wechat": {
-        "webhook": "your-webhook-url-here"  // 企业微信机器人 Webhook 地址
-    },
-
-    // ============================================================
-    // 飞书通知配置（可选，配置 webhook 后自动启用）
-    // ============================================================
-    "feishu": {
-        "webhook": "",                      // 飞书机器人 Webhook 地址（留空则不启用）
-        "secret": ""                        // 签名密钥（可选，机器人启用签名校验时填写）
-    },
-
-    // ============================================================
     // 任务进度配置
     // ============================================================
     "task_progress": {
-        "feishu_reminders_enabled": true,        // 长任务飞书提醒开关
-        "reminder_threshold_minutes": [10, 30, 60], // 任务运行超过这些分钟数时提醒
-        "reminder_poll_interval_seconds": 60,    // 后台扫描间隔
         "stale_task_timeout_minutes": 120        // 超过该分钟数无进度心跳则自动标记失败；<=0 表示关闭
     },
 

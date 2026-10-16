@@ -3,13 +3,9 @@
 
     const features = Object.freeze({
         collections: true,
-        visual_learning: true,
         study_player: true,
         reading: true,
         focus_studio: true,
-        post_insight: true,
-        trend_radar: false,
-        flywheel: true,
         history: true,
     });
 

@@ -253,8 +253,8 @@ ALL TESTS PASSED
 ## 📚 相关文档
 
 - [YouTube API Server 客户端指南](../guides/api/youtube_client_guide.md)
-- [下载器工厂模式设计](../development/platforms/downloader_factory.md)
-- [测试用例文档](../../tests/integration/README.md)
+- [下载器工厂实现](../../src/video_transcript_api/downloaders/factory.py)
+- [测试说明](../../tests/README.md)
 
 ---
 

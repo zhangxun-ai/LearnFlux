@@ -6,7 +6,7 @@ from . import (
     reviews,
     study,
     tasks,
-    trend_radar,
+    visual_learning,
     users,
     views,
 )
@@ -19,7 +19,7 @@ __all__ = [
     "reviews",
     "study",
     "tasks",
-    "trend_radar",
+    "visual_learning",
     "users",
     "views",
 ]

@@ -915,6 +915,6 @@ print(f"摘要: {result.summary}")
 
 ## 相关文档
 
-- [JSON 结构化输出方案设计](./json_output_mode_guide.md) - 多模型 JSON 输出兼容方案
-- [Gemini OpenAI 兼容性](./gemini_openai_api.md) - Gemini API 的 OpenAI 兼容模式与 Thinking 配置
-- [LLM 最佳实践](./manus%20-LLM最佳实践.md) - Manus 团队的上下文工程经验
+- [JSON 结构化输出方案设计](./json_output.md) - 多模型 JSON 输出兼容方案
+- [Gemini OpenAI 兼容性](./gemini_openai_compat.md) - Gemini API 的 OpenAI 兼容模式与 Thinking 配置
+- [LLM 最佳实践](./manus_context_engineering.md) - Manus 团队的上下文工程经验

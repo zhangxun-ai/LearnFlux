@@ -70,7 +70,10 @@ class NewCloudSubmissionSettings:
             provider=PROVIDER,
             model=MODEL,
             region=REGION,
-            price_cny_per_second=_fixed_price(cloud_asr.get("price_cny_per_second")),
+            price_cny_per_second=_positive_decimal(
+                cloud_asr.get("price_cny_per_second", DEFAULT_PRICE_CNY_PER_SECOND),
+                "invalid_price",
+            ),
             price_verified_at=_verified_price_date(
                 cloud_asr.get("price_verified_at"), today
             ),
@@ -110,13 +113,6 @@ def _nonnegative_decimal(value: object, code: str) -> Decimal:
     return decimal_value
 
 
-def _fixed_price(value: object) -> Decimal:
-    price = _nonnegative_decimal(value, "invalid_price")
-    if price != DEFAULT_PRICE_CNY_PER_SECOND:
-        raise CloudASRConfigError("invalid_price")
-    return price
-
-
 def _decimal(value: object, code: str) -> Decimal:
     try:
         decimal_value = Decimal(str(value))
@@ -128,13 +124,13 @@ def _decimal(value: object, code: str) -> Decimal:
 
 
 def _verified_price_date(value: object, today: date) -> date:
+    """Keep the last verification date as metadata, never an availability gate."""
     try:
-        verified_at = date.fromisoformat(str(value))
+        return date.fromisoformat(str(value))
     except (TypeError, ValueError):
-        raise CloudASRConfigError("invalid_price_verification") from None
-    if verified_at > today or (today - verified_at).days > 30:
-        raise CloudASRConfigError("invalid_price_verification")
-    return verified_at
+        # Missing legacy metadata must not pretend that verification happened
+        # today or prevent use of an otherwise valid configured price.
+        return date.min
 
 
 def _bounded_positive_int(value: object, *, maximum: int, code: str) -> int:

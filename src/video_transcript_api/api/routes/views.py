@@ -1,3 +1,4 @@
+import ipaddress
 import os
 import json
 import subprocess
@@ -12,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
+from ..browser_auth import require_same_origin
 from ..services.longcut import (
     build_analysis_url,
     build_longcut_action,
@@ -364,369 +366,114 @@ async def service_worker():
     )
 
 
-# 首页 HTML：简洁的服务介绍页，供搜索引擎收录以建立域名信任
+# 首页 HTML：本地产品介绍页，帮助首次进入时理解学习流程
 _HOME_HTML = """\
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LearnFlux · 把音视频变成可复习的学习资产</title>
-    <meta name="description" content="粘贴链接或上传本地文件，完成精准转写、AI 深度解读与边播边学。支持系列专题、图解生成与 Obsidian 同步。">
-    <meta name="theme-color" content="#F9FAFB">
+    <title>LearnFlux · 让学习，回归生活的美好</title>
+    <meta name="description" content="LearnFlux 是一款个人 AI 学习工作台，可导入音视频、文档与文字，生成逐字稿和 AI 解读，并将有用的内容整理到自己的知识库。">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#FDFCF8">
     <meta name="application-name" content="LearnFlux">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="LearnFlux">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="icon" type="image/png" href="/static/icon/learnflux-favicon-32.png">
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/static/icon/learnflux-leaf.svg?v=__ASSET_VERSION__">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
-    <meta property="og:title" content="LearnFlux · 深度学习工作台">
-    <meta property="og:description" content="把海量音视频与文档，变成可复习的学习资产。">
+    <meta property="og:title" content="LearnFlux · 让学习，回归生活的美好">
+    <meta property="og:description" content="个人 AI 学习工作台：导入内容、理解重点、整理笔记。">
     <meta property="og:type" content="website">
     <meta property="og:image" content="/static/icon/learnflux-og.png">
     <meta name="twitter:card" content="summary_large_image">
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;scroll-behavior:smooth}
-        body{
-            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-            color: #111827;
-            background: #F9FAFB;
-            line-height: 1.6;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        a{color:inherit;text-decoration:none}
-        img{max-width:100%;height:auto;display:block}
-        ::selection{background:#2868D8;color:#fff}
 
-        .nav{
-            max-width:1120px;margin:0 auto;padding:20px 24px;
-            display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:20;
-            background:rgba(249,250,251,0.88);backdrop-filter:blur(12px);
-        }
-        .brand a{display:flex;align-items:center;gap:10px;font-weight:600;font-size:1.05rem;color:#111827}
-        .brand img{
-            width:32px;height:32px;border-radius:8px;object-fit:cover;
-            box-shadow:0 1px 2px rgba(15,23,42,0.08);
-        }
-        .links{margin-left:auto;display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-        .links a{
-            font-size:.9rem;color:#4B5563;padding:8px 12px;border-radius:8px;
-            transition:all .15s ease;font-weight:500;white-space:nowrap;
-        }
-        .links a:hover{background:rgba(0,0,0,0.04);color:#111827}
-        .links a.cta{
-            background:#2868D8;color:#fff;padding:8px 16px;margin-left:4px;
-        }
-        .links a.cta:hover{background:#1F57B6;box-shadow:0 4px 12px rgba(40,104,216,0.2)}
-
-        .hero{
-            max-width:880px;margin:0 auto;text-align:center;
-            padding:56px 24px 40px;position:relative;z-index:10;
-        }
-        .eyebrow{
-            display:inline-block;
-            font-size:0.82rem;letter-spacing:0.04em;color:#2868D8;font-weight:600;
-            background:rgba(40,104,216,0.08);padding:6px 14px;border-radius:999px;
-            margin-bottom:20px;
-        }
-        .hero h1{
-            font-weight:700;
-            font-size:clamp(1.75rem, 5.2vw, 3.25rem);
-            line-height:1.22;
-            letter-spacing:-0.02em;
-            color:#111827;
-            overflow-wrap:anywhere;
-            word-break:break-word;
-            max-width:100%;
-        }
-        .hero h1 em{font-style:normal;color:#2868D8}
-        .hero .sub{
-            margin:20px auto 0;max-width:620px;color:#4B5563;
-            font-size:clamp(0.98rem, 2.4vw, 1.12rem);line-height:1.7;
-            overflow-wrap:anywhere;
-        }
-        .cta-row{margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-        .btn{
-            display:inline-flex;align-items:center;justify-content:center;
-            padding:12px 24px;border-radius:10px;font-weight:600;font-size:1rem;
-            transition:all .15s ease;cursor:pointer;min-height:48px;
-        }
-        .btn-primary{background:#2868D8;color:#fff;box-shadow:0 4px 14px rgba(40,104,216,0.22)}
-        .btn-primary:hover{background:#1F57B6;transform:translateY(-1px);box-shadow:0 6px 18px rgba(40,104,216,0.28)}
-        .btn-ghost{background:#fff;color:#111827;border:1px solid #E5E7EB;box-shadow:0 1px 2px rgba(0,0,0,0.03)}
-        .btn-ghost:hover{border-color:#D1D5DB;background:#F9FAFB}
-
-        .demo-container{max-width:1120px;margin:0 auto 72px;padding:0 24px}
-        .demo-mockup{
-            width:100%;border-radius:16px;overflow:hidden;
-            border:1px solid rgba(0,0,0,0.08);
-            box-shadow:0 24px 60px -16px rgba(15,23,42,0.14), 0 8px 20px -12px rgba(15,23,42,0.08);
-            background:#fff;
-        }
-        .mockup-header{
-            height:40px;background:#fff;border-bottom:1px solid #F3F4F6;
-            display:flex;align-items:center;padding:0 16px;gap:8px;
-        }
-        .mockup-dot{width:10px;height:10px;border-radius:50%;background:#E5E7EB}
-        .mockup-dot.red{background:#FECACA}
-        .mockup-dot.yellow{background:#FEF08A}
-        .mockup-dot.green{background:#BBF7D0}
-        .demo-caption{
-            text-align:center;margin-top:14px;color:#6B7280;font-size:0.9rem;
-        }
-        .shot-grid{
-            display:grid;grid-template-columns:repeat(3,1fr);gap:16px;
-            max-width:1120px;margin:0 auto 96px;padding:0 24px;
-        }
-        .shot-card{
-            background:#fff;border:1px solid #E5E7EB;border-radius:14px;overflow:hidden;
-            transition:border-color .15s ease, box-shadow .15s ease;
-        }
-        .shot-card:hover{border-color:#CBD5E1;box-shadow:0 10px 24px -12px rgba(15,23,42,0.12)}
-        .shot-card img{width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top;background:#F3F4F6}
-        .shot-card p{padding:12px 14px;font-size:0.88rem;color:#4B5563;font-weight:500}
-
-        .section-title{
-            text-align:center;font-size:clamp(1.5rem, 3.5vw, 2rem);
-            font-weight:700;margin-bottom:12px;color:#111827;letter-spacing:-0.01em;
-            overflow-wrap:anywhere;
-        }
-        .section-sub{
-            text-align:center;color:#6B7280;font-size:1.05rem;
-            max-width:560px;margin:0 auto 40px;padding:0 8px;
-        }
-
-        .workflow-section,.features-section{max-width:1120px;margin:0 auto 80px;padding:0 24px}
-        .workflow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-        .step-card{
-            background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:28px;
-            box-shadow:0 2px 4px rgba(0,0,0,0.02);transition:all .15s ease;
-        }
-        .step-card:hover{border-color:#93C5FD;transform:translateY(-2px);box-shadow:0 10px 20px -8px rgba(40,104,216,0.12)}
-        .step-num{font-size:0.8rem;font-weight:700;color:#2868D8;margin-bottom:12px;letter-spacing:0.04em}
-        .step-card h3{font-size:1.15rem;font-weight:600;margin-bottom:10px;color:#111827}
-        .step-card p{color:#4B5563;font-size:0.95rem;line-height:1.65}
-
-        .features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
-        .feature-card{
-            background:#fff;border:1px solid #E5E7EB;border-radius:16px;
-            padding:28px;display:flex;flex-direction:column;transition:all .15s ease;
-            min-height:100%;
-        }
-        .feature-card:hover{border-color:#CBD5E1;box-shadow:0 12px 24px -12px rgba(15,23,42,0.1)}
-        .feat-icon{
-            width:44px;height:44px;border-radius:12px;background:#E9F1FF;color:#2868D8;
-            display:flex;align-items:center;justify-content:center;font-size:0.95rem;
-            margin-bottom:16px;font-weight:700;
-        }
-        .feature-card h3{font-size:1.2rem;font-weight:600;margin-bottom:10px;color:#111827}
-        .feature-card p{color:#4B5563;font-size:0.98rem;line-height:1.65}
-
-        /* Soft closing band — light wash, no hard dark cut (NotebookLM-inspired) */
-        .trust-section{
-            position:relative;
-            color:#0F172A;
-            text-align:center;
-            padding:88px 24px 72px;
-            overflow:hidden;
-            background:
-                radial-gradient(ellipse 70% 55% at 50% 0%, rgba(40,104,216,0.10), transparent 68%),
-                radial-gradient(ellipse 42% 48% at 12% 88%, rgba(99,102,241,0.07), transparent 62%),
-                radial-gradient(ellipse 40% 46% at 88% 78%, rgba(56,189,248,0.07), transparent 60%),
-                linear-gradient(180deg, #F9FAFB 0%, #F4F7FC 28%, #EEF3FB 72%, #E9EFF8 100%);
-        }
-        .trust-section::before{
-            content:"";
-            position:absolute;left:50%;top:18%;
-            width:min(720px, 92vw);height:280px;
-            transform:translateX(-50%);
-            background:radial-gradient(ellipse at center, rgba(255,255,255,0.72), transparent 70%);
-            pointer-events:none;
-        }
-        .trust-inner{position:relative;z-index:1;max-width:760px;margin:0 auto}
-        .trust-inner h2{
-            font-size:clamp(1.6rem, 4vw, 2.25rem);font-weight:700;
-            margin-bottom:16px;letter-spacing:-0.02em;overflow-wrap:anywhere;color:#0F172A;
-        }
-        .trust-inner > p{color:#64748B;font-size:1.05rem;margin-bottom:32px;line-height:1.7}
-        .tags-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:36px}
-        .tag{
-            background:rgba(255,255,255,0.78);
-            border:1px solid rgba(148,163,184,0.28);
-            box-shadow:0 1px 2px rgba(15,23,42,0.04);
-            backdrop-filter:blur(8px);
-            padding:8px 14px;border-radius:999px;
-            font-size:0.9rem;color:#334155;display:inline-flex;align-items:center;gap:8px;
-        }
-        .tag span{color:#2868D8;font-weight:700}
-        .trust-section .btn-primary{
-            box-shadow:0 8px 22px rgba(40,104,216,0.18);
-        }
-
-        .footer{
-            text-align:center;padding:28px 20px;color:#475569;font-size:0.88rem;
-            background:#E9EFF8;
-            border-top:1px solid rgba(15,23,42,0.05);
-        }
-        .footer a{color:#475569}
-        .footer a:hover{color:#2868D8}
-
-        @media (max-width:900px){
-            .shot-grid{grid-template-columns:1fr;max-width:520px}
-            .workflow-grid,.features-grid{grid-template-columns:1fr}
-        }
-        @media (max-width:768px){
-            .nav{padding:12px 16px}
-            .links a:not(.cta){display:none}
-            .hero{padding:36px 16px 28px}
-            .demo-container,.workflow-section,.features-section,.shot-grid{padding-left:16px;padding-right:16px}
-            .demo-container{margin-bottom:48px}
-            .workflow-section,.features-section{margin-bottom:56px}
-            .feature-card,.step-card{padding:22px}
-            .trust-section{padding:64px 16px 56px}
-            .btn{width:100%;max-width:320px}
-            .cta-row{flex-direction:column;align-items:center}
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/landing-wildwood.css?v=__ASSET_VERSION__">
 </head>
 <body class="page-home marketing-home">
-    <nav class="nav" aria-label="页面导航">
-        <div class="brand">
-            <a href="/" aria-label="LearnFlux 首页">
-                <img src="/static/icon/learnflux-icon-256.png" width="32" height="32" alt="">
-                <span class="brand-text">LearnFlux</span>
+    <!-- impeccable:contract | thesis: 让学习，回归生活的美好 | own-world: 明亮、克制的手绘田野与湖景，作为本地学习旅程的入口 | story: 导入内容 → AI 理解 → 复习整理 → 沉淀笔记 | first-viewport: LearnFlux 品牌文案、手写短句、横向工作台示意与底部三步流程 | visitor: 正在自己的 Mac 上使用 LearnFlux 的个人学习者 | primary-action: 点击工作台示意卡 → /add_task_by_web | secondary-action: none | proof: 只展示仓库已有能力，不展示客户、价格或公开服务承诺 | finish-line: 用户记住产品气质并进入真实工作台开始学习 -->
+    <a class="lf-skip" href="#main-content">跳到主要内容</a>
+    <main class="lf-main" id="main-content">
+        <section class="lf-hero" aria-labelledby="hero-title">
+            <figure class="lf-hero-art">
+                <picture>
+                    <source media="(min-aspect-ratio: 2.1/1)" srcset="/static/images/landing/learnflux-meadow-hero-panorama.png?v=__ASSET_VERSION__">
+                    <img
+                        src="/static/images/landing/learnflux-meadow-hero-v2.png?v=__ASSET_VERSION__"
+                        width="1672"
+                        height="941"
+                        alt="湖畔小屋、花径、野花与春日树枝下的阅读小桌"
+                        fetchpriority="high"
+                        decoding="async"
+                    >
+                </picture>
+            </figure>
+            <header class="lf-brand-lockup">
+                <a class="lf-brand" href="/" aria-label="LearnFlux 首页">
+                    <img class="lf-leaf-mark" src="/static/icon/learnflux-leaf.svg?v=__ASSET_VERSION__" alt="" aria-hidden="true">
+                    <span>LearnFlux</span>
+                </a>
+                <div class="lf-brand-copy">
+                    <h1 id="hero-title">让学习，回归生活的美好</h1>
+                    <p>在不确定的时代，持续成长</p>
+                </div>
+            </header>
+            <p class="lf-hero-note">好奇，<br>让平凡的日子发光。</p>
+            <a class="lf-workbench-preview" href="/add_task_by_web" aria-label="开始学习，进入 LearnFlux 工作台">
+                <aside class="lf-preview-sidebar" aria-hidden="true">
+                    <div class="lf-preview-brand"><img class="lf-leaf-mark" src="/static/icon/learnflux-leaf.svg?v=__ASSET_VERSION__" alt="" aria-hidden="true"><strong>LearnFlux</strong></div>
+                    <span class="lf-preview-group">学习功能</span>
+                    <span class="lf-preview-nav-item is-current">单次学习</span>
+                    <span class="lf-preview-nav-item">合集学习</span>
+                    <span class="lf-preview-nav-item">学习播放器</span>
+                    <span class="lf-preview-nav-item">复习</span>
+                </aside>
+                <div class="lf-preview-content" aria-hidden="true">
+                    <div class="lf-preview-media">
+                        <div class="lf-preview-visual">
+                            <img src="/static/images/landing/learnflux-reading-nook-cover.webp?v=__ASSET_VERSION__" alt="" loading="lazy" decoding="async">
+                            <span class="lf-preview-play" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" focusable="false"><path d="M8.1 5.6a.8.8 0 0 1 1.2-.7l10.1 6.3a.9.9 0 0 1 0 1.6L9.3 19a.8.8 0 0 1-1.2-.7z"/></svg>
+                            </span>
+                        </div>
+                        <strong>如何在不确定的时代保持学习力</strong>
+                        <div class="lf-preview-progress"><span></span></div>
+                    </div>
+                    <div class="lf-preview-transcript">
+                        <div class="lf-preview-heading"><strong>如何在不确定的时代保持学习力</strong><span>示例内容 · 学习方法</span></div>
+                        <div class="lf-preview-tabs"><span class="is-active">逐字稿</span><span>AI 解读</span><span>笔记</span></div>
+                        <p><time>00:32</time> 在变化很快的时候，持续学习让我们更从容。</p>
+                        <p><time>01:15</time> 把输入转成自己的理解，知识才会留下来。</p>
+                    </div>
+                    <div class="lf-preview-note">
+                        <strong>我的笔记</strong>
+                        <span>记录一个想法</span>
+                        <p>先理解，再整理。留下真正有用的内容。</p>
+                    </div>
+                </div>
             </a>
-        </div>
-        <div class="links">
-            <a href="#workflow">工作流</a>
-            <a href="#features">产品功能</a>
-            <a href="#trust">隐私与部署</a>
-            <a href="https://github.com/zhangxun-ai/LearnFlux" target="_blank" rel="noopener">GitHub</a>
-            <a class="cta" href="/add_task_by_web">开始深度学习</a>
-        </div>
-    </nav>
-
-    <header class="hero">
-        <div class="eyebrow">专为深度学习者与研究员打造</div>
-        <h1>把海量音视频与文档，<br>变成可复习的<em>学习资产</em>。</h1>
-        <p class="sub">支持本地文件与网页链接。精准转写、AI 深度解读、时间轴联动与边播边学，帮你把碎片信息沉淀成可检索、可复习的私人知识库。</p>
-        <div class="cta-row">
-            <a class="btn btn-primary" href="/add_task_by_web">开始深度学习</a>
-            <a class="btn btn-ghost" href="/add_task_by_web#local-video-study">本地视频学习</a>
-        </div>
-    </header>
-
-    <div class="demo-container">
-        <div class="demo-mockup">
-            <div class="mockup-header" aria-hidden="true">
-                <div class="mockup-dot red"></div>
-                <div class="mockup-dot yellow"></div>
-                <div class="mockup-dot green"></div>
-            </div>
-            <img
-                src="/static/images/landing/01-single-study.png"
-                width="1440"
-                height="900"
-                alt="LearnFlux 单篇深度学习工作台：粘贴链接、本地文件或粘贴文字即可开始解析"
-                loading="eager"
-                decoding="async"
-            >
-        </div>
-        <p class="demo-caption">单篇深度学习工作台 · 链接 / 本地文件 / 粘贴文字一站导入</p>
-    </div>
-
-    <div class="shot-grid" aria-label="产品界面预览">
-        <a class="shot-card" href="/collections">
-            <img src="/static/images/landing/02-collections.png" width="960" height="600" alt="系列深度学习专题合集界面" loading="lazy" decoding="async">
-            <p>系列专题 · 按课程结构系统掌握</p>
-        </a>
-        <a class="shot-card" href="/study">
-            <img src="/static/images/landing/03-study-player.png" width="960" height="600" alt="边播边学本地视频学习入口" loading="lazy" decoding="async">
-            <p>边播边学 · 本地音视频即选即播</p>
-        </a>
-        <a class="shot-card" href="/visual-learning">
-            <img src="/static/images/landing/04-visual-learning.png" width="960" height="600" alt="可视化图解生成界面" loading="lazy" decoding="async">
-            <p>图解生成 · 把抽象逻辑变成可视卡片</p>
-        </a>
-    </div>
-
-    <section class="workflow-section" id="workflow">
-        <h2 class="section-title">核心工作流</h2>
-        <p class="section-sub">三步，把信息洪流变成结构化知识</p>
-        <div class="workflow-grid">
-            <div class="step-card">
-                <div class="step-num">STEP 1</div>
-                <h3>汇集与精准转写</h3>
-                <p>粘贴链接或上传本地音视频，生成高准确度逐字稿。支持 Bilibili、YouTube、播客、本地文件与图文文档。</p>
-            </div>
-            <div class="step-card">
-                <div class="step-num">STEP 2</div>
-                <h3>深度解读与边播边学</h3>
-                <p>AI 提取框架与核心观点。播放器与文稿分屏同步，点击任意一句即可跳回上下文，边看边记不丢焦。</p>
-            </div>
-            <div class="step-card">
-                <div class="step-num">STEP 3</div>
-                <h3>知识沉淀与连接</h3>
-                <p>按专题组织学习资产，把高价值内容同步到 Obsidian，形成可长期复用的本地知识库。</p>
-            </div>
-        </div>
-    </section>
-
-    <section class="features-section" id="features">
-        <h2 class="section-title">主要功能</h2>
-        <p class="section-sub">导入内容后，可继续完成学习和复盘</p>
-        <div class="features-grid">
-            <a class="feature-card" href="/add_task_by_web">
-                <div class="feat-icon">单</div>
-                <h3>单篇深度学习</h3>
-                <p>链接、本地文件、粘贴文字都能入口统一处理。转写、校准、摘要与阅读视图一次完成。</p>
-            </a>
-            <a class="feature-card" href="/add_task_by_web#local-video-study">
-                <div class="feat-icon">播</div>
-                <h3>边播边学 / 本地视频学习</h3>
-                <p>本地音视频选中即播，解析在后台继续。时间轴与文稿联动，适合长课、播客与会议回放。</p>
-            </a>
-            <a class="feature-card" href="/collections">
-                <div class="feat-icon">系</div>
-                <h3>系列深度学习</h3>
-                <p>按合集顺序解析完整课程与专题，生成全局方法论，把碎片学习升级为系统掌握。</p>
-            </a>
-            <a class="feature-card" href="/visual-learning">
-                <div class="feat-icon">图</div>
-                <h3>可视化图解生成</h3>
-                <p>把冗长逻辑关系转成直观图文卡片，降低认知负荷，方便复习与分享。</p>
-            </a>
-            <a class="feature-card" href="/reading">
-                <div class="feat-icon">流</div>
-                <h3>沉浸式心流空间</h3>
-                <p>免打扰阅读与写作环境，配合 AI 润色，让你从信息噪音里回到思考本身。</p>
-            </a>
-        </div>
-    </section>
-
-    <section class="trust-section" id="trust">
-        <div class="trust-inner">
-            <h2>本地优先，数据由你掌控。</h2>
-            <p>LearnFlux 按本地优先架构设计：学习资产可落在你自己的环境里，也支持自托管部署与 Obsidian 同步。云端转写仅在你主动选择时发生。</p>
-            <div class="tags-row">
-                <div class="tag"><span>✓</span> 本地优先存储</div>
-                <div class="tag"><span>✓</span> 支持自托管部署</div>
-                <div class="tag"><span>✓</span> 同步至 Obsidian</div>
-                <div class="tag"><span>✓</span> 云端转写按需启用</div>
-            </div>
-            <a class="btn btn-primary" href="/add_task_by_web">开始深度学习</a>
-        </div>
-    </section>
-
-    <footer class="footer">
-        Powered by <a href="https://github.com/zhangxun-ai/LearnFlux" target="_blank" rel="noopener">LearnFlux</a> · Open Source
-    </footer>
+            <section class="lf-flow-strip" id="workflow" aria-label="学习流程">
+                <ol class="lf-steps">
+                <li>
+                    <span class="lf-step-number">01</span>
+                    <div><h3>导入内容</h3><p>视频、音频、文档或文字</p></div>
+                </li>
+                <li>
+                    <span class="lf-step-number">02</span>
+                    <div><h3>AI 解读</h3><p>逐字稿、摘要与内容解释</p></div>
+                </li>
+                <li>
+                    <span class="lf-step-number">03</span>
+                    <div><h3>复习与沉淀</h3><p>整理笔记，保存到 Obsidian</p></div>
+                </li>
+                </ol>
+            </section>
         </section>
+
     </main>
 </body>
 </html>
@@ -735,14 +482,19 @@ _HOME_HTML = """\
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def home():
-    """Marketing landing page for SEO and first-time product orientation."""
+    """Local product introduction page for first-time orientation."""
     static_dir = get_static_dir()
     version_files = [
         static_dir / "icon" / "learnflux-icon-256.png",
+        static_dir / "icon" / "learnflux-leaf.svg",
         static_dir / "images" / "landing" / "01-single-study.png",
         static_dir / "images" / "landing" / "02-collections.png",
         static_dir / "images" / "landing" / "03-study-player.png",
         static_dir / "images" / "landing" / "04-visual-learning.png",
+        static_dir / "images" / "landing" / "learnflux-reading-nook-cover.webp",
+        static_dir / "images" / "landing" / "learnflux-meadow-hero-v2.png",
+        static_dir / "images" / "landing" / "learnflux-meadow-hero-panorama.png",
+        static_dir / "css" / "landing-wildwood.css",
         # Keep ui-features.js in the version set so shell-route asset contracts
         # that scan views.py still observe the shared feature-config digest.
         static_dir / "js" / "ui-features.js",
@@ -1340,6 +1092,9 @@ async def add_task_by_web(request: Request):
                 static_dir / "css" / "app-shell.css",
                 static_dir / "css" / "product-linear.css",
                 static_dir / "css" / "home-linear.css",
+                static_dir / "css" / "learning-history-meadow.css",
+                static_dir / "css" / "workbench-wildwood.css",
+                static_dir / "css" / "single-study-improvements.css",
                 static_dir / "css" / "editorial.css",
                 static_dir / "js" / "app-shell.js",
                 static_dir / "js" / "ui-features.js",
@@ -1581,6 +1336,7 @@ async def view_source_file(view_token: str):
 
 @router.post("/view/{view_token}/source-file/reveal")
 async def reveal_view_source_file(view_token: str, request: Request):
+    require_same_origin(request)
     if not _is_local_reveal_request(request):
         raise HTTPException(status_code=403, detail="仅允许从本机打开本地源文件")
     view_data = cache_manager.get_view_data_by_token(view_token)
@@ -1602,8 +1358,20 @@ async def reveal_view_source_file(view_token: str, request: Request):
 
 
 def _is_local_reveal_request(request: Request) -> bool:
-    host = request.client.host if request.client else ""
-    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
+    def is_loopback(value: str | None, *, allow_test_value: bool = False) -> bool:
+        normalized = (value or "").strip().strip("[]").lower()
+        if normalized == "localhost" or (allow_test_value and normalized in {"testclient", "testserver"}):
+            return True
+        try:
+            return ipaddress.ip_address(normalized).is_loopback
+        except ValueError:
+            return False
+
+    client_host = request.client.host if request.client else ""
+    return is_loopback(client_host, allow_test_value=True) and is_loopback(
+        request.url.hostname,
+        allow_test_value=True,
+    )
 
 
 def _reveal_path_in_file_manager(file_path: str) -> None:

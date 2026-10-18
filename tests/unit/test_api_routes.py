@@ -1050,7 +1050,27 @@ class TestViewProgressEndpoint:
             raising=False,
         )
 
-        resp = client.post("/view/vt-1/source-file/reveal")
+        rejected = client.post(
+            "/view/vt-1/source-file/reveal",
+            headers={"Origin": "https://attacker.example"},
+        )
+        assert rejected.status_code == 403
+        assert opened == {}
+
+        dns_rebinding = client.post(
+            "/view/vt-1/source-file/reveal",
+            headers={
+                "Host": "attacker.example",
+                "Origin": "http://attacker.example",
+            },
+        )
+        assert dns_rebinding.status_code == 403
+        assert opened == {}
+
+        resp = client.post(
+            "/view/vt-1/source-file/reveal",
+            headers={"Origin": "http://testserver"},
+        )
 
         assert resp.status_code == 200
         assert opened["path"] == str(source_file)

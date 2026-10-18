@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import uuid
+from typing import Literal
 from decimal import Decimal, InvalidOperation
 from fastapi import (
     APIRouter,
@@ -36,9 +37,15 @@ from ..services.transcription import (
     process_local_upload,
     resume_cloud_quote_locally,
     refresh_cloud_quote,
+    claim_asr_retry,
+    release_asr_retry,
+    resume_asr_retry,
     verify_token,
 )
 from ...transcriber.cloud_quote_repository import CloudQuoteConflict
+from ...transcriber.asr_retry_repository import ASRRetryConflict
+from ...transcriber.usage_repository import UsageEventRepository
+from ..context import get_transcription_control_database
 from ...utils.notifications import send_view_link_wechat, get_notification_router
 from ...utils.accounts.user_manager import get_user_manager
 from ...utils.task_status import TERMINAL_STATUSES, TaskStatus, http_code_for_status
@@ -54,6 +61,10 @@ router = APIRouter(prefix="/api", tags=["tasks"])
 class CloudQuoteConfirmationRequest(BaseModel):
     quote_token: str
     accepted_max_cost_cny: str
+
+
+class ASRRetryRequest(BaseModel):
+    transcription_strategy: Literal["local", "cloud"] = "local"
 
 
 def _normalize_empty_string(value: str | None) -> str | None:
@@ -497,6 +508,11 @@ async def confirm_cloud_quote(
             task_id, request_body.quote_token, accepted_cost
         )
     except (CloudQuoteConflict, RuntimeError, ValueError) as exc:
+        if str(exc) in {"quote_expired", "quote_not_confirmable", "quote_token_mismatch"}:
+            try:
+                refresh_cloud_quote(task_id)
+            except (CloudQuoteConflict, RuntimeError, ValueError):
+                pass
         raise HTTPException(status_code=409, detail=str(exc))
     try:
         get_cloud_asr_dispatcher().notify(task_id)
@@ -560,6 +576,63 @@ async def refresh_task_cloud_quote(
         raise HTTPException(status_code=409, detail=str(exc))
     return TranscribeResponse(
         code=200, message="云端报价已刷新", data={"task_id": task_id, **quote}
+    )
+
+
+@router.post("/task/{task_id}/asr-retry", response_model=TranscribeResponse)
+async def retry_asr_task(
+    task_id: str,
+    request_body: ASRRetryRequest,
+    background_tasks: BackgroundTasks,
+    user_info: dict = Depends(verify_token),
+):
+    """Retry failed ASR from retained audio without repeating its download."""
+    task = cache_manager.get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="task_not_found")
+    _require_task_owner(task, user_info, paid_action=False)
+    if task.get("status") != TaskStatus.FAILED:
+        raise HTTPException(status_code=409, detail="该任务已在处理或已结束")
+    strategy = request_body.transcription_strategy
+    repository = UsageEventRepository(get_transcription_control_database(cache_manager))
+    event = repository.find_latest_event_by_task_id(task_id)
+    if event is not None:
+        if event.remote_status in {"reserved", "submitting", "submission_unknown", "submitted", "polling_unknown", "succeeded"}:
+            raise HTTPException(status_code=409, detail="云端任务正在恢复，请等待原任务结果")
+        if strategy == "cloud":
+            raise HTTPException(status_code=409, detail="此任务已提交过云端，请改用本地或重新创建云端任务")
+    try:
+        claim_asr_retry(task_id)
+    except (ASRRetryConflict, ValueError) as exc:
+        detail = {
+            "retry_already_started": "重试已开始，请等待处理结果",
+            "retry_media_expired": "保留音频已过期，请重新提交",
+            "retry_media_unavailable": "没有可复用的音频，请重新提交",
+            "retained_media_missing": "保留音频已失效，请重新提交",
+            "retained_media_changed": "保留音频已变化，请重新提交",
+        }.get(str(exc), "无法复用音频，请重新提交")
+        raise HTTPException(status_code=409, detail=detail)
+    try:
+        updated = cache_manager.update_task_status(
+            task_id, TaskStatus.PROCESSING, error_message="", force=True
+        )
+        if updated is False:
+            raise RuntimeError("retry_status_update_failed")
+        background_tasks.add_task(resume_asr_retry, task_id, strategy=strategy)
+    except Exception:
+        release_asr_retry(task_id)
+        try:
+            cache_manager.update_task_status(
+                task_id, TaskStatus.FAILED, force=True,
+                error_message="暂时无法启动重试，请稍后再试",
+                terminal_evidence={"retry_available": True},
+            )
+        except Exception:
+            logger.warning("Retry status rollback failed")
+        raise HTTPException(status_code=503, detail="暂时无法启动重试，请稍后再试")
+    return TranscribeResponse(
+        code=202, message="已从保留音频继续处理",
+        data={"task_id": task_id, "view_token": task.get("view_token")},
     )
 
 
@@ -664,6 +737,20 @@ async def get_task_status(
         )
 
         status = task_info.get("status") or TaskStatus.QUEUED
+        if status == TaskStatus.AWAITING_CLOUD_CONFIRMATION:
+            # Only quote metadata is refreshed here; this never submits ASR or
+            # waits for the official-price website.
+            from ...transcriber.cloud_quote_repository import CloudQuoteRepository
+            try:
+                current_quote = CloudQuoteRepository(
+                    get_transcription_control_database(cache_manager)
+                ).get(task_id)
+                if current_quote.status == "refresh_required":
+                    refresh_cloud_quote(task_id)
+                    task_info = cache_manager.get_task_by_id(task_id) or task_info
+            except (CloudQuoteConflict, RuntimeError, ValueError):
+                task_info = cache_manager.get_task_by_id(task_id) or task_info
+            status = task_info.get("status") or status
         code = http_code_for_status(status)
 
         # 干净的元信息形状 + 显式 status；正文走 view_token 获取

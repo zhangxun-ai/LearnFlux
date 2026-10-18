@@ -17,7 +17,6 @@ except ImportError:  # pragma: no cover - POSIX only
     msvcrt = None
 
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ..collections.summary_worker import CollectionSummaryWorker
@@ -30,6 +29,7 @@ from .context import (
     get_cache_manager,
     get_cloud_asr_executor,
     get_config,
+    get_cloud_pricing_service,
     get_logger,
     get_llm_queue,
     get_static_dir,
@@ -39,6 +39,7 @@ from .context import (
     get_workspace_dir,
     get_executor,
     get_transcription_concurrency_controller,
+    get_user_manager,
     set_cloud_asr_dispatcher,
 )
 from ..transcriber.cloud_dispatcher import CloudASRDispatcher
@@ -52,8 +53,11 @@ from ..transcriber.cloud_runtime import (
 from ..reading.service import ReadingService
 from .services.post_asr import dispatch_pending_post_asr, dispatch_post_asr
 from .services.progress_notifications import process_progress_reminders
+from .browser_auth import BrowserSessionStore, browser_session_ttl_seconds
+from .security import configure_web_security
 from .routes import (
     audit,
+    auth,
     collections,
     health,
     journal,
@@ -66,8 +70,8 @@ from .routes import (
     tasks,
     ui_lab,
     users,
-    views,
     visual_learning,
+    views,
 )
 from .services.transcription import (
     process_llm_queue,
@@ -201,14 +205,12 @@ def create_app() -> FastAPI:
         version="1.0.0",
     )
     app.state.runtime_lock_release_guard = threading.Lock()
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+    app.state.app_config = config
+    app.state.user_manager = get_user_manager()
+    app.state.browser_sessions = BrowserSessionStore(
+        browser_session_ttl_seconds(config)
     )
+    configure_web_security(app, config)
 
     static_dir = get_static_dir()
     if static_dir.exists():
@@ -239,6 +241,7 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(tasks.router)
     app.include_router(audit.router)
     app.include_router(users.router)
@@ -268,6 +271,13 @@ def create_app() -> FastAPI:
                 "Skipping orphan task recovery: another API instance owns the runtime lock"
             )
         else:
+            if config.get("cloud_asr", {}).get("enabled") is True:
+                try:
+                    pricing = get_cloud_pricing_service()
+                    pricing.start()
+                    app.state.cloud_pricing_service = pricing
+                except Exception:
+                    logger.warning("Cloud pricing refresh unavailable; using cached prices")
             if cache_manager.db_path is not None:
                 Path(cache_manager.db_path).parent.mkdir(
                     parents=True, exist_ok=True
@@ -322,6 +332,9 @@ def create_app() -> FastAPI:
                 recovered = cache_manager.recover_orphaned_tasks(
                     protected_task_ids=protected_task_ids
                 )
+                from ..transcriber.asr_retry_repository import ASRRetryRepository
+
+                ASRRetryRepository(control_store.database).recover_failed_claims()
                 if recovered:
                     logger.warning(
                         f"启动恢复：已将 {recovered} 个中断任务标记为 failed"
@@ -581,6 +594,9 @@ def create_app() -> FastAPI:
 
     @app.on_event("shutdown")
     async def shutdown_event():
+        pricing = getattr(app.state, "cloud_pricing_service", None)
+        if pricing is not None:
+            pricing.stop()
         summary_worker = getattr(app.state, "collection_summary_worker", None)
         if summary_worker is not None:
             summary_worker.stop(timeout=2.0)

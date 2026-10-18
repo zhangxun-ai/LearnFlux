@@ -2216,6 +2216,11 @@ class CacheManager:
                     if not isinstance(transcript, str):
                         transcript = str(transcript) if transcript is not None else '转录文本获取中...'
 
+                    from ..llm.summary_quality import summary_incompleteness_reason
+                    summary_missing = summary_missing or (
+                        summary_incompleteness_reason(transcript, summary) is not None
+                    )
+
                     # 获取 LLM 模型配置（缓存命中任务无 llm_config，回退查同 view_token 下的历史任务）
                     llm_config = self.get_task_llm_config(task_info['task_id'])
                     if not llm_config:

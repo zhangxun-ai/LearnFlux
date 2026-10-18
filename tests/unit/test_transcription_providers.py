@@ -102,13 +102,14 @@ def test_local_whisper_rejects_missing_binary(tmp_path):
         _local_config(tmp_path / "missing-binary"), str(tmp_path)
     )
 
-    with pytest.raises(RuntimeError, match="mlx-whisper"):
+    with pytest.raises(RuntimeError, match="local_binary_unavailable"):
         provider.transcribe(str(tmp_path / "audio.mp3"), "result")
 
 
 def test_local_whisper_converts_subprocess_timeout(tmp_path, monkeypatch):
     binary_path = tmp_path / "mlx_whisper"
     binary_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary_path.chmod(0o755)
     provider = LocalWhisperProvider(_local_config(binary_path), str(tmp_path))
 
     def raise_timeout(*args, **kwargs):
@@ -116,13 +117,14 @@ def test_local_whisper_converts_subprocess_timeout(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", raise_timeout)
 
-    with pytest.raises(RuntimeError, match="17"):
+    with pytest.raises(RuntimeError, match="local_transcription_timeout"):
         provider.transcribe(str(tmp_path / "audio.mp3"), "result")
 
 
 def test_local_whisper_rejects_nonzero_exit(tmp_path, monkeypatch):
     binary_path = tmp_path / "mlx_whisper"
     binary_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary_path.chmod(0o755)
     provider = LocalWhisperProvider(_local_config(binary_path), str(tmp_path))
     monkeypatch.setattr(
         subprocess,
@@ -132,13 +134,14 @@ def test_local_whisper_rejects_nonzero_exit(tmp_path, monkeypatch):
         ),
     )
 
-    with pytest.raises(RuntimeError, match="exit 3"):
+    with pytest.raises(RuntimeError, match="local_transcription_failed"):
         provider.transcribe(str(tmp_path / "audio.mp3"), "result")
 
 
 def test_local_whisper_rejects_missing_json(tmp_path, monkeypatch):
     binary_path = tmp_path / "mlx_whisper"
     binary_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary_path.chmod(0o755)
     provider = LocalWhisperProvider(_local_config(binary_path), str(tmp_path))
     monkeypatch.setattr(
         subprocess,
@@ -146,13 +149,14 @@ def test_local_whisper_rejects_missing_json(tmp_path, monkeypatch):
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
     )
 
-    with pytest.raises(RuntimeError, match="JSON"):
+    with pytest.raises(RuntimeError, match="local_result_missing"):
         provider.transcribe(str(tmp_path / "audio.mp3"), "result")
 
 
 def test_local_whisper_rejects_empty_transcript(tmp_path, monkeypatch):
     binary_path = tmp_path / "mlx_whisper"
     binary_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary_path.chmod(0o755)
     provider = LocalWhisperProvider(_local_config(binary_path), str(tmp_path))
 
     def fake_run(*args, **kwargs):
@@ -163,7 +167,7 @@ def test_local_whisper_rejects_empty_transcript(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    with pytest.raises(RuntimeError, match="empty|为空"):
+    with pytest.raises(RuntimeError, match="local_transcript_empty"):
         provider.transcribe(str(tmp_path / "audio.mp3"), "result")
 
 
@@ -172,6 +176,7 @@ def test_local_whisper_rejects_uniform_high_compression_transcript(
 ):
     binary_path = tmp_path / "mlx_whisper"
     binary_path.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary_path.chmod(0o755)
     provider = LocalWhisperProvider(_local_config(binary_path), str(tmp_path))
 
     def fake_run(*args, **kwargs):

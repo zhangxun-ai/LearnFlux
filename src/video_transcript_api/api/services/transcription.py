@@ -16,10 +16,12 @@ from uuid import uuid4
 from fastapi import HTTPException, Header, Request
 from pydantic import BaseModel, Field, field_validator
 
+from ..browser_auth import authenticate_request, get_request_user_manager
 from ..context import (
     get_audit_logger,
     get_cache_manager,
     get_config,
+    get_cloud_pricing_service,
     get_executor,
     get_local_asr_executor,
     get_llm_queue,
@@ -31,6 +33,7 @@ from ..context import (
     get_user_manager,
 )
 from ...downloaders import create_downloader
+from ...llm.summary_quality import summary_incompleteness_reason
 from ...transcriber import FunASRSpeakerClient, Transcriber, TranscriptionContext
 from ...transcriber.cloud_runtime import build_aliyun_provider
 from ...transcriber.cloud_config import (
@@ -49,6 +52,8 @@ from ...transcriber.media_preparer import (
     PreparedASRMedia,
 )
 from ...transcriber.usage_repository import UsageEventRepository
+from ...transcriber.asr_retry_repository import ASRRetryConflict, ASRRetryRepository
+from ...transcriber.providers.local_whisper import local_transcription_error_message
 from ...utils.notifications import (
     WechatNotifier,
     send_long_text_wechat,
@@ -129,6 +134,155 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _retry_repository():
+    return ASRRetryRepository(get_transcription_control_database(cache_manager))
+
+
+def _retain_retry_media(task_id, media_path, continuation_json, *, sha256=None):
+    """Retain only task-owned temporary media; retries never own user originals."""
+    try:
+        payload = load_cloud_continuation(continuation_json)
+        if payload["task_id"] != task_id:
+            return None
+        root = Path(get_temp_manager().get_temp_dir()).resolve()
+        path = Path(media_path).absolute()
+        resolved = path.resolve(strict=True)
+        if path != resolved or not resolved.is_file():
+            return None
+        relative = resolved.relative_to(root)
+        _retry_repository().save(
+            task_id, str(relative), sha256 or _sha256_file(resolved), continuation_json
+        )
+        untrack = getattr(get_temp_manager(), "untrack_file", None)
+        if untrack:
+            untrack(resolved)
+        return resolved
+    except Exception:
+        logger.warning("ASR retry media could not be retained")
+        return None
+
+
+def _finish_retry(task_id):
+    try:
+        _retry_repository().finish(task_id)
+    except Exception:
+        logger.warning("ASR retry completion could not be recorded")
+
+
+def _asr_error_message(exc):
+    code = getattr(exc, "code", str(exc))
+    if isinstance(exc, CloudASRConfigError):
+        return {
+            "cloud_asr_disabled": "云端转录未启用，可改用本地转录",
+            "invalid_price": "云端价格配置无效，可改用本地转录",
+            "invalid_provider": "云端服务配置无效，可改用本地转录",
+            "invalid_model": "云端模型配置无效，可改用本地转录",
+        }.get(code, "云端配置无效，可改用本地转录")
+    if isinstance(exc, CloudProviderError):
+        return _cloud_provider_error_message(code)
+    return local_transcription_error_message(code)
+
+
+def _record_asr_failure(task_id, exc):
+    if _is_task_canceled(task_id):
+        _finish_retry(task_id)
+        return
+    retry_available = False
+    try:
+        record = _retry_repository().get(task_id)
+        _verified_retained_media(record.media_ref, record.media_sha256)
+        _retry_repository().release(task_id)
+        retry_available = True
+    except Exception:
+        pass
+    message = _asr_error_message(exc)
+    if retry_available:
+        message += "；已保留音频，可直接重试或切换转录方式"
+    _safe_update_progress(
+        task_id, stage="transcribing", stage_label=message,
+        basis="asr_failed", confidence="high",
+        evidence={"retry_available": retry_available},
+    )
+    cache_manager.update_task_status(
+        task_id, TaskStatus.FAILED, error_message=message, force=True,
+        terminal_evidence={"retry_available": retry_available},
+    )
+
+
+def claim_asr_retry(task_id: str):
+    """Verify media identity before atomically accepting one retry."""
+    record = _retry_repository().get(task_id)
+    _verified_retained_media(record.media_ref, record.media_sha256)
+    return _retry_repository().claim(task_id)
+
+
+def release_asr_retry(task_id: str):
+    """Release a retry that could not be handed to its background worker."""
+    _retry_repository().release(task_id)
+
+
+def resume_asr_retry(task_id: str, *, strategy: str):
+    """Resume a failed task from retained media; cloud still requires a quote."""
+    try:
+        record = _retry_repository().get(task_id)
+        media_path = _verified_retained_media(record.media_ref, record.media_sha256)
+        if _is_task_canceled(task_id):
+            _finish_retry(task_id)
+            return
+        payload = load_cloud_continuation(record.continuation_json)
+        if strategy == "cloud":
+            CloudQuoteRepository(
+                get_transcription_control_database(cache_manager)
+            ).reopen_for_asr_retry(task_id)
+            return _pause_for_cloud_confirmation(
+                task_id=task_id, media_path=str(media_path),
+                continuation_json=record.continuation_json,
+            )
+
+        def run_provider():
+            return Transcriber(strategy="local").transcribe(
+                str(media_path), f"{task_id}-{uuid4().hex[:8]}"
+            )
+
+        def after_provider(result):
+            if _is_task_canceled(task_id):
+                raise RuntimeError("local_asr_cancelled")
+            transcript = (result.get("transcript") or "").strip()
+            if not transcript:
+                raise RuntimeError("empty_local_transcript")
+            structured = result.get("funasr_json_data")
+            preserve = payload["preserve_transcript_timestamps"] and structured
+            if not cache_manager.save_cache(
+                platform=payload["platform"], url=payload["url"],
+                media_id=payload["media_id"], use_speaker_recognition=False,
+                transcript_data=structured if preserve else transcript,
+                transcript_type="funasr" if preserve else "capswriter",
+                title=payload["video_title"], author=payload["author"],
+                description=payload["description"],
+            ):
+                raise RuntimeError("postprocess_cache_write_failed")
+            llm_task_queue.put({
+                **payload, "transcript": transcript,
+                "use_speaker_recognition": False, "notification_webhooks": {},
+            })
+            cache_manager.update_task_status(task_id, TaskStatus.CALIBRATING, force=True)
+            _finish_retry(task_id)
+            return transcript
+
+        submit_local_asr_continuation(
+            task_id=task_id, run_provider=run_provider, after_provider=after_provider,
+            media=MediaCleanupOwnership((media_path,)),
+            controller=get_transcription_concurrency_controller(),
+            asr_executor=get_local_asr_executor(), post_executor=get_executor(),
+            on_result=lambda result: None,
+            on_failure=lambda exc: _record_asr_failure(task_id, exc),
+            cancelled=lambda: _is_task_canceled(task_id),
+            failure_preserved=frozenset({media_path}),
+        )
+    except Exception as exc:
+        _record_asr_failure(task_id, exc)
 
 
 def _new_media_preparer() -> ASRMediaPreparer:
@@ -274,15 +428,15 @@ def _prepare_cloud_quote(
     relative_ref = _relative_prepared_media_ref(prepared_media, temp_root)
     duration = prepared_media.duration_seconds
     settings = NewCloudSubmissionSettings.from_config(
-        config, today=datetime.date.today()
+        get_cloud_pricing_service().apply_cached_price(config),
+        today=datetime.date.today()
     )
     billable_seconds = int(duration.to_integral_value(rounding=ROUND_CEILING))
     # A quote is not a charge. The user's later signed confirmation is the
     # budget boundary for this path, so long videos must remain quotable.
     max_cost = settings.estimated_cost(duration)
     repository = CloudQuoteRepository(db_path)
-    return repository.create(
-        NewCloudQuote(
+    new_quote = NewCloudQuote(
             task_id=task_id,
             media_ref=relative_ref,
             media_sha256=prepared_media.sha256,
@@ -293,7 +447,14 @@ def _prepare_cloud_quote(
             max_cost=max_cost,
             continuation_json=continuation_json,
         )
-    )
+    try:
+        return repository.create(new_quote)
+    except CloudQuoteConflict as exc:
+        if str(exc) != "quote_already_exists":
+            raise
+        if repository.get(task_id).status == "refresh_required":
+            return repository.refresh_required(new_quote)
+        raise
 
 
 def _pause_for_cloud_confirmation(
@@ -311,6 +472,7 @@ def _pause_for_cloud_confirmation(
     if _is_task_canceled(task_id):
         preparer.cleanup(prepared_media)
         return {"status": "canceled", "message": "任务已取消"}
+    retry_path = None
     try:
         quote = _prepare_cloud_quote(
             task_id=task_id,
@@ -337,7 +499,12 @@ def _pause_for_cloud_confirmation(
             persisted_quote = CloudQuoteRepository(db_path).get(task_id)
         except CloudQuoteConflict as reconciliation_error:
             if str(reconciliation_error) == "quote_not_found":
-                preparer.cleanup(prepared_media)
+                retry_path = _retain_retry_media(
+                    task_id, prepared_media.path, continuation_json,
+                    sha256=prepared_media.sha256,
+                )
+                if retry_path is None:
+                    preparer.cleanup(prepared_media)
         except Exception:
             pass
         else:
@@ -352,6 +519,15 @@ def _pause_for_cloud_confirmation(
         return {"status": "canceled", "message": "任务已取消"}
     if quote.media_ref != candidate_ref:
         preparer.cleanup(prepared_media)
+    else:
+        _retain_retry_media(
+            task_id, prepared_media.path, continuation_json,
+            sha256=prepared_media.sha256,
+        )
+    try:
+        _retry_repository().release(task_id)
+    except Exception:
+        pass
     quote_payload = {
         "duration_seconds": str(quote.duration_seconds),
         "billable_seconds": quote.billable_seconds,
@@ -480,29 +656,24 @@ def resume_confirmed_cloud_quote(
         terminal_state = _cloud_provider_terminal_state(exc)
         if terminal_state:
             status, message = terminal_state
-            cache_manager.update_task_status(
-                task_id, status, error_message=message, force=True
-            )
+            if status == TaskStatus.FAILED:
+                _record_asr_failure(task_id, exc)
+            else:
+                cache_manager.update_task_status(
+                    task_id, status, error_message=message, force=True
+                )
             return {"status": str(status), "message": message}
         if exc.code not in _CLOUD_RECOVERY_PENDING_CODES:
-            cache_manager.update_task_status(
-                task_id,
-                TaskStatus.FAILED,
-                error_message=_cloud_provider_error_message(exc.code),
-                force=True,
-            )
+            _record_asr_failure(task_id, exc)
         raise
-    except Exception:
+    except Exception as exc:
         if _is_task_canceled(task_id):
             return {"status": "canceled", "message": "任务已取消"}
-        cache_manager.update_task_status(
-            task_id,
-            TaskStatus.FAILED,
-            error_message="云端转录失败，请重新提交",
-            force=True,
-        )
+        _record_asr_failure(task_id, exc)
         raise
     typed_result = transcriber.last_result
+    _finish_retry(task_id)
+    _cleanup_retained_quote_media(quote.media_ref)
     if _is_task_canceled(task_id):
         return {"status": "canceled", "message": "任务已取消"}
     try:
@@ -570,7 +741,10 @@ def resume_cloud_quote_locally(task_id: str, *, claim_owner: str):
         _fail_missing_quote_media(task_id, exc)
         raise
     payload = load_cloud_continuation(quote.continuation_json)
-    output_base = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+    retry_path = _retain_retry_media(
+        task_id, media_path, quote.continuation_json, sha256=quote.media_sha256
+    )
+    output_base = f"{task_id}-{uuid4().hex[:8]}"
     derived_path = _extract_audio_to_file(
         str(media_path),
         str(media_path.parent),
@@ -634,16 +808,11 @@ def resume_cloud_quote_locally(task_id: str, *, claim_owner: str):
             author=payload["author"],
             force=True,
         )
+        _finish_retry(task_id)
         return transcript
 
     def on_failure(exc):
-        if not _is_task_canceled(task_id):
-            cache_manager.update_task_status(
-                task_id,
-                TaskStatus.FAILED,
-                error_message="本地转录失败，请重试",
-                force=True,
-            )
+        _record_asr_failure(task_id, exc)
 
     try:
         submit_local_asr_continuation(
@@ -658,6 +827,7 @@ def resume_cloud_quote_locally(task_id: str, *, claim_owner: str):
             on_failure=on_failure,
             cancelled=lambda: _is_task_canceled(task_id),
             submit_failure_preserved=frozenset({media_path}),
+            failure_preserved=frozenset({retry_path}) if retry_path else frozenset(),
         )
     except Exception:
         if not repository.release_local_queue(task_id, claim_owner):
@@ -677,7 +847,10 @@ def refresh_cloud_quote(task_id: str):
         _fail_missing_quote_media(task_id, exc)
         raise
     duration = prepared_media.duration_seconds
-    settings = NewCloudSubmissionSettings.from_config(get_config(), today=datetime.date.today())
+    settings = NewCloudSubmissionSettings.from_config(
+        get_cloud_pricing_service().apply_cached_price(get_config()),
+        today=datetime.date.today(),
+    )
     refreshed = repository.refresh_required(
         NewCloudQuote(
             task_id=task_id, media_ref=current.media_ref,
@@ -1331,11 +1504,9 @@ def process_local_upload(
                 task_id, stage="transcribing", stage_label="正在转录本地文件",
                 basis="local_upload", confidence="high",
             )
-            # 长视频（如 1-2 小时）可能超过默认 30 分钟的转写超时，
-            # 这里为本地上传放宽到 4 小时，避免长内容半途超时失败。
+            # The provider scales its timeout from actual media duration for
+            # both uploaded files and platform links.
             upload_cfg = copy.deepcopy(get_config())
-            _lw = upload_cfg.setdefault("local_whisper", {})
-            _lw["timeout"] = max(int(_lw.get("timeout") or 1800), 14400)
             if transcription_strategy != "cloud":
                 # Never put preserved source media into cleanup_paths.
                 cleanup_paths = tuple(
@@ -1344,6 +1515,16 @@ def process_local_upload(
                     if path and not (keep_source and path == file_path)
                 )
                 output_base = task_id
+                retry_continuation = build_cloud_continuation(
+                    task_id=task_id, url=display_url, display_url=original_name,
+                    platform="generic", media_id=media_id, video_title=original_name,
+                    author="本地上传", description="", is_generic=True,
+                    include_comments=False, comment_limit=100,
+                    preserve_transcript_timestamps=preserve_transcript_timestamps,
+                )
+                retry_path = _retain_retry_media(
+                    task_id, transcribe_target, retry_continuation
+                )
 
                 def run_provider():
                     local_transcriber = Transcriber(
@@ -1412,15 +1593,11 @@ def process_local_upload(
                         platform="generic",
                         media_id=media_id,
                     )
+                    _finish_retry(task_id)
                     return transcript
 
                 def on_failure(exc):
-                    if not _is_task_canceled(task_id):
-                        cache_manager.update_task_status(
-                            task_id,
-                            TaskStatus.FAILED,
-                            error_message="本地转录失败，请重试",
-                        )
+                    _record_asr_failure(task_id, exc)
 
                 submit_local_asr_continuation(
                     task_id=task_id,
@@ -1433,6 +1610,7 @@ def process_local_upload(
                     on_result=lambda result: None,
                     on_failure=on_failure,
                     cancelled=lambda: _is_task_canceled(task_id),
+                    failure_preserved=frozenset({retry_path}) if retry_path else frozenset(),
                 )
                 media_handed_off = True
                 return {"status": "processing", "message": "local_asr_queued"}
@@ -1531,6 +1709,9 @@ def process_local_upload(
             else ("云端转录" if transcription_strategy == "cloud" else "本地转录")
         )
         logger.exception(f"{stage}失败: {task_id}, error={exc}")
+        if isinstance(exc, (CloudASRConfigError, CloudProviderError)):
+            _record_asr_failure(task_id, exc)
+            return {"status": "failed", "message": _asr_error_message(exc)}
         if not _is_task_canceled(task_id):
             cache_manager.update_task_status(
                 task_id, TaskStatus.FAILED, error_message=f"{stage}失败: {exc}"
@@ -1678,7 +1859,14 @@ def _submit_local_link_asr(
     transcription_strategy: str | None,
 ) -> dict[str, str]:
     """Hand acquired link media to the local provider continuation."""
-    output_base = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
+    output_base = f"{task_id}-{uuid4().hex[:8]}"
+    retry_continuation = build_cloud_continuation(
+        task_id=task_id, url=url, display_url=display_url, platform=platform,
+        media_id=media_id, video_title=video_title, author=author,
+        description=description, is_generic=is_generic,
+        include_comments=include_comments, comment_limit=comment_limit,
+    )
+    retry_path = _retain_retry_media(task_id, local_file, retry_continuation)
 
     def run_provider():
         transcriber = Transcriber(
@@ -1752,15 +1940,11 @@ def _submit_local_link_asr(
             author=author,
             download_url=download_url,
         )
+        _finish_retry(task_id)
         return transcript
 
     def on_failure(exc):
-        if not _is_task_canceled(task_id):
-            cache_manager.update_task_status(
-                task_id,
-                TaskStatus.FAILED,
-                error_message="本地转录失败，请重试",
-            )
+        _record_asr_failure(task_id, exc)
 
     submit_local_asr_continuation(
         task_id=task_id,
@@ -1773,6 +1957,7 @@ def _submit_local_link_asr(
         on_result=lambda result: None,
         on_failure=on_failure,
         cancelled=lambda: _is_task_canceled(task_id),
+        failure_preserved=frozenset({retry_path}) if retry_path else frozenset(),
     )
     return {"status": "processing", "message": "local_asr_queued"}
 
@@ -1982,33 +2167,30 @@ def _should_use_cached_llm_results(cache_data: dict, include_comments: bool) -> 
     )
     if not has_llm_results:
         return False
+    if summary_incompleteness_reason(
+        cache_data.get("llm_calibrated") or "", cache_data.get("llm_summary")
+    ) is not None:
+        return False
     if include_comments and not cache_data.get("comment_insight"):
         return False
     return True
 
 
 async def verify_token(authorization: str = Header(None), request: Request = None):
-    """
-    验证API令牌（支持多用户）
-    """
-    if not authorization:
-        logger.warning("请求未提供Authorization头")
-        raise HTTPException(status_code=401, detail="未提供授权令牌")
-
-    token_parts = authorization.split()
-    if len(token_parts) != 2 or token_parts[0].lower() != "bearer":
-        logger.warning("授权令牌格式错误")
-        raise HTTPException(status_code=401, detail="授权令牌格式错误")
-
-    token = token_parts[1]
-    user_info = user_manager.validate_token(token)
-    if not user_info:
-        logger.warning(f"授权令牌无效: {token[:8]}...")
-        raise HTTPException(status_code=401, detail="授权令牌无效")
+    """验证 Bearer API 令牌或短期 HttpOnly 浏览器会话。"""
+    manager = get_request_user_manager(request, user_manager) if request else user_manager
+    try:
+        user_info = authenticate_request(
+            request,
+            authorization,
+            manager,
+            config=config,
+        )
+    except HTTPException as exc:
+        logger.warning("Authentication rejected: status=%s", exc.status_code)
+        raise
 
     logger.debug(f"用户认证成功: {user_info.get('user_id')}")
-    if request:
-        request.state.user_info = user_info
     return user_info
 
 
@@ -2276,7 +2458,11 @@ def process_transcription(
                 logger.info("使用 CapsWriter 缓存文本")
 
             has_llm_calibrated = "llm_calibrated" in cache_data
-            has_llm_summary = "llm_summary" in cache_data
+            has_llm_summary = (
+                summary_incompleteness_reason(
+                    cache_data.get("llm_calibrated") or "", cache_data.get("llm_summary")
+                ) is None
+            )
 
             if _should_use_cached_llm_results(cache_data, include_comments):
                 logger.info("缓存中已有 LLM 结果，直接使用")
@@ -2440,6 +2626,8 @@ def process_transcription(
                         "include_comments": include_comments,
                         "comment_limit": comment_limit,
                         "comment_only": has_llm_calibrated and has_llm_summary and include_comments,
+                        "summary_only_retry": has_llm_calibrated and not has_llm_summary and not include_comments,
+                        "summary_retry_attempt": 1,
                         "cached_calibrated": cache_data.get("llm_calibrated"),
                         "cached_summary": cache_data.get("llm_summary"),
                         "perf_tracker": tracker,
@@ -3506,6 +3694,9 @@ def process_transcription(
         logger.exception(f"转录处理异常: {exc}")
         # 任务失败时输出已记录的性能摘要
         tracker.log_summary()
+        if isinstance(exc, (CloudASRConfigError, CloudProviderError)):
+            _record_asr_failure(task_id, exc)
+            return {"status": "failed", "message": _asr_error_message(exc)}
         display_url = url
         get_notification_router().notify_task_status(
             url=display_url, status="转录异常", error=str(exc),

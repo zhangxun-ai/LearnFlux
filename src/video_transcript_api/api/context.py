@@ -60,6 +60,15 @@ def get_config():
 
 
 @lru_cache
+def get_cloud_pricing_service():
+    """Resolve prices from a local snapshot without delaying ASR work."""
+    from ..transcriber.cloud_pricing import CloudPricingService
+
+    cache_dir = get_config().get("storage", {}).get("cache_dir", "./data/cache")
+    return CloudPricingService(Path(cache_dir) / "cloud_pricing.json")
+
+
+@lru_cache
 def get_user_manager():
     """User manager shared across routes."""
     return _get_user_manager_impl(fallback_config=get_config())

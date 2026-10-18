@@ -482,6 +482,17 @@ class CloudQuoteRepository:
                 raise CloudQuoteConflict("quote_not_confirming")
         return self.get(task_id)
 
+    def reopen_for_asr_retry(self, task_id: str) -> None:
+        """Invalidate an unpaid quote after a failed local handoff."""
+        with self._connection() as connection:
+            connection.execute(
+                "UPDATE cloud_quotes SET status='refresh_required', token_hash=NULL, "
+                "lease_owner=NULL, lease_expires_at=NULL, updated_at=? "
+                "WHERE task_id=? AND status IN "
+                "('pending', 'refresh_required', 'local_selected', 'local_queued')",
+                (_iso(self.clock()), task_id),
+            )
+
     def refresh(self, quote: NewCloudQuote, *, old_token: str, new_token: str | None = None) -> CloudQuote:
         new_token = new_token or secrets.token_urlsafe(32)
         now = self.clock()

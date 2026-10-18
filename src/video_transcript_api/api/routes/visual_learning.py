@@ -137,8 +137,6 @@ async def visual_learning_page():
         default=0,
     ))
     html = page.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version)
-    if "<base " not in html:
-        html = html.replace("<head>", '<head>\n    <base href="/static/">', 1)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 

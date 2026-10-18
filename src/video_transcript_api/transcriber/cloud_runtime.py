@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .aliyun_client import AliyunASRClient, AliyunCredentials
 from .cloud_config import NewCloudSubmissionSettings
+from .asr_retry_repository import ASRRetryRepository
 from .control_store import QuoteBackedReservedAttempt
 from .media_preparer import (
     ASRMediaPreparer,
@@ -209,6 +210,7 @@ def build_aliyun_provider(
         get_transcription_control_store,
         get_transcription_concurrency_controller,
         get_cloud_submission_guard,
+        get_cloud_pricing_service,
     )
 
     temp_manager = get_temp_manager()
@@ -249,7 +251,9 @@ def build_aliyun_provider(
                 recovery=recovery,
             )
 
-    settings = NewCloudSubmissionSettings.from_config(config, today=date.today())
+    settings = NewCloudSubmissionSettings.from_config(
+        get_cloud_pricing_service().apply_cached_price(config), today=date.today()
+    )
     if context is not None and context.accepted_max_cost is not None:
         settings = replace(settings, accepted_max_cost=context.accepted_max_cost)
     snapshotter = MediaSnapshotter(temp_manager.get_temp_dir())
@@ -267,6 +271,14 @@ def build_aliyun_provider(
             or verified.size_bytes != prepared.size_bytes
         ):
             raise MediaPreparationError("media_identity_mismatch")
+        if context is not None:
+            try:
+                retry = ASRRetryRepository(repository.database).get(context.task_id)
+                retained = (Path(temp_root) / retry.media_ref).resolve(strict=True)
+                if retained == verified.path.resolve() and retry.media_sha256 == verified.sha256:
+                    return
+            except Exception:
+                pass
         preparer.cleanup(verified)
         if os.path.lexists(verified.path):
             raise RuntimeError("prepared_media_cleanup_failed")

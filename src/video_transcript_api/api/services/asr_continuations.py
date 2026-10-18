@@ -56,6 +56,7 @@ def submit_local_asr_continuation(
     on_failure: Callable[[Exception], None],
     cancelled: Callable[[], bool] | None = None,
     submit_failure_preserved: frozenset[Path] = frozenset(),
+    failure_preserved: frozenset[Path] = frozenset(),
 ):
     """Run only Provider under a local slot, then hand post-ASR work back."""
     owner = f"local:{task_id}:{uuid4().hex}"
@@ -66,16 +67,26 @@ def submit_local_asr_continuation(
         except Exception:
             pass
 
+    def preserved_after_failure() -> frozenset[Path]:
+        if cancelled is not None and cancelled():
+            return frozenset()
+        return failure_preserved
+
     def post_work(result: Any, post_media: MediaCleanupOwnership) -> None:
+        failed = False
         try:
             processed = after_provider(result)
             on_result(processed)
         except Exception as exc:
+            failed = True
             fail(exc)
         finally:
-            post_media.cleanup_if_owner()
+            post_media.cleanup_if_owner(
+                additionally_preserved=preserved_after_failure() if failed else frozenset()
+            )
 
     def asr_work() -> None:
+        failed = False
         try:
             acquired = controller.acquire(
                 "local", owner, cancelled=cancelled
@@ -89,6 +100,7 @@ def submit_local_asr_continuation(
                     return
                 result = run_provider()
             except Exception as exc:
+                failed = True
                 fail(exc)
                 return
             finally:
@@ -98,16 +110,19 @@ def submit_local_asr_continuation(
             try:
                 post_executor.submit(post_work, result, post_media)
             except Exception as exc:
-                post_media.cleanup_if_owner()
+                failed = True
+                post_media.cleanup_if_owner(additionally_preserved=preserved_after_failure())
                 fail(exc)
         finally:
-            media.cleanup_if_owner()
+            media.cleanup_if_owner(
+                additionally_preserved=preserved_after_failure() if failed else frozenset()
+            )
 
     try:
         return asr_executor.submit(asr_work)
     except Exception as exc:
         media.cleanup_if_owner(
-            additionally_preserved=submit_failure_preserved
+            additionally_preserved=submit_failure_preserved | preserved_after_failure()
         )
         fail(exc)
         raise

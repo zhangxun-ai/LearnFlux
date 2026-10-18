@@ -60,10 +60,6 @@ def test_builds_fixed_new_submission_settings_and_estimates_with_decimal() -> No
         ("price_cny_per_second", None, "invalid_price"),
         ("price_cny_per_second", "NaN", "invalid_price"),
         ("price_cny_per_second", "-0.00022", "invalid_price"),
-        ("price_verified_at", None, "invalid_price_verification"),
-        ("price_verified_at", "not-a-date", "invalid_price_verification"),
-        ("price_verified_at", "2026-05-01", "invalid_price_verification"),
-        ("price_verified_at", "2026-07-22", "invalid_price_verification"),
         ("poll_interval_seconds", 0, "invalid_poll_interval"),
         ("poll_interval_seconds", 61, "invalid_poll_interval"),
         ("poll_timeout_seconds", 0, "invalid_poll_timeout"),
@@ -85,17 +81,23 @@ def test_rejects_invalid_new_submission_settings_with_safe_code(
     assert str(exc_info.value) == code
 
 
-def test_rejects_price_that_differs_from_fixed_verified_price() -> None:
+def test_updated_configured_price_is_used_for_estimation() -> None:
     config = _valid_config()
     cloud_asr = config["cloud_asr"]
     assert isinstance(cloud_asr, dict)
     cloud_asr["price_cny_per_second"] = "0.00023"
 
-    with pytest.raises(CloudASRConfigError) as exc_info:
-        NewCloudSubmissionSettings.from_config(config, today=date(2026, 7, 21))
+    settings = NewCloudSubmissionSettings.from_config(config, today=date(2026, 7, 21))
+    assert settings.estimated_cost(10) == Decimal("0.00230")
 
-    assert exc_info.value.code == "invalid_price"
-    assert str(exc_info.value) == "invalid_price"
+
+@pytest.mark.parametrize("verified_at", [None, "not-a-date", "2026-05-01", "2027-01-01"])
+def test_price_verification_metadata_never_disables_cloud(verified_at):
+    config = _valid_config()
+    config["cloud_asr"]["price_verified_at"] = verified_at
+    settings = NewCloudSubmissionSettings.from_config(config, today=date(2026, 10, 3))
+    assert settings.estimated_cost(10) == Decimal("0.00220")
+    assert settings.price_verified_at != date(2026, 10, 3)
 
 
 def test_quote_estimate_has_no_hidden_per_task_budget_cap() -> None:

@@ -70,20 +70,25 @@ def db_pair(tmp_path):
             cache_id   TEXT,
             llm_config TEXT,
             download_url TEXT,
-            source_file_path TEXT
+            source_file_path TEXT,
+            owner_user_id TEXT,
+            error_message TEXT
         )
     ''')
     conn.commit()
     conn.close()
 
     def insert_task(task_id, view_token, platform="youtube", title="Test Title",
-                    author="Test Author", status="success", source_file_path=None):
+                    author="Test Author", status="success", source_file_path=None, url=None,
+                    owner_user_id=None, error_message=None, created_at=None):
         c = sqlite3.connect(cache_db_path)
         c.execute(
             "INSERT OR IGNORE INTO task_status "
-            "(task_id, view_token, platform, title, author, status, source_file_path) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (task_id, view_token, platform, title, author, status, source_file_path),
+            "(task_id, view_token, url, platform, title, author, status, source_file_path, "
+            "owner_user_id, error_message, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))",
+            (task_id, view_token, url, platform, title, author, status, source_file_path,
+             owner_user_id, error_message, created_at),
         )
         c.commit()
         c.close()
@@ -127,13 +132,14 @@ def history_client(db_pair):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _log(al, task_id, webhook=_WEBHOOK_A, status_code=202):
+def _log(al, task_id, webhook=_WEBHOOK_A, status_code=202,
+         video_url="https://youtube.com/watch?v=abc"):
     """Insert one audit row using the real AuditLogger."""
     al.log_api_call(
         api_key=_API_KEY,
         user_id="test-user",
         endpoint="/api/transcribe",
-        video_url="https://youtube.com/watch?v=abc",
+        video_url=video_url,
         status_code=status_code,
         task_id=task_id,
         wechat_webhook=webhook,
@@ -155,6 +161,35 @@ class TestHistoryEndpoint:
         data = resp.json()["data"]
         assert data["items"] == []
         assert data["total"] == 0
+
+    def test_content_type_filter_groups_posts_and_local_documents(self, history_client):
+        client, setup = history_client
+        al = setup["audit_logger"]
+        insert = setup["insert_task"]
+
+        _log(al, "post-task", video_url="https://x.com/author/status/123")
+        insert("post-task", "post-vt", platform="twitter", title="X post")
+        _log(al, "file-task", video_url="local://reading-notes.pdf")
+        insert(
+            "file-task", "file-vt", platform="local", title="reading-notes.pdf",
+            source_file_path="/tmp/reading-notes.pdf",
+        )
+        _log(al, "video-task")
+        insert("video-task", "video-vt", platform="youtube", title="Lesson")
+
+        posts = client.get("/api/audit/history?content_type=post").json()["data"]
+        files = client.get("/api/audit/history?content_type=file").json()["data"]
+        videos = client.get("/api/audit/history?content_type=video").json()["data"]
+
+        assert [item["task_id"] for item in posts["items"]] == ["post-task"]
+        assert posts["items"][0]["content_type"] == "post"
+        assert [item["task_id"] for item in files["items"]] == ["file-task"]
+        assert files["items"][0]["content_type"] == "file"
+        assert [item["task_id"] for item in videos["items"]] == ["video-task"]
+
+    def test_rejects_unknown_content_type(self, history_client):
+        client, _ = history_client
+        assert client.get("/api/audit/history?content_type=unknown").status_code == 422
 
     def test_returns_completed_by_default(self, history_client):
         """Default status filter returns only completed tasks (LEFT JOIN match)."""
@@ -297,7 +332,8 @@ class TestHistoryEndpoint:
         )
         conn.commit()
         conn.close()
-        insert("old-task", "vt-old"); insert("new-task", "vt-new")
+        insert("old-task", "vt-old", created_at="2023-01-01 10:00:00")
+        insert("new-task", "vt-new", created_at="2025-06-15 10:00:00")
 
         resp = client.get("/api/audit/history?start_date=2025-01-01&end_date=2025-12-31")
         assert resp.status_code == 200
@@ -669,6 +705,32 @@ class TestFilterOptionsEndpoint:
         assert resp.status_code == 200
         platforms = resp.json()["data"]["platforms"]
         assert set(platforms) == {"youtube", "bilibili"}
+        counts = {item["platform"]: item["count"] for item in resp.json()["data"]["platform_counts"]}
+        assert counts == {"youtube": 2, "bilibili": 1}
+
+    def test_platform_options_include_legacy_url_join(self, history_client):
+        client, setup = history_client
+        al = setup["audit_logger"]
+        source_url = "https://bilibili.com/video/BV123"
+        al.log_api_call(
+            api_key=_API_KEY,
+            user_id="test-user",
+            endpoint="/api/transcribe",
+            video_url=source_url,
+            status_code=202,
+            task_id=None,
+        )
+        setup["insert_task"](
+            "legacy-url-task", "legacy-url-vt", platform="bilibili",
+            title="Legacy URL task", url=source_url,
+        )
+
+        options = client.get("/api/audit/filter-options").json()["data"]
+        history = client.get("/api/audit/history?platform=bilibili").json()["data"]
+
+        assert options["platforms"] == ["bilibili"]
+        assert options["platform_counts"] == [{"platform": "bilibili", "count": 1}]
+        assert [item["task_id"] for item in history["items"]] == ["legacy-url-task"]
 
     def test_returns_distinct_authors(self, history_client):
         """Authors are deduplicated, ordered by frequency."""
@@ -760,7 +822,8 @@ class TestSummaryEndpoint:
 
     def test_returns_202_for_processing_task(self, summary_setup):
         """A task still processing returns code=202 with empty summary."""
-        client, _, mock_cache = summary_setup
+        client, setup, mock_cache = summary_setup
+        _log(setup["audit_logger"], "task-proc")
         mock_cache.get_task_by_view_token.return_value = {"task_id": "task-proc", "status": "processing"}
 
         resp = client.get("/api/audit/summary?view_token=vt-proc")
@@ -820,3 +883,216 @@ class TestSummaryEndpoint:
         resp = client.get("/api/audit/summary?view_token=vt-nk")
         assert resp.status_code == 200
         assert resp.json()["data"]["summary"] == ""
+
+
+class TestDurableHistoryScope:
+    """History and metadata share durable ownership and deduplication rules."""
+
+    def test_owned_task_without_audit_is_visible_with_failure_details(self, history_client):
+        client, setup = history_client
+        setup["insert_task"](
+            "owned-no-audit", "owned-view", owner_user_id="test-user",
+            status="failed", title="Retained lesson", error_message="Download unavailable",
+        )
+        data = client.get("/api/audit/history?status=all").json()["data"]
+        assert data["total"] == 1
+        assert data["items"][0]["view_token"] == "owned-view"
+        assert data["items"][0]["error"] == "Download unavailable"
+
+    def test_explicit_other_owner_overrides_current_key_audit(self, history_client):
+        client, setup = history_client
+        _log(setup["audit_logger"], "other-owned")
+        setup["insert_task"]("other-owned", "other-view", owner_user_id="other-user")
+        assert client.get("/api/audit/history?status=all").json()["data"]["total"] == 0
+        assert client.get("/api/audit/filter-options").json()["data"]["total"] == 0
+
+    def test_regular_user_does_not_inherit_unowned_task_without_audit(self, history_client):
+        client, setup = history_client
+        setup["insert_task"]("unowned", "unowned-view")
+        assert client.get("/api/audit/history?status=all").json()["data"]["total"] == 0
+
+    def test_legacy_scope_includes_unowned_but_not_other_owner(self, history_client):
+        from video_transcript_api.api.services.transcription import verify_token
+        client, setup = history_client
+
+        async def legacy_user():
+            return {"user_id": "legacy_user", "api_key": _API_KEY, "is_legacy": True}
+
+        client.app.dependency_overrides[verify_token] = legacy_user
+        setup["insert_task"]("legacy", "legacy-view")
+        setup["insert_task"]("owned-other", "other-view", owner_user_id="other-user")
+        data = client.get("/api/audit/history?status=all").json()["data"]
+        assert [row["task_id"] for row in data["items"]] == ["legacy"]
+
+    def test_metadata_counts_deduplicated_views_and_unknown_audit_rows(self, history_client):
+        client, setup = history_client
+        insert = setup["insert_task"]
+        insert("old", "shared-view", platform="youtube", owner_user_id="test-user",
+               created_at="2026-10-01 10:00:00")
+        insert("latest", "shared-view", platform="bilibili", owner_user_id="test-user",
+               created_at="2026-10-02 10:00:00")
+        _log(setup["audit_logger"], "audit-only")
+        history = client.get("/api/audit/history?status=all").json()["data"]
+        metadata = client.get("/api/audit/filter-options").json()["data"]
+        assert history["total"] == metadata["total"] == 2
+        assert sum(item["count"] for item in metadata["platform_counts"]) == 2
+        assert metadata["platform_counts"] == [
+            {"platform": "bilibili", "count": 1}, {"platform": "generic", "count": 1},
+        ]
+        assert "old" not in {item["task_id"] for item in history["items"]}
+
+    def test_empty_page_keeps_filtered_total(self, history_client):
+        client, setup = history_client
+        setup["insert_task"]("owned", "view", owner_user_id="test-user")
+        data = client.get("/api/audit/history?offset=100").json()["data"]
+        assert data["items"] == []
+        assert data["total"] == 1
+
+    def test_date_filter_matches_displayed_import_time(self, history_client):
+        client, setup = history_client
+        _log(setup["audit_logger"], "old-task")
+        setup["insert_task"]("old-task", "view", created_at="2023-01-01 10:00:00")
+        data = client.get("/api/audit/history?start_date=2023-01-01&end_date=2023-01-01").json()["data"]
+        assert data["total"] == 1
+        assert str(data["items"][0]["request_time"]).startswith("2023-01-01")
+        assert client.get("/api/audit/history?start_date=invalid").status_code == 422
+
+    def test_processing_filter_includes_queued_and_calibrating(self, history_client):
+        client, setup = history_client
+        for status in ("queued", "processing", "calibrating", "awaiting_cloud_confirmation"):
+            setup["insert_task"](status, "view-" + status,
+                                 owner_user_id="test-user", status=status)
+        data = client.get("/api/audit/history?status=processing").json()["data"]
+        assert {item["status"] for item in data["items"]} == {"queued", "processing", "calibrating"}
+        waiting = client.get("/api/audit/history?status=awaiting_cloud_confirmation").json()["data"]
+        assert waiting["total"] == 1
+
+    def test_history_reads_do_not_create_marks_tables(self, history_client):
+        client, setup = history_client
+        setup["insert_task"]("owned", "view", owner_user_id="test-user")
+        for endpoint in ("/api/audit/history", "/api/audit/filter-options"):
+            assert client.get(endpoint).status_code == 200
+        with sqlite3.connect(setup["cache_db_path"]) as conn:
+            assert conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE name = 'content_marks'"
+            ).fetchone() is None
+
+
+def test_postgres_history_uses_one_read_statement_per_endpoint(db_pair, monkeypatch):
+    """Exercise the unified-schema branch without a remote database or DDL."""
+    from video_transcript_api.api.routes import audit
+    from video_transcript_api.api.services.transcription import verify_token
+    setup = db_pair
+    setup["insert_task"]("owned", "view", owner_user_id="test-user")
+    statements = []
+
+    def connect():
+        conn = sqlite3.connect(setup["audit_logger"].db_path)
+        conn.execute("ATTACH DATABASE ? AS cache", (setup["cache_db_path"],))
+        conn.execute("CREATE TEMP VIEW task_status AS SELECT * FROM cache.task_status")
+        conn.execute("CREATE TEMP TABLE content_marks (id TEXT, owner_type TEXT, owner_id TEXT, user_key TEXT)")
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    cache = MagicMock()
+    cache._is_postgres = True
+    cache.database.connect.side_effect = connect
+    monkeypatch.setattr(audit, "audit_logger", setup["audit_logger"])
+    monkeypatch.setattr(audit, "get_cache_manager", lambda: cache)
+    app = FastAPI()
+    app.include_router(audit.router)
+
+    async def user():
+        return {"user_id": "test-user", "api_key": _API_KEY}
+
+    app.dependency_overrides[verify_token] = user
+    client = TestClient(app)
+    history = client.get("/api/audit/history").json()["data"]
+    options = client.get("/api/audit/filter-options").json()["data"]
+    assert history["total"] == options["total"] == 1
+    assert len(statements) == 2
+    assert all(statement.lstrip().startswith("WITH owned_audits") for statement in statements)
+    assert cache.database.connect.call_count == 2
+
+
+def test_history_calendar_filter_uses_display_timezone(history_client, monkeypatch):
+    from datetime import timezone, timedelta
+    from video_transcript_api.api.routes import audit
+    monkeypatch.setattr(audit, "get_configured_timezone", lambda: timezone(timedelta(hours=8)))
+    client, setup = history_client
+    setup["insert_task"]("night", "night-view", owner_user_id="test-user",
+                         created_at="2026-10-17 17:30:00")
+    day = client.get("/api/audit/history?start_date=2026-10-18&end_date=2026-10-18").json()["data"]
+    previous = client.get("/api/audit/history?start_date=2026-10-17&end_date=2026-10-17").json()["data"]
+    assert day["total"] == 1
+    assert previous["total"] == 0
+
+
+class TestSummaryDurableOwnership:
+    def test_owner_without_audit_can_read_summary(self, summary_setup):
+        client, _, cache = summary_setup
+        cache.get_task_by_view_token.return_value = {
+            "task_id": "owned", "owner_user_id": "test-user", "status": "success",
+        }
+        cache.get_view_data_by_token.return_value = {"status": "success", "summary": "Owner preview"}
+        response = client.get("/api/audit/summary?view_token=owned-view")
+        assert response.status_code == 200
+        assert response.json()["data"]["summary"] == "Owner preview"
+
+    def test_key_rotation_preserves_owner_access(self, summary_setup):
+        client, setup, cache = summary_setup
+        setup["audit_logger"].log_api_call(
+            api_key="previous-owner-key-9999", user_id="test-user",
+            endpoint="/api/transcribe", task_id="rotated",
+        )
+        cache.get_task_by_view_token.return_value = {
+            "task_id": "rotated", "owner_user_id": "test-user", "status": "success",
+        }
+        cache.get_view_data_by_token.return_value = {"status": "success", "summary": "Rotated key"}
+        assert client.get("/api/audit/summary?view_token=rotated-view").status_code == 200
+
+    @pytest.mark.parametrize("has_audit", [False, True])
+    def test_explicit_other_owner_cannot_read_even_with_current_key_audit(self, summary_setup, has_audit):
+        client, setup, cache = summary_setup
+        if has_audit:
+            _log(setup["audit_logger"], "other-owned")
+        cache.get_task_by_view_token.return_value = {
+            "task_id": "other-owned", "owner_user_id": "other-user", "status": "success",
+        }
+        assert client.get("/api/audit/summary?view_token=other-view").status_code == 403
+        cache.get_view_data_by_token.assert_not_called()
+
+    def test_unowned_without_audit_is_not_visible_to_regular_user(self, summary_setup):
+        client, _, cache = summary_setup
+        cache.get_task_by_view_token.return_value = {"task_id": "unowned", "status": "success"}
+        assert client.get("/api/audit/summary?view_token=unowned-view").status_code == 403
+        cache.get_view_data_by_token.assert_not_called()
+
+    def test_legacy_user_can_read_unowned_task_without_audit(self, summary_setup):
+        from video_transcript_api.api.services.transcription import verify_token
+        client, _, cache = summary_setup
+
+        async def legacy():
+            return {"user_id": "legacy_user", "api_key": _API_KEY, "is_legacy": True}
+
+        client.app.dependency_overrides[verify_token] = legacy
+        cache.get_task_by_view_token.return_value = {"task_id": "unowned", "status": "success"}
+        cache.get_view_data_by_token.return_value = {"status": "success", "summary": "Legacy preview"}
+        assert client.get("/api/audit/summary?view_token=unowned-view").status_code == 200
+
+    def test_legacy_url_audit_keeps_preview_access(self, summary_setup):
+        client, setup, cache = summary_setup
+        url = "https://example.com/legacy-upload"
+        _log(setup["audit_logger"], None, video_url=url)
+        cache.get_task_by_view_token.return_value = {
+            "task_id": "legacy-url", "url": url, "status": "success",
+        }
+        cache.get_view_data_by_token.return_value = {"status": "success", "summary": "URL preview"}
+        assert client.get("/api/audit/summary?view_token=legacy-url-view").status_code == 200
+
+    def test_ownership_lookup_failure_does_not_allow_access(self, summary_setup):
+        client, setup, cache = summary_setup
+        cache.get_task_by_view_token.return_value = {"task_id": "unowned", "status": "success"}
+        with patch.object(setup["audit_logger"], "_get_cursor", side_effect=RuntimeError("unavailable")):
+            assert client.get("/api/audit/summary?view_token=unowned-view").status_code == 503
+        cache.get_view_data_by_token.assert_not_called()

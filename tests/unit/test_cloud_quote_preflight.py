@@ -218,6 +218,10 @@ def test_quote_conflict_keeps_only_database_referenced_media(
         )
     )
     cleanup_calls = []
+    monkeypatch.setattr(
+        transcription, "_retain_retry_media",
+        lambda *args, **kwargs: pytest.fail("conflicting candidate must not replace retained media"),
+    )
 
     class Preparer:
         def prepare(self, source_path, task_id):

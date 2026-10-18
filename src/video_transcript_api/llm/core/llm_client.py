@@ -25,6 +25,8 @@ class LLMResponse:
     """LLM 响应数据类"""
     text: str
     structured_output: Optional[Dict] = None
+    model: str = ""
+    finish_reason: Optional[str] = None
 
 
 class LLMClient:
@@ -76,7 +78,11 @@ class LLMClient:
                     structured_output=result.data or {},
                 )
             else:
-                return LLMResponse(text=result)
+                return LLMResponse(
+                    text=result,
+                    model=getattr(result, "model", ""),
+                    finish_reason=getattr(result, "finish_reason", None),
+                )
 
         except LLMCallError:
             raise

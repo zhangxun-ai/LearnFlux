@@ -14,7 +14,8 @@ from typing import Any, Dict, List, Optional, Union, overload
 from dataclasses import dataclass
 from loguru import logger
 
-from llm_compat import SyncLLMClient, set_custom_patterns
+from llm_compat import set_custom_patterns
+from .response_client import CompletionAwareSyncLLMClient as SyncLLMClient
 from llm_compat import normalize_reasoning_effort as _lc_normalize
 from llm_compat.providers import (
     build_request_payload,
@@ -379,6 +380,16 @@ def _extract_json_from_response(response: str) -> str:
 # 内部调用函数
 # ============================================================
 
+class TextResult(str):
+    """String-compatible result with per-call completion metadata."""
+
+    def __new__(cls, text: str, *, model: str = "", finish_reason: str | None = None):
+        result = super().__new__(cls, text)
+        result.model = model
+        result.finish_reason = finish_reason
+        return result
+
+
 def _call_with_text_output(
     model: str,
     prompt: str,
@@ -399,7 +410,18 @@ def _call_with_text_output(
     start_time = time.time()
     logger.info(f"[{task_type.upper()}] Model: {model} | text mode")
 
-    result = client.chat(model, messages, reasoning_effort=reasoning_effort, stream=False)
+    extra = {}
+    if task_type == "summary":
+        # A ceiling, not a requested length; completion tokens include reasoning.
+        extra["max_tokens"] = (_default_config or {}).get("llm", {}).get(
+            "summary_max_tokens", 32768
+        )
+    result = client.chat(
+        model, messages, reasoning_effort=reasoning_effort, stream=False, **extra
+    )
+    finish_reason = getattr(result, "finish_reason", None)
+    if task_type == "summary" and finish_reason not in (None, "stop", "end_turn"):
+        raise LLMCallError(f"Incomplete summary response: finish_reason={finish_reason}")
     content = str(result)
     duration = time.time() - start_time
 
@@ -408,8 +430,11 @@ def _call_with_text_output(
             f"[{task_type.upper()}] Content fallback: {result.fallback_from} -> {result.model}"
         )
 
-    logger.info(f"[{task_type.upper()}] Succeeded | {len(content)} chars | {duration:.2f}s")
-    return content
+    logger.info(
+        f"[{task_type.upper()}] Succeeded | {len(content)} chars | "
+        f"{duration:.2f}s | finish_reason={finish_reason}"
+    )
+    return TextResult(content, model=result.model, finish_reason=finish_reason)
 
 
 def _call_with_json_schema_mode(

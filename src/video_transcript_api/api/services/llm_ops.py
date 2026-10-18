@@ -26,6 +26,7 @@ from ..context import (
 )
 from ...comments import CommentInsightAnalyzer, generate_comment_insight
 from ...llm import call_llm_api
+from ...llm.summary_quality import summary_incompleteness_reason
 from ...utils.notifications import (
     WechatNotifier,
     send_long_text_wechat,
@@ -207,11 +208,24 @@ def _handle_summary_only_retry(llm_task: dict) -> None:
             platform,
             media_id,
             use_speaker_recognition=use_speaker_recognition,
+            exact_speaker_match=True,
         )
         if platform and media_id
         else None
     ) or {}
     calibrated_text = str(cache_snapshot.get("llm_calibrated") or "").strip()
+    evidence = _existing_progress_evidence(task_id)
+    task_state = cache_manager.get_task_by_id(task_id) or {}
+    if task_state.get("status") == TaskStatus.CANCELED:
+        return
+    existing_summary = cache_snapshot.get("llm_summary")
+    if (
+        task_state.get("status") == TaskStatus.SUCCESS
+        and evidence.get("summary_pending") is not True
+        and summary_incompleteness_reason(calibrated_text, existing_summary) is None
+    ):
+        logger.info(f"Summary already recovered; skipping stale retry: {task_id}")
+        return
     summary_text = None
     summary_error = None
 
@@ -224,7 +238,8 @@ def _handle_summary_only_retry(llm_task: dict) -> None:
                 title=llm_task.get("video_title") or "",
                 author=llm_task.get("author") or "",
                 description=llm_task.get("description") or "",
-                speaker_count=2 if use_speaker_recognition else 0,
+                # Existing labels remain in the transcript; a toggle is not a count.
+                speaker_count=0,
                 transcription_data=None,
                 selected_models=llm_coordinator.config.get_models(),
             )
@@ -236,8 +251,9 @@ def _handle_summary_only_retry(llm_task: dict) -> None:
                 f"summary-only retry failed: {task_id}, attempt={attempt}"
             )
 
-    evidence = _existing_progress_evidence(task_id)
     if summary_text and platform and media_id:
+        if _is_task_canceled(task_id):
+            return
         summary_saved = cache_manager.save_llm_result(
             platform=platform,
             media_id=media_id,
@@ -246,6 +262,8 @@ def _handle_summary_only_retry(llm_task: dict) -> None:
             content=normalize_markdown_text(summary_text),
         )
         if summary_saved:
+            for key in ("summary_error", "summary_retry_in_seconds"):
+                evidence.pop(key, None)
             evidence.update(
                 {
                     "summary_pending": False,
@@ -613,6 +631,8 @@ def _handle_llm_task(llm_task: dict):
                     calibrate_only=calibrate_only,
                     summary_backfill=summary_backfill,
                 )
+                if not summary_error_message and result_dict.get("summary_error"):
+                    summary_error_message = result_dict["summary_error"]
                 # Summary failure must not block transcript delivery or collection progress.
                 # Model problems are handled by immediate in-request fallback models;
                 # if the whole chain fails, keep calibrated artifacts and mark pending.
@@ -924,8 +944,7 @@ def _append_comment_insight(
 def _should_backfill_summary(cache_data: dict, calibrate_only: bool) -> bool:
     """判断是否需要在 recalibrate 流程里顺手补跑一次 summary。
 
-    触发条件：仅校对模式，且缓存目录里的 llm_summary.txt 缺失或为空字节。
-    空文件视为历史遗留占位，同样需要补跑。
+    触发条件：仅校对模式，且总结缺失、为空或存在明确的结构残缺。
 
     Args:
         cache_data: cache_manager.get_cache(...) 返回的数据字典
@@ -937,9 +956,12 @@ def _should_backfill_summary(cache_data: dict, calibrate_only: bool) -> bool:
     if not calibrate_only:
         return False
 
+    if cache_data and "llm_summary" in cache_data:
+        return summary_incompleteness_reason(
+            cache_data.get("llm_calibrated") or "", cache_data.get("llm_summary")
+        ) is not None
     if cache_data and cache_data.get("storage_backend") == "postgres":
-        summary = cache_data.get("llm_summary")
-        return not isinstance(summary, str) or not summary.strip()
+        return True
 
     file_path = cache_data.get("file_path") if cache_data else None
     if not file_path:
@@ -950,8 +972,11 @@ def _should_backfill_summary(cache_data: dict, calibrate_only: bool) -> bool:
         return True
 
     try:
-        return summary_file.stat().st_size == 0
-    except OSError:
+        return summary_incompleteness_reason(
+            cache_data.get("llm_calibrated") or "",
+            summary_file.read_text(encoding="utf-8"),
+        ) is not None
+    except (OSError, UnicodeError):
         return True
 
 
@@ -1024,13 +1049,16 @@ def _save_llm_results(
         else:
             if summary_text is not None:
                 logger.info(f"保存LLM总结到缓存: {task_id}")
-                cache_manager.save_llm_result(
+                summary_saved = cache_manager.save_llm_result(
                     platform=platform,
                     media_id=media_id,
                     use_speaker_recognition=use_speaker_recognition,
                     llm_type="summary",
                     content=normalize_markdown_text(summary_text),
                 )
+                if not summary_saved:
+                    result_dict["summary_success"] = False
+                    result_dict["summary_error"] = "summary persistence failed"
             else:
                 logger.warning(f"总结生成失败，跳过保存: {task_id}")
     else:

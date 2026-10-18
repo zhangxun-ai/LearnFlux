@@ -104,7 +104,11 @@ def test_summary_retry_uses_cached_calibration_without_recalibrating(tmp_path):
         TaskStatus.SUCCESS,
         platform="youtube",
         media_id="vid2",
-        terminal_evidence={"summary_pending": True},
+        terminal_evidence={
+            "summary_pending": True,
+            "summary_error": "previous failure",
+            "summary_retry_in_seconds": 60,
+        },
     )
 
     coordinator = MagicMock()
@@ -148,6 +152,21 @@ def test_summary_retry_uses_cached_calibration_without_recalibrating(tmp_path):
     evidence = (row.get("progress") or {}).get("evidence") or {}
     assert evidence.get("summary_pending") is False
     assert evidence.get("summary_retry_attempt") == 1
+    assert "summary_error" not in evidence
+    assert "summary_retry_in_seconds" not in evidence
+
+    with patch.object(llm_ops, "cache_manager", cm), patch.object(
+        llm_ops, "llm_coordinator", coordinator
+    ):
+        llm_ops._handle_summary_only_retry(
+            {
+                "task_id": task_id,
+                "platform": "youtube",
+                "media_id": "vid2",
+                "summary_retry_attempt": 2,
+            }
+        )
+    coordinator.summary_processor.process.assert_called_once()
     cm.close()
 
 
@@ -185,3 +204,68 @@ def test_summary_retry_keeps_pending_when_summary_persistence_fails():
     assert evidence["summary_retry_scheduled"] is True
     assert evidence["summary_retry_attempt"] == 2
     schedule_retry.assert_called_once()
+
+
+def test_overview_only_cache_keeps_recovery_visible(tmp_path):
+    cm = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = cm.create_task(url="https://example.com/v3", platform="youtube", media_id="vid3")
+    cm.save_cache(
+        platform="youtube", url="https://example.com/v3", media_id="vid3",
+        use_speaker_recognition=False, transcript_data="source " * 900,
+        transcript_type="capswriter", title="Demo", author="Alice",
+    )
+    cm.save_llm_result("youtube", "vid3", False, "calibrated", "source " * 900)
+    cm.save_llm_result("youtube", "vid3", False, "summary", "## 1. 概述\n\nA partial overview.")
+    cm.update_task_status(
+        task["task_id"], TaskStatus.SUCCESS, platform="youtube", media_id="vid3",
+        terminal_evidence={"summary_pending": True},
+    )
+    view = cm.get_view_data_by_token(task["view_token"])
+    assert view["summary_missing"] is True
+    assert view["summary_pending"] is True
+    cm.close()
+
+
+def test_generated_summary_is_not_success_when_persistence_fails(tmp_path):
+    cm = CacheManager(cache_dir=str(tmp_path / "cache"))
+    task = cm.create_task(url="https://example.com/v4", platform="youtube", media_id="vid4")
+    cm.save_cache(
+        platform="youtube", url="https://example.com/v4", media_id="vid4",
+        use_speaker_recognition=False, transcript_data="source " * 100,
+        transcript_type="capswriter", title="Demo", author="Alice",
+    )
+    coordinator = MagicMock()
+    coordinator.config.min_summary_threshold = 500
+    coordinator.process.return_value = {
+        "calibrated_text": "source " * 100,
+        "summary_text": "A complete generated explanation. " * 10,
+        "stats": {}, "models_used": {},
+    }
+    original_save = cm.save_llm_result
+    def save_result(*args, **kwargs):
+        if kwargs.get("llm_type") == "summary":
+            return False
+        return original_save(*args, **kwargs)
+    retry = MagicMock(return_value=60)
+    with patch.object(llm_ops, "cache_manager", cm), patch.object(
+        llm_ops, "llm_coordinator", coordinator
+    ), patch.object(llm_ops, "llm_task_queue", MagicMock()), patch.object(
+        cm, "save_llm_result", side_effect=save_result
+    ), patch.object(
+        llm_ops, "_send_notification", MagicMock()
+    ), patch.object(llm_ops, "_schedule_summary_retry", retry), patch.object(
+        llm_ops, "get_notification_router", lambda: MagicMock()
+    ), patch.object(llm_ops, "_generate_title_if_needed", lambda t, title, tr: title):
+        llm_ops._handle_llm_task({
+            "task_id": task["task_id"], "url": "https://example.com/v4",
+            "display_url": "https://example.com/v4", "platform": "youtube",
+            "media_id": "vid4", "video_title": "Demo", "author": "Alice",
+            "transcript": "source " * 100, "skip_notification": True,
+        })
+    row = cm.get_task_by_id(task["task_id"])
+    evidence = row["progress"]["evidence"]
+    assert evidence["summary_pending"] is True
+    assert evidence["summary_error"] == "summary persistence failed"
+    assert evidence["summary_retry_scheduled"] is True
+    retry.assert_called_once()
+    cm.close()

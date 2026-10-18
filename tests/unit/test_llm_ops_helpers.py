@@ -193,3 +193,19 @@ class TestShouldBackfillSummary:
         """Cache data without file_path cannot be inspected; be conservative."""
         assert _should_backfill_summary({}, calibrate_only=True) is False
         assert _should_backfill_summary({"file_path": None}, calibrate_only=True) is False
+
+    def test_partial_postgres_summary_needs_backfill(self):
+        cache_data = {
+            "storage_backend": "postgres",
+            "llm_calibrated": "interview " * 6000,
+            "llm_summary": "## 1. 概述\n\nThe interview covers several topics.",
+        }
+        assert _should_backfill_summary(cache_data, calibrate_only=True) is True
+
+    def test_complete_short_summary_does_not_need_backfill(self):
+        cache_data = {
+            "storage_backend": "postgres",
+            "llm_calibrated": "short source " * 50,
+            "llm_summary": "A complete short explanation, without headings.",
+        }
+        assert _should_backfill_summary(cache_data, calibrate_only=True) is False

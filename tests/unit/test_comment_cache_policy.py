@@ -23,3 +23,13 @@ def test_uses_cached_llm_results_when_requested_comment_exists():
         "comment_insight": "comment insight",
     }
     assert _should_use_cached_llm_results(cache_data, include_comments=True) is True
+
+
+def test_incomplete_interview_summary_is_not_a_complete_cache_hit():
+    cache_data = {
+        "llm_calibrated": "interview " * 6000,
+        "llm_summary": "# Interview\n\n## 1. 概述\n\nOnly the overview was generated.",
+        "comment_insight": "comment insight",
+    }
+    assert _should_use_cached_llm_results(cache_data, include_comments=False) is False
+    assert _should_use_cached_llm_results(cache_data, include_comments=True) is False

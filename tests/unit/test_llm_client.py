@@ -80,6 +80,15 @@ class TestLLMClientSuccess:
         assert result.structured_output == {"key": "value"}
         assert mock_call.call_count == 1
 
+    @patch("video_transcript_api.llm.core.llm_client.call_llm_api")
+    def test_text_metadata_reaches_processor(self, mock_call, client):
+        from video_transcript_api.llm.llm import TextResult
+        mock_call.return_value = TextResult("summary", model="fallback-model", finish_reason="stop")
+        result = client.call(model="primary-model", system_prompt="system", user_prompt="user")
+        assert result.text == "summary"
+        assert result.model == "fallback-model"
+        assert result.finish_reason == "stop"
+
 
 # ============================================================
 # Error Mapping Tests (llm-compat errors -> project errors)

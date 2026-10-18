@@ -11,8 +11,11 @@ import fnmatch
 import os
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from llm_compat import SyncLLMClient
 from loguru import logger
+
+from .response_client import CompletionAwareSyncLLMClient
+
+SyncLLMClient = CompletionAwareSyncLLMClient
 
 
 def resolve_model_endpoint(
@@ -85,7 +88,7 @@ def build_endpoint_clients(
     return clients
 
 
-class MultiEndpointSyncLLMClient(SyncLLMClient):
+class MultiEndpointSyncLLMClient(CompletionAwareSyncLLMClient):
     """SyncLLMClient that routes per-model HTTP calls to secondary endpoints."""
 
     def __init__(

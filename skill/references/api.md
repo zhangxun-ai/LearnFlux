@@ -10,9 +10,9 @@
 Authorization: Bearer <token>
 ```
 
-token 可能是 `config.jsonc` 中 `api.auth_token`（单用户），或 `config/users.json` 中某个用户的 `api_key`（多用户）。
+token 可能是 `config.jsonc` 中 `api.auth_token`（单用户管理口令），或 `config/users.json` 中某个用户的 `api_key`（多用户）。公开分发的 Skill 优先使用独立用户 key；不要把任何 token 写进 Skill、对话、Issue 或日志。
 
-`/view/*`、`/export/*`、`/health` 无需鉴权。
+`/view/*`、`/export/*`、`/health` 无需 Bearer 鉴权。`view_token` 本身因此等同分享凭证，只能发给应当看到结果的人。
 
 ## 端点清单
 
@@ -50,7 +50,7 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户），或 `config
 }
 ```
 
-**Response 202**
+**典型响应**
 
 ```json
 {
@@ -73,9 +73,11 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户），或 `config
 
 ## GET /api/task/{task_id}
 
-**HTTP code 对应任务状态**
+**响应体 `code` 对应任务状态**
 
-| HTTP | `data.status` | 含义 |
+正常查询通常返回 HTTP 200，业务状态写在 JSON 响应体的 `code` 和 `data.status` 中；只有路由异常、鉴权失败或任务不存在等情况才使用对应 HTTP 错误码。CLI 以 `data.status` 为准，不要把响应体 `code` 误当成 HTTP 状态。
+
+| 响应体 `code` | `data.status` | 含义 |
 |------|--------------|------|
 | 202 | `queued` \| `processing` | 还在队列里或处理中 |
 | 200 | `success` | 完成，`data` 含结果字段 |
@@ -109,7 +111,7 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户），或 `config
 | `?raw=calibrated\|summary\|transcript` | `text/plain; charset=utf-8` | 纯文本（推荐给 agent） |
 | `?page=calibrated\|summary\|transcript` | `text/html` | 爬虫友好 HTML |
 
-**HTTP code**
+**HTTP code（Raw 结果端点）**
 
 | HTTP | 含义 |
 |------|------|
@@ -117,6 +119,7 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户），或 `config
 | 202 | 任务仍在处理 |
 | 404 | view_token 无效 |
 | 410 | 结果已清理 |
+| 500 | 任务明确失败；CLI 将其归类为业务失败而不是网络故障 |
 
 **`type` 说明**
 
@@ -197,11 +200,13 @@ Query：`view_token=...`。返回摘要前 300 字（快速预览用）。
 {
   "code": 200,
   "data": {
-    "user_id": "...",
-    "api_key_masked": "sk-xxx***",
-    "wechat_webhook": "...",
-    "permissions": ["recalibrate", ...],
-    "multi_user_mode": true
+    "user_info": {
+      "user_id": "...",
+      "api_key": "sk-xxx***",
+      "wechat_webhook": "...",
+      "permissions": ["recalibrate"]
+    },
+    "is_multi_user_mode": true
   }
 }
 ```
@@ -244,6 +249,6 @@ curl -X POST "$BASE/api/transcribe" \
 # 查进度
 curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/task/$TASK_ID"
 
-# 拉总结（不需要 token）
+# 拉总结（不需要 Bearer token，但 VIEW_TOKEN 本身是分享凭证）
 curl -s "$BASE/view/$VIEW_TOKEN?raw=summary"
 ```

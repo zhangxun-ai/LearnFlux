@@ -5,7 +5,11 @@
     "api": {
         "port": 8000,                    // 服务监听端口
         "host": "0.0.0.0",               // 服务监听地址，0.0.0.0 表示所有网卡
-        "auth_token": "your-auth-token-here", // API 访问令牌
+        "auth_token": "your-auth-token-here", // API 访问令牌；浏览器只用它换取短期 HttpOnly 会话
+        "browser_local_auto_login": true, // 本机直连浏览器自动连接；远程、代理和多用户模式仍需口令
+        "browser_session_ttl_seconds": 28800, // 浏览器会话有效期，允许 300-86400 秒；服务重启后失效
+        "browser_session_cookie_secure": false, // HTTPS 请求会自动启用；TLS 代理未传递协议时设为 true
+        "cors_allowed_origins": [],       // 默认仅同源；跨域 Bearer API 前端需逐项填写完整 Origin，禁止 *
         "ui_lab_enabled": false           // 仅本地开发时显式开启 UI 实验区
     },
 
@@ -14,7 +18,7 @@
     // ============================================================
     "tikhub": {
         "api_key": "your-tikhub-api-key-here",  // TikHub API 密钥
-        "base_url": "https://api.tikhub.io",    // API 基础地址，国内网络可尝试 https://api.tikhub.dev
+        "base_url": "https://api.tikhub.io",    // TikHub API 基础地址
         "cache_enabled": true,           // 是否缓存成功的 TikHub JSON 响应，降低重复请求成本
         "cache_ttl_seconds": 21600,      // TikHub 响应缓存时长（秒），默认 6 小时
         "cache_dir": "./data/cache/tikhub", // TikHub 响应缓存目录
@@ -61,7 +65,9 @@
         "binary": "~/.venvs/mlx-whisper/bin/mlx_whisper",
         "model": "mlx-community/whisper-large-v3-turbo",
         "language": "",
-        "timeout": 1800
+        "timeout": 1800,                 // 最低处理时限（秒），长音频自动延长
+        "timeout_duration_factor": 1,    // 自动处理时限 / 音频时长
+        "max_timeout": 14400             // 自动延长最多 4 小时；不缩短显式 timeout
     },
 
     // ============================================================
@@ -76,7 +82,7 @@
         "model": "fun-asr-2025-11-07",
         "region": "cn-beijing",
         "price_cny_per_second": "0.00022",
-        "price_verified_at": "2026-08-23",
+        "price_verified_at": "2026-08-23", // 价格来源记录，过期不会阻断转录
         "poll_interval_seconds": 5,
         "poll_timeout_seconds": 3600
     },
@@ -210,6 +216,7 @@
         //         延迟和 token 成本会上升（思考模式），请按任务重要性选择级别。
         "summary_model": "deepseek-v4-flash",   // 总结使用的模型
         "summary_reasoning_effort": "high",     // 总结推理强度（v4-flash 下触发思考模式）
+        "summary_max_tokens": 32768,            // 输出上限（含思考），不是要求生成的长度
         "collection_summary_model": "deepseek-v4-pro",  // 全系列解读优先使用长上下文强模型
         "collection_summary_reasoning_effort": "high",  // 全系列解读推理强度
         "collection_summary_module_model": "deepseek-v4-flash", // 模块阶段优先快速模型，最终合并仍使用强模型

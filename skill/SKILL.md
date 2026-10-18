@@ -1,50 +1,12 @@
 ---
 name: learnflux
-description: 通过自部署的 LearnFlux 服务，把 YouTube、Bilibili、抖音、小红书、小宇宙播客等平台链接（或直接可访问的音视频直链 URL）转成 AI 校对过的文字稿与总结。当用户分享视频/播客链接并希望拿到文字版、总结、要点、逐字稿时必须使用，即使只是说"这个视频讲了啥"、"帮我听一下这期播客"、"给我这个节目的文字版"、"总结一下这个 B 站视频"、"小宇宙这期在聊什么"也要触发。同样用于查询过去提交过的转录任务历史（按平台、作者、关键词、日期过滤）。注意：服务只接受 URL（平台链接或直链），不支持上传本地文件；若用户想转本地录音，需先把文件放到可访问的 URL 后再提交。
+description: 通过自部署的 LearnFlux 服务，把 YouTube、Bilibili、抖音、小红书、小宇宙等视频或播客 URL 转成文字稿与总结。用户提供媒体 URL 并询问内容、要点、逐字稿或说话人观点时使用；也可查询此前通过 LearnFlux 提交的任务。本 Skill 只处理 URL，不上传本地文件，也不分析视频画面。
 metadata:
   openclaw:
     requires:
-      bins:
+      anyBins:
         - python3
         - python
-    env:
-      - name: VIDEO_TRANSCRIPT_API_BASE_URL
-        description: API 请求地址。通常填内网/tailnet/局域网地址，图的是低延迟。例：http://localhost:8000
-        required: true
-      - name: VIDEO_TRANSCRIPT_API_TOKEN
-        description: Bearer token，对应 config.jsonc 的 api.auth_token 或 users.json 中的 api_key
-        required: true
-      - name: VIDEO_TRANSCRIPT_API_PUBLIC_URL
-        description: 给用户点的公网地址（可选）。不设时用 BASE_URL。例：https://vt.example.com
-        required: false
-      - name: VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK
-        description: 企业微信 webhook 默认值（可选）。--webhook 传参时覆盖
-        required: false
-      - name: VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK
-        description: 飞书 webhook 默认值（可选）。--feishu-webhook 传参时覆盖
-        required: false
-  hermes:
-    required_environment_variables:
-      - name: VIDEO_TRANSCRIPT_API_BASE_URL
-        prompt: API 请求地址（内网优先），如 http://localhost:8000
-        help: 服务端监听地址，通常是内网/tailnet/局域网 IP，图的是低延迟
-      - name: VIDEO_TRANSCRIPT_API_TOKEN
-        prompt: Bearer token
-        help: 对应 config.jsonc 的 api.auth_token 或 users.json 中的 api_key
-      - name: VIDEO_TRANSCRIPT_API_PUBLIC_URL
-        prompt: 给用户点的公网地址（可选，回车跳过）
-        help: 不设时用 BASE_URL。服务端在内网但用户从公网看 /view/ 页面时需要
-        optional: true
-      - name: VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK
-        prompt: 企业微信 webhook（可选，回车跳过）
-        help: 设置后 submit 自动推送企微通知，--webhook 传参时覆盖
-        optional: true
-        required: false
-      - name: VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK
-        prompt: 飞书 webhook（可选，回车跳过）
-        help: 设置后 submit 自动推送飞书通知，--feishu-webhook 传参时覆盖
-        optional: true
-        required: false
 ---
 
 # LearnFlux Skill
@@ -65,29 +27,29 @@ metadata:
 - 音视频直链 —— `.mp3` / `.mp4` / `.m4a` / `.wav` 等公网可直接 GET 的 URL，走 `submit` 默认参数或 `--download-url`
 
 **不支持的场景**：
-- **上传本地文件** —— 服务端没有 multipart 上传端点。若用户拿着一个本地会议录音要转写，需先把文件放到可公网访问的 URL（OSS/S3/Dropbox 直链等）再调 `submit`。
+- **通过本 Skill 上传本地文件** —— LearnFlux 网页端另有本地上传能力，但这个可移植 Skill 刻意只处理 URL。用户可改用 LearnFlux 网页上传，或提供自己有权访问的 HTTP(S) 直链；不要要求用户把私密文件公开上传。
 - **视频画面理解** —— 本 skill 只做音轨转录+总结，不分析画面内容。
 
 ## 关键约束
 
-**任务是异步的，但 agent 应主动轮询交付结果。** 正确姿势：
+**任务是异步的，先交付查看入口，再做一次即时结果检查。** 正确姿势：
 
-1. 调 `submit`，脚本输出中会包含 `view_token` 和一条 `[url](url)` 格式的查看链接
-2. **第一步永远是发查看链接**：把脚本输出的查看链接原样复制，单独一条消息发给用户。**无论后续是否立即拿到结果，这一步都不能跳过**——链接是用户日后回看的永久入口
-3. 立即调 `result <view_token> --type summary`（可能命中缓存秒返回）
-4. 如果返回 202（还在处理），**每隔 1 分钟轮询一次**，最多轮询 10 次（覆盖 0–10 分钟）
-5. 返回 200 = 完成，把结果贴给用户；10 次仍未完成则告诉用户「还在处理中，可以点查看链接关注进度」
+1. 调 `submit <url> --format json`，保存输出中的 `view_token`、`task_id` 和 `view_url`
+2. 把 `view_url` 原样复制给用户，并说明页面会在完成后展示结果；不要向用户暴露内部 `task_id`
+3. 立即调 `result <view_token> --type summary --format json`，缓存命中时可直接交付总结
+4. `ready=true`：交付结果；`ready=false`：明确说明仍在处理，不要在 Agent 会话中无上限等待，也不要承诺当前运行环境无法保证的自动回访
+5. 只有用户明确要求等待、且当前运行环境允许可靠等待时，才进行有上限的退避重查；在超时前停止并保留查看链接
 
-**查看链接必须从脚本输出中原样复制，严禁自己拼接 URL。** 脚本输出的「查看链接」已经是正确的 `[url](url)` markdown 格式，直接复制发给用户即可。不要凭记忆重写域名或路径——LLM 重构 URL 极易拼错字母（如把 `lexgogo` 写成 `lexgugo`），导致链接失效。
+**查看链接必须从脚本输出中原样复制，不要自己拼接。** 该链接无需 Bearer Token 即可访问，相当于分享凭证：只发给提出请求的用户，不要写进公开日志、Issue 或示例。
 
 ## 环境变量
 
-skill 在调用时从环境读取，**不要**在对话里要求用户粘贴 token。
+skill 在调用时从环境或用户自己的 `~/.learnflux/agent.env` 读取，**不要**在对话里要求用户粘贴 token。
 
 | 变量 | 必填 | 用途 | 示例 |
 |------|-----|------|------|
 | `VIDEO_TRANSCRIPT_API_BASE_URL` | ✅ | 脚本发 API 请求用的地址 | `http://localhost:8000` / `http://100.68.21.80:8200`（tailnet）|
-| `VIDEO_TRANSCRIPT_API_TOKEN` | ✅ | Bearer token | `config.jsonc` 里 `api.auth_token` 或 `users.json` 的某个 key |
+| `VIDEO_TRANSCRIPT_API_TOKEN` | ✅ | Bearer token；优先独立用户 key | `users.json` 的某个 key；可信单用户环境可用 `api.auth_token` |
 | `VIDEO_TRANSCRIPT_API_PUBLIC_URL` | —  | 给用户点的**公网**地址，不设时用 BASE_URL | `https://vt.example.com` |
 | `VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK` | —  | 企业微信 webhook 默认值，`--webhook` 传参时覆盖 | `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx` |
 | `VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK` | —  | 飞书 webhook 默认值，`--feishu-webhook` 传参时覆盖 | `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
@@ -95,15 +57,16 @@ skill 在调用时从环境读取，**不要**在对话里要求用户粘贴 tok
 **为啥分两个地址**：服务端常跑在内网/tailnet（BASE_URL 用这个，请求最快），但用户拿 `/view/<token>` 链接可能从公网打开。配 PUBLIC_URL 后，skill 返回给用户的查看页面 URL 用公网域名拼，无论用户在哪张网都点得开。没配 PUBLIC_URL 的场景（纯本机 / 都在一张网内）行为不变。
 
 各平台配置方式：
+- **通用 / Codex**：推荐写入用户自己的 `~/.learnflux/agent.env`，Windows 对应 `C:\Users\<用户名>\.learnflux\agent.env`
 - **Claude Code**：写入 `~/.claude/settings.json` 的 `"env"` 字段（推荐，跨平台通用）；也可以写 shell profile 的 `export`，但 Windows 上 Git Bash 不一定会 source
-- **Hermes**：写入 `~/.hermes/.env`（`KEY=VALUE` 格式），或跑 `hermes setup` 交互式填入
-- **OpenClaw**：编辑 `~/.openclaw/openclaw.json`，在 `skills.entries.videotranscript-api.env` 下加这两三个
+- **Hermes**：写入 `~/.hermes/.env`（`KEY=VALUE` 格式），或使用通用私有配置文件
+- **OpenClaw**：优先使用通用私有配置文件；不要把 Token 写回 `SKILL.md`
 
-缺失必填变量时脚本会用 exit 3 和明确的 stderr 消息报错。
+首次配置后先运行 `doctor`。它只显示配置是否存在、服务是否连通和鉴权是否成功，不会输出 token。缺失必填变量时脚本会用 exit 3 和明确的 stderr 消息报错。
 
 ## 命令总览
 
-所有命令通过 `python3 <skill>/scripts/videotranscript.py <sub> ...` 调用，输出默认是 markdown，加 `--format json` 拿结构化结果。
+所有命令通过 `<python> <skill>/scripts/videotranscript.py <sub> ...` 调用。macOS/Linux 的 `<python>` 通常是 `python3`，Windows 通常是 `python`。输出默认是 markdown，加 `--format json` 拿结构化结果。
 
 **Windows 注意**：Windows 上 `python3` 是系统占位程序（只会打开 Microsoft Store），实际的 Python 命令是 `python`。如果 `python3` 执行失败（exit code 非 0/1/2/3），改用 `python` 重试。
 
@@ -121,6 +84,14 @@ python3 scripts/videotranscript.py submit <url> [options]
 - `--download-url URL`：绕过平台解析，用直链下载音视频
 
 返回 `view_token`（和 task_id，可忽略）。**只需要记住 `view_token`**，后续查进度和拉结果都用它。
+
+### doctor — 首次配置自检
+
+```bash
+python3 scripts/videotranscript.py doctor
+```
+
+出现 `READY` 代表服务地址、Token 和鉴权均可用。警告单 Token 管理模式或非本机明文 HTTP 时仍可继续，但只应在可信网络和设备中使用。
 
 #### 什么时候该加 `--speaker`
 
@@ -148,7 +119,7 @@ python3 scripts/videotranscript.py result <view_token> --type <summary|calibrate
 - `calibrated`：LLM 校对过的完整文字稿（去除 ASR 错别字、加标点、分段）
 - `transcript`：原始 ASR 输出（FunASR JSON 或 CapsWriter 纯文本，一般不用）
 
-任务还没完成时会返回 exit 0 + 一行提示"仍在处理中"；拿不到结果时返回 exit 1。
+任务还没完成时会返回 exit 0；JSON 输出中 `ready=false`，并附带原样的 `view_url`。任务明确失败或结果不存在时返回 exit 1。
 
 ### history — 查历史任务
 
@@ -173,8 +144,8 @@ Options：`--platform youtube`、`--author 作者名`、`--q 关键词`、`--sta
 2. 调 `submit https://www.bilibili.com/video/BVxxx`，脚本输出查看链接和 `view_token`
 3. **把脚本输出的查看链接原样复制，单独发一条消息给用户**
 4. 立即调 `result <view_token> --type summary`，如果命中缓存直接拿到结果
-5. 返回 202 → 每隔 1 分钟重试，直到拿到结果（最多 10 次）
-6. 拿到结果后把总结贴给用户
+5. `ready=false` → 告诉用户仍在处理，可直接打开查看链接；不要让当前会话无上限轮询
+6. `ready=true` → 把总结贴给用户
 
 **场景 B：查找最近转过的小宇宙节目**
 
@@ -213,13 +184,13 @@ curl -X POST "$BASE_URL/api/transcribe" \
 # 查任务状态（需要 token）
 curl -s -H "Authorization: Bearer $TOKEN" "$BASE_URL/api/task/$TASK_ID"
 
-# 拉总结（不需要 token）
+# 拉总结（不需要 Bearer token，但 VIEW_TOKEN 本身是分享凭证）
 curl -s "$BASE_URL/view/$VIEW_TOKEN?raw=summary"
 
-# 拉校对后全文（不需要 token）
+# 拉校对后全文（不需要 Bearer token，但 VIEW_TOKEN 本身是分享凭证）
 curl -s "$BASE_URL/view/$VIEW_TOKEN?raw=calibrated"
 
-# 拉原始转录（不需要 token）
+# 拉原始转录（不需要 Bearer token，但 VIEW_TOKEN 本身是分享凭证）
 curl -s "$BASE_URL/view/$VIEW_TOKEN?raw=transcript"
 
 # 历史查询（需要 token）

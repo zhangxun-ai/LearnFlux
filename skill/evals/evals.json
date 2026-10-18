@@ -1,18 +1,18 @@
 {
-  "skill_name": "videotranscript-api",
+  "skill_name": "learnflux",
   "evals": [
     {
       "id": 0,
       "name": "bilibili-single-speaker-summary",
       "prompt": "https://b23.tv/DBUt7OW 这个视频讲了啥",
-      "expected_output": "调 submit（不加 --speaker，单人 UP 主）。从脚本输出中原样复制查看链接，用单独一条消息发给用户（markdown [url](url) 格式）。记住 view_token，立即调 result 尝试拉结果，未完成则每分钟轮询。不暴露 task_id 给用户。",
+      "expected_output": "调 submit（不加 --speaker，单人 UP 主），优先使用 JSON 输出。从脚本输出中原样复制 view_url 发给用户，记住 view_token，立即调 result 检查一次。ready=false 时说明仍在处理并保留查看链接，不进行无上限轮询，也不暴露 task_id。",
       "files": []
     },
     {
       "id": 1,
       "name": "xiaoyuzhou-multiperson-speaker",
       "prompt": "https://www.xiaoyuzhoufm.com/episode/69e875e81d989496e73b7892 这期播客有几个人对谈，帮我整理成各个人的观点",
-      "expected_output": "识别多人对谈场景，调 submit 时加 --speaker。从脚本输出原样复制查看链接单独发送。用 view_token 轮询 result，完成后拉 summary 或 calibrated。",
+      "expected_output": "识别多人对谈场景，调 submit 时加 --speaker。从脚本输出原样复制 view_url 发送给用户，再用 view_token 检查 result；完成后按需求返回 summary 或 calibrated。",
       "files": []
     },
     {
@@ -26,7 +26,7 @@
       "id": 3,
       "name": "local-file-refuse",
       "prompt": "我这有个 meeting_20260401.mp3 本地录音文件，帮我转成文字",
-      "expected_output": "不调 submit。告诉用户服务不支持本地文件上传，需先放到可公网访问的 URL 再提交。",
+      "expected_output": "不调 submit。准确说明这个可移植 Skill 只处理 URL，但 LearnFlux 网页端支持本地上传；可引导用户使用网页上传，或提供自己有权访问的 HTTP(S) 直链。不要要求用户公开上传私密录音。",
       "files": []
     },
     {
@@ -38,9 +38,16 @@
     },
     {
       "id": 5,
-      "name": "proactive-polling",
+      "name": "bounded-async-handoff",
       "prompt": "https://www.youtube.com/watch?v=dQw4w9WgXcQ 帮我总结一下",
-      "expected_output": "submit 后立即调 result 尝试拉结果（可能命中缓存）。如果返回 202，每隔约 1 分钟自动重试，最多 10 次。不要让用户主动来问进度。最终把 summary 结果贴给用户。",
+      "expected_output": "submit 后立即原样交付 view_url，并调 result 检查一次（可能命中缓存）。ready=true 时返回 summary；ready=false 时说明仍在处理并让用户使用查看链接。只有用户明确要求等待且环境支持时才进行有上限的退避重查，不承诺无法保证的自动回访。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "safe-first-time-configuration",
+      "prompt": "我已经装了 LearnFlux skill，但不知道 API 地址和密钥应该填在哪里，你帮我配一下",
+      "expected_output": "说明把 BASE_URL 和 TOKEN 写入用户自己的 ~/.learnflux/agent.env 或平台私有配置，不要求用户把真实 token 粘贴进对话。配置后运行 doctor；doctor 只读检查且不显示 token。优先推荐 users.json 的独立用户 key，单用户管理口令只用于可信设备。",
       "files": []
     }
   ]

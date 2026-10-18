@@ -2,6 +2,7 @@
 """LearnFlux CLI client — stdlib-only, cross-platform.
 
 Subcommands:
+  doctor         Validate local configuration, connectivity, and authentication.
   submit         Submit a transcription task for a video/podcast URL.
   status         Check the status of a task by task_id.
   result         Fetch the finished text (calibrated/summary/transcript) by view_token.
@@ -26,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
 import textwrap
 from typing import Any
@@ -57,26 +59,36 @@ class BusinessError(Exception):
 _env_loaded = False
 
 
+def _env_file_paths() -> list[str]:
+    """Return supported user config files in precedence order."""
+    home = os.path.expanduser("~")
+    configured_path = os.environ.get("LEARNFLUX_AGENT_CONFIG")
+    paths = [
+        configured_path,
+        os.path.join(home, ".learnflux", "agent.env"),
+        os.path.join(home, ".hermes", ".env"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+    ]
+    return list(dict.fromkeys(path for path in paths if path))
+
+
 def _load_env_files() -> None:
     """从常见配置文件补全缺失的环境变量（不覆盖已有值）。
 
     按优先级依次尝试：
-    1. ~/.hermes/.env          — Hermes 的标准 env 存储
-    2. ~/.claude/settings.json — Claude Code 的 env 字段
-    3. 脚本同级目录的 .env    — 本地开发用
+    1. $LEARNFLUX_AGENT_CONFIG — 用户显式指定的配置文件
+    2. ~/.learnflux/agent.env  — 跨 Agent 的推荐配置位置
+    3. ~/.hermes/.env          — Hermes 的标准 env 存储
+    4. 脚本同级目录的 .env    — 本地开发用
+    5. ~/.claude/settings.json — Claude Code 的 env 字段
     """
     global _env_loaded
     if _env_loaded:
         return
     _env_loaded = True
 
-    home = os.path.expanduser("~")
-
     # .env 格式：KEY=VALUE（忽略注释和空行）
-    for env_path in [
-        os.path.join(home, ".hermes", ".env"),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
-    ]:
+    for env_path in _env_file_paths():
         if os.path.isfile(env_path):
             try:
                 with open(env_path, encoding="utf-8") as f:
@@ -95,6 +107,7 @@ def _load_env_files() -> None:
                 pass
 
     # Claude Code settings.json
+    home = os.path.expanduser("~")
     settings_path = os.path.join(home, ".claude", "settings.json")
     if os.path.isfile(settings_path):
         try:
@@ -117,15 +130,28 @@ def _require_env(name: str) -> str:
     val = os.environ.get(name)
     if not val:
         raise ConfigError(
-            f"环境变量 {name} 未设置。请在 Claude Code / Hermes / OpenClaw "
-            f"的对应配置中设置（参见 SKILL.md 的 Env 部分）。"
+            f"环境变量 {name} 未设置。请写入环境变量或 ~/.learnflux/agent.env，"
+            f"不要把密钥粘贴到 Agent 对话中；配置方法参见 skill/README.md。"
         )
     return val
 
 
+def _validate_http_url(value: str, label: str) -> str:
+    normalized = value.strip().rstrip("/")
+    parsed = urlparse.urlsplit(normalized)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ConfigError(f"{label} 必须是完整的 http:// 或 https:// URL。")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ConfigError(f"{label} 不能包含账号、密码、查询参数或片段。")
+    return normalized
+
+
 def _base_url() -> str:
     """API 调用用的地址。通常是内网/局域网/tailnet，优先保证低延迟。"""
-    return _require_env("VIDEO_TRANSCRIPT_API_BASE_URL").rstrip("/")
+    return _validate_http_url(
+        _require_env("VIDEO_TRANSCRIPT_API_BASE_URL"),
+        "VIDEO_TRANSCRIPT_API_BASE_URL",
+    )
 
 
 def _public_url() -> str:
@@ -134,9 +160,10 @@ def _public_url() -> str:
     场景：服务端实际跑在内网（如 tailnet / 局域网），但用户可能从公网打开 `/view/<token>` 页面。
     这时需要两个地址分离：API 请求走内网（快），给用户的链接用公网域名。
     """
+    _load_env_files()
     pub = os.environ.get("VIDEO_TRANSCRIPT_API_PUBLIC_URL")
     if pub:
-        return pub.rstrip("/")
+        return _validate_http_url(pub, "VIDEO_TRANSCRIPT_API_PUBLIC_URL")
     return _base_url()
 
 
@@ -154,6 +181,7 @@ def _request(
     query: dict | None = None,
     accept_text: bool = False,
     timeout: int = DEFAULT_TIMEOUT,
+    passthrough_statuses: tuple[int, ...] = (),
 ) -> tuple[int, Any]:
     """Send an HTTP request and return (status_code, parsed_body).
 
@@ -190,14 +218,14 @@ def _request(
     except urlerror.URLError as e:
         raise TransportError(f"网络错误: {e.reason}") from e
     except TimeoutError as e:
-        raise TransportError(f"请求超时 ({timeout}s): {url}") from e
+        raise TransportError(f"请求超时 ({timeout}s)。请检查服务地址和网络。") from e
 
     # Classify
     if status in (401, 403):
         raise TransportError(
             f"认证失败 (HTTP {status})。检查 VIDEO_TRANSCRIPT_API_TOKEN 是否正确。"
         )
-    if status >= 500:
+    if status >= 500 and status not in passthrough_statuses:
         snippet = raw[:500].decode("utf-8", errors="replace")
         raise TransportError(f"服务端错误 (HTTP {status}): {snippet}")
 
@@ -233,6 +261,163 @@ def _emit_markdown_kv(title: str, kv: dict[str, Any]) -> None:
 # ---------- Commands ----------
 
 
+def _emit_doctor(payload: dict[str, Any], output_format: str) -> None:
+    if output_format == "json":
+        _emit_json(payload)
+        return
+
+    print("# LearnFlux Doctor\n")
+    labels = {"ok": "OK", "warning": "WARN", "error": "ERROR"}
+    for check in payload["checks"]:
+        label = labels.get(check["status"], check["status"].upper())
+        detail = check.get("detail") or ""
+        print(f"- [{label}] {check['name']}: {detail}")
+    for warning in payload["warnings"]:
+        print(f"- [WARN] {warning['code']}: {warning['message']}")
+    print("\nREADY" if payload["ready"] else "\nNOT READY")
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Check configuration and connectivity without exposing credentials."""
+    checks: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+    payload: dict[str, Any] = {"ready": False, "checks": checks, "warnings": warnings}
+
+    try:
+        base_url = _base_url()
+        _require_env("VIDEO_TRANSCRIPT_API_TOKEN")
+        public_url = _public_url()
+    except ConfigError as exc:
+        checks.append({"name": "configuration", "status": "error", "detail": str(exc)})
+        _emit_doctor(payload, args.format)
+        return 3
+
+    checks.extend(
+        [
+            {"name": "base_url", "status": "ok", "detail": base_url},
+            {"name": "token", "status": "ok", "detail": "configured (value hidden)"},
+            {"name": "public_url", "status": "ok", "detail": public_url},
+        ]
+    )
+
+    parsed_base = urlparse.urlsplit(base_url)
+    if parsed_base.scheme == "http" and parsed_base.hostname not in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }:
+        warnings.append(
+            {
+                "code": "unencrypted_http",
+                "message": "Bearer tokens are visible on plain HTTP networks; prefer HTTPS or a trusted encrypted tunnel.",
+            }
+        )
+
+    if os.name != "nt":
+        for env_path in _env_file_paths():
+            if not os.path.isfile(env_path):
+                continue
+            try:
+                mode = stat.S_IMODE(os.stat(env_path).st_mode)
+            except OSError:
+                continue
+            if mode & 0o077:
+                warnings.append(
+                    {
+                        "code": "config_file_permissions",
+                        "message": f"Protect {env_path} with chmod 600.",
+                    }
+                )
+
+    try:
+        health_status, health_body = _request("GET", "/health", auth=False)
+    except TransportError as exc:
+        checks.append({"name": "health", "status": "error", "detail": str(exc)})
+        _emit_doctor(payload, args.format)
+        return 2
+    health_value = health_body.get("status") if isinstance(health_body, dict) else None
+    if health_status != 200:
+        checks.append(
+            {"name": "health", "status": "error", "detail": f"HTTP {health_status}"}
+        )
+        _emit_doctor(payload, args.format)
+        return 2
+    checks.append(
+        {
+            "name": "health",
+            "status": "ok" if health_value != "degraded" else "warning",
+            "detail": str(health_value or f"HTTP {health_status}"),
+        }
+    )
+
+    try:
+        profile_status, profile_body = _request("GET", "/api/users/profile")
+    except TransportError as exc:
+        checks.append({"name": "authentication", "status": "error", "detail": str(exc)})
+        _emit_doctor(payload, args.format)
+        return 2
+    if not isinstance(profile_body, dict):
+        checks.append(
+            {
+                "name": "authentication",
+                "status": "error",
+                "detail": "profile response is not JSON",
+            }
+        )
+        _emit_doctor(payload, args.format)
+        return 2
+    profile_code = profile_body.get("code")
+    if profile_status != 200 or profile_code not in (None, 200):
+        checks.append(
+            {
+                "name": "authentication",
+                "status": "error",
+                "detail": f"HTTP {profile_status}, code={profile_code}",
+            }
+        )
+        _emit_doctor(payload, args.format)
+        return 2
+
+    profile_data = profile_body.get("data") or {}
+    if not isinstance(profile_data, dict):
+        checks.append(
+            {
+                "name": "authentication",
+                "status": "error",
+                "detail": "profile data has an invalid shape",
+            }
+        )
+        _emit_doctor(payload, args.format)
+        return 2
+    user_info = profile_data.get("user_info") or {}
+    if not isinstance(user_info, dict):
+        user_info = {}
+    checks.append(
+        {
+            "name": "authentication",
+            "status": "ok",
+            "detail": f"user={user_info.get('user_id') or 'unknown'}",
+        }
+    )
+    if (
+        not profile_data.get("is_multi_user_mode")
+        or user_info.get("user_id") == "legacy_user"
+    ):
+        warnings.append(
+            {
+                "code": "legacy_admin_token",
+                "message": (
+                    "This is the single-token admin mode. Keep the token on trusted "
+                    "devices and never publish it."
+                ),
+            }
+        )
+
+    payload["ready"] = True
+    _emit_doctor(payload, args.format)
+    return 0
+
+
 def cmd_submit(args: argparse.Namespace) -> int:
     body: dict[str, Any] = {"url": args.url}
     if args.speaker:
@@ -240,7 +425,9 @@ def cmd_submit(args: argparse.Namespace) -> int:
     webhook = args.webhook or os.environ.get("VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK")
     if webhook:
         body["wechat_webhook"] = webhook
-    feishu_webhook = args.feishu_webhook or os.environ.get("VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK")
+    feishu_webhook = args.feishu_webhook or os.environ.get(
+        "VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK"
+    )
     if feishu_webhook:
         body["feishu_webhook"] = feishu_webhook
     if args.download_url:
@@ -255,9 +442,14 @@ def cmd_submit(args: argparse.Namespace) -> int:
     if meta:
         body["metadata_override"] = meta
 
-    status, resp = _request("POST", "/api/transcribe", json_body=body)
+    status, resp = _request(
+        "POST",
+        "/api/transcribe",
+        json_body=body,
+        passthrough_statuses=(503,),
+    )
 
-    if status == 400:
+    if status in (400, 409, 422):
         raise BusinessError(f"请求参数有误: {resp}")
     if status == 404:
         raise BusinessError(f"资源不存在: {resp}")
@@ -342,8 +534,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     data = (resp or {}).get("data") or {}
     message = (resp or {}).get("message") or ""
 
-    # 服务端语义：HTTP 200 = 成功（data 含 transcript 等），HTTP 202 = 队列中/处理中，
-    # HTTP 500 = 失败。`data` 在成功时不含 status 字段，需按 HTTP code 推断。
+    # 当前服务通常以 HTTP 200 返回查询结果，任务状态以 data.status 为准。
+    # 为兼容旧部署，仍保留对 HTTP 202/500 的合理回退。
     if status == 200:
         task_status = data.get("status") or "success"
     elif status == 202:
@@ -414,16 +606,26 @@ def cmd_result(args: argparse.Namespace) -> int:
         auth=False,
         query={"raw": args.type},
         accept_text=True,
+        passthrough_statuses=(500,),
     )
 
     if status == 404:
-        raise BusinessError(f"view_token 无效或已过期: {args.view_token}")
+        raise BusinessError("view_token 无效或已过期。")
     if status == 410:
         raise BusinessError("结果已被清理 (HTTP 410)。原始文件已从服务器删除。")
+    if status == 500:
+        raise BusinessError("任务处理失败。请打开查看链接确认原因，修正后再重新提交。")
     if status == 202:
         # Still processing — surface to caller with exit 0 and a hint
         if args.format == "json":
-            _emit_json({"ready": False, "http_status": 202, "text": text})
+            _emit_json(
+                {
+                    "ready": False,
+                    "http_status": 202,
+                    "view_url": f"{_public_url()}/view/{args.view_token}",
+                    "text": text,
+                }
+            )
         else:
             print("任务仍在处理中 (HTTP 202)。稍后再拉一次。")
         return 0
@@ -434,7 +636,14 @@ def cmd_result(args: argparse.Namespace) -> int:
         raise BusinessError(f"结果为空 (type={args.type})。可能是该类型未生成。")
 
     if args.format == "json":
-        _emit_json({"ready": True, "type": args.type, "text": text})
+        _emit_json(
+            {
+                "ready": True,
+                "type": args.type,
+                "view_url": f"{_public_url()}/view/{args.view_token}",
+                "text": text,
+            }
+        )
     else:
         print(text)
     return 0
@@ -552,6 +761,11 @@ def _build_parser() -> argparse.ArgumentParser:
             default="markdown",
             help="输出格式，默认 markdown。JSON 适合程序消费。",
         )
+
+    # doctor
+    sp = sub.add_parser("doctor", help="验证配置、连通性和鉴权（不会显示 token）")
+    add_format(sp)
+    sp.set_defaults(func=cmd_doctor)
 
     # submit
     sp = sub.add_parser("submit", help="提交转录任务")

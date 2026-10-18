@@ -1,6 +1,6 @@
 # LearnFlux skill
 
-把 [LearnFlux](../README.md) 封装为一个 **agentskills.io 标准 skill**，让下游 agent（Claude Code / OpenClaw / Hermes 等）能直接调用它做视频/播客转录、总结、历史检索。
+把 [LearnFlux](../README.md) 的「视频、播客 URL 转录与总结」封装为一个 **Agent Skills 标准 Skill**。它只复用现有 HTTP API 和无依赖 Python CLI，不包含 MCP，不复制 LearnFlux 的业务逻辑。
 
 这份 README 面向**部署 skill 的人**。skill 本身的使用逻辑在 [`SKILL.md`](./SKILL.md) 里，由 agent 自己读。
 
@@ -16,72 +16,77 @@ skill/
 ├── references/
 │   └── api.md                   # 完整 API 端点参考（按需加载）
 ├── evals/
-│   └── evals.json               # 5 条回归测试 prompt
+│   └── evals.json               # 7 条核心行为回归 prompt
 └── README.md                    # 本文件
 ```
 
 ## 先决条件
 
-- **Python 3.9+**（脚本只用 stdlib，不需要 pip install 任何东西）
+- **Python 3.10+**（脚本只用 stdlib，不需要 pip install 任何东西）
 - **一个可访问的 LearnFlux 实例**（本仓库根目录的服务，跑起来后监听 `:8000`，或走你的自部署地址）
-- **Bearer Token**：`config/config.jsonc` 的 `api.auth_token`，或多用户模式下 `config/users.json` 里某个 key
+- **Bearer Token**：优先使用多用户模式下 `config/users.json` 里的独立 key；可信的单用户环境也兼容 `config/config.jsonc` 的 `api.auth_token`
 
 ## 环境变量
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
 | `VIDEO_TRANSCRIPT_API_BASE_URL` | ✅ | **API 请求地址**。内网/tailnet/局域网优先，延迟低。如 `http://localhost:8000` / `http://100.68.21.80:8200` |
-| `VIDEO_TRANSCRIPT_API_TOKEN` | ✅ | Bearer token（`config.jsonc` 的 `api.auth_token` 或 `users.json` 里的 key）|
+| `VIDEO_TRANSCRIPT_API_TOKEN` | ✅ | Bearer token。优先使用 `users.json` 的独立 key；不要提交到 Git 或粘贴进 Agent 对话 |
 | `VIDEO_TRANSCRIPT_API_PUBLIC_URL` | — | **给用户点的公网地址**（可选）。不设时用 BASE_URL。如 `https://vt.example.com` |
 | `VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK` | — | **企业微信 webhook 默认值**（可选）。设置后 submit 自动带上，`--webhook` 传参时覆盖。如 `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx` |
 | `VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK` | — | **飞书 webhook 默认值**（可选）。设置后 submit 自动带上，`--feishu-webhook` 传参时覆盖。如 `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
 
 **为什么分两个地址**：API 请求追求低延迟，通常走内网；但返给用户的 `/view/<token>` 链接需要能从公网打开。配了 PUBLIC_URL 后，`submit` / `status` / `history` 打印给用户的链接会自动用公网域名拼。
 
-脚本运行时会从环境读取。必填变量缺失 → `exit 3` + stderr 明确提示。
+脚本不会打印 Token。它按以下顺序补全尚未设置的变量：显式环境变量 → `LEARNFLUX_AGENT_CONFIG` 指向的文件 → `~/.learnflux/agent.env` → Hermes/Claude Code 的已有配置。必填变量缺失时返回 exit 3。
+
+### 推荐的跨平台配置
+
+在用户目录创建 `.learnflux/agent.env`：
+
+- macOS：`/Users/<用户名>/.learnflux/agent.env`
+- Linux：`/home/<用户名>/.learnflux/agent.env`
+- Windows：`C:\Users\<用户名>\.learnflux\agent.env`
+
+```dotenv
+VIDEO_TRANSCRIPT_API_BASE_URL=http://127.0.0.1:8000
+VIDEO_TRANSCRIPT_API_TOKEN=<只在本机填写，不要发给 Agent>
+VIDEO_TRANSCRIPT_API_PUBLIC_URL=
+```
+
+macOS/Linux 再执行 `chmod 600 ~/.learnflux/agent.env`。Windows 将文件保留在自己的用户目录，不要放入同步盘或公开项目。
+
+配置后先运行只读自检：
+
+```bash
+# macOS / Linux
+python3 skill/scripts/videotranscript.py doctor
+
+# Windows PowerShell
+python skill/scripts/videotranscript.py doctor
+```
+
+看到 `READY` 代表地址、服务和鉴权均可用。`doctor` 不提交转录任务，也不会产生转录费用。
 
 ## 各平台部署
+
+### Codex
+
+把 `skill/` 中的内容安装到 `$HOME/.agents/skills/learnflux/`，然后使用上面的 `~/.learnflux/agent.env` 配置。安装完成后运行 `doctor`；若 Skill 没有立即出现，再重启 Codex。不要在安装提示词里填写真实 Token。
 
 ### Claude Code
 
 1. 把整个 `skill/` 目录放到你的 skill 索引路径下（常见路径：`~/.claude/skills/learnflux/`），或者直接保留在本仓库里用本地路径引用。
-2. 配置环境变量（推荐方式：写入 `~/.claude/settings.json` 的 `env` 字段，跨平台通用）：
-   ```json
-   {
-     "env": {
-       "VIDEO_TRANSCRIPT_API_BASE_URL": "http://your-server:8000",
-       "VIDEO_TRANSCRIPT_API_TOKEN": "sk-xxx...",
-       "VIDEO_TRANSCRIPT_API_PUBLIC_URL": "https://vt.example.com",
-       "VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx",
-       "VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK": "https://open.feishu.cn/open-apis/bot/v2/hook/xxx"
-     }
-   }
-   ```
-   也可以用传统方式写入 shell profile（`.zshrc` / `.bashrc`）的 `export` 语句，但 Windows 上不推荐（Git Bash 不一定会 source）。
+2. 推荐使用上面的 `~/.learnflux/agent.env`。已有用户继续使用 `~/.claude/settings.json` 的 `env` 字段也兼容，无需迁移。
 
-**首次安装 prompt**（复制后把 `<...>` 占位符换成实际值）：
+**首次安装 prompt（不包含密钥）**：
 
 ```
 帮我安装 LearnFlux skill。
 
 1. 把 https://github.com/zhangxun-ai/LearnFlux.git 仓库里的 skill/ 目录复制到 ~/.claude/skills/learnflux/
-2. 在 ~/.claude/settings.json 中配置环境变量（跨平台通用，不依赖 shell）：
-   在 JSON 顶层加一个 "env" 字段（如果已有则合并进去）：
-   {
-     "env": {
-       "VIDEO_TRANSCRIPT_API_BASE_URL": "<API 服务地址>",
-       "VIDEO_TRANSCRIPT_API_TOKEN": "<Bearer token>",
-       "VIDEO_TRANSCRIPT_API_PUBLIC_URL": "<公网地址，可选，不设时用 BASE_URL>",
-       "VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK": "<企微 webhook，可选>",
-       "VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK": "<飞书 webhook，可选>"
-     }
-   }
-   注意：不要覆盖 settings.json 里已有的其他配置，只合并 env 部分。
-3. 验证连通性：
-   - 先试 python3（macOS/Linux）或 python（Windows）运行：
-     python3 ~/.claude/skills/learnflux/scripts/videotranscript.py health
-   - 如果 python 不可用，用 curl 验证：
-     curl -s <API 服务地址>/health
+2. 不要向我索要、读取或回显任何 API Token，也不要修改我已有的环境变量。
+3. 安装后运行 videotranscript.py --help，告诉我应当手动创建的 ~/.learnflux/agent.env 路径和 doctor 验证命令。
 
 注意：Windows 上 python3 命令是微软商店占位程序，会直接失败。请用 python 代替。
 ```
@@ -89,54 +94,45 @@ skill/
 **更新 prompt**（skill 已安装，只需拉最新代码）：
 
 ```
-更新 LearnFlux skill：从 https://github.com/zhangxun-ai/LearnFlux.git 拉取最新的 skill/ 目录，覆盖到 ~/.claude/skills/learnflux/。环境变量不用动。更新后跑 health 验证。
+更新 LearnFlux skill：从 https://github.com/zhangxun-ai/LearnFlux.git 拉取最新的 skill/ 目录，覆盖到 ~/.claude/skills/learnflux/。环境变量不用动。更新后跑 doctor 验证。
 ```
 
 ### Hermes
 
 1. 把 `skill/` 同步到 Hermes skill 目录（`~/.hermes/skills/learnflux/`）。
-2. 环境变量写入 `~/.hermes/.env`（Hermes 的标准持久化方式，每次 skill 执行时自动注入）。也可以跑 `hermes setup`，会根据 SKILL.md frontmatter 里的 `required_environment_variables` 交互式提示填值。
+2. 使用上面的通用私有配置文件；已有用户也可继续把变量写入 `~/.hermes/.env`。
 
-**首次安装 prompt**（复制后把 `<...>` 占位符换成实际值）：
+**首次安装 prompt（不包含密钥）**：
 
 ```
 帮我安装 LearnFlux skill。
 
 1. 把 https://github.com/zhangxun-ai/LearnFlux.git 仓库里的 skill/ 目录复制到 ~/.hermes/skills/learnflux/
-2. 在 ~/.hermes/.env 文件中追加以下环境变量（如果文件不存在就创建，注意不要覆盖已有内容）：
-   VIDEO_TRANSCRIPT_API_BASE_URL=<API 服务地址，内网优先>
-   VIDEO_TRANSCRIPT_API_TOKEN=<Bearer token>
-   VIDEO_TRANSCRIPT_API_PUBLIC_URL=<公网地址，可选，不设时用 BASE_URL>
-   VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK=<企微 webhook，可选>
-   VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK=<飞书 webhook，可选>
-3. 验证连通性：先试 python3 跑 health 命令，python3 不可用则用 python，都不行就用 curl <API 服务地址>/health
+2. 不要向我索要、读取或回显任何 API Token，也不要修改我已有的环境变量。
+3. 安装后运行 videotranscript.py --help，告诉我应当手动创建的 ~/.learnflux/agent.env 路径和 doctor 验证命令。
 ```
 
 **更新 prompt**（skill 已安装，只需拉最新代码）：
 
 ```
-更新 LearnFlux skill：从 https://github.com/zhangxun-ai/LearnFlux.git 拉取最新的 skill/ 目录，覆盖到 Hermes 的 skill 目录下的 learnflux/。环境变量不用动。更新后跑 health 验证。
+更新 LearnFlux skill：从 https://github.com/zhangxun-ai/LearnFlux.git 拉取最新的 skill/ 目录，覆盖到 Hermes 的 skill 目录下的 learnflux/。环境变量不用动。更新后跑 doctor 验证。
 ```
 
 ### OpenClaw
 
-1. 把 `skill/` 放到 OpenClaw 读取的 skill 目录。
-2. 编辑 `~/.openclaw/openclaw.json`，在 `skills.entries.videotranscript-api.env` 下加入两个变量。如果你的 agent 跑在 sandbox 里，同时在 `agents.defaults.sandbox.docker.env` 里重复一次。
+1. 默认个人范围可把 `skill/` 内容放到 `~/.agents/skills/learnflux/`；也可在仓库根目录运行 `openclaw skills install ./skill --as learnflux` 安装到当前 workspace。
+2. 使用上面的通用私有配置文件。不要把 Token 写入 `SKILL.md` 或提交到 Git。
 
-## 烟测
+## 安全烟测
 
 配好环境变量后：
 
 ```bash
-# 探活（无需 token 就能跑，但会读 BASE_URL）
-python3 skill/scripts/videotranscript.py health
-
-# 查当前 token 对应的用户
-python3 skill/scripts/videotranscript.py profile
-
-# 提交一个测试任务（幂等：同一 URL 会命中缓存秒返回）
-python3 skill/scripts/videotranscript.py submit https://b23.tv/DBUt7OW
+# 只读检查，不提交任务、不显示 token
+python3 skill/scripts/videotranscript.py doctor
 ```
+
+不要为了烟测提交仓库里的固定示例 URL：缓存状态无法保证，可能触发真实下载、ASR 或 LLM 成本。只有用户提供并明确要求处理 URL 时才运行 `submit`。
 
 退出码语义：
 
@@ -151,6 +147,7 @@ python3 skill/scripts/videotranscript.py submit https://b23.tv/DBUt7OW
 
 | 子命令 | 作用 |
 |--------|------|
+| `doctor` | 只读检查配置、服务和鉴权，不显示 token |
 | `submit <url>` | 提交转录任务，返回查看链接（agent 内部记录 task_id 用于后续查询） |
 | `status <task_id>` | 查任务状态（agent 内部使用），success 时自动附带 view_token |
 | `result <view_token>` | 拉结果文本（`--type summary`/`calibrated`/`transcript`） |
@@ -163,13 +160,13 @@ python3 skill/scripts/videotranscript.py submit https://b23.tv/DBUt7OW
 
 ## 更新与测试
 
-修改 `scripts/videotranscript.py` 或 `SKILL.md` 后，用 `evals/evals.json` 里的 5 条 prompt 回归：
+修改 `scripts/videotranscript.py` 或 `SKILL.md` 后，用 `evals/evals.json` 里的 7 条 prompt 回归：
 
 ```bash
 # 跟真实服务端对打的烟测
 export VIDEO_TRANSCRIPT_API_BASE_URL=...
 export VIDEO_TRANSCRIPT_API_TOKEN=...
-python3 skill/scripts/videotranscript.py health && echo OK
+python3 skill/scripts/videotranscript.py doctor
 ```
 
 完整 agent 行为测试（带/不带 skill 对比）见 skill-creator 框架：跑完会在 `skill-workspace/iteration-N/` 输出每个 case 的 `response.md` 和 `benchmark.md`。
@@ -177,7 +174,7 @@ python3 skill/scripts/videotranscript.py health && echo OK
 ## 设计要点
 
 - **stdlib-only**：脚本零依赖，`python3` 有就能跑
-- **env 驱动**：不在 skill 里硬编码地址或 token，每个下游平台按自己的规范注入
+- **安全配置**：不在 Skill、命令行参数或对话中硬编码 Token；跨 Agent 共享用户私有配置文件
 - **异步不阻塞**：`submit` 立返查看链接，不在 agent 会话里 poll 十几分钟
 - **闭环优先**：`status` 自动反查 view_token，agent 内部用 task_id 闭环到 result，不用反问用户
 - **用户友好**：用户只看到查看链接，task_id 等内部标识不暴露

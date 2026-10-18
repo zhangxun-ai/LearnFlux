@@ -121,3 +121,30 @@ def test_collection_create_and_list_use_authenticated_owner(monkeypatch):
     assert listed.status_code == 200
     assert service.create_collection.call_args.kwargs["owner_user_id"] == "user-a"
     assert service.list_collections.call_args.kwargs["owner_user_id"] == "user-a"
+
+
+def test_collection_list_supports_keyword_and_load_more(monkeypatch):
+    from video_transcript_api.api.routes import collections
+
+    service = MagicMock()
+    service.list_collections.return_value = [
+        {"id": "c1"},
+        {"id": "c2"},
+        {"id": "c3"},
+    ]
+    monkeypatch.setattr(collections, "get_collection_service", lambda: service)
+    client = TestClient(_collection_app())
+
+    response = client.get(
+        "/api/collections",
+        params={"q": "创业", "creator_name": "Alice", "limit": 2, "offset": 4},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert [item["id"] for item in data["collections"]] == ["c1", "c2"]
+    assert data["has_more"] is True
+    assert service.list_collections.call_args.kwargs["title_query"] == "创业"
+    assert service.list_collections.call_args.kwargs["creator_name"] == "Alice"
+    assert service.list_collections.call_args.kwargs["limit"] == 3
+    assert service.list_collections.call_args.kwargs["offset"] == 4

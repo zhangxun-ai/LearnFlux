@@ -257,7 +257,8 @@ def test_collection_selected_incremental_and_force_resolve_correct_sources(
     assert calls[0].args == ("u1", "c1", ["s2"])
     assert calls[1].args == ("u1", "c1", None)
     assert calls[2].args == ("u1", "c1", None)
-    assert calls[3].args == ("u1", "c1", None)
+    assert calls[3].args == ("u1", "c1", ["s1"])
+    assert calls[4].args == ("u1", "c1", None)
     assert sync.preview.call_args_list[1].kwargs["force"] is False
     assert sync.preview.call_args_list[2].kwargs["force"] is True
     assert sync.apply.call_args.kwargs["force"] is True
@@ -265,7 +266,7 @@ def test_collection_selected_incremental_and_force_resolve_correct_sources(
     assert incremental.json()["data"]["counts"]["unchanged"] == 1
     assert applied.json()["data"]["counts"] == {"created": 1}
     assert applied.json()["data"]["unavailable"][0]["code"] == "analysis_not_ready"
-    assert invalid_force.status_code == 422
+    assert invalid_force.status_code == 200
 
 
 def test_ownership_failures_are_hidden_as_404(monkeypatch, tmp_path):
@@ -281,3 +282,44 @@ def test_ownership_failures_are_hidden_as_404(monkeypatch, tmp_path):
         "/api/obsidian/knowledge/single/other/binding"
     )
     assert response.status_code == 404
+
+
+def test_directory_list_reads_current_vault_and_disables_cache(monkeypatch, tmp_path):
+    _runtime(monkeypatch, tmp_path)
+    vault = tmp_path / "vault"
+    client = TestClient(_app())
+    old = vault / "old-folder"
+    old.mkdir()
+    assert "old-folder" in client.get("/api/obsidian/directories").json()["data"]["items"]
+    old.rename(vault / "new-folder")
+    response = client.get("/api/obsidian/directories")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["data"]["knowledge_sync_version"] == 2
+    assert "new-folder" in response.json()["data"]["items"]
+    assert "old-folder" not in response.json()["data"]["items"]
+
+
+def test_target_directory_and_document_selection_reach_service_and_resolver(monkeypatch, tmp_path):
+    _repo, sync, resolver, _recommender, _binding = _runtime(monkeypatch, tmp_path)
+    client = TestClient(_app())
+    response = client.post("/api/obsidian/knowledge/single/view-1/preview", json={
+        "target_directory": "新目录/课程", "document_types": ["analysis"]
+    })
+    assert response.status_code == 200
+    assert sync.preview.call_args.kwargs["target_directory"] == "新目录/课程"
+    assert sync.preview.call_args.kwargs["document_types"] == ["analysis"]
+    assert resolver.resolve_single.call_args.kwargs["document_types"] == ["analysis"]
+    for selection in ([], ["invalid"]):
+        assert client.post("/api/obsidian/knowledge/single/view-1/preview",
+                           json={"document_types": selection}).status_code == 422
+
+
+def test_binding_without_legacy_raw_categories_can_be_saved(monkeypatch, tmp_path):
+    _runtime(monkeypatch, tmp_path)
+    client = TestClient(_app())
+    response = client.put("/api/obsidian/knowledge/collections/c1/binding",
+                          json={"category": "知识", "collection_directory": ""})
+    assert response.status_code == 200
+    unsafe = client.put("/api/obsidian/knowledge/collections/c1/binding",
+                        json={"category": "../outside"})
+    assert unsafe.status_code == 400

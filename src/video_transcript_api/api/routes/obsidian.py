@@ -6,9 +6,9 @@ import os
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, model_validator
 
@@ -33,6 +33,7 @@ from ...obsidian.paths import (
     ManagedFileConflict,
     VaultPathError,
     create_vault_directory,
+    build_knowledge_directory,
     list_raw_categories,
     list_vault_directories,
 )
@@ -57,17 +58,19 @@ class KnowledgeBindingRequest(BaseModel):
 
 class KnowledgePreviewRequest(BaseModel):
     force: bool = False
+    target_directory: str | None = Field(default=None, max_length=1000)
+    document_types: list[Literal["raw", "analysis"]] = Field(
+        default_factory=lambda: ["raw", "analysis"], min_length=1, max_length=2
+    )
 
 
-class KnowledgeCollectionSelectionRequest(BaseModel):
+class KnowledgeCollectionSelectionRequest(KnowledgePreviewRequest):
     source_ids: list[str] | None = None
     sync_all: bool = False
     force: bool = False
 
     @model_validator(mode="after")
     def validate_selection(self):
-        if self.force and not self.sync_all:
-            raise ValueError("force_requires_sync_all")
         if not self.sync_all and not self.source_ids:
             raise ValueError("source_ids_required")
         if self.source_ids is not None:
@@ -236,11 +239,11 @@ def _recommendation_data(
     }
 
 
-def _resolve_single(user_info: dict, view_token: str):
+def _resolve_single(user_info: dict, view_token: str, document_types=("raw", "analysis")):
     _require_owned_single_content(view_token, user_info)
     try:
         return get_obsidian_source_resolver().resolve_single(
-            user_info.get("user_id") or "", view_token
+            user_info.get("user_id") or "", view_token, document_types=document_types
         )
     except KnowledgeContentNotReady as exc:
         raise HTTPException(
@@ -252,6 +255,7 @@ def _resolve_collection(
     user_info: dict,
     collection_id: str,
     source_ids: list[str] | None,
+    document_types=("raw", "analysis"),
 ):
     _require_owned_collection(collection_id, user_info)
     try:
@@ -259,6 +263,7 @@ def _resolve_collection(
             user_info.get("user_id") or "",
             collection_id,
             source_ids,
+            document_types=document_types,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -310,19 +315,13 @@ def _save_binding(
     request: KnowledgeBindingRequest,
     settings: dict,
 ) -> dict[str, Any]:
-    if request.category not in _categories(settings):
-        raise HTTPException(
-            status_code=409, detail={"code": "invalid_category"}
-        )
     collection_directory = request.collection_directory.strip()
-    if scope_type == "collection" and not collection_directory:
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "collection_directory_required"},
-        )
     if scope_type == "single":
         collection_directory = ""
     try:
+        build_knowledge_directory(
+            root="raw", category=request.category, collection_directory=collection_directory
+        )
         return get_obsidian_knowledge_repository().save_binding(
             user_info.get("user_id") or "",
             scope_type,
@@ -374,7 +373,11 @@ def _map_sync_conflict(exc: Exception) -> HTTPException:
         return HTTPException(
             status_code=409, detail={"code": "managed_identity_conflict"}
         )
-    if isinstance(exc, (VaultPathError, OSError)):
+    if isinstance(exc, VaultPathError):
+        return HTTPException(
+            status_code=400, detail={"code": "invalid_vault_path"}
+        )
+    if isinstance(exc, OSError):
         return HTTPException(
             status_code=409, detail={"code": "vault_unavailable"}
         )
@@ -565,7 +568,7 @@ async def preview_knowledge_single(
     user_info: dict = Depends(verify_token),
 ):
     settings = _configured_settings()
-    item = _resolve_single(user_info, view_token)
+    item = _resolve_single(user_info, view_token, request.document_types)
     binding = _required_binding(
         owner_user_id=user_info.get("user_id") or "",
         scope_type="single",
@@ -574,7 +577,8 @@ async def preview_knowledge_single(
     )
     try:
         data = get_obsidian_knowledge_service().preview(
-            items=[item], binding=binding, force=request.force
+            items=[item], binding=binding, force=request.force,
+            target_directory=request.target_directory, document_types=request.document_types
         )
     except Exception as exc:
         raise _map_sync_conflict(exc)
@@ -593,7 +597,7 @@ async def apply_knowledge_single(
     user_info: dict = Depends(verify_token),
 ):
     settings = _configured_settings()
-    item = _resolve_single(user_info, view_token)
+    item = _resolve_single(user_info, view_token, request.document_types)
     binding = _required_binding(
         owner_user_id=user_info.get("user_id") or "",
         scope_type="single",
@@ -610,6 +614,7 @@ async def apply_knowledge_single(
                 for condition in request.preconditions
             ],
             force=request.force,
+            target_directory=request.target_directory, document_types=request.document_types,
         )
     except Exception as exc:
         raise _map_sync_conflict(exc)
@@ -632,6 +637,7 @@ async def preview_knowledge_collection(
         user_info,
         collection_id,
         None if request.sync_all else request.source_ids,
+        request.document_types,
     )
     del collection
     binding = _required_binding(
@@ -642,7 +648,8 @@ async def preview_knowledge_collection(
     )
     try:
         data = get_obsidian_knowledge_service().preview(
-            items=items, binding=binding, force=request.force
+            items=items, binding=binding, force=request.force,
+            target_directory=request.target_directory, document_types=request.document_types
         )
     except Exception as exc:
         raise _map_sync_conflict(exc)
@@ -667,6 +674,7 @@ async def apply_knowledge_collection(
         user_info,
         collection_id,
         None if request.sync_all else request.source_ids,
+        request.document_types,
     )
     binding = _required_binding(
         owner_user_id=user_info.get("user_id") or "",
@@ -684,6 +692,7 @@ async def apply_knowledge_collection(
                 for condition in request.preconditions
             ],
             force=request.force,
+            target_directory=request.target_directory, document_types=request.document_types,
         )
     except Exception as exc:
         raise _map_sync_conflict(exc)
@@ -728,11 +737,13 @@ async def get_obsidian_status(
 
 @router.get("/directories", response_model=TranscribeResponse)
 async def get_obsidian_directories(
+    response: Response,
     root: str = Query("vault", pattern="^(raw|vault)$"),
     q: str = Query("", max_length=160),
     _user_info: dict = Depends(verify_token),
 ):
     settings = _configured_settings()
+    response.headers["Cache-Control"] = "no-store"
     try:
         directories = list_vault_directories(
             settings["vault_path"], root=root, query=q
@@ -744,7 +755,7 @@ async def get_obsidian_directories(
     return TranscribeResponse(
         code=200,
         message="Obsidian directories",
-        data={"items": directories},
+        data={"items": directories, "knowledge_sync_version": 2},
     )
 
 

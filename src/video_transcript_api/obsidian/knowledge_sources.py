@@ -38,7 +38,7 @@ class ObsidianKnowledgeSourceResolver:
         self.collection_service = collection_service
         self.verify_single = verify_single
 
-    def resolve_single(self, owner_user_id: str, view_token: str) -> KnowledgeItem:
+    def resolve_single(self, owner_user_id: str, view_token: str, *, document_types: Sequence[str] = ("raw", "analysis")) -> KnowledgeItem:
         if self.verify_single:
             self.verify_single(owner_user_id, view_token)
         cache = self.cache_manager.get_cache_by_view_token(view_token)
@@ -46,9 +46,9 @@ class ObsidianKnowledgeSourceResolver:
             raise KnowledgeContentNotReady("transcript_not_ready")
         raw = _text(cache.get("llm_calibrated") or cache.get("transcript_data"))
         analysis = _text(cache.get("llm_summary"))
-        if not raw:
+        if "raw" in document_types and not raw:
             raise KnowledgeContentNotReady("transcript_not_ready")
-        if not analysis:
+        if "analysis" in document_types and not analysis:
             raise KnowledgeContentNotReady("analysis_not_ready")
 
         task = cache.get("task_info") or {}
@@ -145,6 +145,8 @@ class ObsidianKnowledgeSourceResolver:
         owner_user_id: str,
         collection_id: str,
         source_ids: Sequence[str] | None,
+        *,
+        document_types: Sequence[str] = ("raw", "analysis"),
     ):
         if self.collection_service is None:
             raise ValueError("collection_service_required")
@@ -173,9 +175,9 @@ class ObsidianKnowledgeSourceResolver:
                 )
                 raw = _text(detail.get("transcript"))
                 analysis = _text(detail.get("summary"))
-                if not raw:
+                if "raw" in document_types and not raw:
                     raise KnowledgeContentNotReady("transcript_not_ready")
-                if not analysis:
+                if "analysis" in document_types and not analysis:
                     raise KnowledgeContentNotReady("analysis_not_ready")
                 access = detail.get("source_access") or {}
                 if access.get("kind") == "online_url":

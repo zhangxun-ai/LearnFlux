@@ -198,6 +198,9 @@ async def collections_page():
 async def list_collections(
     creator_name: Optional[str] = Query(None),
     title: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, max_length=200),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     collection_type: Optional[str] = Query(None),
@@ -206,19 +209,25 @@ async def list_collections(
 ):
     service = get_collection_service()
     _backfill_testable_single_user_owner(service, user_info)
+    collection_items = service.list_collections(
+        creator_name=creator_name,
+        title=title,
+        title_query=q,
+        date_from=date_from,
+        date_to=date_to,
+        collection_type=collection_type,
+        status=status,
+        owner_user_id=user_info.get("user_id") or "",
+        limit=limit + 1,
+        offset=offset,
+    )
+    has_more = len(collection_items) > limit
     return TranscribeResponse(
         code=200,
         message="学习集合列表",
         data={
-            "collections": service.list_collections(
-                creator_name=creator_name,
-                title=title,
-                date_from=date_from,
-                date_to=date_to,
-                collection_type=collection_type,
-                status=status,
-                owner_user_id=user_info.get("user_id") or "",
-            )
+            "collections": collection_items[:limit],
+            "has_more": has_more,
         },
     )
 
@@ -392,6 +401,86 @@ async def pick_local_fs_folder(
             "media_count": preview.get("media_count", 0),
             "video_count": preview.get("video_count", 0),
             "document_count": preview.get("document_count", 0),
+        },
+    )
+
+
+@router.post(
+    "/api/collections/{collection_id}/sources/preview-local-paths",
+    response_model=TranscribeResponse,
+)
+async def preview_collection_local_paths(
+    collection_id: str,
+    body: LocalPathImportRequest,
+    user_info: dict = Depends(verify_token),
+):
+    """Preview local additions without registering sources or starting work."""
+    if not (body.directory or "").strip() and not (body.paths or []):
+        raise HTTPException(status_code=400, detail="请提供本机目录路径或文件路径列表")
+
+    service = get_collection_service()
+    _require_collection_owner(service, collection_id, user_info)
+    try:
+        candidates = await run_in_threadpool(
+            lambda: service.resolve_local_import_paths(
+                collection_id,
+                directory=body.directory or "",
+                paths=list(body.paths or []),
+            )
+        )
+        detail = service.get_collection_detail(collection_id) or {}
+        existing_hashes = {
+            str(source.get("content_sha256"))
+            for source in detail.get("sources", [])
+            if source.get("content_sha256")
+        }
+        legacy_media_ids = set()
+        for source in detail.get("sources", []):
+            if source.get("content_sha256"):
+                continue
+            task = cache_manager.get_task_by_id(source.get("task_id")) or {}
+            media_id = task.get("media_id")
+            if isinstance(media_id, str) and media_id:
+                legacy_media_ids.add(media_id)
+
+        preview_items = []
+        import_paths = []
+        seen_hashes = set()
+        for candidate in candidates:
+            content_hash = str(candidate.get("content_sha256") or "")
+            is_existing = (
+                content_hash in existing_hashes
+                or str(candidate.get("media_id") or "") in legacy_media_ids
+                or content_hash in seen_hashes
+            )
+            if content_hash:
+                seen_hashes.add(content_hash)
+            if not is_existing:
+                import_paths.append(str(candidate["file_path"]))
+            preview_items.append(
+                {
+                    "name": str(candidate.get("original_name") or ""),
+                    "source_type": str(candidate.get("source_type") or ""),
+                    "position": int(candidate.get("position") or 0),
+                    "size": int(candidate.get("size") or 0),
+                    "existing": is_existing,
+                }
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    existing_count = sum(1 for item in preview_items if item["existing"])
+    return TranscribeResponse(
+        code=200,
+        message="追加内容预览",
+        data={
+            "candidate_count": len(preview_items),
+            "new_source_count": len(import_paths),
+            "existing_source_count": existing_count,
+            "items": preview_items,
+            "paths": import_paths,
         },
     )
 

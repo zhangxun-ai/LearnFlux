@@ -136,6 +136,48 @@ def test_from_local_paths_endpoint_registers_sources_without_copy(tmp_path, monk
         assert args[6] is True
 
 
+def test_preview_local_paths_marks_existing_files_without_mutating_collection(
+    tmp_path, monkeypatch
+):
+    client, collection, service, scheduled, root = _build_client(tmp_path, monkeypatch)
+    existing_dir = root / "already-added"
+    existing_dir.mkdir()
+    existing_content = b"same-course-lesson"
+    (existing_dir / "001-existing.mp4").write_bytes(existing_content)
+    imported = client.post(
+        f"/api/collections/{collection['id']}/sources/from-local-paths",
+        json={"directory": str(existing_dir)},
+    )
+    assert imported.status_code == 202, imported.text
+    scheduled.clear()
+
+    candidate_dir = root / "append"
+    candidate_dir.mkdir()
+    duplicate_path = candidate_dir / "001-existing-copy.mp4"
+    new_path = candidate_dir / "002-new.mp4"
+    duplicate_path.write_bytes(existing_content)
+    new_path.write_bytes(b"new-course-lesson")
+    task_count_before = _task_count(service.cache_manager)
+    source_count_before = len(service.repository.get_sources(collection["id"]))
+
+    response = client.post(
+        f"/api/collections/{collection['id']}/sources/preview-local-paths",
+        json={"directory": str(candidate_dir)},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()["data"]
+    assert payload["candidate_count"] == 2
+    assert payload["new_source_count"] == 1
+    assert payload["existing_source_count"] == 1
+    assert payload["paths"] == [str(new_path.resolve())]
+    assert {item["existing"] for item in payload["items"]} == {True, False}
+    assert all("file_path" not in item for item in payload["items"])
+    assert _task_count(service.cache_manager) == task_count_before
+    assert len(service.repository.get_sources(collection["id"])) == source_count_before
+    assert scheduled == []
+
+
 def test_from_local_paths_reconciles_legacy_source_by_media_id(
     tmp_path, monkeypatch
 ):

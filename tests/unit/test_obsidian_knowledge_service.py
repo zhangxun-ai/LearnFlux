@@ -222,8 +222,8 @@ def test_reimport_with_new_collection_id_overwrites_canonical_filename(tmp_path)
     )
     assert result["counts"]["failed"] == 0
     assert (target_dir / "002-部署.md").is_file()
-    # Canonical path reclaimed; same-view_token duplicate should be cleaned.
-    assert not (target_dir / "002-部署 (2).md").exists()
+    # Reclaiming a canonical path must never delete existing user files.
+    assert (target_dir / "002-部署 (2).md").read_text(encoding="utf-8") == old_raw
     text = (target_dir / "002-部署.md").read_text(encoding="utf-8")
     assert "learnflux_collection_id: new-collection" in text
     assert "learnflux_source_id: new-source" in text
@@ -246,7 +246,7 @@ def test_external_edit_and_rename_are_detected_without_writing_during_preview(tm
     relocated = service.preview(items=[item], binding=binding)
     after = sorted(path.relative_to(vault) for path in vault.rglob("*"))
     raw_doc = relocated["items"][0]["documents"][0]
-    assert raw_doc["state"] == "relocated"
+    assert raw_doc["state"] == "externally_modified"
     assert raw_doc["relative_path"].endswith("用户重命名.md")
     assert before == after
 
@@ -304,3 +304,144 @@ def test_analysis_failure_returns_truthful_partial_and_retry_is_idempotent(tmp_p
     statuses = {doc["document_type"]: doc["status"] for doc in retry["items"][0]["documents"]}
     assert statuses == {"raw": "unchanged", "analysis": "created"}
     assert len(list(vault.rglob("*.md"))) == 2
+
+
+@pytest.mark.parametrize("document_types", [["raw"], ["analysis"], ["raw", "analysis"]])
+def test_selected_documents_use_exact_directory_without_touching_other_state(tmp_path, document_types):
+    service, repo, vault, binding, item = _setup(tmp_path)
+    original = service.preview(items=[item], binding=binding)
+    service.apply(items=[item], binding=binding, expected_binding_revision=1,
+                  preconditions=original["preconditions"])
+    original_state = repo.get_sync_state("u", item.context_key)
+    original_files = {path: path.read_bytes() for path in vault.rglob("*.md")}
+    preview = service.preview(items=[item], binding=binding, target_directory="新目录/课程",
+                              document_types=document_types)
+    assert preview["target_directory"] == "新目录/课程"
+    assert preview["document_types"] == document_types
+    assert not (vault / "新目录").exists()
+    result = service.apply(items=[item], binding=binding, expected_binding_revision=1,
+                           preconditions=preview["preconditions"], target_directory="新目录/课程",
+                           document_types=document_types)
+    assert result["counts"]["created"] == len(document_types)
+    state = repo.get_sync_state("u", item.context_key)
+    for kind, folder in (("raw", "逐字稿"), ("analysis", "AI 总结")):
+        if kind in document_types:
+            assert state[f"{kind}_relative_path"].startswith(f"新目录/课程/{folder}/")
+        else:
+            assert state[f"{kind}_relative_path"] == original_state[f"{kind}_relative_path"]
+            assert state[f"{kind}_synced_hash"] == original_state[f"{kind}_synced_hash"]
+            assert not (vault / "新目录/课程" / folder).exists()
+    assert all(path.read_bytes() == data for path, data in original_files.items())
+    if document_types == ["analysis"]:
+        text = (vault / state["analysis_relative_path"]).read_text(encoding="utf-8")
+        assert "raw_note:" not in text and "[[]]" not in text
+
+
+def test_root_target_and_changed_selection_reject_stale_preview(tmp_path):
+    from video_transcript_api.obsidian.knowledge_service import KnowledgeStalePreview
+    service, _repo, vault, binding, item = _setup(tmp_path)
+    preview = service.preview(items=[item], binding=binding, target_directory="", document_types=["raw"])
+    assert preview["preconditions"][0]["relative_path"] == "逐字稿/坏-标题.md"
+    for options in ({"target_directory": "other", "document_types": ["raw"]},
+                    {"target_directory": "", "document_types": ["analysis"]}):
+        with pytest.raises(KnowledgeStalePreview):
+            service.apply(items=[item], binding=binding, expected_binding_revision=1,
+                          preconditions=preview["preconditions"], **options)
+    assert not list(vault.rglob("*.md"))
+
+
+@pytest.mark.parametrize("target", ["../outside", "/tmp/outside", ".obsidian", "a/../../outside"])
+def test_explicit_target_rejects_unsafe_paths(tmp_path, target):
+    from video_transcript_api.obsidian.paths import VaultPathError
+    service, _repo, _vault, binding, item = _setup(tmp_path)
+    with pytest.raises(VaultPathError):
+        service.preview(items=[item], binding=binding, target_directory=target)
+
+
+def test_external_edits_require_force_even_with_fresh_preview(tmp_path):
+    from video_transcript_api.obsidian.paths import ManagedFileConflict
+    service, _repo, vault, binding, item = _setup(tmp_path)
+    options = {"target_directory": "新目录", "document_types": ["raw"]}
+    preview = service.preview(items=[item], binding=binding, **options)
+    service.apply(items=[item], binding=binding, expected_binding_revision=1,
+                  preconditions=preview["preconditions"], **options)
+    path = vault / preview["preconditions"][0]["relative_path"]
+    edited = path.read_text(encoding="utf-8") + "\nMy own notes\n"
+    path.write_text(edited, encoding="utf-8")
+    preview = service.preview(items=[item], binding=binding, **options)
+    with pytest.raises(ManagedFileConflict):
+        service.apply(items=[item], binding=binding, expected_binding_revision=1,
+                      preconditions=preview["preconditions"], **options)
+    assert path.read_text(encoding="utf-8") == edited
+    result = service.apply(items=[item], binding=binding, expected_binding_revision=1,
+                           preconditions=preview["preconditions"], force=True, **options)
+    assert result["counts"]["updated"] == 1
+
+
+def test_distinct_collections_same_target_keep_both_overviews(tmp_path):
+    from video_transcript_api.obsidian.knowledge_markdown import COLLECTION_INDEX_SOURCE_ID, COLLECTION_INDEX_TITLE
+    service, repo, vault, _binding, base = _setup(tmp_path)
+    options = {"target_directory": "共享目录", "document_types": ["analysis"]}
+    written = []
+    for collection_id in ("first", "second"):
+        binding = repo.save_binding("u", "collection", collection_id, "vault", "知识", "")
+        item = KnowledgeItem(**{**base.__dict__, "collection_id": collection_id,
+                               "source_id": COLLECTION_INDEX_SOURCE_ID,
+                               "source_kind": "collection_index",
+                               "title": COLLECTION_INDEX_TITLE,
+                               "view_token": f"collection-index:{collection_id}",
+                               "analysis_content": f"Summary for {collection_id}"})
+        preview = service.preview(items=[item], binding=binding, **options)
+        service.apply(items=[item], binding=binding, expected_binding_revision=1,
+                      preconditions=preview["preconditions"], **options)
+        written.append(vault / preview["preconditions"][0]["relative_path"])
+    assert len(set(written)) == 2
+    assert "Summary for first" in written[0].read_text(encoding="utf-8")
+    assert "Summary for second" in written[1].read_text(encoding="utf-8")
+
+
+def test_same_batch_duplicate_titles_have_stable_distinct_paths(tmp_path):
+    service, repo, vault, _binding, base = _setup(tmp_path)
+    binding = repo.save_binding("u", "collection", "c", "vault", "知识", "")
+    items = [KnowledgeItem(**{**base.__dict__, "collection_id": "c", "source_id": source_id,
+                              "view_token": source_id}) for source_id in ("first", "second")]
+    options = {"target_directory": "共享目录"}
+    preview = service.preview(items=items, binding=binding, **options)
+    paths = [condition["relative_path"] for condition in preview["preconditions"]]
+    assert len(set(paths)) == 4
+    result = service.apply(items=items, binding=binding, expected_binding_revision=1,
+                           preconditions=preview["preconditions"], **options)
+    assert result["counts"]["created"] == 4
+    repeated = service.preview(items=items, binding=binding, **options)
+    assert [condition["relative_path"] for condition in repeated["preconditions"]] == paths
+    assert all(document["state"] == "unchanged" for item in repeated["items"] for document in item["documents"])
+
+
+def test_overview_links_use_allocated_paths_for_duplicate_titles(tmp_path):
+    from video_transcript_api.obsidian.knowledge_markdown import (
+        COLLECTION_INDEX_SOURCE_ID, COLLECTION_INDEX_TITLE, build_collection_index_bodies,
+    )
+    service, repo, vault, _binding, base = _setup(tmp_path)
+    binding = repo.save_binding("u", "collection", "c", "vault", "知识", "")
+    chapters = [KnowledgeItem(**{**base.__dict__, "title": "同名课", "collection_id": "c",
+                                 "source_id": source_id, "view_token": source_id, "position": position})
+                for position, source_id in enumerate(("first", "second"), 1)]
+    raw, analysis = build_collection_index_bodies(
+        creator="", collection_title="Course", description="", summary_markdown="",
+        chapters=[{"title": chapter.title, "position": chapter.position, "ready": True} for chapter in chapters],
+    )
+    index = KnowledgeItem(**{**base.__dict__, "title": COLLECTION_INDEX_TITLE, "collection_id": "c",
+                            "source_id": COLLECTION_INDEX_SOURCE_ID, "source_kind": "collection_index",
+                            "view_token": "collection-index:c", "raw_content": raw, "analysis_content": analysis})
+    items = [index, *chapters]
+    options = {"target_directory": "共享目录", "document_types": ["analysis"]}
+    preview = service.preview(items=items, binding=binding, **options)
+    service.apply(items=items, binding=binding, expected_binding_revision=1,
+                  preconditions=preview["preconditions"], **options)
+    overview = (vault / preview["preconditions"][0]["relative_path"]).read_text(encoding="utf-8")
+    assert "[[共享目录/AI 总结/同名课|同名课]]" in overview
+    assert "[[共享目录/AI 总结/同名课 (2)|同名课]]" in overview
+    assert "raw_note:" not in overview
+    from video_transcript_api.obsidian.knowledge_markdown import content_hash, parse_knowledge_markdown
+    fields, body = parse_knowledge_markdown(overview)
+    assert fields["content_hash"] == content_hash(body)

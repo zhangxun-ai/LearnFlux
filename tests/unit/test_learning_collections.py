@@ -1718,28 +1718,33 @@ def test_collection_workflow_status_is_stopped_after_cancel(tmp_path):
     assert service.list_collections(status="stopped")[0]["id"] == collection["id"]
 
 
-def test_collections_import_uses_one_primary_choice_and_collapsed_history():
+def test_collections_catalog_and_create_page_use_one_primary_import_choice():
     project_root = Path(__file__).resolve().parents[2]
     html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
     js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
 
-    intro = html[html.index('class="lc-intro-strip"') : html.index('class="lc-import-card"')]
-    import_card = html[html.index('class="lc-import-card"') : html.index('class="lc-history lc-history-panel"')]
+    catalog = html[html.index('id="collection-catalog-page"') : html.index('id="collection-import-panel"')]
+    create_page = html[html.index('id="collection-import-panel"') : html.index('id="collection-workspace"')]
+    import_card = create_page[create_page.index('class="lc-import-card') :]
     import_files = js[
         js.index("async function importFiles(") : js.index(
             "async function appendLocalDirectoryToCurrentCollection("
         )
     ]
 
-    assert "lc-eyebrow" not in intro
-    assert "lc-points" not in intro
+    assert 'id="collection-create-open"' in catalog
+    assert 'id="history-creator-filter"' in catalog
+    assert 'id="history-topic-filter"' in catalog
+    assert 'id="collection-history-more"' in catalog
+    assert 'class="lc-create-page"' in html
+    assert 'id="collection-create-back"' in create_page
     assert 'id="drop-action"' in import_card
     assert 'id="browse-local-path"' in import_card
     assert 'id="local-import-path"' in import_card
     assert 'id="import-local-path"' in import_card
     assert 'id="pick-files"' in import_card
     assert "选择文件夹并导入" in import_card
-    assert "更多选项" in import_card
+    assert "导入方式与并发设置" in import_card
     assert "扫描路径并导入" not in import_card
     assert "上传文件副本（不推荐）" not in import_card
     assert import_card.count("lc-btn primary") >= 1
@@ -1748,34 +1753,36 @@ def test_collections_import_uses_one_primary_choice_and_collapsed_history():
     assert "video_course" in busy_guard or "选择文件夹并导入" in import_files
     assert "startFolderImport" in js
     assert "importSelectedLocalDirectory" in js
+    assert "preview-local-paths" in js
+    assert "appendFolder: document.getElementById('append-folder')" in js
+    assert "appendFolderName: document.getElementById('collection-append-folder')" in js
+    assert "if (els.appendFolderName) els.appendFolderName.textContent" in js
+    assert 'id="collection-append-dialog"' in html
     assert "window.confirm" not in js[
         js.index("async function importFromLocalDirectory(") : js.index("async function importFiles(")
     ]
-    assert '<details class="lc-history lc-history-panel"' in html
-    assert '<summary class="lc-history-summary">' in html
-    assert '<details class="lc-history lc-history-panel" open' not in html
+    assert '<section class="lc-history lc-history-panel"' in html
+    assert '<details class="lc-create-page"' not in html
     assert "from-local-paths" in js
     assert "displaySourceTitle(source)" in js
     assert "clearImportIdentityFields" in js
     assert "uq_learning_collections" not in js  # uniqueness is backend-enforced
 
 
-def test_collections_import_identity_input_does_not_collapse_panel():
-    """Typing IP/topic must not re-collapse the import <details> mid-input."""
+def test_collections_import_identity_input_does_not_rebuild_the_create_page():
+    """Typing IP/topic keeps the independent create page stable."""
     project_root = Path(__file__).resolve().parents[2]
     js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
     html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
 
     assert 'id="collection-creator"' in html
     assert 'list="collection-creator-options"' in html
-    assert 'class="lc-import-wrap' in html
+    assert 'class="lc-create-page" id="collection-import-panel"' in html
 
     render_history = js[js.index("function renderHistory(") : js.index("function applyInitialPanelLayoutOnce(")]
-    # renderHistory must not force-close the import panel on every list refresh.
-    assert "importDetails.open = false" not in render_history
-    assert "lc-import-wrap" not in render_history
+    assert "createPage.hidden" not in render_history
 
-    # Initial layout collapse is one-shot only (returning users with history).
+    # Collection history refreshes never manipulate the independent create page.
     assert "function applyInitialPanelLayoutOnce(" in js
     assert "didApplyInitialPanelLayout" in js
     assert "applyInitialPanelLayoutOnce();" in js[
@@ -1785,7 +1792,7 @@ def test_collections_import_identity_input_does_not_collapse_panel():
     # Input handlers must not call full render() (which rebuilds history / re-ran layout).
     creator_title_input = js[
         js.index("// Only refresh workspace chrome while typing") : js.index(
-            "[els.historyCreatorFilter, els.historyTopicFilter"
+            "if (els.historyCreatorFilter)"
         )
     ]
     assert "render();" not in creator_title_input
@@ -1852,11 +1859,16 @@ def test_collections_page_restores_existing_collections():
     assert "collection-creator" in html
     assert "collection-description" not in html
     assert "collection-description" not in js
-    assert "lc-intro-strip" in html
+    assert 'id="collection-catalog-page"' in html
+    assert 'id="collection-import-panel"' in html
+    assert 'class="lc-create-page"' in html
     assert "lc-history-panel" in html
-    # Import card must appear before the historical topics panel (not the import wrap).
-    assert html.index('class="lc-import-card"') < html.index('class="lc-history lc-history-panel"')
+    assert html.index('id="collection-catalog-page"') < html.index('id="collection-import-panel"')
+    assert html.index('id="collection-import-panel"') < html.index('id="collection-workspace"')
     assert "history-creator-filter" in html
+    assert "history-topic-filter" in html
+    assert "history-status-filter" not in html
+    assert "history-date-filter" not in html
     assert "metadata-creator" in html
     assert 'data-view="map"' in html
     # Knowledge map UI is retired from the product surface (DOM kept but hidden).
@@ -1866,19 +1878,22 @@ def test_collections_page_restores_existing_collections():
     assert 'class="lc-tab active" data-view="summary"' in html
     assert "let currentView = 'summary'" in js
     assert "currentView = opts.sourceId ? 'source' : 'summary'" in js
-    assert "knowledge-map-svg" in html
-    assert "map-generate" in html
-    assert "map-stage-focus" in html
-    assert "map-toggle-links" in html
-    assert "lc-icon-btn" in html
-    assert ">全屏查看<" not in html
-    assert ">Fit<" not in html
-    assert "隐藏连线" in html
-    assert "map-zoom-in" in html
-    assert "map-fit" in html
+    assert 'data-view="source" type="button" role="tab">章节解读</button>' in html
+    assert 'id="source-pane-summary"' in html
+    assert 'id="source-pane-transcript"' in html
     assert "open-source-file" in html
     assert "append-folder" in html
     assert "append-files" not in html
+    assert 'id="collection-append-dialog"' in html
+    assert 'id="collection-append-confirm"' in html
+    assert "preview-local-paths" in js
+    assert "title_query" in (project_root / "src/video_transcript_api/collections/service.py").read_text(encoding="utf-8")
+    assert "params.set('q', query)" in js
+    assert "params.set('limit', String(COLLECTIONS_PAGE_SIZE))" in js
+    assert 'id="obsidian-collection-open"' in html
+    assert 'fill="#7C3AED"' in html
+    assert 'id="obsidian-collection-preview-list"' in html
+    assert 'id="open-study-player"' not in html
     assert "cancel-collection" in html
     assert "lc-history-delete" in js
     assert "deleteCollectionById" in js
@@ -1996,7 +2011,7 @@ def test_collections_page_restores_existing_collections():
     assert "loadCollections({ selectLatest: false }).catch((error) => {\n                    showToast(error.message || '历史专题筛选失败');" in js
 
 
-def test_collections_page_exposes_immersive_text_visual_reader():
+def test_collections_page_keeps_text_reader_and_hides_diagram_controls():
     project_root = Path(__file__).resolve().parents[2]
     html = (project_root / "src/web/static/collections.html").read_text(encoding="utf-8")
     js = (project_root / "src/web/static/js/collections.js").read_text(encoding="utf-8")
@@ -2006,7 +2021,9 @@ def test_collections_page_exposes_immersive_text_visual_reader():
     assert '/static/js/visual-learning.js?v=__ASSET_VERSION__' in html
     assert 'data-view="visual"' not in html
     assert 'data-view="summary"' in html
-    assert "图解版" in html
+    assert 'id="collection-summary-visual"' in html
+    assert 'id="collection-summary-visual" type="button" role="tab" aria-selected="false" aria-controls="collection-summary-visual-panel" hidden' in html
+    assert '#visual-view' in css
     for element_id in (
         "visual-view",
         "collection-visual-root",
@@ -2032,7 +2049,7 @@ def test_collections_page_exposes_immersive_text_visual_reader():
     assert "阅读全文" not in html
 
     assert "function activateCollectionVisuals()" in js
-    assert "currentView !== 'visual'" in js
+    assert "currentView === 'map' || currentView === 'visual'" in js
     assert "document_type=${encodeURIComponent(documentType)}" in js
     assert "document_type: documentType" in js
     assert "'overview'" in js
@@ -2139,12 +2156,24 @@ def test_collection_repository_filters_and_options(tmp_path):
         description="沉淀一人公司 SOP",
         import_method="local_files",
     )
+    repo.create_collection(
+        title="课程设计入门",
+        creator_name="其他 IP",
+        collection_type="video_course",
+    )
 
     filtered = repo.list_collections(creator_name="屠龙胭脂", title="如何走出人生困局")
     assert len(filtered) == 1
     assert filtered[0]["creator_name"] == "屠龙胭脂"
     assert filtered[0]["description"] == "提炼破局判断标准"
     assert filtered[0]["import_method"] == "local_folder"
+
+    keyword_matches = repo.list_collections(title_query="课程", limit=1)
+    next_keyword_matches = repo.list_collections(title_query="课程", limit=1, offset=1)
+    assert len(keyword_matches) == 1
+    assert len(next_keyword_matches) == 1
+    assert keyword_matches[0]["id"] != next_keyword_matches[0]["id"]
+    assert all("课程" in item["title"] for item in keyword_matches + next_keyword_matches)
 
     options = repo.get_filter_options()
     assert "屠龙胭脂" in options["creator_names"]

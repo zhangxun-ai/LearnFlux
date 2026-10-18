@@ -24,7 +24,58 @@ def collection_index_view_token(collection_id: str) -> str:
 
 
 def _normalise(text: str) -> str:
-    return str(text or "").replace("\r\n", "\n").rstrip() + "\n"
+    return str(text or "").replace("\r\n", "\n").replace("\r", "\n").rstrip() + "\n"
+
+
+def _format_note_content(text: str, *, transcript: bool = False) -> str:
+    """Nest Markdown headings and paragraph plain transcripts without rewriting text.
+
+    Existing Markdown blocks are left intact. Unlike the study transcript
+    renderer this accepts source text, so it must not infer timing, merge
+    speakers, or synthesize punctuation from structured ASR fragments.
+    """
+    lines = _normalise(text).rstrip("\n").split("\n")
+    headings: list[tuple[int, re.Match[str]]] = []
+    fence = ""
+    structured = False
+    for index, line in enumerate(lines):
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+        if fence:
+            if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
+                fence = ""
+            continue
+        if marker:
+            fence = marker[1]
+            structured = True
+            continue
+        heading = re.match(r"^( {0,3})(#{1,6})([ \t]+.*)$", line)
+        if heading:
+            headings.append((index, heading))
+        if heading or re.match(r"^(?: {4}|\t| {0,3}(?:>|[-+*]\s|\d+[.)]\s|\||\$\$|[-=_*]{3,}\s*$|<))", line):
+            structured = True
+
+    if headings:
+        offset = max(0, 3 - min(len(match[2]) for _, match in headings))
+        for index, match in headings:
+            lines[index] = match[1] + "#" * min(6, len(match[2]) + offset) + match[3]
+    if not transcript or structured:
+        return "\n".join(lines)
+
+    paragraphs: list[str] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        # Keep each source line (including speaker and timestamp) distinct.
+        # Split long prose only at existing sentence boundaries; no words or
+        # punctuation are added, and unpunctuated lines remain unchanged.
+        start = 0
+        for boundary in re.finditer(r"[。！？!?](?:[”’\"』」）)]*)(?:[ \t]*)|\.(?:[ \t]+|$)", line):
+            if boundary.end() - start >= 180:
+                paragraphs.append(line[start:boundary.end()])
+                start = boundary.end()
+        if start < len(line):
+            paragraphs.append(line[start:])
+    return "\n\n".join(paragraphs)
 
 
 def _truncate_text(value: str, limit: int = 160) -> str:
@@ -151,11 +202,11 @@ def _render(item: KnowledgeItem, *, kind: str, category: str, body: str, synced_
         fields["learnflux_role"] = "collection_index"
     if kind == "raw":
         fields["source_kind"] = item.source_kind
-    else:
+    elif raw_relative_path:
         fields["raw_note"] = f'[[{raw_relative_path.removesuffix(".md")}]]'
     fields.update({"source_access": item.source_access, "content_hash": content_hash(body), "synced_at": synced_at})
     dumped = yaml.safe_dump(fields, allow_unicode=True, sort_keys=False).strip()
-    if kind == "analysis":
+    if "raw_note" in fields:
         raw_note = fields["raw_note"].replace('"', '\\"')
         dumped = dumped.replace(f"raw_note: '{fields['raw_note']}'", f'raw_note: "{raw_note}"')
     return "---\n" + dumped + "\n---\n\n" + body
@@ -165,7 +216,8 @@ def render_raw_knowledge_markdown(item: KnowledgeItem, *, category: str, relativ
     if is_collection_index_item(item):
         body = _normalise(item.raw_content)
     else:
-        body = f"# {item.title}\n\n## 原文 / 逐字稿\n\n{item.raw_content}\n"
+        content = _format_note_content(item.raw_content, transcript=True)
+        body = f"# {item.title}\n\n## 原文 / 逐字稿\n\n{content}\n"
     return _render(item, kind="raw", category=category, body=body, synced_at=synced_at)
 
 
@@ -173,5 +225,6 @@ def render_analysis_knowledge_markdown(item: KnowledgeItem, *, category: str, ra
     if is_collection_index_item(item):
         body = _normalise(item.analysis_content)
     else:
-        body = f"# {item.title}\n\n## AI 解读\n\n{item.analysis_content}\n"
+        content = _format_note_content(item.analysis_content)
+        body = f"# {item.title}\n\n## AI 解读\n\n{content}\n"
     return _render(item, kind="analysis", category=category, body=body, synced_at=synced_at, raw_relative_path=raw_relative_path)

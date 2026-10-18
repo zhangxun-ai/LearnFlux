@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import re
 import threading
 from contextlib import ExitStack
 from datetime import datetime, timezone
@@ -11,6 +12,8 @@ from typing import Any, Callable, Mapping, Sequence
 
 from .knowledge_markdown import (
     COLLECTION_INDEX_TITLE,
+    content_hash,
+    parse_knowledge_markdown,
     is_collection_index_item,
     managed_document_hash,
     render_analysis_knowledge_markdown,
@@ -145,9 +148,12 @@ class ObsidianKnowledgeService:
         preferred_filename: str | None = None,
         item: KnowledgeItem | None = None,
         document_type: str = "raw",
+        reclaim_by_filename: bool = True,
+        reserved_paths: set[str] | None = None,
     ) -> str:
+        reserved_paths = reserved_paths if reserved_paths is not None else set()
         exact = self._unique_managed_match(directory, identity)
-        if exact:
+        if exact and exact not in reserved_paths:
             return exact
 
         filename = preferred_filename or sanitize_markdown_filename(title)
@@ -158,10 +164,10 @@ class ObsidianKnowledgeService:
             raise ValueError("preferred filename must be a Markdown basename")
 
         # 1) Canonical filename already managed by LearnFlux → overwrite.
-        reclaimed = self._managed_filename_path(
+        reclaimed = (self._managed_filename_path(
             directory, filename, document_type
-        )
-        if reclaimed:
+        ) if reclaim_by_filename else None)
+        if reclaimed and reclaimed not in reserved_paths:
             return reclaimed
 
         # 2) Same view_token (stable content identity across re-collections).
@@ -169,7 +175,7 @@ class ObsidianKnowledgeService:
             by_token = self._unique_managed_match(
                 directory, self._view_token_identity(item, document_type)
             )
-            if by_token:
+            if by_token and by_token not in reserved_paths:
                 return by_token
 
         candidate = PurePosixPath(directory, filename).as_posix()
@@ -177,19 +183,11 @@ class ObsidianKnowledgeService:
         stem = path.stem
         suffix = path.suffix
         index = 2
-        while path.exists() or path.is_symlink():
+        while path.exists() or path.is_symlink() or candidate in reserved_paths:
             # Prefer reclaiming LearnFlux-managed collision names with same token.
             collision = PurePosixPath(
                 directory, f"{stem} ({index}){suffix}"
             ).as_posix()
-            if item and item.view_token:
-                managed = find_managed_markdown_files(
-                    self.vault_path,
-                    directory,
-                    self._view_token_identity(item, document_type),
-                )
-                if collision in managed:
-                    return collision
             candidate = collision
             path = resolve_vault_path(self.vault_path, candidate)
             index += 1
@@ -203,6 +201,8 @@ class ObsidianKnowledgeService:
         directory: str,
         synced_path: str | None,
         preferred_filename: str | None = None,
+        reclaim_by_filename: bool = True,
+        reserved_paths: set[str] | None = None,
     ) -> tuple[str, bool, bool]:
         """Return ``(relative_path, relocated, reclaimed_managed)``.
 
@@ -210,20 +210,21 @@ class ObsidianKnowledgeService:
         under a new context_key (e.g. re-imported collection) so preview can
         treat identity/frontmatter updates as normal ``changed`` writes.
         """
-        if synced_path:
+        reserved_paths = reserved_paths if reserved_paths is not None else set()
+        if synced_path and synced_path not in reserved_paths:
             old_path = resolve_vault_path(self.vault_path, synced_path)
-            if old_path.is_file():
+            if old_path.is_file() and PurePosixPath(synced_path).parent == PurePosixPath(directory):
                 return synced_path, False, False
         identity = self._identity(item, document_type)
         exact = self._unique_managed_match(directory, identity)
-        if exact:
+        if exact and exact not in reserved_paths:
             return exact, bool(synced_path and exact != synced_path), False
 
         filename = preferred_filename or sanitize_markdown_filename(item.title)
-        reclaimed = self._managed_filename_path(
+        reclaimed = (self._managed_filename_path(
             directory, filename, document_type
-        )
-        if reclaimed:
+        ) if reclaim_by_filename else None)
+        if reclaimed and reclaimed not in reserved_paths:
             return (
                 reclaimed,
                 bool(synced_path and reclaimed != synced_path),
@@ -234,7 +235,7 @@ class ObsidianKnowledgeService:
             by_token = self._unique_managed_match(
                 directory, self._view_token_identity(item, document_type)
             )
-            if by_token:
+            if by_token and by_token not in reserved_paths:
                 return (
                     by_token,
                     bool(synced_path and by_token != synced_path),
@@ -249,116 +250,128 @@ class ObsidianKnowledgeService:
                 preferred_filename=preferred_filename,
                 item=item,
                 document_type=document_type,
+                reclaim_by_filename=reclaim_by_filename,
+                reserved_paths=reserved_paths,
             ),
             False,
             False,
         )
 
-    def _cleanup_stale_managed_duplicates(
-        self,
-        *,
-        directory: str,
-        document_type: str,
-        item: KnowledgeItem,
-        keep_relative_path: str,
-    ) -> None:
-        """Remove leftover ``name (2).md`` copies for the same managed note."""
-        if not item.view_token:
-            return
-        directory_path = resolve_vault_path(self.vault_path, directory)
-        if not directory_path.is_dir():
-            return
-        try:
-            matches = find_managed_markdown_files(
-                self.vault_path,
-                directory,
-                self._view_token_identity(item, document_type),
-            )
-        except (ManagedFileConflict, ValueError):
-            return
-        for relative in matches:
-            if relative == keep_relative_path:
-                continue
-            path = resolve_vault_path(self.vault_path, relative)
-            try:
-                if path.is_file():
-                    path.unlink()
-            except OSError:
-                continue
+    @staticmethod
+    def _document_types(document_types: Sequence[str]) -> tuple[str, ...]:
+        if not document_types or any(value not in {"raw", "analysis"} for value in document_types):
+            raise ValueError("invalid_document_types")
+        return tuple(value for value in ("raw", "analysis") if value in document_types)
 
     def _documents(
         self,
         item: KnowledgeItem,
         binding: Mapping[str, Any],
+        *,
+        target_directory: str | None = None,
+        document_types: Sequence[str] = ("raw", "analysis"),
+        reserved_paths: set[str] | None = None,
     ) -> list[dict[str, Any]]:
-        collection_directory = str(
-            binding.get("collection_directory") or ""
-        )
-        raw_directory = build_knowledge_directory(
-            root=self.raw_root,
-            category=str(binding["category"]),
-            collection_directory=collection_directory,
-        )
-        analysis_directory = build_knowledge_directory(
-            root=self.processed_root,
-            category=str(binding["category"]),
-            collection_directory=collection_directory,
-        )
-        sync = (
-            self.repository.get_sync_state(
-                item.owner_user_id, item.context_key
-            )
-            or {}
-        )
-        preferred_name = (
-            f"{COLLECTION_INDEX_TITLE}.md"
-            if is_collection_index_item(item)
-            else None
-        )
-        raw_path, raw_relocated, raw_reclaimed = self._resolve_path(
-            item=item,
-            document_type="raw",
-            directory=raw_directory,
-            synced_path=sync.get("raw_relative_path"),
-            preferred_filename=preferred_name,
-        )
-        analysis_path, analysis_relocated, analysis_reclaimed = self._resolve_path(
-            item=item,
-            document_type="analysis",
-            directory=analysis_directory,
-            synced_path=sync.get("analysis_relative_path"),
-            preferred_filename=PurePosixPath(raw_path).name,
-        )
+        selected = self._document_types(document_types)
+        if target_directory is not None:
+            resolve_vault_path(self.vault_path, target_directory, allow_empty=True)
+            directories = {
+                "raw": PurePosixPath(target_directory, "逐字稿").as_posix(),
+                "analysis": PurePosixPath(target_directory, "AI 总结").as_posix(),
+            }
+        else:
+            directories = {
+                kind: build_knowledge_directory(
+                    root=root,
+                    category=str(binding["category"]),
+                    collection_directory=str(binding.get("collection_directory") or ""),
+                )
+                for kind, root in (("raw", self.raw_root), ("analysis", self.processed_root))
+            }
+        sync = self.repository.get_sync_state(item.owner_user_id, item.context_key) or {}
+        preferred_name = f"{COLLECTION_INDEX_TITLE}.md" if is_collection_index_item(item) else None
+        raw_path = ""
+        documents = []
         synced_at = self.now_provider()
-        return [
-            {
-                "document_type": "raw",
-                "relative_path": raw_path,
-                "content": render_raw_knowledge_markdown(
-                    item,
-                    category=str(binding["category"]),
-                    relative_path=raw_path,
-                    synced_at=synced_at,
-                ),
-                "last_synced_hash": sync.get("raw_synced_hash"),
-                "relocated": raw_relocated,
-                "reclaimed_managed": raw_reclaimed,
-            },
-            {
-                "document_type": "analysis",
-                "relative_path": analysis_path,
-                "content": render_analysis_knowledge_markdown(
-                    item,
-                    category=str(binding["category"]),
+        for kind in selected:
+            relative_path, relocated, reclaimed = self._resolve_path(
+                item=item,
+                document_type=kind,
+                directory=directories[kind],
+                synced_path=sync.get(f"{kind}_relative_path"),
+                preferred_filename=PurePosixPath(raw_path).name if raw_path else preferred_name,
+                reclaim_by_filename=target_directory is None,
+                reserved_paths=reserved_paths,
+            )
+            if reserved_paths is not None:
+                reserved_paths.add(relative_path)
+            if kind == "raw":
+                raw_path = relative_path
+                content = render_raw_knowledge_markdown(
+                    item, category=str(binding["category"]),
+                    relative_path=relative_path, synced_at=synced_at,
+                )
+            else:
+                content = render_analysis_knowledge_markdown(
+                    item, category=str(binding["category"]),
                     raw_relative_path=raw_path,
-                    relative_path=analysis_path,
-                    synced_at=synced_at,
-                ),
-                "last_synced_hash": sync.get("analysis_synced_hash"),
-                "relocated": analysis_relocated,
-                "reclaimed_managed": analysis_reclaimed,
-            },
+                    relative_path=relative_path, synced_at=synced_at,
+                )
+            documents.append({
+                "document_type": kind,
+                "relative_path": relative_path,
+                "content": content,
+                "last_synced_hash": sync.get(f"{kind}_synced_hash"),
+                "relocated": relocated,
+                "reclaimed_managed": reclaimed,
+            })
+        return documents
+
+    def _plan_documents(
+        self,
+        items: Sequence[KnowledgeItem],
+        binding: Mapping[str, Any],
+        *,
+        target_directory: str | None,
+        document_types: Sequence[str],
+    ) -> list[tuple[KnowledgeItem, list[dict[str, Any]]]]:
+        """Allocate the complete batch before writing, including duplicate titles."""
+        reserved_paths: set[str] = set()
+        planned = [
+            (item, self._documents(
+                item, binding, target_directory=target_directory,
+                document_types=document_types, reserved_paths=reserved_paths,
+            ))
+            for item in items
         ]
+        if target_directory is not None:
+            for index_item, documents in planned:
+                if not is_collection_index_item(index_item):
+                    continue
+                for chapter, chapter_documents in planned:
+                    if is_collection_index_item(chapter) or chapter.collection_id != index_item.collection_id:
+                        continue
+                    stem = sanitize_markdown_filename(chapter.title).removesuffix(".md")
+                    prefix = f"- {chapter.position:02d}. [[{stem}]]"
+                    paths = {doc["document_type"]: doc["relative_path"] for doc in chapter_documents}
+                    for document in documents:
+                        note_path = paths[document["document_type"]].removesuffix(".md")
+                        replacement = f"- {chapter.position:02d}. [[{note_path}|{stem}]]"
+                        document["content"] = re.sub(
+                            "^" + re.escape(prefix), lambda _match: replacement,
+                            document["content"], flags=re.MULTILINE,
+                        )
+                for document in documents:
+                    # Link allocation changes the body after rendering; keep its
+                    # stored hash consistent without altering other frontmatter.
+                    _fields, body = parse_knowledge_markdown(document["content"])
+                    header, separator, rest = document["content"].partition("\n---\n")
+                    header = re.sub(
+                        r"^content_hash:.*$", f"content_hash: {content_hash(body)}",
+                        header, flags=re.MULTILINE,
+                    )
+                    document["content"] = header + separator + rest
+        return planned
 
     def _preview_document(self, document: Mapping[str, Any]) -> dict[str, Any]:
         path = resolve_vault_path(
@@ -374,7 +387,13 @@ class ObsidianKnowledgeService:
             else ABSENT
         )
         last_synced_hash = document.get("last_synced_hash")
-        if document.get("relocated"):
+        if (
+            existing_hash != ABSENT
+            and last_synced_hash
+            and existing_hash not in {last_synced_hash, desired_hash}
+        ):
+            state = "externally_modified"
+        elif document.get("relocated"):
             state = "relocated"
         elif existing_hash == ABSENT:
             state = "new"
@@ -417,14 +436,19 @@ class ObsidianKnowledgeService:
         items: Sequence[KnowledgeItem],
         binding: Mapping[str, Any],
         force: bool = False,
+        target_directory: str | None = None,
+        document_types: Sequence[str] = ("raw", "analysis"),
     ) -> dict[str, Any]:
+        document_types = self._document_types(document_types)
+        if target_directory is not None:
+            resolve_vault_path(self.vault_path, target_directory, allow_empty=True)
+        planned = self._plan_documents(
+            items, binding, target_directory=target_directory, document_types=document_types
+        )
         preview_items = []
         preconditions = []
-        for item in items:
-            documents = [
-                self._preview_document(document)
-                for document in self._documents(item, binding)
-            ]
+        for item, item_documents in planned:
+            documents = [self._preview_document(document) for document in item_documents]
             for document in documents:
                 preconditions.append(
                     {
@@ -447,6 +471,8 @@ class ObsidianKnowledgeService:
         return {
             "binding_revision": binding["revision"],
             "force": bool(force),
+            "target_directory": target_directory,
+            "document_types": list(document_types),
             "items": preview_items,
             "preconditions": preconditions,
         }
@@ -482,6 +508,8 @@ class ObsidianKnowledgeService:
             Mapping[str, Any] | KnowledgeApplyPrecondition
         ],
         force: bool = False,
+        target_directory: str | None = None,
+        document_types: Sequence[str] = ("raw", "analysis"),
     ) -> dict[str, Any]:
         if not items:
             return {"items": [], "counts": {}}
@@ -501,13 +529,24 @@ class ObsidianKnowledgeService:
             ):
                 raise KnowledgeStalePreview()
             latest = self.preview(
-                items=items, binding=fresh_binding, force=force
+                items=items, binding=fresh_binding, force=force,
+                target_directory=target_directory, document_types=document_types
             )
             actual = self._precondition_map(latest["preconditions"])
             expected = self._precondition_map(preconditions)
             if actual != expected:
                 raise KnowledgeStalePreview(latest)
 
+            if not force and any(
+                document["state"] == "externally_modified"
+                for preview_item in latest["items"]
+                for document in preview_item["documents"]
+            ):
+                raise ManagedFileConflict("externally modified notes require explicit overwrite")
+
+            planned = self._plan_documents(
+                items, fresh_binding, target_directory=target_directory, document_types=document_types
+            )
             results = []
             counts = {
                 "created": 0,
@@ -515,10 +554,10 @@ class ObsidianKnowledgeService:
                 "unchanged": 0,
                 "failed": 0,
             }
-            for item in items:
+            for item, documents in planned:
                 item_documents = []
-                raw_succeeded = False
-                for document in self._documents(item, fresh_binding):
+                raw_succeeded = "raw" not in document_types
+                for document in documents:
                     document_type = str(document["document_type"])
                     relative_path = str(document["relative_path"])
                     desired_hash = managed_document_hash(
@@ -571,14 +610,6 @@ class ObsidianKnowledgeService:
                                 f"{document_type}_synced_hash": desired_hash,
                             },
                         )
-                        # After reclaiming the canonical path, drop leftover
-                        # ``title (2).md`` clones for the same view_token.
-                        self._cleanup_stale_managed_duplicates(
-                            directory=PurePosixPath(relative_path).parent.as_posix(),
-                            document_type=document_type,
-                            item=item,
-                            keep_relative_path=relative_path,
-                        )
                         raw_succeeded = (
                             raw_succeeded or document_type == "raw"
                         )
@@ -608,4 +639,5 @@ class ObsidianKnowledgeService:
                         "documents": item_documents,
                     }
                 )
-            return {"items": results, "counts": counts}
+            return {"items": results, "counts": counts,
+                    "target_directory": target_directory, "document_types": list(document_types)}

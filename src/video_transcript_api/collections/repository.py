@@ -603,6 +603,8 @@ class LearningCollectionRepository:
         date_to: Optional[str] = None,
         collection_type: Optional[str] = None,
         owner_user_id: Optional[str] = None,
+        title_query: Optional[str] = None,
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
         where = []
         params: List[Any] = []
@@ -615,6 +617,15 @@ class LearningCollectionRepository:
         if title:
             where.append("c.title = ?")
             params.append(title.strip())
+        if title_query and title_query.strip():
+            escaped_query = (
+                title_query.strip()
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_")
+            )
+            where.append("LOWER(c.title) LIKE LOWER(?) ESCAPE '!'")
+            params.append(f"%{escaped_query}%")
         source_date_where = []
         if date_from:
             source_date_where.append("DATE(s_date.created_at) >= DATE(?)")
@@ -648,8 +659,9 @@ class LearningCollectionRepository:
                 GROUP BY c.id
                 ORDER BY c.updated_at DESC
                 LIMIT ?
+                OFFSET ?
                 """,
-                (*params, limit),
+                (*params, max(1, int(limit)), max(0, int(offset))),
             )
             return [dict(row) for row in cursor.fetchall()]
 

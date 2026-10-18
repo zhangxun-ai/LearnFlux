@@ -117,14 +117,20 @@ class LearningCollectionService:
         collection_type: Optional[str] = None,
         status: Optional[str] = None,
         owner_user_id: Optional[str] = None,
+        title_query: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
         collections = self.repository.list_collections(
+            limit=limit,
             creator_name=creator_name,
             title=title,
             date_from=date_from,
             date_to=date_to,
             collection_type=collection_type,
             owner_user_id=owner_user_id,
+            title_query=title_query,
+            offset=offset,
         )
         decorated = [self._decorate_collection_for_list(item) for item in collections]
         if status:

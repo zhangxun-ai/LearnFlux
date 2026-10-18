@@ -117,3 +117,33 @@ def test_collection_resolves_selected_items_in_position_order_and_reports_unread
     assert items[1].collection_title == "作者-专题"
     assert unavailable == [{"source_id": "s3", "code": "transcript_not_ready"}]
     assert collection["title"] == "专题"
+
+
+@pytest.mark.parametrize("selected,cache_data", [
+    (["raw"], {"transcript_data": "Only transcript", "llm_summary": ""}),
+    (["analysis"], {"transcript_data": "", "llm_summary": "Only summary"}),
+])
+def test_single_only_requires_selected_content(selected, cache_data):
+    from video_transcript_api.obsidian.knowledge_sources import ObsidianKnowledgeSourceResolver
+    cache = MagicMock()
+    cache.get_cache_by_view_token.return_value = cache_data
+    item = ObsidianKnowledgeSourceResolver(cache_manager=cache).resolve_single(
+        "u", "view", document_types=selected
+    )
+    assert (item.raw_content if selected == ["raw"] else item.analysis_content)
+
+
+@pytest.mark.parametrize("selected,detail", [
+    (["raw"], {"transcript": "Only transcript", "summary": ""}),
+    (["analysis"], {"transcript": "", "summary": "Only summary"}),
+])
+def test_collection_only_requires_selected_content(selected, detail):
+    from video_transcript_api.obsidian.knowledge_sources import ObsidianKnowledgeSourceResolver
+    collection_service = MagicMock()
+    collection_service.get_collection_detail.return_value = {"id": "c", "title": "Course", "sources": [{"id": "s"}]}
+    collection_service.get_source_detail.return_value = {**detail, "view_token": "v"}
+    _, items, unavailable = ObsidianKnowledgeSourceResolver(
+        cache_manager=MagicMock(), collection_service=collection_service
+    ).resolve_collection("u", "c", ["s"], document_types=selected)
+    assert [item.source_id for item in items] == ["__collection_index__", "s"]
+    assert unavailable == []

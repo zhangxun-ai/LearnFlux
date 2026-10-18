@@ -174,3 +174,70 @@ def test_collection_raw_and_analysis_have_stable_identity_and_source_access():
     assert "## AI 解读" not in raw_body
     assert analysis_fields["raw_note"] == "[[raw/知识/作者-合集/标题]]"
     assert "## 原文 / 逐字稿" not in analysis_body
+
+
+def test_analysis_only_omits_raw_note_and_preserves_markdown_blocks():
+    from dataclasses import replace
+    from video_transcript_api.obsidian.knowledge_markdown import (
+        parse_knowledge_markdown,
+        render_analysis_knowledge_markdown,
+    )
+
+    fenced = '````markdown\n# Literal heading\n```python\nprint("hello")\n```\n````'
+    tilde_fenced = '~~~python\n# Keep comment\nprint("world")\n~~~'
+    blocks = (
+        '- [ ] Try it\n  - Nested detail\n\n'
+        '| Name | Value |\n| --- | --- |\n| A | `code` |\n\n'
+        '> [!note]\n> Keep this callout\n\n'
+        '    # Indented code comment\n\n'
+        f'{fenced}\n\n{tilde_fenced}'
+    )
+    content = f'# Summary\n\n## Steps\n\n{blocks}'
+    result = render_analysis_knowledge_markdown(
+        replace(_item(), analysis_content=content), category='Notes',
+        raw_relative_path='', relative_path='Notes/Summary.md', synced_at='now',
+    )
+    fields, body = parse_knowledge_markdown(result)
+    assert 'raw_note' not in fields
+    assert '[[]]' not in result
+    assert '\n### Summary\n\n#### Steps\n' in body
+    assert blocks in body
+
+
+def test_plain_transcript_preserves_speakers_timestamps_and_words():
+    from dataclasses import replace
+    from video_transcript_api.obsidian.knowledge_markdown import (
+        parse_knowledge_markdown,
+        render_raw_knowledge_markdown,
+    )
+
+    first = '[00:01] Speaker A: This is the original statement.'
+    second = '[00:12] Speaker B: This is the answer.'
+    long_line = '这是一个完整的句子，保留原文。' * 40
+    source = f'{first}\r\n{second}\r\n{long_line}'
+    result = render_raw_knowledge_markdown(
+        replace(_item(), raw_content=source), category='Notes',
+        relative_path='Notes/Transcript.md', synced_at='now',
+    )
+    _, body = parse_knowledge_markdown(result)
+    assert f'{first}\n\n{second}\n\n' in body
+    exported = body.split('## 原文 / 逐字稿\n\n', 1)[1]
+    assert exported.replace('\n', '') == source.replace('\r\n', '')
+    assert max(map(len, exported.splitlines())) < 210
+
+
+def test_transcript_markdown_keeps_list_table_and_code_structure():
+    from dataclasses import replace
+    from video_transcript_api.obsidian.knowledge_markdown import render_raw_knowledge_markdown
+
+    source = (
+        '## Existing section\n\n'
+        '1. First\n   - Nested\n2. Second\n\n'
+        '| A | B |\n| --- | --- |\n| 1 | 2 |\n\n'
+        '```python\n# Comment\nx = 1\n```'
+    )
+    result = render_raw_knowledge_markdown(
+        replace(_item(), raw_content=source), category='Notes',
+        relative_path='Notes/Transcript.md', synced_at='now',
+    )
+    assert source.replace('## Existing section', '### Existing section') in result

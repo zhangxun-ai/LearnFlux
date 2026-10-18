@@ -31,8 +31,8 @@ def test_single_result_syncs_without_a_preview_step_and_closes_on_success():
         assert f'id="{element_id}"' in template
     assert 'popover="manual"' in template
     for element_id in (
-        "obsidian-knowledge-category",
-        "obsidian-knowledge-recommendation",
+        "obsidian-knowledge-directory",
+        "obsidian-knowledge-refresh",
         "obsidian-knowledge-apply",
     ):
         assert f'id="{element_id}"' in template
@@ -42,7 +42,7 @@ def test_single_result_syncs_without_a_preview_step_and_closes_on_success():
     assert "生成同步预览" not in template
     assert "同步到 Obsidian" in template
 
-    assert "/recommend-category" in script
+    assert "/recommend-category" not in script
     assert "/binding" in script
     assert "/preview" in script
     assert "/apply" in script
@@ -71,7 +71,7 @@ def test_collection_has_selection_incremental_force_and_result_ui():
     for value in (
         'id="obsidian-collection-open"',
         'id="obsidian-collection-dialog"',
-        'id="obsidian-collection-category"',
+        'id="obsidian-collection-refresh"',
         'id="obsidian-collection-directory"',
         'id="obsidian-collection-directory-browse"',
         'id="obsidian-collection-directory-panel"',
@@ -141,3 +141,14 @@ def test_opening_dialogs_does_not_call_apply():
     ]
     assert "/apply" not in single_open
     assert "/apply" not in collection_open
+
+
+def test_sync_frontend_behavior_with_mocked_transport():
+    import shutil
+    import subprocess
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for frontend behavior checks")
+    subprocess.run([node, "tests/frontend/obsidian_sync_behavior.cjs"], cwd=ROOT, check=True, capture_output=True, text=True)

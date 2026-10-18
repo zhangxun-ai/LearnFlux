@@ -78,7 +78,13 @@ def build_insight_sections(markdown: str) -> list[dict]:
     if not pairs:
         if not preamble:
             return []
-        return [{"key": "other", "title": "洞察", "html": render_markdown_to_html(preamble)}]
+        sanitized_html = render_markdown_to_html(preamble)
+        return [{
+            "key": "other",
+            "title": "洞察",
+            "html": sanitized_html,
+            "sanitized_html": sanitized_html,
+        }]
 
     sections: list[dict] = []
     for heading, body in pairs:
@@ -86,7 +92,12 @@ def build_insight_sections(markdown: str) -> list[dict]:
         html = render_markdown_to_html(body.strip())
         if key == "credibility":
             html = _apply_credibility_chips(html)
-        sections.append({"key": key, "title": title, "html": html})
+        sections.append({
+            "key": key,
+            "title": title,
+            "html": html,
+            "sanitized_html": html,
+        })
     return sections
 
 

@@ -25,6 +25,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/static/css/editorial.css?v={{ asset_ver }}">
 <link rel="stylesheet" href="/static/css/app-shell.css?v={{ asset_ver }}">
+<script src="/static/js/auth-session.js"></script>
 <script src="/static/js/pwa-register.js?v={{ asset_ver }}" defer></script>
 <script src="/static/js/ui-features.js?v={{ asset_ver }}" defer></script>
 <script src="/static/js/app-shell.js?v={{ asset_ver }}" defer></script>
@@ -296,24 +297,27 @@
     <section class="page-stage">
   <div class="top">
     <div class="top-label">IP 对标工作台</div>
-    <nav class="nav" aria-label="IP 对标工作台">
-      <button type="button" class="on" data-v="analyze" onclick="fwV('analyze')" aria-selected="true">拆解</button>
-      <button type="button" data-v="opportunities" onclick="fwV('opportunities')" aria-selected="false">选题机会</button>
-      <button type="button" data-v="history" onclick="fwV('history')" aria-selected="false">历史记录</button>
-      <button type="button" data-v="bloggers" onclick="fwV('bloggers')" aria-selected="false">对标账号</button>
-      <button type="button" data-v="settings" onclick="fwV('settings')" aria-selected="false">IP 设置</button>
-    </nav>
+    <div class="nav" role="tablist" aria-label="IP 对标工作台" aria-orientation="horizontal">
+      <button type="button" class="on" id="flywheel-tab-analyze" role="tab" data-v="analyze" onclick="fwV('analyze')" aria-controls="v-analyze" aria-selected="true" tabindex="0">拆解</button>
+      <button type="button" id="flywheel-tab-opportunities" role="tab" data-v="opportunities" onclick="fwV('opportunities')" aria-controls="v-opportunities" aria-selected="false" tabindex="-1">选题机会</button>
+      <button type="button" id="flywheel-tab-history" role="tab" data-v="history" onclick="fwV('history')" aria-controls="v-history" aria-selected="false" tabindex="-1">历史记录</button>
+      <button type="button" id="flywheel-tab-bloggers" role="tab" data-v="bloggers" onclick="fwV('bloggers')" aria-controls="v-bloggers" aria-selected="false" tabindex="-1">对标账号</button>
+      <button type="button" id="flywheel-tab-settings" role="tab" data-v="settings" onclick="fwV('settings')" aria-controls="v-settings" aria-selected="false" tabindex="-1">IP 设置</button>
+    </div>
   </div>
 
   <div class="wrap">
 
+    <div id="flywheel-auth-gate" hidden></div>
+
     <!-- ANALYZE -->
-    <div class="view on" id="v-analyze">
+    <div class="view on" id="v-analyze" role="tabpanel" aria-labelledby="flywheel-tab-analyze">
       <div class="hero">
         <div class="eyebrow" style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent-primary, #E4503A); margin-bottom: 8px;">INSIGHT & ANALYSIS · FLYWHEEL</div>
         <h1 style="font-size: 2rem; font-weight: 700; margin: 0 0 12px 0; letter-spacing: -0.01em;">IP 对标</h1>
         <p class="sub" style="font-size: 1.1rem; color: var(--text-secondary); margin: 0 0 24px 0; line-height: 1.5;">粘贴小红书链接，拆解对标账号的选题、结构与转化策略。</p>
         <div class="box">
+          <label class="sr-only" for="url">小红书对标内容链接</label>
           <input id="url" name="xhs-content-link" type="url" inputmode="url" placeholder="粘贴小红书对标内容链接…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
           <button class="go" id="go">开始拆解</button>
         </div>
@@ -341,34 +345,35 @@
     </div>
 
     <!-- HISTORY -->
-    <div class="view" id="v-history">
+    <div class="view" id="v-history" role="tabpanel" aria-labelledby="flywheel-tab-history" hidden>
       <div class="head"><h2 class="serif">历史记录</h2><p>已拆解内容和对标结果都能回看。</p></div>
       <div class="filters">
-        <select id="f-subscribe"><option value="">全部来源</option><option value="subscribed">已订阅</option><option value="adhoc">临时解析</option></select>
-        <select id="f-blogger"><option value="">全部博主</option></select>
-        <select id="f-status"><option value="">全部状态</option><option value="pending">待解析</option><option value="processing">解析中</option><option value="success">解析成功</option><option value="failed">解析失败</option></select>
-        <select id="f-type"><option value="">全部类型</option><option value="video">视频</option><option value="article">图文</option></select>
-        <select id="f-date"><option value="">全部时间</option><option value="today">今天</option><option value="7d">近 7 天</option><option value="30d">近 30 天</option><option value="90d">近 90 天</option></select>
-        <select id="f-sort"><option value="published_at">最新发布</option><option value="like_count">最高赞</option></select>
+        <label class="sr-only" for="f-subscribe">历史来源</label><select id="f-subscribe"><option value="">全部来源</option><option value="subscribed">已订阅</option><option value="adhoc">临时解析</option></select>
+        <label class="sr-only" for="f-blogger">历史博主</label><select id="f-blogger"><option value="">全部博主</option></select>
+        <label class="sr-only" for="f-status">解析状态</label><select id="f-status"><option value="">全部状态</option><option value="pending">待解析</option><option value="processing">解析中</option><option value="success">解析成功</option><option value="failed">解析失败</option></select>
+        <label class="sr-only" for="f-type">内容类型</label><select id="f-type"><option value="">全部类型</option><option value="video">视频</option><option value="article">图文</option></select>
+        <label class="sr-only" for="f-date">发布时间</label><select id="f-date"><option value="">全部时间</option><option value="today">今天</option><option value="7d">近 7 天</option><option value="30d">近 30 天</option><option value="90d">近 90 天</option></select>
+        <label class="sr-only" for="f-sort">历史排序</label><select id="f-sort"><option value="published_at">最新发布</option><option value="like_count">最高赞</option></select>
       </div>
       <div id="contents"><div class="empty">加载中…</div></div>
     </div>
 
     <!-- OPPORTUNITIES -->
-    <div class="view" id="v-opportunities">
+    <div class="view" id="v-opportunities" role="tabpanel" aria-labelledby="flywheel-tab-opportunities" hidden>
       <div class="head"><h2 class="serif">选题机会</h2><p>把已拆解成功的内容按可复用价值和互动信号排序，帮你决定下一条该跟进什么。它不抓新热点，也不额外调用 LLM。</p></div>
       <div class="filters">
-        <select id="o-date"><option value="">全部时间</option><option value="7d">近 7 天</option><option value="30d">近 30 天</option><option value="90d">近 90 天</option></select>
-        <select id="o-type"><option value="">全部类型</option><option value="video">视频</option><option value="article">图文</option></select>
-        <select id="o-subscribe"><option value="">全部来源</option><option value="subscribed">已订阅</option><option value="adhoc">临时解析</option></select>
+        <label class="sr-only" for="o-date">机会时间范围</label><select id="o-date"><option value="">全部时间</option><option value="7d">近 7 天</option><option value="30d">近 30 天</option><option value="90d">近 90 天</option></select>
+        <label class="sr-only" for="o-type">机会内容类型</label><select id="o-type"><option value="">全部类型</option><option value="video">视频</option><option value="article">图文</option></select>
+        <label class="sr-only" for="o-subscribe">机会来源</label><select id="o-subscribe"><option value="">全部来源</option><option value="subscribed">已订阅</option><option value="adhoc">临时解析</option></select>
       </div>
       <div id="opportunities"><div class="empty">加载中…</div></div>
     </div>
 
     <!-- BLOGGERS -->
-    <div class="view" id="v-bloggers">
+    <div class="view" id="v-bloggers" role="tabpanel" aria-labelledby="flywheel-tab-bloggers" hidden>
       <div class="head"><h2 class="serif">对标账号</h2><p>订阅博主只抓取最近内容（默认不解析），你在「历史记录」里挑值得的再拆。</p></div>
       <div class="box" style="margin-top:22px">
+        <label class="sr-only" for="sub-url">博主主页链接</label>
         <input id="sub-url" placeholder="粘贴博主主页链接，订阅追更…" autocomplete="off">
         <button class="go" id="sub">订阅</button>
         <span class="sub-msg" id="sub-msg" role="alert" hidden></span>
@@ -377,25 +382,23 @@
     </div>
 
     <!-- SETTINGS -->
-    <div class="view" id="v-settings">
-      <div class="head"><h2 class="serif">IP 设置</h2><p>填入 API 令牌后即可使用（保存在你本地浏览器）。</p></div>
-      <div class="field">
-        <input id="token-input" class="secret-input" name="api-token-local" type="text" placeholder="粘贴 API 令牌…" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
-        <button class="go" id="save-token">保存</button>
-      </div>
-      <div class="saved hidden" id="token-saved">✓ 已保存，去「拆解」试试吧。</div>
+    <div class="view" id="v-settings" role="tabpanel" aria-labelledby="flywheel-tab-settings" hidden>
+      <div class="head"><h2 class="serif">IP 设置</h2><p>浏览器通过短期 HttpOnly 会话访问，管理口令不会保存在浏览器中。</p></div>
+      <div class="saved" id="flywheel-session-status" role="status">正在检查浏览器会话…</div>
       <div class="prompt-box">
         <div class="head" style="padding:0 0 10px">
           <h2 class="serif">拆解提示词</h2>
           <p>当前提示词会作为新内容拆解的 active 版本，保存后自动生成新版本。</p>
         </div>
         <div class="prompt-top">
+          <label class="sr-only" for="prompt-media-type">提示词内容类型</label>
           <select id="prompt-media-type">
             <option value="video">视频拆解提示词</option>
             <option value="article">图文拆解提示词</option>
           </select>
           <span class="prompt-ver" id="prompt-version">未加载</span>
         </div>
+        <label class="sr-only" for="prompt-body">拆解提示词</label>
         <textarea id="prompt-body" spellcheck="false" placeholder="加载当前提示词…"></textarea>
         <div class="prompt-actions">
           <button class="go" id="prompt-save" type="button">保存为新版本</button>
@@ -411,13 +414,36 @@
 
 <script>
 (function(){
-  var TOKEN_KEY='vta_bearer_token', ENC='vta_encrypt_key_2024';
-  function getToken(){try{var raw=localStorage.getItem(TOKEN_KEY);if(!raw)return '';
-    var r=raw.split('').reverse().join('');return decodeURIComponent(escape(atob(r))).replace(ENC,'');}catch(e){return '';}}
-  function setToken(t){try{var e=btoa(unescape(encodeURIComponent(ENC+t)));localStorage.setItem(TOKEN_KEY,e.split('').reverse().join(''));}catch(e){}}
+  function getToken(){return window.LearnFluxAuth?window.LearnFluxAuth.getTokenPlaceholder():'';}
   var $=function(id){return document.getElementById(id);};
   function show(e){e.classList.remove('hidden');}function hide(e){e.classList.add('hidden');}
+  function hideAuthGate(){var gate=$('flywheel-auth-gate');if(gate)gate.hidden=true;}
+  function showAuthGate(){
+    var gate=$('flywheel-auth-gate');
+    if(!gate||!window.LearnFluxAuth)return;
+    gate.hidden=false;
+    if(gate.dataset.rendered==='true'&&gate.querySelector('.lf-auth-required'))return;
+    gate.dataset.rendered='true';
+    window.LearnFluxAuth.renderAuthGate(gate,{
+      title:'连接后使用 IP 对标',
+      reason:'输入管理口令后读取对标账号和历史记录；已粘贴的链接与当前标签会保留。',
+      onAuthenticated:function(){hideAuthGate();checkToken();var current=document.querySelector('.view.on');if(current&&current.id!=='v-analyze')fwV(current.id.slice(2));}
+    });
+  }
+  function requireFlywheelSession(reason){
+    return window.LearnFluxAuth.requireSession({
+      title:'连接后继续当前操作',
+      reason:reason||'输入管理口令后继续；当前输入与页面位置会保留。'
+    }).then(function(){hideAuthGate();checkToken();return true;});
+  }
   function esc(s){var d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;}
+  function safeHttpURL(value){
+    if(!String(value||'').trim())return '';
+    try{
+      var parsed=new URL(String(value),window.location.origin);
+      return ['http:', 'https:'].includes(parsed.protocol)?parsed.href:'';
+    }catch(error){return '';}
+  }
   function md(s){
     if(!s) return '';
     var lines = esc(s).split('\n');
@@ -459,23 +485,39 @@
 
   // view switch
   window.fwV=function(v){
-    document.querySelectorAll('.view').forEach(function(e){e.classList.remove('on');});
+    document.querySelectorAll('.view').forEach(function(e){e.classList.remove('on');e.hidden=true;});
     document.querySelectorAll('.nav [data-v]').forEach(function(a){
       var active=a.dataset.v===v;
       a.classList.toggle('on',active);
       a.setAttribute('aria-selected',active?'true':'false');
+      a.tabIndex=active?0:-1;
     });
     if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);
-    $('v-'+v).classList.add('on');window.scrollTo({top:0,behavior:'smooth'});
+    $('v-'+v).hidden=false;$('v-'+v).classList.add('on');window.scrollTo({top:0,behavior:'smooth'});
+    if(v!=='analyze'&&!getToken()){showAuthGate();return;}
     if(v==='history'){fwLoadBloggerOptions();fwLoadContents();}
     if(v==='opportunities')fwLoadOpportunities();
     if(v==='bloggers')fwLoadBloggers();
     if(v==='settings')fwLoadPrompts();
   };
 
+  var flywheelTabs=Array.from(document.querySelectorAll('.nav [data-v]'));
+  document.querySelector('.nav').addEventListener('keydown',function(event){
+    var currentIndex=flywheelTabs.indexOf(event.target),nextIndex=currentIndex;
+    if(currentIndex<0)return;
+    if(event.key==='ArrowRight')nextIndex=(currentIndex+1)%flywheelTabs.length;
+    else if(event.key==='ArrowLeft')nextIndex=(currentIndex-1+flywheelTabs.length)%flywheelTabs.length;
+    else if(event.key==='Home')nextIndex=0;
+    else if(event.key==='End')nextIndex=flywheelTabs.length-1;
+    else return;
+    event.preventDefault();flywheelTabs[nextIndex].focus();fwV(flywheelTabs[nextIndex].dataset.v);
+  });
+
   function checkToken(){
-    if(getToken()){$('token-note').innerHTML='';}
-    else{$('token-note').innerHTML='还没设置令牌？<a onclick="fwV(\'settings\')">去设置</a>';}
+    var connected=Boolean(getToken());
+    $('token-note').textContent=connected?'浏览器会话已连接。':'连接后即可开始拆解，已填写的链接会保留。';
+    var status=$('flywheel-session-status');
+    if(status)status.textContent=connected?'浏览器会话已连接，管理口令未保存在浏览器中。':'尚未连接；请使用上方“连接管理会话”按钮。';
   }
 
   // ---------- analyze ----------
@@ -493,7 +535,7 @@
           '<div class="res-info">'+
             '<div class="res-tt"><span class="ty '+tc+'">'+tt+'</span> '+esc(d.title)+'</div>'+
             '<div class="res-meta">@'+esc(d.author)+(d.stats?(' · 赞 '+(d.stats.like_count||0)):'')+' · '+
-            '<a class="link" href="'+esc(d.original_url)+'" target="_blank" rel="noopener">看原内容 ↗</a></div>'+
+            '<a class="link" href="'+esc(safeHttpURL(d.original_url)||'#')+'" target="_blank" rel="noopener">看原内容 ↗</a></div>'+
           '</div>';
     if(d.content_id){
       h+='<div class="res-actions">'+
@@ -529,7 +571,11 @@
       .replace(/\n/g,'<br>');
   }
   window.fwDraft=function(contentId){
-    if(!getToken()){fwV('settings');return;}
+    if(!getToken()){
+      requireFlywheelSession('输入管理口令后继续生成新帖；当前拆解结果会保留。')
+        .then(function(){fwDraft(contentId);}).catch(function(error){showErr(error.message||'未能建立浏览器会话');});
+      return;
+    }
     var btn=$('draft-btn'), out=$('draft-output'), status=$('draft-status'), copy=$('draft-copy');
     if(!btn||!out||!status)return;
     btn.disabled=true;btn.textContent='生成中…';status.textContent='正在调用 DeepSeek v4 Pro 生成新帖…';
@@ -537,7 +583,8 @@
     fetch('/api/flywheel/content/'+contentId+'/draft',{method:'POST',headers:hdrs()})
       .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
       .then(function(r){btn.disabled=false;btn.textContent='重新生成';
-        if(r.s===401||r.s===403){status.textContent='令牌无效，请到「设置」重新填写。';return;}
+        if(r.s===401){status.textContent='浏览器会话已过期，请重新连接后继续。';showAuthGate();return;}
+        if(r.s===403){status.textContent='当前会话无权执行此操作，请检查管理口令权限。';return;}
         if(!r.j||r.j.ok!==true){status.textContent=(r.j&&r.j.error)||'生成失败，请重试。';return;}
         lastDraftMarkdown=r.j.markdown||'';out.innerHTML=renderDraft(lastDraftMarkdown);out.classList.remove('hidden');
         status.textContent='已生成，可直接复制后再人工润色。';if(copy)copy.classList.remove('hidden');})
@@ -559,12 +606,17 @@
     if($('url').closest('.box'))$('url').closest('.box').classList.remove('is-error');
     url=(url||$('url').value||'').trim();if(!url){$('url').focus();return;}
     $('url').value=url;
-    if(!getToken()){fwV('settings');return;}
+    if(!getToken()){
+      requireFlywheelSession('输入管理口令后拆解刚才粘贴的链接；链接不会丢失。')
+        .then(function(){analyze(url);}).catch(function(error){showErr(error.message||'未能建立浏览器会话');});
+      return;
+    }
     hide($('err'));hide($('result'));show($('loading'));$('go').disabled=true;startLoad();
     fetch('/api/flywheel/analyze',{method:'POST',headers:hdrs(),body:JSON.stringify({url:url})})
       .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
       .then(function(r){stopLoad();hide($('loading'));$('go').disabled=false;
-        if(r.s===401||r.s===403){showErr('令牌无效，请到「设置」重新填写。');return;}
+        if(r.s===401){showErr('浏览器会话已过期，请重新连接后继续。');showAuthGate();return;}
+        if(r.s===403){showErr('当前会话无权执行此操作，请检查管理口令权限。');return;}
         if(!r.j||r.j.ok!==true){showErr((r.j&&r.j.error)||'解析失败，请重试。');return;}
         renderResult(r.j);})
       .catch(function(){showErr('网络错误，请重试。');});
@@ -576,12 +628,14 @@
   // ---------- history ----------
   var bloggerOptsLoaded=false;
   function fwLoadBloggerOptions(){
+    if(!getToken()){showAuthGate();return;}
     if(bloggerOptsLoaded)return;bloggerOptsLoaded=true;
     fetch('/api/flywheel/bloggers',{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
       (d.items||[]).forEach(function(b){var o=document.createElement('option');o.value=b.id;o.textContent=b.handle;$('f-blogger').appendChild(o);});
     }).catch(function(){});
   }
   window.fwLoadContents=function(){
+    if(!getToken()){showAuthGate();return;}
     var qs=new URLSearchParams();
     var map={subscribe:'f-subscribe',blogger_ids:'f-blogger',statuses:'f-status',media_type:'f-type',date:'f-date',sort:'f-sort'};
     for(var k in map){var v=$(map[k]).value;if(v)qs.set(k,v);}
@@ -598,17 +652,18 @@
               : '<button class="act primary" onclick="fwRun(\''+encodeURIComponent(c.original_url)+'\')">解析</button>');
         h+='<div class="row"><span class="ic">'+(c.media_type==='video'?'视':'文')+'</span>'+
           '<div class="main"><div class="tt">'+esc(c.title)+'<span class="st '+c.analysis_status+'">'+stTxt+'</span></div>'+
-          '<div class="meta">@'+esc(c.blogger_handle)+' · 赞 '+c.like_count+' · <a href="'+esc(c.original_url)+'" target="_blank" rel="noopener">看原内容↗</a></div></div>'+
+          '<div class="meta">@'+esc(c.blogger_handle)+' · 赞 '+c.like_count+' · <a href="'+esc(safeHttpURL(c.original_url)||'#')+'" target="_blank" rel="noopener">看原内容↗</a></div></div>'+
           act+'</div>';
       });
       $('contents').innerHTML=h;
-    }).catch(function(){$('contents').innerHTML='<div class="err">加载失败，请检查令牌（设置）。</div>';});
+    }).catch(function(){$('contents').innerHTML='<div class="err">网络连接失败，请稍后重试。</div>';});
   };
   // auto-apply on any filter change
   ['f-subscribe','f-blogger','f-status','f-type','f-date','f-sort'].forEach(function(id){
     $(id).addEventListener('change',fwLoadContents);
   });
   window.fwView=function(id){
+    if(!getToken()){showAuthGate();return;}
     fwV('analyze');hide($('err'));hide($('result'));show($('loading'));setLoadStage('fetch','正在加载解析结果…');
     fetch('/api/flywheel/content/'+id,{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
       hide($('loading'));
@@ -620,7 +675,7 @@
 
   // ---------- topic opportunity ranking ----------
   window.fwLoadOpportunities=function(){
-    if(!getToken()){fwV('settings');return;}
+    if(!getToken()){showAuthGate();return;}
     var qs=new URLSearchParams();
     var date=$('o-date').value, type=$('o-type').value, subscribe=$('o-subscribe').value;
     if(date)qs.set('date',date);if(type)qs.set('media_type',type);if(subscribe)qs.set('subscribe',subscribe);
@@ -634,13 +689,13 @@
       d.items.forEach(function(o){
         h+='<div class="row"><div class="opp-score '+esc(o.level)+'"><span>'+esc(o.score)+'</span><small>分</small></div>'+
           '<div class="main"><div class="tt">'+esc(o.title)+'<span class="st success">'+esc(lvlTxt[o.level]||o.level)+'</span></div>'+
-          '<div class="meta">@'+esc(o.blogger_handle||'')+' · 赞 '+((o.stats&&o.stats.like_count)||0)+' · 收藏 '+((o.stats&&o.stats.collect_count)||0)+' · 评论 '+((o.stats&&o.stats.comment_count)||0)+' · <a href="'+esc(o.original_url)+'" target="_blank" rel="noopener">看原内容↗</a></div>'+
+          '<div class="meta">@'+esc(o.blogger_handle||'')+' · 赞 '+((o.stats&&o.stats.like_count)||0)+' · 收藏 '+((o.stats&&o.stats.collect_count)||0)+' · 评论 '+((o.stats&&o.stats.comment_count)||0)+' · <a href="'+esc(safeHttpURL(o.original_url)||'#')+'" target="_blank" rel="noopener">看原内容↗</a></div>'+
           '<div class="opp-tags"><span class="opp-tag">'+esc(typeTxt[o.opportunity_type]||o.opportunity_type)+'</span><span class="opp-tag">'+esc(o.reason||'')+'</span></div>'+
           '<div class="opp-action"><strong>建议动作：</strong><br>'+md(o.next_action||'打开解析结果继续判断')+'</div></div>'+
           '<button class="act primary" onclick="fwView('+o.content_id+')">看解析</button></div>';
       });
       $('opportunities').innerHTML=h;
-    }).catch(function(){$('opportunities').innerHTML='<div class="err">加载失败，请检查令牌。</div>';});
+    }).catch(function(){$('opportunities').innerHTML='<div class="err">网络连接失败，请稍后重试。</div>';});
   };
   ['o-date','o-type','o-subscribe'].forEach(function(id){
     $(id).addEventListener('change',fwLoadOpportunities);
@@ -648,6 +703,7 @@
 
   // ---------- bloggers ----------
   window.fwLoadBloggers=function(){
+    if(!getToken()){showAuthGate();return;}
     fetch('/api/flywheel/bloggers',{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
       if(!d.items||!d.items.length){$('bloggers').innerHTML='<div class="empty">还没订阅博主。</div>';return;}
       var h='';d.items.forEach(function(b){
@@ -658,7 +714,12 @@
   };
   function subMsg(t){var m=$('sub-msg');if(!m)return;if(t){m.textContent=t;m.hidden=false;}else{m.textContent='';m.hidden=true;}}
   $('sub').addEventListener('click',function(){
-    var url=($('sub-url').value||'').trim();if(!url)return;if(!getToken()){fwV('settings');return;}
+    var url=($('sub-url').value||'').trim();if(!url)return;
+    if(!getToken()){
+      requireFlywheelSession('输入管理口令后订阅刚才填写的账号；主页链接会保留。')
+        .then(function(){$('sub').click();}).catch(function(error){subMsg(error.message||'未能建立浏览器会话');});
+      return;
+    }
     subMsg('');$('sub').disabled=true;
     fetch('/api/flywheel/subscribe',{method:'POST',headers:hdrs(),body:JSON.stringify({url:url})})
       .then(function(r){return r.json();}).then(function(d){$('sub').disabled=false;
@@ -680,7 +741,7 @@
     $('prompt-body').value=item.body||'';
   }
   window.fwLoadPrompts=function(force, doneText){
-    if(!getToken()){$('prompt-status').textContent='请先保存 API 令牌';return Promise.resolve();}
+    if(!getToken()){$('prompt-status').textContent='连接浏览器会话后可编辑提示词';showAuthGate();return Promise.resolve();}
     if(promptLoaded&&!force){renderPromptEditor();return;}
     $('prompt-status').textContent='正在加载提示词…';
     return fetch('/api/flywheel/prompts',{headers:hdrs()}).then(function(r){return r.json();}).then(function(d){
@@ -689,7 +750,11 @@
   };
   $('prompt-media-type').addEventListener('change',renderPromptEditor);
   $('prompt-save').addEventListener('click',function(){
-    if(!getToken()){fwV('settings');return;}
+    if(!getToken()){
+      requireFlywheelSession('输入管理口令后保存当前提示词；编辑内容会保留。')
+        .then(function(){$('prompt-save').click();}).catch(function(error){$('prompt-status').textContent=error.message||'未能建立浏览器会话';});
+      return;
+    }
     var media=$('prompt-media-type').value, body=$('prompt-body').value||'';
     if(!body.trim()){$('prompt-status').textContent='提示词不能为空';return;}
     $('prompt-save').disabled=true;$('prompt-status').textContent='正在保存…';
@@ -701,7 +766,11 @@
       }).catch(function(){$('prompt-save').disabled=false;$('prompt-status').textContent='保存失败';});
   });
   $('prompt-reset').addEventListener('click',function(){
-    if(!getToken()){fwV('settings');return;}
+    if(!getToken()){
+      requireFlywheelSession('输入管理口令后恢复默认提示词。')
+        .then(function(){$('prompt-reset').click();}).catch(function(error){$('prompt-status').textContent=error.message||'未能建立浏览器会话';});
+      return;
+    }
     var media=$('prompt-media-type').value;
     $('prompt-reset').disabled=true;$('prompt-status').textContent='正在恢复默认…';
     fetch('/api/flywheel/prompts/'+media+'/reset',{method:'POST',headers:hdrs()})
@@ -711,11 +780,6 @@
         promptLoaded=false;return fwLoadPrompts(true,'已恢复默认提示词 v'+r.j.version);
       }).catch(function(){$('prompt-reset').disabled=false;$('prompt-status').textContent='恢复失败';});
   });
-  $('save-token').addEventListener('click',function(){
-    var t=($('token-input').value||'').trim();if(!t)return;setToken(t);show($('token-saved'));checkToken();
-    promptLoaded=false;fwLoadPrompts(true);
-  });
-  if(getToken())$('token-input').value='';
   var startParams=new URLSearchParams(window.location.search);
   var startUrl=startParams.get('url');
   if(startUrl){
@@ -724,7 +788,11 @@
   }
   var startView=(location.hash||'').replace('#','');
   if(['opportunities','history','bloggers','settings'].indexOf(startView)>=0)fwV(startView);
-  checkToken();
+  window.LearnFluxAuth.ready.then(function(authState){
+    checkToken();
+    if(authState.authenticated){hideAuthGate();return;}
+    showAuthGate();
+  });
 })();
 </script>
 </body>

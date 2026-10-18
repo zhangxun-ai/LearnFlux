@@ -245,10 +245,17 @@ body {
     white-space: nowrap;
 }
 
-.url-score {
-    font-size: 0.85rem; /* Increased for better legibility */
-    color: var(--text-secondary);
-    font-weight: 500;
+.url-recommendation {
+    flex-shrink: 0;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid var(--accent-primary);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
 /* 复选框样式 */
@@ -705,7 +712,7 @@ body {
         gap: 0.5rem;
     }
 
-    .url-score {
+    .url-recommendation {
         align-self: flex-start;
     }
 }
@@ -775,7 +782,7 @@ body {
         word-break: break-all;
     }
 
-    .url-score {
+    .url-recommendation {
         font-size: 0.75rem;
     }
 

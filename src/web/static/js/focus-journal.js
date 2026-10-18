@@ -1,8 +1,6 @@
 (function () {
     'use strict';
 
-    const TOKEN_KEY = 'vta_bearer_token';
-    const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
     const LOCAL_TEXT_KEY = 'vta_focus_studio_text';
     const LOCAL_SAVED_AT_KEY = 'vta_focus_studio_saved_at';
 
@@ -44,19 +42,10 @@
         els.panels = document.querySelectorAll('[data-journal-panel]');
     }
 
-    function decryptToken(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.replace(ENCRYPTION_KEY, '');
-        } catch (error) {
-            return encoded;
-        }
-    }
-
     function getToken() {
-        return decryptToken(localStorage.getItem(TOKEN_KEY));
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : '';
     }
 
     async function apiJSON(url, options) {
@@ -221,12 +210,14 @@
             return;
         }
         els.historyList.innerHTML = entries.map((entry) => {
-            const label = TYPE_LABELS[entry.entry_type] || entry.entry_type;
+            const entryDate = escapeHTML(entry.entry_date);
+            const entryType = escapeHTML(entry.entry_type);
+            const label = escapeHTML(TYPE_LABELS[entry.entry_type] || entry.entry_type);
             const title = escapeHTML(entry.title || titleFromBody(entry.body));
             const preview = escapeHTML(shortBody(entry.body));
             return '<button type="button" class="journal-history-card" ' +
-                'data-entry-date="' + entry.entry_date + '" data-entry-type="' + entry.entry_type + '">' +
-                '<span>' + entry.entry_date + ' · ' + label + '</span>' +
+                'data-entry-date="' + entryDate + '" data-entry-type="' + entryType + '">' +
+                '<span>' + entryDate + ' · ' + label + '</span>' +
                 '<strong>' + title + '</strong>' +
                 (preview ? '<small>' + preview + '</small>' : '') +
                 '</button>';
@@ -288,6 +279,7 @@
             const active = button.dataset.journalTab === target;
             button.classList.toggle('active', active);
             button.setAttribute('aria-selected', active ? 'true' : 'false');
+            button.tabIndex = active ? 0 : -1;
         });
         els.panels.forEach((panelEl) => {
             const active = panelEl.dataset.journalPanel === target;
@@ -363,8 +355,21 @@
                 loadCurrentEntry();
             });
         }
-        els.tabs.forEach((button) => {
-            button.addEventListener('click', () => togglePanel(button.dataset.journalTab));
+        const journalTabs = Array.from(els.tabs);
+        journalTabs.forEach((button) => {
+            button.addEventListener('click', () => openPanel(button.dataset.journalTab));
+            button.addEventListener('keydown', (event) => {
+                const currentIndex = journalTabs.indexOf(button);
+                let nextIndex = currentIndex;
+                if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % journalTabs.length;
+                else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + journalTabs.length) % journalTabs.length;
+                else if (event.key === 'Home') nextIndex = 0;
+                else if (event.key === 'End') nextIndex = journalTabs.length - 1;
+                else return;
+                event.preventDefault();
+                journalTabs[nextIndex].focus();
+                openPanel(journalTabs[nextIndex].dataset.journalTab);
+            });
         });
         els.openButtons.forEach((button) => {
             button.addEventListener('click', () => togglePanel(button.dataset.journalOpen));

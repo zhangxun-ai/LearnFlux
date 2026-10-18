@@ -135,7 +135,7 @@
         if (!SOUND_BY_ID[sound]) sound = 'rain';
         state.sound = sound;
         localStorage.setItem(STORAGE.sound, sound);
-        soundName.textContent = 'Volume';
+        soundName.textContent = soundLabel(sound);
         soundCurrent.title = '当前背景音：' + soundLabel(sound);
         document.querySelectorAll('button[data-sound]').forEach((button) => {
             button.classList.toggle('active', button.dataset.sound === sound);
@@ -169,10 +169,10 @@
         let dpr = 1;
         let fallbackTimer = null;
 
-        // 自托管底图：雨=车内模糊 bokeh，雪=阿尔卑斯雪湖（与目标站点同源素材）
+        // 自托管底图：雨景与雪景使用同构图的绘本风湖畔场景
         const TEXTURES = {
-            rainy: '/static/img/focus/rain-bg.jpg',
-            snowy: '/static/img/focus/snow-bg.jpg'
+            rainy: '/static/img/focus/rain-bg-storybook.jpg',
+            snowy: '/static/img/focus/snow-bg-storybook-v2.jpg'
         };
 
         // 共享顶点着色器：全屏四边形，并把裁剪坐标映射成 [0,1] 的 vUv 供片元采样底图

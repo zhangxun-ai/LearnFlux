@@ -349,7 +349,9 @@ def test_review_navigation_and_frontend_contracts():
     assert 'id="filterRecordType"' in history
     assert "/api/reviews/search" in history
     assert "复盘历史不依赖任务审计" in history
-    assert "catch (e) { return encoded; }" in history
+    assert "window.LearnFluxAuth.requireSession" in history
+    assert 'id="apiKeyInput"' not in history
+    assert "vta_encrypt_key_2024" not in history
 
 
 def test_review_secondary_routes_render_the_same_workspace(tmp_path):

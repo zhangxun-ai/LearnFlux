@@ -1,0 +1,263 @@
+/* Shared browser-session gate for protected LearnFlux workspaces. */
+
+.lf-auth-gate {
+    width: min(92vw, 480px);
+    max-width: 480px;
+    max-height: min(88dvh, 680px);
+    margin: auto;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--shell-text, #172033);
+}
+
+.lf-auth-gate::backdrop {
+    background: rgba(15, 23, 42, 0.54);
+    backdrop-filter: blur(5px);
+}
+
+.lf-auth-gate-card {
+    position: relative;
+    display: grid;
+    gap: 20px;
+    padding: 28px;
+    overflow: hidden;
+    border: 1px solid var(--shell-line, #dce2ea);
+    border-radius: inherit;
+    background: var(--shell-surface, #fff);
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.lf-auth-gate-header {
+    display: grid;
+    gap: 8px;
+    padding-right: 36px;
+}
+
+.lf-auth-gate-kicker {
+    margin: 0;
+    color: var(--shell-accent, #2868d8);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.lf-auth-gate-title {
+    margin: 0;
+    color: var(--shell-text, #172033);
+    font-size: clamp(1.35rem, 4vw, 1.65rem);
+    line-height: 1.25;
+    letter-spacing: -0.025em;
+}
+
+.lf-auth-gate-description,
+.lf-auth-gate-hint {
+    margin: 0;
+    color: var(--shell-muted, #596579);
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.lf-auth-gate-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--shell-muted, #596579);
+    cursor: pointer;
+    font: inherit;
+    font-size: 22px;
+}
+
+.lf-auth-gate-form,
+.lf-auth-gate-field {
+    display: grid;
+    gap: 8px;
+}
+
+.lf-auth-gate-label {
+    color: var(--shell-text, #172033);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.lf-auth-gate-input {
+    width: 100%;
+    min-height: 48px;
+    padding: 11px 13px;
+    border: 1px solid var(--shell-line-strong, #758195);
+    border-radius: 9px;
+    background: var(--shell-surface, #fff);
+    color: var(--shell-text, #172033);
+    font: inherit;
+    font-size: 16px;
+    line-height: 24px;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.lf-auth-gate-input::placeholder {
+    color: var(--shell-subtle, #68758a);
+}
+
+.lf-auth-gate-status {
+    min-height: 20px;
+    margin: 2px 0 0;
+    color: #b42318;
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.lf-auth-gate-status:empty {
+    min-height: 0;
+}
+
+.lf-auth-gate-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.lf-auth-gate-secondary,
+.lf-auth-gate-primary,
+.lf-auth-required-action {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 16px;
+    border-radius: 9px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.lf-auth-gate-secondary {
+    border: 1px solid var(--shell-line, #dce2ea);
+    background: var(--shell-surface, #fff);
+    color: var(--shell-muted, #596579);
+}
+
+.lf-auth-gate-primary,
+.lf-auth-required-action {
+    border: 1px solid var(--shell-accent, #2868d8);
+    background: var(--shell-accent, #2868d8);
+    color: var(--shell-on-accent, #fff);
+}
+
+.lf-auth-gate-primary:disabled {
+    cursor: wait;
+    opacity: 0.68;
+}
+
+.lf-auth-gate-settings-link {
+    width: fit-content;
+    color: var(--shell-muted, #596579);
+    font-size: 13px;
+    text-underline-offset: 3px;
+}
+
+.lf-auth-gate :is(button, input, a):focus-visible,
+.lf-auth-required :is(button, a):focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--shell-focus, #2868d8) 34%, transparent);
+    outline-offset: 2px;
+}
+
+.lf-auth-required {
+    display: grid;
+    justify-items: start;
+    gap: 10px;
+    width: 100%;
+    padding: 22px;
+    border: 1px solid var(--shell-line, #dce2ea);
+    border-radius: 12px;
+    background: var(--shell-surface, #fff);
+    color: var(--shell-text, #172033);
+}
+
+.lf-auth-required-icon {
+    width: 36px;
+    height: 36px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 10px;
+    background: var(--shell-accent-soft, #e9f1ff);
+    color: var(--shell-accent, #2868d8);
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.lf-auth-required h2 {
+    margin: 2px 0 0;
+    font-size: 18px;
+    line-height: 1.35;
+}
+
+.lf-auth-required p {
+    max-width: 58ch;
+    margin: 0;
+    color: var(--shell-muted, #596579);
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+[data-theme="dark"] .lf-auth-gate-card,
+[data-theme="dark"] .lf-auth-required {
+    border-color: var(--shell-line, #343b47);
+    background: var(--shell-surface, #181c23);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .lf-auth-gate-input,
+[data-theme="dark"] .lf-auth-gate-secondary {
+    border-color: var(--shell-line-strong, #687386);
+    background: var(--shell-surface-muted, #212733);
+    color: var(--shell-text, #f4f7fb);
+}
+
+@media (max-width: 560px) {
+    .lf-auth-gate {
+        width: 100%;
+        max-width: none;
+        max-height: calc(100dvh - 12px);
+        margin: auto 0 0;
+        border-radius: 16px 16px 0 0;
+    }
+
+    .lf-auth-gate-card {
+        max-height: calc(100dvh - 12px);
+        overflow-y: auto;
+        padding: 24px max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+    }
+
+    .lf-auth-gate-actions {
+        align-items: stretch;
+        flex-direction: column-reverse;
+    }
+
+    .lf-auth-gate-actions > * {
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lf-auth-gate::backdrop {
+        backdrop-filter: none;
+    }
+}

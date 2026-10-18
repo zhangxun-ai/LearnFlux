@@ -1,7 +1,5 @@
 (function () {
     const CURRENT_REPORT_VERSION = "decision-brief-v4";
-    const TOKEN_KEY = "vta_bearer_token";
-    const ENC = "vta_encrypt_key_2024";
 
     const stageMeta = {
         "too-early": { label: "太早期", className: "stage-too-early", verdict: "观察，不急" },
@@ -210,6 +208,16 @@
             .replace(/'/g, "&#39;");
     }
 
+    function safeHttpURL(value) {
+        if (!String(value || '').trim()) return '';
+        try {
+            const parsed = new URL(String(value), window.location.origin);
+            return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+        } catch (error) {
+            return '';
+        }
+    }
+
     function truncateText(value, limit) {
         const text = String(value || "").replace(/\s+/g, " ").trim();
         if (text.length <= limit) return text;
@@ -221,14 +229,9 @@
     }
 
     function getToken() {
-        try {
-            const raw = localStorage.getItem(TOKEN_KEY);
-            if (!raw) return "";
-            const decoded = decodeURIComponent(escape(atob(raw.split("").reverse().join(""))));
-            return decoded.replace(ENC, "");
-        } catch (error) {
-            return "";
-        }
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : "";
     }
 
     function setStatus(message, tone) {
@@ -606,7 +609,8 @@
             const title = row.displayTitle || row.title || row.author || "原始依据";
             const summary = row.displaySummary || row.summary || row.text || "原文信息不足，只能看到来源标题。";
             const facts = Array.isArray(row.keyFacts) ? row.keyFacts : [row.platform, row.author, row.time].filter(Boolean);
-            const link = row.url ? `<a href="${escapeHtml(row.url)}" target="_blank" rel="noreferrer">打开原文</a>` : "无链接";
+            const safeURL = safeHttpURL(row.url);
+            const link = safeURL ? `<a href="${escapeHtml(safeURL)}" target="_blank" rel="noreferrer">打开原文</a>` : "无链接";
             return `
                 <article class="evidence-card">
                     <div class="evidence-head">

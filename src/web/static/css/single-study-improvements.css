@@ -1,0 +1,53 @@
+/* Task controls complement the approved meadow illustration and paper surfaces. */
+.page-home .study-cloud-note {
+    margin: 0 0 12px;
+    color: var(--product-ink, #123D32);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.page-home .study-file-selection {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 14px;
+    padding: 14px 16px;
+    border: 1px solid var(--product-line, #DCE7DE);
+    border-radius: 12px;
+    background: var(--product-surface, #FFFFFF);
+}
+
+.page-home .study-file-summary { display: grid; gap: 5px; min-width: 0; }
+.page-home .study-file-summary strong { color: var(--product-ink, #123D32); overflow-wrap: anywhere; }
+.page-home .study-file-summary span,
+.page-home .study-text-meta,
+.page-home .study-recent-note { color: var(--product-muted, #64756D); font-size: 12px; line-height: 1.6; }
+.page-home .study-file-actions { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+.page-home .study-file-actions .submit-btn { flex: 1; }
+.page-home .study-text-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 7px; }
+.page-home .study-text-meta #study-text-count { font-variant-numeric: tabular-nums; }
+.page-home .study-text-action {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 4px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--product-ink, #123D32);
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+.page-home .study-text-action:focus-visible { outline: 2px solid var(--product-focus, #337B62); outline-offset: 3px; }
+.page-home .study-text-action:disabled { opacity: 0.55; cursor: wait; }
+.page-home .study-recent-note { margin: 14px 0 0; }
+.page-home .submit-hint[data-state="error"] { color: #9B382A; }
+.page-home .url-preview[data-single="true"] { display: none; }
+.page-home :is(.study-cloud-note, .study-file-selection, .study-file-actions, #file-cancel, #study-draft-clear, #file-transcription-options)[hidden] { display: none; }
+
+@media (max-width: 700px) {
+    .page-home .study-file-selection { gap: 8px; padding: 12px; }
+    .page-home .study-file-actions { gap: 8px; }
+}

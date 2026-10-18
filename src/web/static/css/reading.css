@@ -123,8 +123,12 @@ body.page-reading {
 }
 
 .reading-status.is-error,
-.reading-import-status {
-    color: #a23d32;
+.reading-import-status.is-error {
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--product-danger) 30%, transparent);
+    border-radius: 8px;
+    background: var(--product-danger-soft);
+    color: var(--product-danger);
 }
 
 .reading-continue-card {
@@ -559,6 +563,7 @@ body.page-reading {
 .reading-import-status {
     min-height: 22px;
     margin: 0;
+    color: var(--flow-muted);
     font-size: 0.86rem;
 }
 

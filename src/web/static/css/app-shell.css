@@ -157,11 +157,11 @@ body.sidebar-collapsed {
 
 .shell-icon-button,
 .mobile-menu-btn {
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
-    min-height: 32px;
-    flex: 0 0 32px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    flex: 0 0 44px;
     display: inline-grid;
     place-items: center;
     padding: 0;
@@ -706,6 +706,12 @@ body.sidebar-drawer-open .sidebar-overlay {
         overflow-y: auto;
     }
 
+    .nav-group-toggle,
+    .nav-item,
+    .nav-subitem {
+        min-height: 44px;
+    }
+
     .topbar {
         display: flex;
         min-height: var(--shell-topbar);
@@ -883,6 +889,15 @@ body.sidebar-floating .sidebar {
     box-shadow: var(--shell-shadow-md);
     background: var(--shell-sidebar-bg); /* ensure background covers */
 }
+
+@media (min-width: 901px) {
+    /* Keep themed sidebars out of the flex layout while they float. */
+    body.app-shell.sidebar-floating .sidebar {
+        position: fixed;
+        flex: 0 0 var(--shell-sidebar);
+    }
+}
+
 body.sidebar-floating .topbar {
     padding-left: 64px; /* prevent overlap with floating toggle button */
 }

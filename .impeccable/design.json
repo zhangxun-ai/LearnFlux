@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-16T06:42:29Z",
+  "title": "Design System: LearnFlux Landing",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "canonical": "#FDFCF8",
+        "tonalRamp": [
+          "#514101",
+          "#886D01",
+          "#C09A02",
+          "#F8C702",
+          "#FDD535",
+          "#FEE16C",
+          "#FEECA4",
+          "#FFF9E1"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#520000",
+          "#8A0000",
+          "#C20000",
+          "#FA0000",
+          "#FF3333",
+          "#FF6B6B",
+          "#FFA3A3",
+          "#FFE0E0"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink Green",
+        "canonical": "#123D32",
+        "tonalRamp": [
+          "#222F2C",
+          "#3A504A",
+          "#527068",
+          "#6A9086",
+          "#89A9A1",
+          "#AAC1BB",
+          "#CAD8D5",
+          "#EDF2F1"
+        ]
+      },
+      "body": {
+        "role": "neutral",
+        "displayName": "Body Ink",
+        "canonical": "#33443D",
+        "tonalRamp": [
+          "#1F322A",
+          "#355548",
+          "#4A7865",
+          "#609A82",
+          "#81B19D",
+          "#A4C6B8",
+          "#C6DCD3",
+          "#ECF3F0"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Green Gray",
+        "canonical": "#64756D",
+        "tonalRamp": [
+          "#173A2A",
+          "#286247",
+          "#388A63",
+          "#48B280",
+          "#6EC49C",
+          "#96D5B7",
+          "#BEE5D2",
+          "#E9F6F0"
+        ]
+      },
+      "leaf": {
+        "role": "primary",
+        "displayName": "Leaf Green",
+        "canonical": "#337B62",
+        "tonalRamp": [
+          "#1B372D",
+          "#2D5C4C",
+          "#40826B",
+          "#52A88A",
+          "#76BCA4",
+          "#9CCEBD",
+          "#C1E1D6",
+          "#EAF5F1"
+        ]
+      },
+      "leaf-dark": {
+        "role": "primary",
+        "displayName": "Deep Leaf",
+        "canonical": "#23634F",
+        "tonalRamp": [
+          "#1E342D",
+          "#33574C",
+          "#477A6A",
+          "#5C9E89",
+          "#7EB4A3",
+          "#A2C8BC",
+          "#C5DDD6",
+          "#ECF4F1"
+        ]
+      },
+      "sage": {
+        "role": "secondary",
+        "displayName": "Soft Sage",
+        "canonical": "#E7F1E9",
+        "tonalRamp": [
+          "#034F12",
+          "#05851F",
+          "#07BB2B",
+          "#09F138",
+          "#3BF760",
+          "#71F98C",
+          "#A7FCB8",
+          "#E2FEE7"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Soft Divider",
+        "canonical": "#E3EAE4",
+        "tonalRamp": [
+          "#044E0E",
+          "#078318",
+          "#09B822",
+          "#0CEE2C",
+          "#3DF557",
+          "#72F885",
+          "#A8FBB3",
+          "#E2FEE6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Editorial Serif",
+        "purpose": "Two-line Chinese landing headline."
+      },
+      "body": {
+        "displayName": "System Sans",
+        "purpose": "Navigation, supporting copy, and interface detail."
+      }
+    },
+    "shadows": [
+      {
+        "name": "workbench-preview",
+        "value": "0 16px 48px rgba(38, 75, 52, 0.14)",
+        "purpose": "Separate the learning preview from the illustrated hero."
+      },
+      {
+        "name": "primary-action",
+        "value": "0 9px 22px rgba(42, 111, 82, 0.16)",
+        "purpose": "Give the main action a quiet lift."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-transition",
+        "value": "160ms ease",
+        "purpose": "Button hover and focus transitions."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "tablet",
+        "value": "920px"
+      },
+      {
+        "name": "mobile",
+        "value": "680px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Filled action for entering the existing local learning workflow.",
+      "html": "<a class=\"ds-button-primary\" href=\"#\">开始学习 <span aria-hidden=\"true\">→</span></a>",
+      "css": ".ds-button-primary{display:inline-flex;min-height:52px;align-items:center;justify-content:center;gap:12px;padding:0 24px;border-radius:999px;background:#337B62;color:#FFFFFF;font:650 0.98rem -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;text-decoration:none;box-shadow:0 9px 22px rgba(42,111,82,.16);transition:background-color 160ms ease,transform 160ms ease}.ds-button-primary:hover{background:#23634F;transform:translateY(-1px)}.ds-button-primary:focus-visible{outline:3px solid #123D32;outline-offset:4px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet pill action for exploring the workflow.",
+      "html": "<a class=\"ds-button-secondary\" href=\"#workflow\">了解工作流程</a>",
+      "css": ".ds-button-secondary{display:inline-flex;min-height:52px;align-items:center;justify-content:center;padding:0 24px;border:1px solid #A8C6B3;border-radius:999px;background:rgba(255,255,255,.68);color:#123D32;font:650 0.98rem -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;text-decoration:none;transition:background-color 160ms ease,border-color 160ms ease}.ds-button-secondary:hover{border-color:#337B62;background:#FFFFFF}.ds-button-secondary:focus-visible{outline:3px solid #123D32;outline-offset:4px}"
+    },
+    {
+      "name": "Landing Navigation",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Compact brand and section links above the landing hero.",
+      "html": "<nav class=\"ds-navigation\"><strong>LearnFlux</strong><a href=\"#workflow\">学习流程</a><a class=\"ds-nav-action\" href=\"#\">开始学习</a></nav>",
+      "css": ".ds-navigation{display:flex;min-height:76px;align-items:center;justify-content:space-between;gap:24px;padding:12px 32px;background:rgba(253,252,248,.96);color:#123D32;font:550 .94rem -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.ds-navigation strong{font:700 1.55rem Georgia,\"Songti SC\",serif}.ds-navigation a{color:inherit;text-decoration:none}.ds-navigation a:focus-visible{outline:3px solid #337B62;outline-offset:4px}.ds-navigation .ds-nav-action{padding:12px 22px;border-radius:999px;background:#337B62;color:#FFFFFF}"
+    },
+    {
+      "name": "Workbench Preview",
+      "kind": "card",
+      "refersTo": "preview-surface",
+      "description": "Clearly labeled, non-interactive example of the existing learning interface.",
+      "html": "<section class=\"ds-preview\"><header><strong>如何在不确定的时代保持学习力</strong><span>示例内容 · 学习方法</span></header><p><time>00:32</time> 在变化很快的时候，持续学习让我们更从容。</p></section>",
+      "css": ".ds-preview{padding:22px;border:1px solid #E3EAE4;border-radius:22px;background:#FFFFFF;box-shadow:0 16px 48px rgba(38,75,52,.14);color:#33443D;font:400 .8rem/1.65 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.ds-preview header{display:flex;flex-direction:column;gap:4px}.ds-preview strong{color:#123D32;font-size:.9rem}.ds-preview header span,.ds-preview time{color:#64756D;font-size:.72rem}.ds-preview p{margin:14px 0 0}"
+    },
+    {
+      "name": "Workflow Step",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "One sparse step in the three-part learning path.",
+      "html": "<div class=\"ds-step\"><span>01</span><div><strong>导入材料</strong><p>粘贴链接，或选择音视频、文档和文字。</p></div></div>",
+      "css": ".ds-step{display:flex;align-items:flex-start;gap:17px;padding-top:24px;border-top:1px solid #E3EAE4;color:#33443D;font:400 .93rem/1.7 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.ds-step>span{display:grid;width:42px;height:42px;flex:0 0 42px;place-items:center;border-radius:50%;background:#E7F1E9;color:#123D32;font:700 1.05rem Georgia,serif}.ds-step strong{color:#123D32;font-size:1.07rem}.ds-step p{margin:7px 0 0;color:#64756D}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Illustrated Learning Path",
+    "overview": "This specification records the landing page at / only. Its visual direction follows the user-selected reference: a bright countryside illustration, generous breathing room, and a concise path from importing material to keeping useful knowledge. The illustration supports the product story while the overlaid learning-interface preview makes the existing workflow tangible. The page describes LearnFlux as a personal AI learning workspace used locally. It does not imply public launch or make claims about pricing, customers, source licensing, or hosted availability. Other pages await the user review.",
+    "keyCharacteristics": [
+      "Warm paper surfaces, readable dark-green text, and restrained leaf-green actions.",
+      "An original countryside illustration with a compact, clearly labeled interface preview.",
+      "Editorial Chinese headlines paired with familiar system body text.",
+      "Clear actions that lead into the existing local learning workflow."
+    ],
+    "rules": [],
+    "dos": [
+      "Keep the headline, landscape, and preview as the landing page main visual hierarchy.",
+      "Use specific copy to distinguish video transcripts from document and text reading.",
+      "Keep local use and the current product state clear."
+    ],
+    "donts": [
+      "Do not imply that the illustrative preview is an interactive player.",
+      "Do not add public launch, pricing, customer, or licensing claims without a confirmed decision.",
+      "Do not treat this landing-page design as approval to redesign the workbench or other pages."
+    ]
+  }
+}

@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 
+{% block body_class %}page-result transcript-result-page page-transcript workbench-meadow{% endblock %}
+
 {% block title %}{{ title or "视频转录" }} - LearnFlux{% endblock %}
 {% block meta_description %}{{ title or "视频转录" }} - {{ platform or "" }} 视频转录校对结果{% endblock %}
 {% block og_title %}{{ title or "视频转录" }} - LearnFlux{% endblock %}
@@ -814,6 +816,7 @@ body.export-document-mode .export-print-nav {
     }
 }
 </style>
+<link rel="stylesheet" href="/static/css/workbench-wildwood.css?v={{ asset_ver }}">
 {% endblock %}
 
 {% block content %}
@@ -1188,6 +1191,198 @@ body.export-document-mode .export-print-nav {
     [data-theme="dark"] .summary-reader-btn[aria-selected="true"] {
         box-shadow: inset 0 0 0 1px var(--line, #2B2722) !important;
     }
+
+    body.transcript-result-page .header {
+        min-width: 0;
+        margin: 0 0 28px;
+        padding: 0 0 28px;
+        background: transparent;
+    }
+    body.transcript-result-page .header h1 {
+        max-width: 100%;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    /* Final responsive overrides intentionally follow the paper layout above. */
+    @media (max-width: 720px) {
+        body.transcript-result-page.app-shell .page-stage {
+            max-width: none;
+            padding: 16px 0 40px;
+        }
+        body.transcript-result-page.app-shell .page-stage > .container {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 24px max(20px, env(safe-area-inset-right)) 48px max(20px, env(safe-area-inset-left));
+            border-right: 0;
+            border-left: 0;
+            border-radius: 0;
+            overflow: visible;
+        }
+        body.transcript-result-page .header {
+            min-width: 0;
+            margin: 0 0 24px;
+            padding: 0 0 24px;
+            background: transparent;
+        }
+        body.transcript-result-page .header h1 {
+            max-width: 100%;
+            font-size: clamp(1.45rem, 7vw, 1.8rem);
+            line-height: 1.24;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            text-wrap: balance;
+        }
+        body.transcript-result-page .header .meta,
+        body.transcript-result-page .header .meta > span,
+        body.transcript-result-page .header .meta a,
+        body.transcript-result-page .header .meta button {
+            min-width: 0;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+        }
+        body.transcript-result-page .status-island {
+            max-width: 100%;
+            flex-wrap: wrap;
+            line-height: 1.5;
+        }
+        body.transcript-result-page .top-actions {
+            width: 100%;
+            align-items: stretch;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        body.transcript-result-page .top-btn,
+        body.transcript-result-page .recalibrate-btn,
+        body.transcript-result-page .summary-reader-btn,
+        body.transcript-result-page .transcript-copy-btn.quick-copy-btn {
+            min-height: 44px;
+        }
+        body.transcript-result-page .top-actions > .top-btn,
+        body.transcript-result-page #exportDropdownContainer {
+            flex: 1 1 132px;
+        }
+        body.transcript-result-page #exportMainBtn {
+            width: 100%;
+        }
+        body.transcript-result-page #exportMenu {
+            width: min(280px, calc(100vw - 32px));
+            max-width: calc(100vw - 32px);
+        }
+        body.transcript-result-page .minimal-nav {
+            margin-bottom: 36px;
+        }
+        body.transcript-result-page .section {
+            min-width: 0;
+            margin-bottom: 40px !important;
+        }
+        body.transcript-result-page .section-header {
+            width: 100%;
+            min-width: 0;
+            align-items: stretch;
+            flex-direction: column;
+            gap: 14px;
+        }
+        body.transcript-result-page .section-header h2 {
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+        }
+        body.transcript-result-page .section-header-actions,
+        body.transcript-result-page .summary-reader-actions,
+        body.transcript-result-page .summary-reader-tabs {
+            width: 100%;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+        body.transcript-result-page .summary-reader-btn {
+            flex: 1 1 112px;
+        }
+        body.transcript-result-page .content,
+        body.transcript-result-page .summary-view-panel,
+        body.transcript-result-page .transcript-visual-panel,
+        body.transcript-result-page .bilingual-both {
+            min-width: 0;
+            max-width: 100%;
+        }
+        body.transcript-result-page .content {
+            font-size: 1rem;
+            overflow-wrap: anywhere;
+        }
+        body.transcript-result-page .content :is(h1, h2, h3, h4, h5, h6, p, li, a) {
+            max-width: 100%;
+            overflow-wrap: anywhere;
+        }
+        body.transcript-result-page .content blockquote {
+            margin-right: 0;
+            margin-left: 0;
+            padding: 14px;
+        }
+        body.transcript-result-page .content ul,
+        body.transcript-result-page .content ol {
+            padding-left: 22px;
+        }
+        body.transcript-result-page .content ul ul,
+        body.transcript-result-page .content ol ol,
+        body.transcript-result-page .content ul ol,
+        body.transcript-result-page .content ol ul {
+            padding-left: 20px;
+        }
+        body.transcript-result-page .content pre {
+            max-width: 100%;
+            overflow-x: auto;
+            font-size: 0.84rem;
+            overscroll-behavior-inline: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        body.transcript-result-page .content code {
+            overflow-wrap: anywhere;
+        }
+        body.transcript-result-page .content pre code {
+            overflow-wrap: normal;
+        }
+        body.transcript-result-page .content table {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        body.transcript-result-page .content :is(img, video, svg, canvas) {
+            max-width: 100%;
+            height: auto;
+        }
+        body.transcript-result-page .advanced-actions-details,
+        body.transcript-result-page .learning-action-bar,
+        body.transcript-result-page .collection-nav {
+            padding-right: 0;
+            padding-left: 0;
+        }
+        body.transcript-result-page .transcript-visual-empty {
+            min-height: 220px;
+            padding: 24px 18px;
+        }
+        body.transcript-result-page .floating-toc-mobile-btn {
+            right: 12px;
+            bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px));
+            min-width: 52px;
+            height: 52px;
+            padding: 0 12px;
+        }
+        body.transcript-result-page .toc-mobile-close-btn {
+            min-width: 44px;
+            min-height: 44px;
+        }
+    }
+
+    @media (max-width: 360px) {
+        body.transcript-result-page.app-shell .page-stage > .container {
+            padding-right: max(16px, env(safe-area-inset-right));
+            padding-left: max(16px, env(safe-area-inset-left));
+        }
+    }
     </style>
 
     <!-- Top Status & Meta Island -->
@@ -1470,40 +1665,22 @@ body.export-document-mode .export-print-nav {
 <script src="/static/js/visual-learning.js?v={{ asset_ver }}"></script>
 <script src="/static/js/transcript-visual-reader.js?v={{ asset_ver }}-reader-20260718"></script>
 <script>
-function decryptContentMarkToken(encoded) {
-    if (!encoded) return '';
-    try {
-        var reversed = encoded.split('').reverse().join('');
-        var decoded = decodeURIComponent(escape(atob(reversed)));
-        return decoded.replace('vta_encrypt_key_2024', '');
-    } catch (e) {
-        return encoded;
-    }
-}
-
-// Same sources as homepage / marks: encrypted vta_bearer_token first, then legacy keys.
 function getContentMarkToken() {
-    return decryptContentMarkToken(localStorage.getItem('vta_bearer_token'))
-        || localStorage.getItem('vta_api_key_persist')
-        || sessionStorage.getItem('vta_api_key')
-        || localStorage.getItem('api_key')
-        || '';
+    return window.LearnFluxAuth
+        ? window.LearnFluxAuth.getTokenPlaceholder()
+        : '';
 }
-
-(function() {
-    var stored = getContentMarkToken();
-    var input = document.getElementById('recalibrateApiKey');
-    if (input && stored) input.value = stored;
-})();
 
 function submitRecalibrate() {
     var area = document.getElementById('recalibrateArea');
-    // Must use getContentMarkToken — homepage stores encrypted vta_bearer_token,
-    // not plain localStorage.api_key. Empty key becomes "Bearer " → 401 format error
-    // which the old UI mislabeled as "API Key invalid".
     var apiKey = getContentMarkToken();
     if (!apiKey) {
-        area.innerHTML = '<span class="recalibrate-status recalibrate-error">未找到登录令牌，请回首页高级设置填写后重试</span>';
+        window.LearnFluxAuth.requireSession({
+            title: '连接后重新校对',
+            reason: '输入管理口令后继续校对当前内容；结果页面不会关闭。'
+        }).then(submitRecalibrate).catch(function(error) {
+            area.innerHTML = '<span class="recalibrate-status recalibrate-error">' + escapeHtml(error.message || '未能建立浏览器会话') + '</span>';
+        });
         return;
     }
 
@@ -1519,7 +1696,7 @@ function submitRecalibrate() {
     })
     .then(function(resp) {
         if (resp.status === 401) {
-            throw new Error('登录令牌无效或已过期，请回首页高级设置重新填写');
+            throw new Error('浏览器会话已过期，请重新连接后继续');
         }
         if (resp.status === 403) throw new Error('当前账号无重新校对权限');
         if (resp.status === 404) throw new Error('未找到原文数据，无法重新校对');
@@ -1545,7 +1722,7 @@ function submitRecalibrate() {
         pollTask(taskId, apiKey, area);
     })
     .catch(function(err) {
-        area.innerHTML = '<span class="recalibrate-status recalibrate-error">' + (err.message || String(err)) + '</span>';
+        area.innerHTML = '<span class="recalibrate-status recalibrate-error">' + escapeHtml(err.message || String(err)) + '</span>';
     });
 }
 
@@ -1595,7 +1772,12 @@ function fetchContentMark(method) {
     var btn = document.getElementById('contentMarkBtn');
     var token = getContentMarkToken();
     if (!btn || !btn.dataset.viewToken) return Promise.reject(new Error('view token missing'));
-    if (!token) return Promise.reject(new Error('请先设置 API 令牌后再标记'));
+    if (!token) {
+        return window.LearnFluxAuth.requireSession({
+            title: '连接后标记精华',
+            reason: '输入管理口令后继续标记当前内容；阅读位置会保留。'
+        }).then(function() { return fetchContentMark(method); });
+    }
     return fetch('/api/marks/transcripts/' + encodeURIComponent(btn.dataset.viewToken), {
         method: method,
         headers: { 'Authorization': 'Bearer ' + token }
@@ -1611,10 +1793,16 @@ function fetchContentMark(method) {
 
 function loadContentMarkState() {
     var btn = document.getElementById('contentMarkBtn');
-    if (!btn) return;
-    fetchContentMark('GET')
-        .then(function(data) { setContentMarkState(Boolean(data.marked)); })
-        .catch(function() { setContentMarkState(false); });
+    if (!btn || !window.LearnFluxAuth) return;
+    window.LearnFluxAuth.ready.then(function(authState) {
+        if (!authState.authenticated) {
+            setContentMarkState(false);
+            return;
+        }
+        fetchContentMark('GET')
+            .then(function(data) { setContentMarkState(Boolean(data.marked)); })
+            .catch(function() { setContentMarkState(false); });
+    });
 }
 
 function toggleContentMark() {
@@ -1903,14 +2091,21 @@ function doExportPng() {
             <div>
                 <span class="obsidian-knowledge-kicker">LearnFlux Knowledge Deposit</span>
                 <h3 id="obsidian-knowledge-title">沉淀到 Obsidian</h3>
-                <p>选择分类后，原文写入 raw，AI 解读写入 processed。</p>
+                <p>选择目标目录及需要同步的内容。</p>
             </div>
             <button type="submit" class="obsidian-knowledge-close" aria-label="关闭">×</button>
         </header>
         <section class="obsidian-knowledge-settings">
-            <label for="obsidian-knowledge-category">一级分类</label>
-            <select id="obsidian-knowledge-category"></select>
-            <p id="obsidian-knowledge-recommendation">正在读取现有分类…</p>
+            <label for="obsidian-knowledge-directory">目标目录</label>
+            <input id="obsidian-knowledge-directory" list="obsidian-knowledge-directories" placeholder="完整相对路径；留空为知识库根目录" autocomplete="off">
+            <datalist id="obsidian-knowledge-directories"></datalist>
+            <button type="button" id="obsidian-knowledge-refresh">刷新目录</button>
+            <p>在目标目录下分别存放 AI 总结 / 逐字稿；新目录将在同步时创建。</p>
+            <div class="obsidian-content-options">
+                <label><input type="checkbox" name="obsidian-knowledge-type" value="analysis" checked> AI 总结</label>
+                <label><input type="checkbox" name="obsidian-knowledge-type" value="raw" checked> 逐字稿</label>
+            </div>
+            <pre id="obsidian-knowledge-conflicts" hidden></pre>
         </section>
         <div
             class="obsidian-knowledge-message"

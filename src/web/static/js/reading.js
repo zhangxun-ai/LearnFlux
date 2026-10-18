@@ -1,8 +1,6 @@
 (function () {
     'use strict';
 
-    const TOKEN_KEY = 'vta_bearer_token';
-    const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
     const PANEL_CLOSE_DELAY_MS = 300;
     const initialMatch = window.location.pathname.match(/^\/reading(?:\/([^/]+))?\/?$/);
     const state = {
@@ -30,6 +28,7 @@
         grid: document.getElementById('reading-grid'),
         empty: document.getElementById('reading-empty-state'),
         status: document.getElementById('reading-status'),
+        authGate: document.getElementById('reading-auth-gate'),
         search: document.getElementById('reading-search'),
         sort: document.getElementById('reading-sort'),
         continueCard: document.getElementById('reading-continue-card'),
@@ -64,26 +63,20 @@
         soundOptions: document.getElementById('reading-sound-options'),
     };
 
-    function decryptToken(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.endsWith(ENCRYPTION_KEY)
-                ? decoded.slice(0, -ENCRYPTION_KEY.length)
-                : encoded;
-        } catch (error) {
-            return encoded;
-        }
-    }
-
     function token() {
-        return decryptToken(localStorage.getItem(TOKEN_KEY)).trim();
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : '';
     }
 
     async function api(path, options = {}) {
+        if (!token()) {
+            await window.LearnFluxAuth.requireSession({
+                title: '连接后继续阅读',
+                reason: '输入管理口令后继续当前操作；已选择的文档和当前阅读位置会保留。'
+            });
+        }
         const accessToken = token();
-        if (!accessToken) throw new Error('请先在系统设置中保存 API 访问令牌');
         const headers = new Headers(options.headers || {});
         headers.set('Authorization', `Bearer ${accessToken}`);
         if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
@@ -94,8 +87,13 @@
     }
 
     async function apiBlob(path) {
+        if (!token()) {
+            await window.LearnFluxAuth.requireSession({
+                title: '连接后继续阅读',
+                reason: '输入管理口令后加载当前文档资源。'
+            });
+        }
         const accessToken = token();
-        if (!accessToken) throw new Error('请先在系统设置中保存 API 访问令牌');
         const response = await fetch(path, {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
@@ -108,10 +106,15 @@
         elements.status.classList.toggle('is-error', isError);
     }
 
+    function setImportStatus(message, isError = false) {
+        elements.importStatus.textContent = message || '';
+        elements.importStatus.classList.toggle('is-error', isError);
+    }
+
     function openImport(event) {
         if (!elements.importDialog || elements.importDialog.open) return;
         state.importTrigger = event.currentTarget;
-        elements.importStatus.textContent = '';
+        setImportStatus('');
         elements.importDialog.showModal();
         const closeButton = elements.importDialog.querySelector('[data-reading-import-close]');
         if (closeButton) closeButton.focus({ preventScroll: true });
@@ -123,18 +126,18 @@
 
     async function importFile(file) {
         if (!file) return;
-        elements.importStatus.textContent = `正在导入「${file.name}」…`;
+        setImportStatus(`正在导入「${file.name}」…`);
         elements.fileInput.disabled = true;
         try {
             const form = new FormData();
             form.append('file', file);
             const documentData = await api('/api/reading/documents', { method: 'POST', body: form });
-            elements.importStatus.textContent = '导入完成，正在打开…';
+            setImportStatus('导入完成，正在打开…');
             await loadLibrary();
             closeImport();
             await openDocument(documentData.id);
         } catch (error) {
-            elements.importStatus.textContent = error.message;
+            setImportStatus(error.message, true);
         } finally {
             elements.fileInput.disabled = false;
             elements.fileInput.value = '';
@@ -808,12 +811,29 @@
         updateAudioUI();
     }
 
-    async function start() {
-        bindEvents();
+    async function loadAuthenticatedReading() {
+        if (elements.authGate) elements.authGate.hidden = true;
         await loadPreferences();
         await loadLibrary();
         if (state.documentId) await openDocument(state.documentId, false);
         document.dispatchEvent(new CustomEvent('reading:route-ready', { detail: { documentId: state.documentId } }));
+    }
+
+    async function start() {
+        bindEvents();
+        const authState = await window.LearnFluxAuth.ready;
+        if (!authState.authenticated) {
+            if (elements.authGate) {
+                elements.authGate.hidden = false;
+                window.LearnFluxAuth.renderAuthGate(elements.authGate, {
+                    title: '连接后打开你的书架',
+                    reason: '输入管理口令后查看文档、阅读进度和个人偏好；当前页面会保留。',
+                    onAuthenticated: loadAuthenticatedReading
+                });
+            }
+            return;
+        }
+        await loadAuthenticatedReading();
     }
 
     start();

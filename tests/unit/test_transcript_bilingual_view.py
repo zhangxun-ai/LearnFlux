@@ -26,7 +26,8 @@ def test_processing_template_exposes_cloud_quote_actions():
     assert 'progress.stage === "awaiting_cloud_confirmation"' in template
     assert "确认云端转录" in template
     assert "cloud-use-local" in template
-    assert "cloud-refresh" in template
+    assert "cloud-refresh" not in template
+    assert 'await loadCloudQuoteActions("报价已更新，请确认预计费用。")' in template
     assert 'data-quote-token="{{ quote.quote_token }}"' not in template
 
 

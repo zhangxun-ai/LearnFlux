@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 
+{% block body_class %}page-result page-processing workbench-meadow{% endblock %}
+
 {% block title %}{{ page_title or title or "处理中" }}{% endblock %}
+
+{% block product_linear_adapter %}
+<link rel="stylesheet" href="/static/css/product-linear-system.css?v={{ asset_ver }}">
+<link rel="stylesheet" href="/static/css/workbench-wildwood.css?v={{ asset_ver }}">
+{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -313,14 +320,9 @@
     const progressUrl = "/view/{{ view_token }}/progress";
 
     function readApiToken() {
-        const stored = localStorage.getItem("vta_bearer_token");
-        if (!stored) return "";
-        try {
-            const decoded = decodeURIComponent(escape(atob(stored.split("").reverse().join(""))));
-            return decoded.replace("vta_encrypt_key_2024", "");
-        } catch (error) {
-            return stored;
-        }
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : "";
     }
 
     async function postQuoteAction(path, body) {
@@ -359,10 +361,10 @@
 
     function readableQuoteActionError(message) {
         const knownErrors = {
-            quote_token_mismatch: "报价状态已变化，请重新加载后确认",
+            quote_token_mismatch: "报价已更新，请确认预计费用",
             quote_not_confirmable: "该报价已处理，请查看最新任务进度",
-            quote_expired: "报价已过期，请刷新报价",
-            quote_amount_mismatch: "报价金额已变化，请刷新报价",
+            quote_expired: "报价已更新，请确认预计费用",
+            quote_amount_mismatch: "报价金额已变化，请确认预计费用",
         };
         return knownErrors[message] || message || "操作失败，请重试";
     }
@@ -373,7 +375,7 @@
         showQuoteActionFeedback(`操作未成功：${readableQuoteActionError(error.message)}`);
         const retry = document.createElement("button");
         retry.type = "button";
-        retry.textContent = "重新加载报价";
+        retry.textContent = "重试";
         retry.style.margin = "12px 6px 0 0";
         retry.onclick = () => {
             quoteActions.textContent = "";
@@ -417,7 +419,7 @@
         window.location.assign("/add_task_by_web");
     }
 
-    async function loadCloudQuoteActions() {
+    async function loadCloudQuoteActions(note = "") {
         if (!quoteActions || quoteActionsLoading || quoteActionsLoaded || quoteActionPending) return;
         quoteActionsLoading = true;
         quoteActions.hidden = false;
@@ -431,16 +433,26 @@
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.detail || "无法读取报价");
             const raw = data.data || data;
+            if (raw.status && raw.status !== "awaiting_cloud_confirmation") {
+                quoteActions.hidden = true;
+                pollProgress();
+                return;
+            }
             const quote = raw.progress && raw.progress.evidence && raw.progress.evidence.cloud_quote;
             if (!quote || !quote.quote_token) throw new Error("报价已失效，请刷新任务页面");
             quoteActions.textContent = "";
             const summary = document.createElement("div");
-            summary.textContent = `云端付费转录待确认：可信时长 ${quote.duration_seconds} 秒，计费 ${quote.billable_seconds} 秒，费用上限 ¥${quote.max_cost_cny}`;
+            summary.textContent = `云端付费转录待确认：可信时长 ${quote.duration_seconds} 秒，计费 ${quote.billable_seconds} 秒，预计费用 ¥${quote.max_cost_cny}`;
             quoteActions.appendChild(summary);
+            if (note) {
+                const feedback = document.createElement("div");
+                feedback.setAttribute("role", "status");
+                feedback.textContent = note;
+                quoteActions.appendChild(feedback);
+            }
             [
                 ["确认云端转录", "cloud-confirm", {quote_token: quote.quote_token, accepted_max_cost_cny: String(quote.max_cost_cny)}],
                 ["改用本地免费", "cloud-use-local", null],
-                ["刷新报价", "cloud-refresh", null],
             ].forEach(([label, action, body]) => {
                 const button = document.createElement("button");
                 button.type = "button";
@@ -480,6 +492,12 @@
                         window.location.reload();
                     } catch (error) {
                         if (cancelTaskButton) cancelTaskButton.disabled = false;
+                        if (action === "cloud-confirm" && /quote_expired|quote_token_mismatch|quote_not_confirmable/.test(String(error.message || ""))) {
+                            quoteActionPending = false;
+                            quoteActionsLoaded = false;
+                            await loadCloudQuoteActions("报价已更新，请确认预计费用。");
+                            return;
+                        }
                         showQuoteActionError(error);
                     }
                 };
@@ -487,7 +505,7 @@
             });
             quoteActionsLoaded = true;
         } catch (error) {
-            quoteActions.textContent = error.message;
+            showQuoteActionError(error);
         } finally {
             quoteActionsLoading = false;
         }

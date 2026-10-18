@@ -1,8 +1,6 @@
 (function () {
     'use strict';
 
-    const TOKEN_KEY = 'vta_bearer_token';
-    const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
     const DRAFT_PREFIX = 'learnflux_review_draft:';
     const TABS = ['daily', 'weekly', 'monthly', 'annual', 'insights'];
     const TAB_LABELS = {
@@ -219,6 +217,7 @@
         pageHeading: document.querySelector('.review-page-heading'),
         pageActions: document.querySelector('.review-page-actions'),
         contextBar: document.querySelector('.review-context-bar'),
+        authGate: document.getElementById('review-auth-gate'),
         view: document.getElementById('review-view'),
         status: document.getElementById('review-page-status'),
         saveState: document.getElementById('review-save-state'),
@@ -268,26 +267,20 @@
         return TABS.includes(candidate) ? candidate : 'daily';
     }
 
-    function decryptToken(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.endsWith(ENCRYPTION_KEY)
-                ? decoded.slice(0, -ENCRYPTION_KEY.length)
-                : encoded;
-        } catch (error) {
-            return encoded;
-        }
-    }
-
     function token() {
-        return decryptToken(localStorage.getItem(TOKEN_KEY)).trim();
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : '';
     }
 
     async function api(path, options = {}) {
+        if (!token()) {
+            await window.LearnFluxAuth.requireSession({
+                title: '连接后继续复盘',
+                reason: '输入管理口令后继续当前操作；尚未保存的表单内容会留在当前页面。'
+            });
+        }
         const accessToken = token();
-        if (!accessToken) throw new Error('请先在系统设置中保存 API 访问令牌');
         const headers = new Headers(options.headers || {});
         headers.set('Authorization', `Bearer ${accessToken}`);
         if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
@@ -1996,13 +1989,8 @@
         });
     }
 
-    async function init() {
-        bindEvents();
-        const canonical = `/review/${state.tab}${window.location.search}`;
-        if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== canonical) {
-            history.replaceState(null, '', canonical);
-        }
-        updateTabChrome();
+    async function loadAuthenticatedReview() {
+        if (elements.authGate) elements.authGate.hidden = true;
         await loadPreferences();
         await loadCurrentView();
         if (legacyGuideRequested) openGuide();
@@ -2011,6 +1999,28 @@
             state.initialSource = null;
             await openSource(source.type, source.id);
         }
+    }
+
+    async function init() {
+        bindEvents();
+        const canonical = `/review/${state.tab}${window.location.search}`;
+        if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== canonical) {
+            history.replaceState(null, '', canonical);
+        }
+        updateTabChrome();
+        const authState = await window.LearnFluxAuth.ready;
+        if (!authState.authenticated) {
+            if (elements.authGate) {
+                elements.authGate.hidden = false;
+                window.LearnFluxAuth.renderAuthGate(elements.authGate, {
+                    title: '连接后查看你的复盘',
+                    reason: '输入管理口令后读取历史记录并继续编辑；当前日期和返回位置会保留。',
+                    onAuthenticated: loadAuthenticatedReview
+                });
+            }
+            return;
+        }
+        await loadAuthenticatedReview();
     }
 
     init();

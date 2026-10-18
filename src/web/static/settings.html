@@ -31,6 +31,7 @@
     <link rel="manifest" href="/manifest.webmanifest">
             <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
+    <script src="/static/js/auth-session.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/ui-features.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
@@ -128,7 +129,7 @@
         .btn { 
             border: 1px solid var(--accent); border-radius: var(--radius-control); padding: 12px 28px; font-size: 1rem; font-weight: 600;
             cursor: pointer; background: var(--accent); 
-            color: #fff; transition: all 0.2s; box-shadow: 0 10px 18px -16px rgba(228, 80, 58, 0.8);
+            color: var(--product-on-accent); transition: all 0.2s; box-shadow: 0 10px 18px -16px rgba(228, 80, 58, 0.8);
         }
         .btn:hover { transform: translateY(-1px); box-shadow: 0 14px 22px -18px rgba(194, 58, 38, 0.9); background: var(--accent-ink); border-color: var(--accent-ink); }
         .btn:active { transform: scale(0.97); }
@@ -211,13 +212,15 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=__ASSET_VERSION__">
 </head>
-<body class="app-shell has-app-shell product-linear page-settings">
+<body class="app-shell has-app-shell product-linear page-settings workbench-meadow">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
             <a class="brand-link" href="/" aria-label="LearnFlux 首页">
-                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-leaf.svg" alt=""></span>
                 <span class="brand-text">LearnFlux</span>
             </a>
         </div>
@@ -327,7 +330,7 @@
                     <button class="btn" id="load-btn">加载</button>
                     <span class="auth-status" id="auth-status" style="display:none;"></span>
                 </div>
-                <div class="hint">即 <code>config.jsonc</code> 的 <code>api.auth_token</code>，用于读取/保存配置。</div>
+                <div class="hint">即 <code>config.jsonc</code> 的 <code>api.auth_token</code>。认证后使用短期 HttpOnly 会话，口令不会保存在浏览器中。</div>
             </div>
         </section>
 
@@ -346,26 +349,32 @@
 
     <script>
     (function () {
-        var TOKEN_KEY = 'vta_settings_token';
-        var WORKBENCH_TOKEN_KEY = 'vta_bearer_token';
-        var ENCRYPTION_KEY = 'vta_encrypt_key_2024';
         var providers = [];
         var lastServerGroups = null;
 
         function $(id) { return document.getElementById(id); }
         function q(key) { return document.querySelector('[data-key="' + key + '"]'); }
         function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-        function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); }, 2400); }
-        function getToken() { return $('token').value.trim(); }
-        function authHeaders() { return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }; }
-        function encryptToken(text) {
-            if (!text) return '';
+        function safeHttpURL(value) {
+            if (!String(value || '').trim()) return '';
             try {
-                var encoded = btoa(unescape(encodeURIComponent(text + ENCRYPTION_KEY)));
-                return encoded.split('').reverse().join('');
-            } catch (e) {
-                return text;
+                var parsed = new URL(String(value), window.location.origin);
+                return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+            } catch (error) { return ''; }
+        }
+        function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(function(){ t.classList.remove('show'); }, 2400); }
+        function managementTokenInput() { return $('token').value.trim(); }
+        function getToken() { return window.LearnFluxAuth ? window.LearnFluxAuth.getTokenPlaceholder() : ''; }
+        function authHeaders() { return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' }; }
+        async function ensureSession() {
+            if (!window.LearnFluxAuth) throw new Error('认证组件加载失败，请刷新页面');
+            await window.LearnFluxAuth.ready;
+            var entered = managementTokenInput();
+            if (entered) {
+                await window.LearnFluxAuth.login(entered);
+                $('token').value = '';
             }
+            if (!window.LearnFluxAuth.isAuthenticated()) throw new Error('请先输入管理口令');
         }
 
         function fieldHTML(f) {
@@ -463,13 +472,13 @@
 
         // 实时拉取服务商可用模型（模型持续迭代）；失败则保留离线候选与手动输入。
         async function fetchProviderModels() {
-            if (!getToken()) { toast('请先输入管理口令'); return; }
             var baseEl = q('llm.base_url'), keyEl = q('llm.api_key');
             var body = { base_url: baseEl ? baseEl.value.trim() : '', api_key: keyEl ? keyEl.value.trim() : '' };
             if (!body.base_url) { toast('请先填写 API Base URL'); return; }
             var btn = $('fetch-models-btn');
             if (btn) { btn.disabled = true; btn.textContent = '拉取中…'; }
             try {
+                await ensureSession();
                 var resp = await fetch('/api/settings/provider-models', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
                 var json = await resp.json();
                 if (resp.ok && json.code === 200 && json.data && (json.data.models || []).length) {
@@ -497,8 +506,9 @@
             }
             var link = $('llm-key-link');
             if (link) {
-                if (p.api_key_url) { link.href = p.api_key_url; link.textContent = '获取 ' + p.name + ' Key ↗'; link.style.display = ''; }
-                else link.style.display = 'none';
+                var safeKeyURL = safeHttpURL(p.api_key_url);
+                if (safeKeyURL) { link.href = safeKeyURL; link.textContent = '获取 ' + p.name + ' Key ↗'; link.style.display = ''; }
+                else { link.removeAttribute('href'); link.style.display = 'none'; }
             }
         }
 
@@ -522,7 +532,11 @@
                 var p = providers.find(function (x) { return x.id === sel.value; }) || { models: [] };
                 setModelOptions(p.models);
                 var link = $('llm-key-link');
-                if (link) { if (p.api_key_url) { link.href = p.api_key_url; link.textContent = '获取 ' + p.name + ' Key ↗'; link.style.display = ''; } else link.style.display = 'none'; }
+                if (link) {
+                    var safeKeyURL = safeHttpURL(p.api_key_url);
+                    if (safeKeyURL) { link.href = safeKeyURL; link.textContent = '获取 ' + p.name + ' Key ↗'; link.style.display = ''; }
+                    else { link.removeAttribute('href'); link.style.display = 'none'; }
+                }
                 var cur = $('current-provider');
                 if (cur) { if (baseUrl) { cur.textContent = '当前：' + p.name; cur.style.display = ''; } else cur.style.display = 'none'; }
             }
@@ -561,29 +575,26 @@
                 providers = json.data.providers || [];
                 renderGroups(json.data.groups || []);
             } catch (e) { $('groups').innerHTML = '<div class="card">加载配置结构失败，请刷新。</div>'; return; }
-            var saved = localStorage.getItem(TOKEN_KEY);
-            if (saved) { $('token').value = saved; loadValues(); }
+            await window.LearnFluxAuth.ready;
+            if (window.LearnFluxAuth.isAuthenticated()) loadValues();
         }
 
         async function loadValues() {
-            if (!getToken()) { toast('请先输入管理口令'); return; }
             try {
+                await ensureSession();
                 var resp = await fetch('/api/settings', { headers: authHeaders() });
-                if (resp.status === 401) { showAuth(false, '口令无效'); return; }
+                if (resp.status === 401) { showAuth(false, '会话无效或已过期'); return; }
                 var json = await resp.json();
                 if (json.code !== 200) { showAuth(false, json.message || '加载失败'); return; }
-                showAuth(true, '已加载');
+                showAuth(true, '已连接');
                 providers = json.data.providers || providers;
                 setConcurrencyOptions(json.data.concurrency_limits || {});
                 fillValues(json.data.groups || []);
                 lastServerGroups = json.data.groups || [];
-                localStorage.setItem(TOKEN_KEY, getToken());
-                localStorage.setItem(WORKBENCH_TOKEN_KEY, encryptToken(getToken()));
-            } catch (e) { showAuth(false, '网络错误'); }
+            } catch (e) { showAuth(false, e.message || '网络错误'); }
         }
 
         async function saveSettings() {
-            if (!getToken()) { toast('请先输入管理口令'); return; }
             var payload = {};
             document.querySelectorAll('[data-key]').forEach(function (el) {
                 payload[el.getAttribute('data-key')] = (el.type === 'checkbox') ? el.checked : el.value;
@@ -591,6 +602,7 @@
             $('save-btn').disabled = true;
             setConcurrencyDisabled(true);
             try {
+                await ensureSession();
                 var resp = await fetch('/api/settings', { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) });
                 var json = await resp.json();
                 if (resp.ok && json.code === 200) {

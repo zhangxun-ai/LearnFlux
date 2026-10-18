@@ -171,7 +171,7 @@
 .filter-chip.active {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
-    color: #fff;
+    color: var(--product-on-accent);
 }
 
 /* ---------- 历史记录：卡片 ---------- */
@@ -339,9 +339,9 @@
 .hist-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .hist-btn.primary {
     background: var(--accent-primary);
-    color: #fff;
+    color: var(--product-on-accent);
 }
-.hist-btn.primary:hover { filter: brightness(0.94); color: #fff; }
+.hist-btn.primary:hover { filter: brightness(0.94); color: var(--product-on-accent); }
 .hist-btn.danger:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
 .hist-btn[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
 
@@ -665,11 +665,14 @@
 }
 
 .app-home .advanced-summary::before {
-    content: '▶';
-    font-size: 0.7rem;
+    width: 7px;
+    height: 7px;
     margin-right: 8px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
     transition: transform 0.2s ease;
     color: var(--text-secondary);
+    transform: rotate(-45deg);
 }
 
 .app-home .advanced-details[open] .advanced-summary::before {
@@ -712,7 +715,7 @@
     box-shadow: none !important;
     font-size: 1.05rem !important;
     font-weight: 600 !important;
-    color: white !important;
+    color: var(--product-on-accent) !important;
     border: none !important;
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease !important;
 }

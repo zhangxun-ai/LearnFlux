@@ -1,8 +1,6 @@
 (function () {
     'use strict';
 
-    const STORAGE_KEY = 'vta_bearer_token';
-    const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
     const state = {
         mode: 'text',
         file: null,
@@ -17,6 +15,7 @@
     };
 
     const els = {
+        authGate: document.getElementById('visual-auth-gate'),
         tabs: Array.from(document.querySelectorAll('[data-source-mode]')),
         textPanel: document.getElementById('visual-text-panel'),
         filePanel: document.getElementById('visual-file-panel'),
@@ -55,24 +54,20 @@
         evidenceList: document.getElementById('visual-evidence-list'),
     };
 
-    function decryptToken(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.replace(ENCRYPTION_KEY, '');
-        } catch (error) {
-            return encoded;
-        }
-    }
-
     function getToken() {
-        return decryptToken(localStorage.getItem(STORAGE_KEY));
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : '';
     }
 
     async function apiJSON(url, options) {
+        if (!getToken()) {
+            await window.LearnFluxAuth.requireSession({
+                title: '连接后继续生成图解',
+                reason: '输入管理口令后继续当前操作；已粘贴的正文和已选择的文档会保留。'
+            });
+        }
         const token = getToken();
-        if (!token) throw new Error('请先在系统设置中配置 API 访问令牌');
         const init = options || {};
         const headers = new Headers(init.headers || {});
         headers.set('Authorization', `Bearer ${token}`);
@@ -140,12 +135,27 @@
             const active = tab.dataset.sourceMode === mode;
             tab.classList.toggle('is-active', active);
             tab.setAttribute('aria-selected', active ? 'true' : 'false');
+            tab.tabIndex = active ? 0 : -1;
         });
         els.textPanel.hidden = mode !== 'text';
         els.filePanel.hidden = mode !== 'file';
         els.textPanel.classList.toggle('is-active', mode === 'text');
         els.filePanel.classList.toggle('is-active', mode === 'file');
         updateGenerateState();
+    }
+
+    function handleSourceTabKeydown(event) {
+        const currentIndex = els.tabs.indexOf(event.currentTarget);
+        let nextIndex = currentIndex;
+        if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % els.tabs.length;
+        else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + els.tabs.length) % els.tabs.length;
+        else if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = els.tabs.length - 1;
+        else return;
+        event.preventDefault();
+        const nextTab = els.tabs[nextIndex];
+        nextTab.focus();
+        switchMode(nextTab.dataset.sourceMode);
     }
 
     async function ingestSource() {
@@ -165,13 +175,15 @@
         return uploadFile(form);
     }
 
-    function uploadFile(form) {
+    async function uploadFile(form) {
+        if (!getToken()) {
+            await window.LearnFluxAuth.requireSession({
+                title: '连接后继续上传文档',
+                reason: '输入管理口令后上传刚才选择的文档；无需重新选择文件。'
+            });
+        }
         return new Promise((resolve, reject) => {
             const token = getToken();
-            if (!token) {
-                reject(new Error('请先在系统设置中配置 API 访问令牌'));
-                return;
-            }
             const request = new XMLHttpRequest();
             request.open('POST', '/api/study/upload');
             request.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -528,7 +540,10 @@
     }
 
     function bindEvents() {
-        els.tabs.forEach((tab) => tab.addEventListener('click', () => switchMode(tab.dataset.sourceMode)));
+        els.tabs.forEach((tab) => {
+            tab.addEventListener('click', () => switchMode(tab.dataset.sourceMode));
+            tab.addEventListener('keydown', handleSourceTabKeydown);
+        });
         els.content.addEventListener('input', updateGenerateState);
         els.fileDrop.addEventListener('click', () => els.fileInput.click());
         els.fileInput.addEventListener('change', () => {
@@ -569,10 +584,9 @@
         });
     }
 
-    async function init() {
-        bindEvents();
-        updateGenerateState();
-        loadHistory();
+    async function loadAuthenticatedVisualWorkspace() {
+        if (els.authGate) els.authGate.hidden = true;
+        await loadHistory();
         const documentId = new URLSearchParams(window.location.search).get('document_id');
         if (documentId) {
             try {
@@ -581,6 +595,24 @@
                 handleError(error);
             }
         }
+    }
+
+    async function init() {
+        bindEvents();
+        updateGenerateState();
+        const authState = await window.LearnFluxAuth.ready;
+        if (!authState.authenticated) {
+            if (els.authGate) {
+                els.authGate.hidden = false;
+                window.LearnFluxAuth.renderAuthGate(els.authGate, {
+                    title: '连接后查看图解记录',
+                    reason: '输入管理口令后读取最近生成记录；也可以先填写正文，生成时再连接。',
+                    onAuthenticated: loadAuthenticatedVisualWorkspace
+                });
+            }
+            return;
+        }
+        await loadAuthenticatedVisualWorkspace();
     }
 
     init();

@@ -664,7 +664,7 @@ def test_visual_learning_page_serves_static_shell(monkeypatch, tmp_path):
 
     assert response.status_code == 200
     assert "图解生成" in response.text
-    assert '<base href="/static/">' in response.text
+    assert "<base " not in response.text
 
 
 def test_main_app_registers_visual_learning_routes():

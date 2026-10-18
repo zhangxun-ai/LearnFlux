@@ -28,12 +28,13 @@
     <meta name="apple-mobile-web-app-title" content="LearnFlux">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.webmanifest">
-            <link rel="stylesheet" href="/static/css/editorial.css?v=2d2cd8f8152d">
-    <link rel="stylesheet" href="/static/css/app-shell.css?v=2d2cd8f8152d">
-    <link rel="stylesheet" href="/static/css/styles.css?v=2d2cd8f8152d">
-    <script src="/static/js/pwa-register.js?v=2d2cd8f8152d" defer></script>
-    <script src="/static/js/ui-features.js?v=05b7834ae213" defer></script>
-    <script src="/static/js/app-shell.js?v=2d2cd8f8152d" defer></script>
+            <link rel="stylesheet" href="/static/css/editorial.css?v=e805773679f4">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=sidebar-reopen-fix-20261016">
+    <link rel="stylesheet" href="/static/css/styles.css?v=e805773679f4">
+    <script src="/static/js/auth-session.js?v=e805773679f4"></script>
+    <script src="/static/js/pwa-register.js?v=e805773679f4" defer></script>
+    <script src="/static/js/ui-features.js?v=f35b18a5e3ce" defer></script>
+    <script src="/static/js/app-shell.js?v=e805773679f4" defer></script>
     <style>
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -114,9 +115,9 @@
             font-weight: 600;
             transition: all 0.2s;
         }
-        .btn-primary { 
-            background: var(--accent); 
-            color: #fff; 
+        .btn-primary {
+            background: var(--accent);
+            color: var(--product-on-accent);
             box-shadow: 0 10px 18px -16px rgba(228, 80, 58, 0.8);
         }
         .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 14px 22px -18px rgba(194, 58, 38, 0.9); background: var(--accent-ink); }
@@ -410,39 +411,6 @@
         .wh-alias { font-weight: 600; color: var(--text-primary); }
         .wh-detail { color: var(--text-tertiary); font-family: monospace; }
 
-        /* 摘要预览卡片 */
-        .summary-tooltip {
-            position: fixed;
-            background: var(--hist-card);
-            border: 1px solid var(--hist-border);
-            border-radius: var(--hist-radius);
-            padding: 14px 16px;
-            width: 340px;
-            max-height: 240px;
-            overflow-y: auto;
-            font-size: 0.85rem;
-            line-height: 1.6;
-            color: var(--text-secondary);
-            z-index: 1000;
-            box-shadow: var(--hist-shadow-hover);
-            pointer-events: none;
-            opacity: 0;
-            visibility: hidden;
-            transform: translateY(10px);
-            transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
-        }
-        .summary-tooltip.visible {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
-        }
-        .summary-tooltip-title {
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 8px;
-            font-size: 0.9rem;
-        }
-
         /* 卡片底部动作 */
         .task-footer {
             display: flex;
@@ -526,19 +494,23 @@
         }
 
     </style>
-    <link rel="stylesheet" href="/static/css/product-linear.css?v=2d2cd8f8152d">
-    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=2d2cd8f8152d">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=e805773679f4">
+    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=e805773679f4">
 
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=e805773679f4">
+    <link rel="stylesheet" href="/static/css/learning-history-meadow.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/history-improvements.css?v=20261018-reference">
 </head>
-<body class="app-shell has-app-shell product-linear page-history">
+<body class="app-shell has-app-shell product-linear page-history workbench-meadow">
 <a class="skip-link" href="#main-content">跳到主要内容</a>
 <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
             <a class="brand-link" href="/" aria-label="LearnFlux 首页">
-                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-leaf.svg" alt=""></span>
                 <span class="brand-text">LearnFlux</span>
             </a>
         </div>
@@ -635,71 +607,62 @@
         <div class="topbar-title"><span class="topbar-page-title">历史记录</span></div>
     </header>
     <section class="page-stage">
-<div class="container">
+<div class="container history-page">
     <div class="header">
-        <h1>历史记录</h1>
+        <div>
+            <h1>历史记录</h1>
+            <p class="history-intro">每一次输入，都在慢慢变成自己的知识。</p>
+        </div>
     </div>
 
-    <!-- 访问令牌输入 -->
-    <div class="auth-bar">
-        <label>API 访问令牌</label>
-        <input type="password" id="apiKeyInput" placeholder="输入访问令牌后查看历史记录" autocomplete="off">
-        <button class="btn btn-primary" onclick="loadHistory()">查询</button>
-        <span class="auth-status" id="authStatus" style="display:none"></span>
-        <span style="flex:1"></span>
-    </div>
-    <div style="font-size:0.8rem; color:var(--text-tertiary); margin:-6px 0 4px;">
-        即后台 <code>config.jsonc</code> 里的 <code>api.auth_token</code>（与提交任务、设置页用的是同一个令牌）；输入后会记在本浏览器，下次自动带入。
+    <div id="history-auth-gate" hidden></div>
+    <span class="auth-status" id="authStatus" style="display:none" role="status" aria-live="polite"></span>
+
+    <div class="history-search-row">
+        <label class="sr-only" for="filterQ">搜索历史记录</label>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+        <input type="search" id="filterQ" placeholder="搜索标题、作者或关键词" autocomplete="off">
+        <button class="btn btn-primary" type="button" onclick="applyFilter()">搜索</button>
     </div>
 
-    <!-- 过滤栏 -->
-    <div class="filter-bar" id="filterBar" style="display:none">
-        <div class="filter-group">
-            <label>记录类别</label>
-            <select id="filterRecordType" onchange="updateRecordTypeFilterUI(); serializeFiltersToURL(); loadHistory(0)">
-                <option value="task">学习任务</option>
-                <option value="review_all">全部复盘</option>
-                <option value="daily">每日复盘</option>
-                <option value="weekly">周度复盘</option>
-                <option value="monthly">月度复盘</option>
-                <option value="annual">年度复盘</option>
-                <option value="experiment">行动实验</option>
-                <option value="insight">内在洞察</option>
-            </select>
+    <details class="history-filter-drawer" id="historyFilters" open>
+        <summary>筛选记录 <span id="historyFilterSummary">全部来源 · 全部时间</span></summary>
+    <section class="history-filter-section history-task-filters" aria-label="按来源平台筛选" hidden>
+        <div class="history-filter-label">来源平台：</div>
+        <div class="history-platform-chips" id="platformChips" role="group" aria-label="来源平台">
+            <button class="platform-chip is-active" type="button" data-platform="" aria-pressed="true">全部 <span class="platform-count" id="allPlatformCount">0</span></button>
         </div>
-        <div class="filter-group">
-            <label>开始日期</label>
-            <input type="date" id="filterStartDate">
+        <label class="sr-only" for="filterPlatform">来源平台筛选值</label>
+        <select id="filterPlatform" class="sr-only" tabindex="-1" aria-hidden="true">
+            <option value="">全部</option>
+        </select>
+    </section>
+
+    <section class="history-filter-section history-task-filters" id="historyContentFilters" aria-label="按内容类型筛选" hidden>
+        <div class="history-filter-label">内容类型：</div>
+        <div class="history-type-chips" id="contentTypeChips" role="group" aria-label="内容类型">
+            <button class="type-chip is-active" type="button" data-content-type="all" aria-pressed="true">全部</button>
+            <button class="type-chip" type="button" data-content-type="video" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="4" width="12" height="12" rx="2"/><path d="m14 8 4-3v10l-4-3M7 8l3 2-3 2Z"/></svg>视频</button>
+            <button class="type-chip" type="button" data-content-type="post" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3H4a1 1 0 0 0-1 1v13h14V4a1 1 0 0 0-1-1h-3M7 2h6v4H7zM7 9h6M7 12h6"/></svg>帖文</button>
+            <button class="type-chip" type="button" data-content-type="file" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2h7l4 4v12H5zM12 2v5h4M8 11h5M8 14h5"/></svg>文件</button>
         </div>
-        <div class="filter-group">
-            <label>结束日期</label>
-            <input type="date" id="filterEndDate">
+        <span class="history-filter-divider" aria-hidden="true"></span>
+        <div class="history-inline-filter task-history-only">
+            <label for="historyDateRange">时间范围：</label>
+            <span class="history-date-select"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="4" width="16" height="14" rx="2"/><path d="M6 2v5M14 2v5M2 9h16M6 12h3"/></svg>
+            <select id="historyDateRange" aria-label="时间范围" onchange="applyDateRangePreset(this.value)">
+                <option value="all">全部时间</option>
+                <option value="7">近 7 天</option>
+                <option value="30">近 30 天</option>
+                <option value="90">近 90 天</option>
+                <option value="custom">自定义</option>
+            </select></span>
         </div>
-        <div class="filter-group task-history-only">
-            <label>平台</label>
-            <select id="filterPlatform">
-                <option value="">全部</option>
-            </select>
-        </div>
-        <div class="filter-group task-history-only" style="position:relative">
-            <label>频道</label>
-            <div id="authorMultiSelect" class="multi-select" onclick="toggleAuthorDropdown(event)">
-                <span id="authorDisplay">全部</span>
-                <span style="font-size:0.6rem; margin-left:auto">&#9662;</span>
-            </div>
-            <div id="authorDropdown" class="multi-dropdown" style="display:none">
-                <div class="multi-opt" onclick="toggleAllAuthors(event)">
-                    <input type="checkbox" id="authorSelectAll" checked> <span>全部</span>
-                </div>
-                <div id="authorOptions"></div>
-            </div>
-            <input type="hidden" id="filterAuthor" value="">
-        </div>
-        <div class="filter-group">
-            <label>状态</label>
-            <select id="filterStatus">
+        <div class="filter-group history-inline-filter" id="historyStatusFilter">
+            <label for="filterStatus">学习状态：</label>
+            <select id="filterStatus" onchange="serializeFiltersToURL(); loadHistory(0)">
+                <option value="all" selected>全部状态</option>
                 <option value="success">已完成</option>
-                <option value="all">全部</option>
                 <option value="processing">处理中</option>
                 <option value="failed">失败</option>
                 <option value="active">复盘进行中</option>
@@ -713,68 +676,144 @@
                 <option value="stopped">行动已停止</option>
             </select>
         </div>
+    </section>
+
+
+
+    </details>
+    <section class="tendedero-section history-task-filters" id="tendederoSection" hidden>
+        <div aria-labelledby="tendederoTitle">
+        <div class="tendedero-heading">
+            <div class="tendedero-heading-copy">
+                <h2 id="tendederoTitle">最近学习</h2>
+                <p>左右滑动，继续回到那段内容</p>
+            </div>
+            <div class="tendedero-controls">
+                <span class="tendedero-position" id="tendederoPosition" aria-live="polite">…</span>
+                <button class="tendedero-arrow" type="button" aria-label="向左浏览最近记录" onclick="scrollTendedero(-1)">‹</button>
+                <button class="tendedero-arrow is-next" type="button" aria-label="向右浏览最近记录" onclick="scrollTendedero(1)">›</button>
+            </div>
+        </div>
+        <div class="tendedero-track" id="tendederoTrack" tabindex="0" aria-label="最近学习记录，可横向滚动" aria-busy="true"><div class="history-recent-loading" role="status"><span class="history-recent-skeleton" aria-hidden="true"></span><span class="history-recent-skeleton" aria-hidden="true"></span><span class="history-recent-skeleton" aria-hidden="true"></span><span class="history-recent-loading-label">正在读取学习记录…</span></div></div>
+    </div></section>
+
+    <!-- 统计条 -->
+    <div class="stats-bar history-record-header" id="statsBar" style="display:none">
+        <div class="history-record-heading">
+            <h2 id="historyListTitle">全部记录</h2>
+            <span id="totalCount"></span>
+        </div>
+        <div class="history-record-tools task-history-only">
+            <span class="unread-badge" id="unreadBadge" style="display:none"></span>
+            <div class="history-bulk-actions">
+                <label class="history-select-all" for="selectAllChk">
+                    <input type="checkbox" id="selectAllChk" class="row-checkbox" title="全选当页" aria-label="全选当前页记录" onchange="toggleSelectAll(this.checked)">
+                    <span>全选本页</span>
+                </label>
+                <span id="selectedCount" style="display:none"></span>
+                <button class="btn btn-ghost" id="markSelectedBtn" onclick="markSelectedRead()" style="display:none">标为已打开</button>
+                <button class="btn btn-ghost" id="clearSelectionBtn" onclick="clearSelection()" hidden>取消选择</button>
+            </div>
+        </div>
+    <details class="history-more-filters">
+        <summary>高级筛选</summary>
+    <!-- 过滤栏 -->
+    <div class="filter-bar" id="filterBar" style="display:none">
+        <div class="filter-group">
+            <label for="filterRecordType">记录类别</label>
+            <select id="filterRecordType" onchange="updateRecordTypeFilterUI(); serializeFiltersToURL(); loadHistory(0)">
+                <option value="task">学习任务</option>
+                <option value="review_all">全部复盘</option>
+                <option value="daily">每日复盘</option>
+                <option value="weekly">周度复盘</option>
+                <option value="monthly">月度复盘</option>
+                <option value="annual">年度复盘</option>
+                <option value="experiment">行动实验</option>
+                <option value="insight">内在洞察</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="filterStartDate">开始日期</label>
+            <input type="date" id="filterStartDate">
+        </div>
+        <div class="filter-group">
+            <label for="filterEndDate">结束日期</label>
+            <input type="date" id="filterEndDate">
+        </div>
+        <div class="filter-group task-history-only" style="position:relative">
+            <label for="authorMultiSelect">频道</label>
+            <button id="authorMultiSelect" class="multi-select" type="button" onclick="toggleAuthorDropdown(event)" aria-haspopup="true" aria-expanded="false" aria-controls="authorDropdown">
+                <span id="authorDisplay">全部</span>
+                <span style="font-size:0.6rem; margin-left:auto" aria-hidden="true">&#9662;</span>
+            </button>
+            <div id="authorDropdown" class="multi-dropdown" role="group" aria-label="频道选项" style="display:none">
+                <label class="multi-opt" for="authorSelectAll">
+                    <input type="checkbox" id="authorSelectAll" checked onchange="toggleAllAuthors(event)"> <span>全部</span>
+                </label>
+                <div id="authorOptions"></div>
+            </div>
+            <input type="hidden" id="filterAuthor" value="">
+        </div>
         <div class="filter-group task-history-only">
-            <label>已读</label>
+            <label for="filterRead">打开记录（当前浏览器）</label>
             <select id="filterRead" onchange="serializeFiltersToURL(); applyReadFilter()">
                 <option value="all">全部</option>
-                <option value="unread">未读</option>
-                <option value="read">已读</option>
+                <option value="unread">未打开</option>
+                <option value="read">已打开</option>
             </select>
         </div>
         <div class="filter-group task-history-only">
-            <label>精华</label>
+            <label for="filterMarked">精华</label>
             <select id="filterMarked" onchange="serializeFiltersToURL(); loadHistory(0)">
                 <option value="all">全部</option>
                 <option value="marked">仅精华</option>
             </select>
         </div>
-        <div class="filter-group" style="min-width:200px; flex:1">
-            <label>搜索</label>
-            <input type="text" id="filterQ" placeholder="标题 / 频道 / URL..."
-                   style="width:100%; background:var(--bg-secondary); border:1px solid var(--border-primary);
-                          border-radius:8px; padding:7px 10px; color:var(--text-primary); font-size:0.8rem;">
-        </div>
         <div class="filter-actions">
-            <button class="btn btn-primary" onclick="applyFilter()">搜索</button>
             <button class="btn btn-ghost" onclick="resetFilter()">重置</button>
         </div>
     </div>
+    </details>
+    </div>
 
-    <!-- 统计条 -->
-    <div class="stats-bar" id="statsBar" style="display:none">
-        <input type="checkbox" id="selectAllChk" class="row-checkbox task-history-only" title="全选当页" onchange="toggleSelectAll(this.checked)">
-        <span id="totalCount"></span>
-        <span class="unread-badge task-history-only" id="unreadBadge" style="display:none"></span>
-        <span class="task-history-only" id="selectedCount" style="display:none; color:var(--accent-primary); font-weight:600"></span>
-        <button class="btn btn-ghost task-history-only" id="markSelectedBtn" onclick="markSelectedRead()" style="display:none; font-size:0.75rem; padding:3px 10px">
-            标记已读
-        </button>
-        <button class="btn btn-ghost task-history-only" onclick="markAllRead()" style="font-size:0.75rem; padding:3px 10px">
-            全部标为已读
-        </button>
+
+
+    <div class="history-table-head history-task-filters" id="historyTableHead" role="row" hidden>
+        <span role="columnheader">内容</span>
+        <span role="columnheader">来源平台</span>
+        <span role="columnheader">学习时间</span>
+        <span role="columnheader">学习状态</span>
+        <span role="columnheader">操作</span>
     </div>
 
     <!-- 列表区 -->
     <div id="listArea">
         <div class="state-box">
             <div class="icon">🔑</div>
-            <div>输入 API Key 后点击查询</div>
+            <div>正在读取历史记录…</div>
         </div>
     </div>
 
+    <div class="history-query-toolbar">
+        <span id="historyQueryState" role="status" aria-live="polite">正在读取历史记录…</span>
+        <button type="button" class="btn btn-ghost" onclick="refreshHistory()">刷新记录</button>
+    </div>
+
     <!-- 分页 -->
-    <div class="pagination" id="paginationBar" style="display:none">
+    <div class="pagination" id="paginationBar" style="display:none" aria-label="历史记录分页">
+        <label class="history-page-size" for="historyPageSize">每页
+            <select id="historyPageSize" onchange="changePageSize(this.value)">
+                <option value="20">20 条</option><option value="50">50 条</option><option value="100">100 条</option><option value="all">全部（最多 1000 条）</option>
+            </select>
+        </label>
+        <span class="history-range" id="pageRange"></span>
         <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled>← 上一页</button>
+        <label class="history-page-jump" for="pageJump">第 <input type="number" id="pageJump" min="1" value="1" aria-label="跳转到页码" onchange="goToPage(Number(this.value) - 1)"> 页</label>
         <span class="page-info" id="pageInfo"></span>
         <button class="page-btn" id="nextBtn" onclick="changePage(1)" disabled>下一页 →</button>
     </div>
 </div>
 
-<!-- 摘要预览卡片 -->
-<div class="summary-tooltip" id="summaryTooltip">
-    <div class="summary-tooltip-title" id="tooltipTitle"></div>
-    <div id="tooltipContent"></div>
-</div>
 </section>
 </main>
 
@@ -782,15 +821,32 @@
 // ===================== 状态 =====================
 const STORAGE_KEY_READ  = () => `vta_read_${getMasked()}`;
 const STORAGE_KEY_ALIAS = () => `vta_webhook_alias_${getMasked()}`;
-const PAGE_SIZE = 20;
+let pageSizeChoice = '20';
+try { pageSizeChoice = localStorage.getItem('vta_history_page_size') || '20'; } catch (_) {}
+if (!['20', '50', '100', 'all'].includes(pageSizeChoice)) pageSizeChoice = '20';
+let PAGE_SIZE = pageSizeChoice === 'all' ? 1000 : Number(pageSizeChoice);
+const HISTORY_CACHE_TTL = 60000;
+const HISTORY_FILTER_TTL = 300000;
+let cacheOwner = '';
+let filtersPromise = null;
+let filtersLoadedAt = 0;
+let historyRequest = 0;
+let historyController = null;
+let locationRestored = false;
+let restoreScroll = null;
+let displayedItems = [];
+let selectedQuery = '';
+let activePreview = null;
+let previewController = null;
+const previewCache = new Map();
+const responseCache = new Map();
 
 let currentPage = 0;
 let totalItems  = 0;
 let currentApiKey = '';
 let currentMasked = '';
-let filterOptions = { webhooks: [], platforms: [], authors: [] };
-let summaryDebounce = null;
-let summaryVisible  = false;
+let filterOptions = { webhooks: [], platforms: [], platform_counts: [], authors: [] };
+let historyFilterOptionsLoaded = false;
 let selectedSet = new Set();   // 当前选中的 view_token
 
 // ===================== 工具函数 =====================
@@ -847,29 +903,28 @@ function toggleSelectAll(checked) {
     updateSelectionUI();
 }
 
+function clearSelection() {
+    selectedSet.clear();
+    document.querySelectorAll('.task-row.selected').forEach(row => row.classList.remove('selected'));
+    document.querySelectorAll('.history-row-checkbox').forEach(check => { check.checked = false; });
+    updateSelectionUI();
+}
+
 function updateSelectionUI() {
     const count = selectedSet.size;
-    const cntEl = document.getElementById('selectedCount');
-    const btnEl = document.getElementById('markSelectedBtn');
-    if (count > 0) {
-        cntEl.style.display = '';
-        cntEl.textContent = `已选 ${count} 条`;
-        btnEl.style.display = '';
-        btnEl.textContent = `标记已读 (${count})`;
-    } else {
-        cntEl.style.display = 'none';
-        btnEl.style.display = 'none';
-    }
-    // 更新全选框的状态
-    const allRows = document.querySelectorAll('.task-row[data-vt]');
-    const selAll = document.getElementById('selectAllChk');
-    if (allRows.length > 0 && count === allRows.length) {
-        selAll.checked = true; selAll.indeterminate = false;
-    } else if (count > 0) {
-        selAll.checked = false; selAll.indeterminate = true;
-    } else {
-        selAll.checked = false; selAll.indeterminate = false;
-    }
+    const countEl = document.getElementById('selectedCount');
+    const action = document.getElementById('markSelectedBtn');
+    countEl.style.display = count ? '' : 'none';
+    countEl.textContent = `已选 ${count} 条（仅本页）`;
+    action.style.display = count ? '' : 'none';
+    action.textContent = `标为已打开 (${count})`;
+    document.getElementById('clearSelectionBtn').hidden = !count;
+    document.querySelector('.history-bulk-actions')?.classList.toggle('has-selection', count > 0);
+    const rows = document.querySelectorAll('.task-row[data-vt]');
+    const all = document.getElementById('selectAllChk');
+    all.checked = count > 0 && count === rows.length;
+    all.indeterminate = count > 0 && count < rows.length;
+    all.disabled = rows.length === 0;
 }
 
 function markSelectedRead() {
@@ -889,15 +944,16 @@ function markSelectedRead() {
 
 // ===================== 已读过滤（触发重新拉取+客户端过滤） =====================
 function applyReadFilter() {
-    currentPage = 0;
-    fetchHistory();
+    serializeFiltersToURL();
+    loadHistory(0);
 }
 
 // ===================== 过滤偏好持久化 =====================
 // ===================== URL 参数过滤状态 =====================
 // 所有过滤条件存在 URL 里，刷新/分享均保留；API Key 不入 URL（安全）
 
-function serializeFiltersToURL() {
+function serializeFiltersToURL(resetPage = true) {
+    if (resetPage) currentPage = 0;
     const params = new URLSearchParams();
     const get = id => document.getElementById(id)?.value.trim() || '';
 
@@ -911,6 +967,7 @@ function serializeFiltersToURL() {
     const read      = get('filterRead');
     const marked    = get('filterMarked');
     const recordType = get('filterRecordType');
+    const contentType = window.__historyContentType || 'all';
 
     if (q)         params.set('q', q);
     if (recordType && recordType !== 'task') params.set('record_type', recordType);
@@ -918,13 +975,16 @@ function serializeFiltersToURL() {
     if (endDate)   params.set('end_date', endDate);
     // webhook 含密钥，不写入 URL
     if (platform)  params.set('platform', platform);
+    if (contentType !== 'all') params.set('content_type', contentType);
     if (author)    params.set('author', author);
     // 默认值不写入 URL，保持简洁
-    const defaultStatus = recordType === 'task' ? 'success' : 'all';
+    const defaultStatus = 'all';
     if (status && status !== defaultStatus) params.set('status', status);
     if (read   && read   !== 'all')     params.set('read', read);
     if (marked && marked !== 'all')     params.set('marked', '1');
 
+    if (currentPage > 0) params.set('page', String(currentPage + 1));
+    if (pageSizeChoice !== '20') params.set('per_page', pageSizeChoice);
     const qs = params.toString();
     history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
 }
@@ -942,6 +1002,9 @@ function loadFiltersFromURL() {
     set('filterEndDate',    'end_date');
     // webhook 不从 URL 读取
     set('filterPlatform',   'platform');
+    window.__historyContentType = ['video', 'post', 'file'].includes(params.get('content_type'))
+        ? params.get('content_type')
+        : 'all';
     // 频道多选：从 URL 恢复选中状态
     const authorParam = params.get('author');
     if (authorParam) {
@@ -952,6 +1015,7 @@ function loadFiltersFromURL() {
         document.getElementById('filterAuthor').value = authorParam;
         updateAuthorDisplay();
     }
+    updateRecordTypeFilterUI();
     set('filterStatus',     'status');
     set('filterRead',       'read');
     const markedParam = params.get('marked');
@@ -960,25 +1024,114 @@ function loadFiltersFromURL() {
         if (el) el.value = 'marked';
     }
     updateRecordTypeFilterUI(!params.has('status'));
+    updateContentTypeChips();
+    updatePlatformChips();
+    syncDateRangePreset();
 }
 
 function updateRecordTypeFilterUI(normalizeStatus = true) {
     const type = document.getElementById('filterRecordType')?.value || 'task';
     const isReview = type !== 'task';
+    const statusFilter = document.getElementById('historyStatusFilter');
+    const statusHost = document.getElementById(isReview ? 'filterBar' : 'historyContentFilters');
+    if (statusFilter && statusHost && statusFilter.parentElement !== statusHost) statusHost.appendChild(statusFilter);
+    document.querySelectorAll('.history-task-filters').forEach(el => {
+        el.hidden = isReview || !historyFilterOptionsLoaded;
+    });
     document.querySelectorAll('.task-history-only').forEach(el => {
         const group = el.classList.contains('filter-group') ? el : null;
         if (group) group.style.display = isReview ? 'none' : '';
-        else if (isReview) el.style.display = 'none';
-        else if (el.id === 'selectAllChk' || (el.tagName === 'BUTTON' && el.id !== 'markSelectedBtn')) el.style.display = '';
+        else el.style.display = isReview ? 'none' : '';
     });
     const status = document.getElementById('filterStatus');
+    const statusLabel = document.querySelector('label[for="filterStatus"]');
     if (normalizeStatus && status) {
-        const taskValues = new Set(['success', 'all', 'processing', 'failed']);
-        if (isReview && taskValues.has(status.value)) status.value = 'all';
-        if (!isReview && !taskValues.has(status.value)) status.value = 'success';
+        const current = status.value || 'all';
+        const choices = isReview
+            ? [['all', '全部状态'], ['active', '复盘进行中'], ['pending', '待确认'], ['observing', '继续观察'], ['accepted', '已认可'], ['rejected', '不认可'], ['disproved', '已被证伪'], ['planned', '行动待实验'], ['completed', '行动已完成'], ['stopped', '行动已停止']]
+            : [['all', '全部状态'], ['success', '解析完成'], ['processing', '处理中'], ['awaiting_cloud_confirmation', '待确认费用'], ['failed', '失败'], ['unknown', '仅导入记录']];
+        status.replaceChildren(...choices.map(([value, label]) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            return option;
+        }));
+        status.value = choices.some(([value]) => value === current) ? current : 'all';
     }
+    if (statusLabel) statusLabel.textContent = isReview ? '记录状态' : '学习状态：';
     const search = document.getElementById('filterQ');
-    if (search) search.placeholder = isReview ? '事实 / 意义 / 人物 / 洞察 / 行动...' : '标题 / 频道 / URL...';
+    if (search) search.placeholder = isReview ? '搜索复盘内容…' : '搜索标题、作者或关键词';
+    const listTitle = document.getElementById('historyListTitle');
+    if (listTitle) listTitle.textContent = isReview ? '复盘记录' : '全部记录';
+    const tableHead = document.getElementById('historyTableHead');
+    if (tableHead) tableHead.hidden = isReview || !historyFilterOptionsLoaded;
+    const tools = document.querySelector('.history-record-tools');
+    if (tools) tools.classList.toggle('is-review-mode', isReview);
+    if (isReview) clearSelection();
+}
+
+function localDateString(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function syncDateRangePreset() {
+    const preset = document.getElementById('historyDateRange');
+    const start = document.getElementById('filterStartDate')?.value || '';
+    const end = document.getElementById('filterEndDate')?.value || '';
+    if (!preset) return;
+    if (!start && !end) { preset.value = 'all'; return; }
+    const todayText = localDateString(new Date());
+    const exactPreset = [7, 30, 90].find(days => {
+        const first = new Date();
+        first.setDate(first.getDate() - (days - 1));
+        return start === localDateString(first) && end === todayText;
+    });
+    preset.value = exactPreset ? String(exactPreset) : 'custom';
+}
+
+function applyDateRangePreset(value) {
+    const moreFilters = document.querySelector('.history-more-filters');
+    if (value === 'custom') {
+        if (moreFilters) moreFilters.open = true;
+        document.getElementById('filterStartDate')?.focus();
+        return;
+    }
+    const startInput = document.getElementById('filterStartDate');
+    const endInput = document.getElementById('filterEndDate');
+    if (!startInput || !endInput) return;
+    if (value === 'all') {
+        startInput.value = '';
+        endInput.value = '';
+    } else {
+        const days = Number(value);
+        const today = new Date();
+        const first = new Date(today);
+        first.setDate(first.getDate() - (days - 1));
+        startInput.value = localDateString(first);
+        endInput.value = localDateString(today);
+    }
+    currentPage = 0;
+    serializeFiltersToURL();
+    loadHistory(0);
+}
+
+function updateFilterSummary() {
+    const selected = document.getElementById('filterPlatform')?.value || '';
+    const date = document.getElementById('historyDateRange');
+    const status = document.getElementById('filterStatus');
+    const labels = [selected ? platformMeta(selected).label : '全部来源'];
+    if (date?.value !== 'all') labels.push(date?.selectedOptions[0]?.textContent || '自定义时间');
+    if (status?.value !== 'all') labels.push(status?.selectedOptions[0]?.textContent || '');
+    if (document.getElementById('filterAuthor')?.value) labels.push('已选频道');
+    if (document.getElementById('filterRead')?.value !== 'all') labels.push('打开记录');
+    if (document.getElementById('filterMarked')?.value === 'marked') labels.push('仅精华');
+    if (window.__historyContentType && window.__historyContentType !== 'all') labels.push(({video:'视频', post:'帖文', file:'文件'})[window.__historyContentType]);
+    document.getElementById('historyFilterSummary').textContent = labels.filter(Boolean).join(' · ');
+    const filtered = labels.length > 1 || selected || document.getElementById('filterQ')?.value;
+    if ((document.getElementById('filterRecordType')?.value || 'task') === 'task') document.getElementById('historyListTitle').textContent = filtered ? '筛选结果' : '全部记录';
 }
 
 function getAliasMap() {
@@ -1000,93 +1153,399 @@ function shortWebhook(url) {
     } catch { return url.slice(-30); }
 }
 
-const PLATFORM_LABELS = {
-    youtube: 'YouTube',
-    bilibili: 'Bilibili',
-    xiaoyuzhou: '小宇宙',
-    xiaohongshu: '小红书',
-    douyin: '抖音',
+const PLATFORM_META = {
+    douyin: { label: '抖音', kind: 'douyin', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9" fill="none" stroke="#25F4EE" stroke-width="4" stroke-linecap="round"/><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9" fill="none" stroke="#FE2C55" stroke-width="2.3" stroke-linecap="round" transform="translate(1 0)"/><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9M14 3c.4 2.5 2.1 4.1 4.5 4.6" fill="none" stroke="#171717" stroke-width="2.3" stroke-linecap="round"/></svg>' },
+    tiktok: { label: 'TikTok', kind: 'douyin', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9" fill="none" stroke="#25F4EE" stroke-width="4" stroke-linecap="round"/><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9" fill="none" stroke="#FE2C55" stroke-width="2.3" stroke-linecap="round" transform="translate(1 0)"/><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9M14 3c.4 2.5 2.1 4.1 4.5 4.6" fill="none" stroke="#171717" stroke-width="2.3" stroke-linecap="round"/></svg>' },
+    xiaohongshu: { label: '小红书', kind: 'xiaohongshu', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5" fill="#F04452"/><text x="12" y="10.5" text-anchor="middle" fill="#fff" font-size="5.4" font-weight="700" font-family="Arial,sans-serif">小红</text><text x="12" y="17" text-anchor="middle" fill="#fff" font-size="5.4" font-weight="700" font-family="Arial,sans-serif">书</text></svg>' },
+    bilibili: { label: '哔哩哔哩', kind: 'bilibili', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 4 2.2 2M16 4l-2.2 2" fill="none" stroke="#00A1D6" stroke-width="1.8" stroke-linecap="round"/><rect x="3" y="7" width="18" height="14" rx="3" fill="#00A1D6"/><path d="M8 12v3m8-3v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>' },
+    youtube: { label: 'YouTube', kind: 'youtube', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="4" fill="#F00"/><path d="m10 9 6 3-6 3z" fill="#fff"/></svg>' },
+    twitter: { label: 'X', kind: 'x', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4.2l9.8 16h-4.2zM19 4l-6.1 7.2M5 20l6.1-7.2" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
+    x: { label: 'X', kind: 'x', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4.2l9.8 16h-4.2zM19 4l-6.1 7.2M5 20l6.1-7.2" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' },
+    wechat_channels: { label: '视频号', kind: 'wechat', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="15" height="13" rx="4" fill="#2FAE67"/><path d="m9 8 4 2.5L9 13z" fill="#fff"/><path d="M13.5 14.5h2.2l2.7 2-.5-2.4a3.8 3.8 0 0 0 2.1-3.3c0-2.3-2.2-4.2-5-4.2" fill="#75C98B"/></svg>' },
+    weixin: { label: '公众号', kind: 'wechat', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4C6.6 4 3 6.7 3 10s3.6 6 8 6c.8 0 1.6-.1 2.3-.3l3.2 1.6-.7-2.7c1.9-1.1 3.2-2.7 3.2-4.6 0-3.3-3.6-6-8-6Z" fill="#36B26D"/><circle cx="8" cy="10" r=".9" fill="#fff"/><circle cx="13" cy="10" r=".9" fill="#fff"/><path d="M16.5 8.2c2.5 0 4.5 1.6 4.5 3.7 0 1.2-.7 2.2-1.8 2.9l.4 1.8-2.1-1c-.3.1-.7.1-1 .1" fill="#7BCB91"/></svg>' },
+    xiaoyuzhou: { label: '小宇宙', kind: 'xiaoyuzhou', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#E89A54"/><path d="M5.5 13c1.4-3.4 2.7-3.4 4.1 0s2.7 3.4 4.1 0 2.7-3.4 4.1 0" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>' },
+    local: { label: '本地文件', kind: 'local', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h9l5 5V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1zM14 3.5V9h5M8 13h8M8 17h8" fill="none" stroke="#557564" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg>' },
+    generic: { label: '其他', kind: 'other', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2" fill="#7B9A87"/><rect x="14" y="3" width="7" height="7" rx="2" fill="#A7BEAD"/><rect x="3" y="14" width="7" height="7" rx="2" fill="#A7BEAD"/><rect x="14" y="14" width="7" height="7" rx="2" fill="#7B9A87"/></svg>' },
 };
+const PLATFORM_LABELS = Object.fromEntries(Object.entries(PLATFORM_META).map(([key, value]) => [key, value.label]));
+function platformMeta(platform) {
+    return PLATFORM_META[String(platform || '').toLowerCase()] || PLATFORM_META.generic;
+}
+function historyItemTitle(item) {
+    const title = String(item.title || '').trim();
+    if (title) return title.length > 100 ? title.slice(0, 97) + '…' : title;
+    const platform = platformMeta(item.platform);
+    if (['processing', 'pending', 'queued', 'running', 'transcribing'].includes(item.status)) return '内容整理中';
+    if (item.status === 'failed') return '暂未完成的内容';
+    if (platform.kind !== 'other') return `${platform.label}内容`;
+    if (item.video_url) { try { return new URL(item.video_url).hostname + ' · ' + String(item.task_id || '').slice(-6); } catch (_) {} }
+    return `${item.content_type === 'file' ? '本地文件' : '已导入内容'} · ${String(item.task_id || '').slice(-6)}`;
+}
+function platformBadgeHTML(platform) {
+    const meta = platformMeta(platform);
+    return `<span class="platform-brand-badge platform-brand-${meta.kind}" aria-label="${meta.label}"><span class="platform-brand-icon" aria-hidden="true">${meta.icon}</span><span>${meta.label}</span></span>`;
+}
 
 // ===================== Auth =====================
-function loadSavedKey() {
-    const persisted = localStorage.getItem('vta_api_key_persist');
-    const session = sessionStorage.getItem('vta_api_key');
-    const saved = persisted || session;
-    if (saved) {
-        document.getElementById('apiKeyInput').value = saved;
-    }
+function cacheKey(key) { return `vta_history_v2:${cacheOwner}:${key}`; }
+function readHistoryCache(key, ttl) {
+    let entry = responseCache.get(key);
+    if (!entry) { try { entry = JSON.parse(sessionStorage.getItem(cacheKey(key)) || 'null'); } catch (_) {} }
+    if (!entry || Date.now() - entry.time > ttl) return null;
+    return entry.data;
 }
-
-async function loadHistory(page = 0) {
-    const keyInput = document.getElementById('apiKeyInput').value.trim();
-    if (!keyInput) { showStatus('err', '请输入 API 访问令牌'); return; }
-
-    currentApiKey = keyInput;
-    sessionStorage.setItem('vta_api_key', keyInput);
-    // 静默记住令牌（仅存本浏览器），下次自动带入
-    localStorage.setItem('vta_api_key_persist', keyInput);
-    currentPage = page;
-
-    showListLoading();
-
-    // 先恢复记录类型。复盘历史不依赖任务审计的筛选元数据。
-    if (page === 0) {
-        loadFiltersFromURL();
-        const recordType = document.getElementById('filterRecordType')?.value || 'task';
-        if (recordType === 'task') {
-            await loadFilterOptions();
-        } else {
-            document.getElementById('filterBar').style.display = 'flex';
-            document.getElementById('statsBar').style.display = 'flex';
-        }
-    }
-
-    await fetchHistory();
-}
-
-async function loadFilterOptions() {
+function writeHistoryCache(key, data) {
+    const safeData = { ...data };
+    if (Array.isArray(safeData.items)) safeData.items = safeData.items.map(({ wechat_webhook, ...item }) => item);
+    if (Array.isArray(safeData.webhooks)) safeData.webhooks = [];
+    const entry = { time: Date.now(), data: safeData };
+    responseCache.set(key, entry);
+    while (responseCache.size > 10) responseCache.delete(responseCache.keys().next().value);
     try {
-        const res = await apiFetch('/api/audit/filter-options');
-        if (res.code === 200) {
-            filterOptions = res.data;
-            currentMasked = res.data.api_key_masked || '';
-            populateFilterDropdowns();
-            loadFiltersFromURL();   // 恢复 URL 里的过滤条件（必须在下拉填充后）
-            document.getElementById('filterBar').style.display = 'flex';
-            document.getElementById('statsBar').style.display = 'flex';
+        let keys = JSON.parse(sessionStorage.getItem(cacheKey('keys')) || '[]').filter(value => value !== key);
+        keys.push(key);
+        while (keys.length > 10) sessionStorage.removeItem(cacheKey(keys.shift()));
+        sessionStorage.setItem(cacheKey(key), JSON.stringify(entry));
+        sessionStorage.setItem(cacheKey('keys'), JSON.stringify(keys));
+    } catch (_) { /* A full or unavailable storage must not block the list. */ }
+}
+function historyStateKey() { return cacheKey('position'); }
+function historyScrollRoot() {
+    const root = document.querySelector('.main-area');
+    return root && root.scrollHeight > root.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(root).overflowY) ? root : null;
+}
+function saveHistoryPosition() {
+    const root = historyScrollRoot();
+    try { sessionStorage.setItem(historyStateKey(), JSON.stringify({ url: location.pathname + location.search, scroll: root?.scrollTop || window.scrollY || 0 })); } catch (_) {}
+}
+function restoreHistoryLocation() {
+    if (locationRestored) return;
+    locationRestored = true;
+    const params = new URLSearchParams(location.search);
+    const size = params.get('per_page');
+    if (['20', '50', '100', 'all'].includes(size)) pageSizeChoice = size;
+    PAGE_SIZE = pageSizeChoice === 'all' ? 1000 : Number(pageSizeChoice);
+    currentPage = Math.max(0, (Number(params.get('page')) || 1) - 1);
+    try {
+        const saved = JSON.parse(sessionStorage.getItem(historyStateKey()) || 'null');
+        if (saved?.url === location.pathname + location.search) restoreScroll = Math.max(0, Number(saved.scroll) || 0);
+    } catch (_) {}
+    document.getElementById('historyPageSize').value = pageSizeChoice;
+    loadFiltersFromURL();
+}
+
+async function loadHistory(page = null, options = {}) {
+    if (!window.LearnFluxAuth) { showStatus('err', '认证组件加载失败，请刷新页面'); return; }
+    try {
+        await window.LearnFluxAuth.ready;
+        if (!window.LearnFluxAuth.isAuthenticated()) {
+            await window.LearnFluxAuth.requireSession({ title: '连接后查看历史记录', reason: '输入管理口令后继续当前查询；筛选条件和搜索词会保留。' });
         }
-    } catch(e) {
-        console.error('filter-options error', e);
-    }
+    } catch (error) { showStatus('err', error.message || '未能建立浏览器会话'); return; }
+    const auth = window.LearnFluxAuth.getState();
+    const owner = `${auth.user?.user_id || ''}:${auth.expires_at || ''}`;
+    if (cacheOwner !== owner) { cacheOwner = owner; responseCache.clear(); previewCache.clear(); filtersLoadedAt = 0; }
+    document.getElementById('history-auth-gate').hidden = true;
+    currentApiKey = window.LearnFluxAuth.getTokenPlaceholder();
+    restoreHistoryLocation();
+    if (page !== null) currentPage = Math.max(0, Number(page) || 0);
+    historyFilterOptionsLoaded = true;
+    document.getElementById('filterBar').style.display = 'flex';
+    document.getElementById('statsBar').style.display = 'flex';
+    updateRecordTypeFilterUI(false);
+    updateFilterSummary();
+    serializeFiltersToURL(false);
+    // 复盘历史不依赖任务审计的筛选元数据。Metadata never gates record loading.
+    if ((document.getElementById('filterRecordType')?.value || 'task') === 'task') void loadFilterOptions(options.force);
+    await fetchHistory(options);
+}
+
+async function refreshHistory() { await loadHistory(currentPage, { force: true }); }
+
+async function loadFilterOptions(force = false) {
+    if (filtersPromise) return filtersPromise;
+    if (!force && Date.now() - filtersLoadedAt < HISTORY_FILTER_TTL) return;
+    const owner = cacheOwner;
+    const apply = data => {
+        if (owner !== cacheOwner || !window.LearnFluxAuth.isAuthenticated()) return;
+        filterOptions = data;
+        historyFilterOptionsLoaded = true;
+        currentMasked = data.api_key_masked || currentMasked;
+        populateFilterDropdowns();
+        loadFiltersFromURL();
+        updateRecordTypeFilterUI(false);
+        updateFilterSummary();
+        document.getElementById('filterBar').style.display = 'flex';
+    };
+    const cached = !force && readHistoryCache('filters', HISTORY_FILTER_TTL);
+    if (cached) { apply(cached); filtersLoadedAt = Date.now(); return; }
+    filtersPromise = apiFetch('/api/audit/filter-options').then(res => {
+        if (res.code !== 200) throw new Error(res.message || '筛选项暂时不可用');
+        if (owner !== cacheOwner || !window.LearnFluxAuth.isAuthenticated()) return;
+        apply(res.data);
+        filtersLoadedAt = Date.now();
+        writeHistoryCache('filters', res.data);
+    }).catch(error => {
+        if (owner !== cacheOwner) return;
+        console.warn('History filter metadata unavailable:', error.message);
+        showStatus('err', '筛选选项暂时未更新，仍可搜索和浏览记录。');
+    }).finally(() => { if (owner === cacheOwner) filtersPromise = null; });
+    return filtersPromise;
 }
 
 function populateFilterDropdowns() {
     const platformSel = document.getElementById('filterPlatform');
     platformSel.innerHTML = '<option value="">全部</option>';
-    filterOptions.platforms.forEach(p => {
+    (filterOptions.platforms || []).forEach(p => {
         const opt = document.createElement('option');
         opt.value = p;
-        opt.textContent = PLATFORM_LABELS[p] || p;
+        opt.textContent = platformMeta(p).label;
         platformSel.appendChild(opt);
     });
+    renderPlatformChips();
 
     // 频道：填充多选 checkbox 列表
     const authorContainer = document.getElementById('authorOptions');
     authorContainer.innerHTML = '';
-    filterOptions.authors.forEach(a => {
-        const div = document.createElement('div');
-        div.className = 'multi-opt';
-        div.innerHTML = `<input type="checkbox" value="${esc(a)}" checked onchange="updateAuthorFilter(event)"> <span>${esc(a)}</span>`;
-        div.addEventListener('click', e => {
-            if (e.target.tagName !== 'INPUT') {
-                const chk = div.querySelector('input'); chk.checked = !chk.checked;
-                updateAuthorFilter();
-            }
-        });
-        authorContainer.appendChild(div);
+    (filterOptions.authors || []).forEach((author, index) => {
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        const text = document.createElement('span');
+        label.className = 'multi-opt';
+        checkbox.type = 'checkbox';
+        checkbox.id = `author-checkbox-${index}`;
+        checkbox.value = author;
+        checkbox.checked = true;
+        checkbox.setAttribute('aria-label', `频道：${author}`);
+        checkbox.addEventListener('change', updateAuthorFilter);
+        label.htmlFor = checkbox.id;
+        text.textContent = author;
+        label.append(checkbox, text);
+        authorContainer.appendChild(label);
     });
     updateAuthorDisplay();
+}
+
+function platformCountMap() {
+    return new Map((filterOptions.platform_counts || []).map(item => [item.platform, Number(item.count) || 0]));
+}
+
+function renderPlatformChips() {
+    const container = document.getElementById('platformChips');
+    if (!container) return;
+    const order = ['douyin', 'bilibili', 'youtube', 'twitter', 'x', 'xiaohongshu', 'wechat_channels', 'weixin', 'xiaoyuzhou', 'local', 'generic'];
+    const platforms = [...(filterOptions.platforms || [])].sort((a, b) => {
+        const rank = value => { const index = order.indexOf(String(value).toLowerCase()); return index < 0 ? order.length : index; };
+        return rank(a) - rank(b);
+    });
+    const counts = platformCountMap();
+    const countTotal = [...counts.values()].reduce((sum, value) => sum + value, 0);
+    const allCount = document.getElementById('allPlatformCount');
+    if (allCount) allCount.textContent = countTotal ? String(countTotal) : '0';
+    container.innerHTML = '';
+    const allButton = document.createElement('button');
+    allButton.className = 'platform-chip';
+    allButton.type = 'button';
+    allButton.dataset.platform = '';
+    allButton.innerHTML = `全部 <span class="platform-count">${countTotal || 0}</span>`;
+    allButton.setAttribute('aria-label', `全部来源，共 ${countTotal || 0} 条`);
+    container.appendChild(allButton);
+    platforms.forEach(platform => {
+        const button = document.createElement('button');
+        const count = counts.get(platform) || 0;
+        const meta = platformMeta(platform);
+        button.className = 'platform-chip';
+        button.type = 'button';
+        button.dataset.platform = platform;
+        button.setAttribute('aria-label', `${meta.label}，${count} 条`);
+        const icon = document.createElement('span');
+        icon.className = `platform-chip-icon platform-brand-${meta.kind}`;
+        icon.setAttribute('aria-hidden', 'true');
+        icon.innerHTML = meta.icon;
+        const label = document.createElement('span');
+        label.textContent = meta.label;
+        const countLabel = document.createElement('span');
+        countLabel.className = 'platform-count';
+        countLabel.textContent = String(count);
+        button.append(icon, label, countLabel);
+        container.appendChild(button);
+    });
+    updatePlatformChips();
+}
+
+function updatePlatformChips() {
+    const selected = document.getElementById('filterPlatform')?.value || '';
+    document.querySelectorAll('#platformChips .platform-chip').forEach(button => {
+        const active = button.dataset.platform === selected;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+}
+
+function updateContentTypeChips() {
+    const selected = window.__historyContentType || 'all';
+    document.querySelectorAll('#contentTypeChips .type-chip').forEach(button => {
+        const active = button.dataset.contentType === selected;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+}
+
+function scrollTendedero(direction) {
+    const track = document.getElementById('tendederoTrack');
+    const card = track?.querySelector('.tendedero-card');
+    if (!track || !card) return;
+    const gap = parseFloat(getComputedStyle(track).columnGap) || 16;
+    track.scrollBy({ left: direction * (card.getBoundingClientRect().width + gap), behavior: 'smooth' });
+}
+
+function updateTendederoPosition() {
+    const track = document.getElementById('tendederoTrack');
+    const position = document.getElementById('tendederoPosition');
+    if (!track || !position) return;
+    const cards = [...track.querySelectorAll('.tendedero-card')];
+    const previous = document.querySelector('.tendedero-arrow:not(.is-next)');
+    const next = document.querySelector('.tendedero-arrow.is-next');
+    if (previous) previous.disabled = !cards.length || track.scrollLeft <= 1;
+    if (next) next.disabled = !cards.length || track.scrollLeft + track.clientWidth >= track.scrollWidth - 1;
+    if (!cards.length) { position.textContent = '0 / 0'; return; }
+    const first = cards[0].getBoundingClientRect();
+    const cardStep = first.width + (parseFloat(getComputedStyle(track).columnGap) || 16);
+    const index = Math.min(cards.length, Math.max(1, Math.round(track.scrollLeft / cardStep) + 1));
+    position.textContent = `${index} / ${cards.length}`;
+}
+
+function layoutTendederoRope() {
+    const track = document.getElementById('tendederoTrack');
+    if (!track) return;
+    const cards = [...track.querySelectorAll('.tendedero-card')];
+    const rope = track.querySelector('.tendedero-rope');
+    if (!cards.length || !rope) return;
+    const width = Math.max(track.scrollWidth, track.clientWidth);
+    const span = Math.max(1, track.clientWidth);
+    rope.setAttribute('viewBox', `0 0 ${width} 64`);
+    rope.setAttribute('width', String(width));
+    const segments = [];
+    for (let start = 0; start < width; start += span) segments.push(`M ${start} 18 C ${start + span / 3} 50 ${start + span * 2 / 3} 50 ${start + span} 18`);
+    rope.querySelector('path').setAttribute('d', segments.join(' '));
+    cards.forEach(card => {
+        const center = card.offsetLeft + card.offsetWidth / 2;
+        const t = Math.max(0, Math.min(1, (center % span) / span));
+        const drop = 24 * 4 * t * (1 - t);
+        card.style.setProperty('--hanger-drop', `${drop.toFixed(1)}px`);
+    });
+}
+
+const HISTORY_COVERS = ['cat-window', 'book', 'lakeside', 'library', 'train', 'coast'];
+let historyCoverAssignments = new Map();
+function historyCoverIdentity(item) {
+    return String(item.task_id || item.view_token || item.video_url || historyItemTitle(item));
+}
+function assignHistoryCovers(items) {
+    // This render-local map is shared by recent cards and rows; it never changes stored records.
+    const assignments = new Map();
+    items.forEach((item, index) => {
+        const identity = historyCoverIdentity(item);
+        if (!assignments.has(identity)) assignments.set(identity, HISTORY_COVERS[index % HISTORY_COVERS.length]);
+    });
+    historyCoverAssignments = assignments;
+}
+function historyCoverURL(item) {
+    const identity = historyCoverIdentity(item);
+    let cover = historyCoverAssignments.get(identity);
+    if (!cover) {
+        let hash = 2166136261;
+        for (let i = 0; i < identity.length; i += 1) hash = Math.imul(hash ^ identity.charCodeAt(i), 16777619);
+        cover = HISTORY_COVERS[(hash >>> 0) % HISTORY_COVERS.length];
+    }
+    return `/static/images/history/cover-${cover}.webp`;
+}
+
+function historyStatusPresentation(item) {
+    const statuses = {
+        success: ['status-completed', '解析完成'], failed: ['status-failed', '失败'],
+        unknown: ['status-unknown', item.view_token ? '待确认' : '仅导入记录'],
+        canceled: ['status-unknown', '已取消'], cancelled: ['status-unknown', '已取消'],
+        awaiting_cloud_confirmation: ['status-processing', '待确认费用'], queued: ['status-processing', '排队中']
+    };
+    return statuses[item.status || 'unknown'] || ['status-processing', '处理中'];
+}
+
+function buildTendederoCard(item, index) {
+    const title = historyItemTitle(item);
+    const viewToken = item.view_token || '';
+    const canOpen = Boolean(viewToken);
+    const element = document.createElement(canOpen ? 'a' : 'article');
+    element.className = 'tendedero-card';
+    if (canOpen) {
+        element.href = `/view/${encodeURIComponent(viewToken)}`;
+        element.setAttribute('aria-label', `打开学习记录：${title}`);
+        element.dataset.viewToken = viewToken;
+    }
+    element.dataset.cover = historyCoverURL(item);
+    const clip = document.createElement('span');
+    clip.className = 'tendedero-clip';
+    clip.setAttribute('aria-hidden', 'true');
+    const cover = document.createElement('div');
+    cover.className = 'tendedero-cover';
+    cover.style.backgroundImage = `url("${historyCoverURL(item)}")`;
+    cover.setAttribute('aria-hidden', 'true');
+    const heading = document.createElement('h3');
+    heading.className = 'tendedero-card-title';
+    heading.textContent = title;
+    const source = document.createElement('div');
+    source.className = 'tendedero-source';
+    source.innerHTML = platformBadgeHTML(item.platform);
+    const meta = document.createElement('div');
+    meta.className = 'tendedero-card-meta';
+    const date = document.createElement('span');
+    date.textContent = String(item.request_time_display || item.request_time || '').replace('T', ' ').slice(0, 10) || '—';
+    const status = document.createElement('span');
+    status.className = 'tendedero-status';
+    const [statusClass, statusLabel] = historyStatusPresentation(item);
+    if (statusClass === 'status-failed') status.classList.add('is-failed');
+    else if (statusClass === 'status-processing') status.classList.add('is-running');
+    else if (statusClass === 'status-unknown') status.classList.add('is-neutral');
+    status.textContent = statusLabel;
+    meta.append(date, status);
+    element.append(clip, cover, heading, source, meta);
+    if (canOpen) element.addEventListener('click', event => {
+        event.preventDefault();
+        openTask(viewToken, element);
+    });
+    return element;
+}
+
+function renderTendedero(items, isFirstPage) {
+    const section = document.getElementById('tendederoSection');
+    const track = document.getElementById('tendederoTrack');
+    if (!section || !track) return;
+    const isTaskHistory = (document.getElementById('filterRecordType')?.value || 'task') === 'task';
+    section.hidden = !isFirstPage || !isTaskHistory;
+    if (section.hidden) return;
+    track.replaceChildren();
+    track.setAttribute('aria-busy', 'false');
+    const recentItems = items;
+    if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'tendedero-empty';
+        empty.innerHTML = '<span class="tendedero-empty-art" aria-hidden="true"></span><div><strong>新的学习，正要开始</strong><p>以后收藏和学习的内容，会在这里留下足迹。</p></div>';
+        track.appendChild(empty);
+    } else {
+        const rope = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        rope.classList.add('tendedero-rope');
+        rope.setAttribute('aria-hidden', 'true');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#B78B59');
+        path.setAttribute('stroke-width', '3');
+        path.setAttribute('stroke-linecap', 'round');
+        rope.appendChild(path);
+        track.appendChild(rope);
+        recentItems.slice(0, 12).forEach((item, index) => track.appendChild(buildTendederoCard(item, index)));
+        requestAnimationFrame(layoutTendederoRope);
+    }
+    updateTendederoPosition();
 }
 
 // ===================== 频道多选交互 =====================
@@ -1095,8 +1554,10 @@ let _authorDropOpen = false;
 function toggleAuthorDropdown(e) {
     e.stopPropagation();
     const dd = document.getElementById('authorDropdown');
+    const trigger = document.getElementById('authorMultiSelect');
     _authorDropOpen = !_authorDropOpen;
     dd.style.display = _authorDropOpen ? 'block' : 'none';
+    trigger.setAttribute('aria-expanded', _authorDropOpen ? 'true' : 'false');
 }
 
 function updateAuthorFilter(e) {
@@ -1114,6 +1575,7 @@ function updateAuthorFilter(e) {
     }
     updateAuthorDisplay();
     serializeFiltersToURL();
+    void loadHistory(0);
 }
 
 function toggleAllAuthors(e) {
@@ -1126,6 +1588,7 @@ function toggleAllAuthors(e) {
     document.getElementById('filterAuthor').value = '';
     updateAuthorDisplay();
     serializeFiltersToURL();
+    void loadHistory(0);
 }
 
 function updateAuthorDisplay() {
@@ -1146,6 +1609,7 @@ document.getElementById('authorDropdown').addEventListener('click', e => e.stopP
 document.addEventListener('click', () => {
     if (_authorDropOpen) {
         document.getElementById('authorDropdown').style.display = 'none';
+        document.getElementById('authorMultiSelect').setAttribute('aria-expanded', 'false');
         _authorDropOpen = false;
     }
 });
@@ -1158,120 +1622,167 @@ function resetFilter() {
     document.getElementById('filterEndDate').value = '';
     document.getElementById('filterPlatform').value = '';
     document.getElementById('filterAuthor').value = '';
-    document.getElementById('filterStatus').value = 'success';
+    document.getElementById('filterStatus').value = 'all';
     document.getElementById('filterRead').value = 'all';
     document.getElementById('filterMarked').value = 'all';
     const qEl = document.getElementById('filterQ'); if (qEl) qEl.value = '';
+    document.querySelectorAll('#authorOptions input[type=checkbox]').forEach(check => { check.checked = true; });
+    updateAuthorDisplay();
+    const dateRange = document.getElementById('historyDateRange'); if (dateRange) dateRange.value = 'all';
+    const moreFilters = document.querySelector('.history-more-filters'); if (moreFilters) moreFilters.open = false;
+    window.__historyContentType = 'all';
     history.replaceState(null, '', window.location.pathname);  // 清空 URL 参数
     updateRecordTypeFilterUI();
+    updateContentTypeChips();
+    updatePlatformChips();
     loadHistory(0);
 }
-function changePage(delta) {
-    const maxPage = Math.ceil(totalItems / PAGE_SIZE) - 1;
-    currentPage = Math.max(0, Math.min(maxPage, currentPage + delta));
+function changePage(delta) { goToPage(currentPage + delta); }
+function goToPage(page) {
+    currentPage = Math.max(0, Math.min(Math.max(0, Math.ceil(totalItems / PAGE_SIZE) - 1), Math.trunc(Number(page) || 0)));
+    clearSelection();
+    closeSummary();
+    serializeFiltersToURL(false);
+    restoreScroll = null;
     if (_filteredItems) {
-        // 客户端已缓存全量过滤结果，直接切片渲染，无需再请求
-        const pageItems = _filteredItems.slice(
-            currentPage * PAGE_SIZE,
-            (currentPage + 1) * PAGE_SIZE
-        );
-        selectedSet.clear(); updateSelectionUI();
-        if ((document.getElementById('filterRecordType')?.value || 'task') === 'task') renderList(pageItems);
-        else renderReviewList(pageItems);
+        const items = _filteredItems.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+        if ((document.getElementById('filterRecordType')?.value || 'task') === 'task') { renderList(items); updateUnreadBadge(items); }
+        else renderReviewList(items);
         renderPagination();
-    } else {
-        fetchHistory();
-    }
+        document.getElementById('statsBar').scrollIntoView({ block: 'start' });
+    } else void fetchHistory({ scrollToList: true });
+}
+function changePageSize(value) {
+    if (!['20', '50', '100', 'all'].includes(value)) return;
+    pageSizeChoice = value;
+    PAGE_SIZE = value === 'all' ? 1000 : Number(value);
+    try { localStorage.setItem('vta_history_page_size', value); } catch (_) {}
+    document.getElementById('historyPageSize').value = value;
+    clearSelection();
+    serializeFiltersToURL();
+    void loadHistory(0);
 }
 
 // ===================== API 请求 =====================
-async function apiFetch(url, params = {}) {
+async function apiFetch(url, params = {}, options = {}) {
     const qs = new URLSearchParams(params).toString();
-    const fullUrl = qs ? `${url}?${qs}` : url;
-    const res = await fetch(fullUrl, {
-        headers: { 'Authorization': `Bearer ${currentApiKey}` }
+    const res = await fetch(qs ? `${url}?${qs}` : url, {
+        headers: { 'Authorization': `Bearer ${currentApiKey}` }, signal: options.signal
     });
     const json = await res.json();
-    if (res.status === 401) { showStatus('err', '访问令牌无效'); throw new Error('401'); }
+    if (res.status === 401) { showStatus('err', '会话已过期，请重新连接'); throw new Error('401'); }
+    if (!res.ok) throw new Error(typeof json.detail === 'string' ? json.detail : json.message || '查询失败');
     return json;
 }
 
-// 缓存客户端过滤后的全量数据（仅已读/未读过滤激活时使用）
 let _filteredItems = null;
-
-async function fetchHistory() {
-    const recordType = document.getElementById('filterRecordType')?.value || 'task';
-    if (recordType !== 'task') return fetchReviewHistory(recordType);
-    const readFilter = document.getElementById('filterRead')?.value || 'all';
-    const isReadFiltered = readFilter !== 'all';
-
-    const params = {};
-    if (isReadFiltered) {
-        // 已读/未读过滤是客户端行为，需拉全量数据再分页
-        params.limit = 10000;
-        params.offset = 0;
-    } else {
-        params.limit = PAGE_SIZE;
-        params.offset = currentPage * PAGE_SIZE;
+function historyQueryParams() {
+    const params = { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE };
+    const fields = { filterStartDate: 'start_date', filterEndDate: 'end_date', filterPlatform: 'platform', filterAuthor: 'author', filterStatus: 'status', filterQ: 'q' };
+    for (const [id, key] of Object.entries(fields)) {
+        const value = document.getElementById(id)?.value.trim() || (key === 'platform' ? new URLSearchParams(location.search).get('platform') : '') || '';
+        if (value) params[key] = value;
     }
+    if (document.getElementById('filterMarked')?.value === 'marked') params.marked = 'true';
+    if (window.__historyContentType && window.__historyContentType !== 'all') params.content_type = window.__historyContentType;
+    return params;
+}
+function setHistoryBusy(busy, message = '') {
+    document.getElementById('listArea').setAttribute('aria-busy', String(busy));
+    document.getElementById('historyQueryState').textContent = message;
+}
+function applyHistoryData(data, readFilter) {
+    currentMasked = data.api_key_masked || currentMasked;
+    const readSet = getReadSet();
+    const items = data.items || [];
+    if (readFilter !== 'all') {
+        _filteredItems = items.filter(item => {
+            const opened = Boolean(item.view_token && readSet.has(item.view_token));
+            return readFilter === 'read' ? opened : !opened;
+        });
+        totalItems = _filteredItems.length;
+    } else { _filteredItems = null; totalItems = Number(data.total) || 0; }
+    const limited = pageSizeChoice === 'all' && totalItems > 1000;
+    if (limited) {
+        pageSizeChoice = '100'; PAGE_SIZE = 100; currentPage = 0;
+        document.getElementById('historyPageSize').value = '100';
+        try { localStorage.setItem('vta_history_page_size', '100'); } catch (_) {}
+        serializeFiltersToURL(false);
+    }
+    currentPage = Math.min(currentPage, Math.max(0, Math.ceil(totalItems / PAGE_SIZE) - 1));
+    const visible = _filteredItems ? _filteredItems.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE) : items.slice(0, PAGE_SIZE);
+    const query = JSON.stringify({ ...historyQueryParams(), read: readFilter });
+    if (selectedQuery !== query) clearSelection();
+    selectedQuery = query;
+    renderList(visible);
+    renderPagination();
+    updateUnreadBadge(visible);
+    if (restoreScroll !== null) {
+        const top = restoreScroll; restoreScroll = null;
+        requestAnimationFrame(() => { const root = historyScrollRoot(); if (root) root.scrollTop = top; else window.scrollTo(0, top); });
+    }
+    return limited;
+}
 
-    const startDate = document.getElementById('filterStartDate').value;
-    const endDate   = document.getElementById('filterEndDate').value;
-    const platform  = document.getElementById('filterPlatform').value;
-    const author    = document.getElementById('filterAuthor').value;
-    const status    = document.getElementById('filterStatus').value;
-    const marked    = document.getElementById('filterMarked')?.value || 'all';
-    const q = document.getElementById('filterQ')?.value.trim() || '';
-
-    if (startDate) params.start_date = startDate;
-    if (endDate)   params.end_date = endDate;
-    if (platform)  params.platform = platform;
-    if (author)    params.author = author;
-    if (status)    params.status = status;
-    if (marked === 'marked') params.marked = 'true';
-    if (q)         params.q = q;
-
+async function fetchHistory(options = {}) {
+    const request = ++historyRequest;
+    historyController?.abort();
+    historyController = new AbortController();
+    const signal = historyController.signal;
+    closeSummary();
+    const recordType = document.getElementById('filterRecordType')?.value || 'task';
+    if (recordType !== 'task') return fetchReviewHistory(recordType, { request, signal, ...options });
+    const readFilter = document.getElementById('filterRead')?.value || 'all';
+    const params = historyQueryParams();
+    if (readFilter !== 'all') { params.limit = 500; params.offset = 0; }
+    const key = 'records:' + new URLSearchParams(params).toString() + ':read=' + readFilter;
+    const cached = !options.force && readHistoryCache(key, HISTORY_CACHE_TTL);
+    if (cached) {
+        const limited = applyHistoryData(cached, readFilter);
+        setHistoryBusy(false, limited ? '结果超过 1000 条，已切换为每页 100 条。' : '已显示最近读取的记录');
+        if (options.scrollToList) document.getElementById('statsBar').scrollIntoView({ block: 'start' });
+        return;
+    }
+    showListLoading();
+    setHistoryBusy(true, displayedItems.length ? '正在更新记录…' : '正在读取历史记录…');
     try {
-        const res = await apiFetch('/api/audit/history', params);
-        if (res.code !== 200) { showError(res.message || '查询失败'); return; }
-
-        currentMasked = res.data.api_key_masked || currentMasked;
-        selectedSet.clear();
-        updateSelectionUI();
-
-        if (isReadFiltered) {
-            // 客户端过滤 + 客户端分页
-            const readSet = getReadSet();
-            _filteredItems = res.data.items.filter(item => {
-                const isRead = item.view_token && readSet.has(item.view_token);
-                return readFilter === 'unread' ? !isRead : isRead;
-            });
-            totalItems = _filteredItems.length;
-            const pageItems = _filteredItems.slice(
-                currentPage * PAGE_SIZE,
-                (currentPage + 1) * PAGE_SIZE
-            );
-            renderList(pageItems);
-        } else {
-            _filteredItems = null;
-            totalItems = res.data.total;
-            renderList(res.data.items);
+        let res = await apiFetch('/api/audit/history', params, { signal });
+        if (request !== historyRequest) return;
+        if (res.code !== 200) throw new Error(res.message || '查询失败');
+        const data = { ...res.data, items: [...(res.data.items || [])] };
+        // Browser-local opened state: scan bounded pages, without silently truncating to 10,000.
+        while (readFilter !== 'all' && data.items.length < data.total) {
+            const offset = data.items.length;
+            setHistoryBusy(true, `正在筛选打开记录… ${offset} / ${data.total}`);
+            const next = await apiFetch('/api/audit/history', { ...params, offset }, { signal });
+            if (request !== historyRequest) return;
+            if (next.code !== 200) throw new Error(next.message || '查询失败');
+            if (!next.data?.items?.length) throw new Error('记录发生变化，请刷新后重新筛选');
+            data.items.push(...next.data.items);
         }
-
-        renderPagination();
-        updateUnreadBadge(res.data.items);
-    } catch(e) {
-        if (e.message === '401') {
-            // 令牌无效：列表区给出明确提示，避免永远停在“加载中…”
-            document.getElementById('listArea').innerHTML =
-                `<div class="state-box"><div class="icon">🔑</div><div>访问令牌无效或已过期，请在上方输入正确的令牌后点击「查询」</div></div>`;
-        } else {
-            showError('网络错误，请稍后重试');
+        if (request !== historyRequest) return;
+        if (currentPage > 0 && params.offset >= data.total && readFilter === 'all') {
+            currentPage = Math.max(0, Math.ceil(data.total / PAGE_SIZE) - 1);
+            serializeFiltersToURL(false);
+            return fetchHistory(options);
         }
+        writeHistoryCache(key, data);
+        const limited = applyHistoryData(data, readFilter);
+        setHistoryBusy(false, limited ? '结果超过 1000 条，已切换为每页 100 条。' : readFilter === 'all' ? '记录已更新' : '按当前浏览器的打开记录筛选');
+        if (options.scrollToList) document.getElementById('statsBar').scrollIntoView({ block: 'start' });
+    } catch (error) {
+        if (error.name === 'AbortError' || request !== historyRequest) return;
+        if (error.message === '401') {
+            displayedItems = []; responseCache.clear();
+            document.getElementById('listArea').replaceChildren();
+        }
+        showError(error.message === '401' ? '会话已过期，请重新连接后重试。' : '记录暂时无法更新，请重试。');
+    } finally {
+        if (request === historyRequest) document.getElementById('listArea').setAttribute('aria-busy', 'false');
     }
 }
 
-async function fetchReviewHistory(recordType) {
+async function fetchReviewHistory(recordType, options = {}) {
     const params = {limit: 200};
     const startDate = document.getElementById('filterStartDate').value;
     const endDate = document.getElementById('filterEndDate').value;
@@ -1283,7 +1794,9 @@ async function fetchReviewHistory(recordType) {
     if (status && status !== 'all') params.status = status;
     if (keyword) params.keyword = keyword;
     try {
-        const res = await apiFetch('/api/reviews/search', params);
+        setHistoryBusy(true, '正在读取复盘记录…');
+        const res = await apiFetch('/api/reviews/search', params, { signal: options.signal });
+        if (options.request !== historyRequest) return;
         if (res.code !== 200) { showError(res.message || '复盘记录查询失败'); return; }
         _filteredItems = res.data.items || [];
         totalItems = _filteredItems.length;
@@ -1292,7 +1805,9 @@ async function fetchReviewHistory(recordType) {
         renderPagination();
         document.getElementById('totalCount').textContent = `共 ${totalItems} 条复盘记录`;
         document.getElementById('unreadBadge').style.display = 'none';
+        setHistoryBusy(false, '复盘记录已更新');
     } catch (e) {
+        if (e.name === 'AbortError' || options.request !== historyRequest) return;
         if (e.message === '401') showError('访问令牌无效或已过期');
         else showError('复盘记录查询失败，请稍后重试');
     }
@@ -1321,6 +1836,8 @@ function reviewRecordURL(item) {
 }
 
 function renderReviewList(items) {
+    renderTendedero([], false);
+    document.getElementById('historyTableHead').hidden = true;
     const area = document.getElementById('listArea');
     if (!items.length) {
         area.innerHTML = `<div class="state-box"><div class="icon">○</div><div>暂无符合条件的复盘记录。空月份和中断不会被视为失败。</div></div>`;
@@ -1335,87 +1852,75 @@ function renderReviewList(items) {
 // ===================== 渲染 =====================
 function renderList(items) {
     const area = document.getElementById('listArea');
+    closeSummary();
+    displayedItems = items;
+    assignHistoryCovers(items);
+    document.getElementById('historyTableHead').hidden = !items.length;
+    renderTendedero(items, currentPage === 0 && !document.getElementById('filterQ')?.value);
     if (!items.length) {
-        area.innerHTML = `<div class="state-box"><div class="icon">📭</div><div>暂无符合条件的任务记录</div></div>`;
+        const filtered = ['filterQ', 'filterPlatform', 'filterStartDate', 'filterEndDate', 'filterAuthor'].some(id => document.getElementById(id)?.value)
+            || ['filterStatus', 'filterRead', 'filterMarked'].some(id => document.getElementById(id)?.value && document.getElementById(id).value !== 'all')
+            || (window.__historyContentType && window.__historyContentType !== 'all');
+        area.innerHTML = filtered
+            ? `<div class="state-box"><div>暂无符合条件的记录</div><p>试试减少筛选条件，或搜索标题、作者。</p><button class="btn btn-ghost" onclick="resetFilter()">清除筛选</button></div>`
+            : `<div class="state-box history-first-record"><div>还没有学习记录</div><p>从一篇感兴趣的内容开始，让新的知识在这里积累。</p><a class="history-open-link" href="/add_task_by_web">开始学习</a></div>`;
+        clearSelection();
         return;
     }
-
     const readSet = getReadSet();
-    const rows = items.map(item => buildRow(item, readSet));
-    area.innerHTML = `<div class="task-list">${rows.join('')}</div>`;
-
-    // 绑定 hover 摘要 + checkbox
-    document.querySelectorAll('.task-row[data-vt]').forEach(row => {
-        row.addEventListener('mouseenter', onRowHover);
-        row.addEventListener('mousemove', onRowMove);
-        row.addEventListener('mouseleave', onRowLeave);
-        const chk = row.querySelector('.row-checkbox');
-        if (chk) {
-            chk.addEventListener('click', e => {
-                e.stopPropagation();   // 不触发行点击
-                toggleSelect(row.dataset.vt, chk, row);
-            });
-        }
+    const available = new Set(items.filter(item => item.status === 'success').map(item => item.view_token));
+    for (const key of selectedSet) if (!available.has(key)) selectedSet.delete(key);
+    area.innerHTML = `<div class="task-list">${items.map((item, index) => buildRow(item, readSet, index)).join('')}</div>`;
+    area.querySelectorAll('.history-record-row').forEach(row => {
+        const check = row.querySelector('.history-row-checkbox');
+        if (check) check.addEventListener('change', () => toggleSelect(row.dataset.vt, check, row));
+        row.querySelectorAll('[data-open-view]').forEach(link => link.addEventListener('click', () => {
+            if (row.dataset.vt) { markRead(link.dataset.openView); renderReadState(); }
+            saveHistoryPosition();
+        }));
+        const details = row.querySelector('[data-record-details]');
+        if (details) details.addEventListener('click', () => {
+            const panel = row.querySelector('.history-row-summary');
+            panel.hidden = !panel.hidden; details.setAttribute('aria-expanded', String(!panel.hidden));
+        });
+        const preview = row.querySelector('[data-preview-view]');
+        if (preview) preview.addEventListener('click', () => toggleSummary(preview.dataset.previewView, row, preview));
     });
-    // 重渲染（翻页/筛选）后清空选择，避免“复选框已重置但 selectedSet 残留”导致全选无法取消
-    selectedSet.clear();
     updateSelectionUI();
 }
 
-function buildRow(item, readSet) {
+function buildRow(item, readSet, index) {
     const isCompleted = item.status === 'success';
-    const isRead = isCompleted && item.view_token && readSet.has(item.view_token);
-    const canClick = isCompleted && item.view_token;
-
+    const canOpen = Boolean(item.view_token);
+    const isRead = isCompleted && readSet.has(item.view_token);
+    const title = historyItemTitle(item);
     const rawTime = item.request_time_display || item.request_time;
-    const time = rawTime
-        ? rawTime.replace('T', ' ').slice(0, 16)
-        : '—';
-
-    const platformLabel = item.platform ? (PLATFORM_LABELS[item.platform] || item.platform) : '—';
-
-    const classes = ['task-row', 'task-card'];
-    if (isRead) classes.push('read');
-    if (!isRead && canClick) classes.push('unread');
-
-    const vtAttr = canClick ? `data-vt="${esc(item.view_token)}"` : '';
-    const clickHandler = canClick
-        ? `onclick="openTask('${esc(item.view_token)}', this)"`
-        : '';
-
-    const checkboxHtml = canClick
-        ? `<div style="display:flex;align-items:center;margin-right:12px;margin-top:2px;"><input type="checkbox" class="row-checkbox" onclick="event.stopPropagation()"></div>`
-        : ``;
-
-    let statusCls = '';
-    let statusTxt = item.status;
-    if (item.status === 'success') { statusCls = 'status-completed'; statusTxt = '已完成'; }
-    else if (item.status === 'failed') { statusCls = 'status-failed'; statusTxt = '失败'; }
-    else { statusCls = 'status-processing'; statusTxt = '处理中'; }
-
-    const titleText = item.title || item.video_url || '(无标题)';
-
-    return `
-        <div class="${classes.join(' ')}" ${vtAttr} style="${canClick ? 'cursor:pointer;' : ''}">
-            <div class="task-header" ${clickHandler}>
-                <div style="display:flex; flex:1; min-width:0;">
-                    ${checkboxHtml}
-                    <div class="task-meta">
-                        <div class="task-title" title="${esc(titleText)}">${esc(titleText)}</div>
-                        <div class="task-subtitle">
-                            <span>${time}</span>
-                            ${item.author ? `<span>·</span><span>${esc(item.author)}</span>` : ''}
-                            <span>·</span><span>${platformLabel}</span>
-                        </div>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    ${item.is_marked ? '<span class="mark-badge">精华</span>' : ''}
-                    <span class="task-status ${statusCls}">${statusTxt}</span>
-                </div>
-            </div>
-            ${item.error ? `<div class="task-body"><div class="task-error">${esc(item.error)}</div></div>` : ''}
-        </div>`;
+    const date = rawTime ? String(rawTime).replace('T', ' ').slice(0, 10) : '—';
+    const [statusClass, statusLabel] = historyStatusPresentation(item);
+    const selected = selectedSet.has(item.view_token);
+    const check = isCompleted && canOpen
+        ? `<input type="checkbox" class="row-checkbox history-row-checkbox" aria-label="选择记录：${esc(title)}" ${selected ? 'checked' : ''}>`
+        : '<span class="history-row-checkbox-placeholder" aria-hidden="true"></span>';
+    const href = canOpen ? `/view/${encodeURIComponent(item.view_token)}` : '';
+    const titleMarkup = canOpen
+        ? `<a class="history-row-title" href="${href}" data-open-view="${esc(item.view_token)}" target="_blank" rel="noopener">${esc(title)}</a>`
+        : `<div class="history-row-title">${esc(title)}</div>`;
+    const actionLabel = isCompleted ? '打开' : item.status === 'failed' ? '查看原因' : item.status === 'awaiting_cloud_confirmation' ? '确认费用' : ['canceled', 'cancelled', 'unknown'].includes(item.status) ? '查看详情' : '查看进度';
+    const action = canOpen
+        ? `<a class="history-open-link" href="${href}" data-open-view="${esc(item.view_token)}" target="_blank" rel="noopener">${actionLabel}</a>`
+        : `<button type="button" class="history-preview-button" data-record-details aria-expanded="false" aria-controls="history-summary-${index}">查看记录</button>`;
+    const preview = isCompleted && canOpen
+        ? `<button type="button" class="history-preview-button" data-preview-view="${esc(item.view_token)}" aria-expanded="false" aria-controls="history-summary-${index}">摘要</button>` : '';
+    const excerpt = summaryPlainText(item.excerpt || item.description || item.summary || item.author || item.video_url || '');
+    return `<div class="task-row task-card history-record-row ${isCompleted ? isRead ? 'read' : 'unread' : ''} ${selected ? 'selected' : ''}" ${isCompleted && canOpen ? `data-vt="${esc(item.view_token)}"` : ''}>
+        <div class="history-row-content">${check}<span class="history-row-cover" aria-hidden="true" style="background-image:url('${historyCoverURL(item)}')"></span><div class="history-row-copy"><div class="history-row-title-line">${titleMarkup}${item.is_marked ? '<span class="mark-badge">精华</span>' : ''}</div>${excerpt ? `<div class="history-row-author">${esc(excerpt)}</div>` : ''}</div></div>
+        <div class="history-row-platform">${platformBadgeHTML(item.platform)}</div>
+        <time class="history-row-date" ${date !== '—' ? `datetime="${esc(date)}"` : ''}>${esc(date)}</time>
+        <div class="history-row-status"><span class="history-status ${statusClass}"><span class="history-status-dot" aria-hidden="true"></span>${statusLabel}</span></div>
+        <div class="history-row-action">${action}${preview}</div>
+        ${item.error ? `<div class="history-row-error">${esc(item.error)}</div>` : ''}
+        ${preview ? `<div id="history-summary-${index}" class="history-row-summary" aria-live="polite" hidden></div>` : !canOpen ? `<div id="history-summary-${index}" class="history-row-summary" hidden>这条记录保留了导入信息，目前没有可打开的处理结果。\n任务编号：${esc(item.task_id || '未记录')}\n原链接：${esc(item.video_url || '未记录')}</div>` : ''}
+    </div>`;
 }
 
 function renderReadState() {
@@ -1435,10 +1940,10 @@ function updateUnreadBadge(items) {
     const unread = items.filter(i => i.view_token && !readSet.has(i.view_token) && i.status === 'success').length;
     const badge = document.getElementById('unreadBadge');
     const total = document.getElementById('totalCount');
-    total.textContent = `共 ${totalItems} 条`;
+    total.textContent = `(${totalItems})`;
     if (unread > 0) {
         badge.style.display = '';
-        badge.textContent = `${unread} 条未读`;
+        badge.textContent = `本页 ${unread} 条未打开`;
     } else {
         badge.style.display = 'none';
     }
@@ -1451,76 +1956,71 @@ function updateUnreadBadgeFromDOM() {
     rows.forEach(r => { if (!readSet.has(r.dataset.vt)) unread++; });
     const badge = document.getElementById('unreadBadge');
     badge.style.display = unread > 0 ? '' : 'none';
-    badge.textContent = `${unread} 条未读`;
+    badge.textContent = `本页 ${unread} 条未打开`;
 }
 
 function renderPagination() {
     const bar = document.getElementById('paginationBar');
-    const totalPages = Math.ceil(totalItems / PAGE_SIZE);
-    if (totalPages <= 1) { bar.style.display = 'none'; return; }
+    const pages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
     bar.style.display = 'flex';
-    document.getElementById('pageInfo').textContent = `第 ${currentPage + 1} / ${totalPages} 页`;
+    document.getElementById('pageInfo').textContent = `/ ${pages} 页`;
+    document.getElementById('pageRange').textContent = totalItems ? `${currentPage * PAGE_SIZE + 1}–${Math.min(totalItems, (currentPage + 1) * PAGE_SIZE)} / ${totalItems} 条` : '共 0 条';
+    const jump = document.getElementById('pageJump');
+    jump.value = currentPage + 1; jump.max = pages;
+    jump.disabled = pages <= 1;
     document.getElementById('prevBtn').disabled = currentPage === 0;
-    document.getElementById('nextBtn').disabled = currentPage >= totalPages - 1;
+    document.getElementById('nextBtn').disabled = currentPage >= pages - 1;
+    const size = document.getElementById('historyPageSize');
+    size.value = pageSizeChoice;
+    const all = size.querySelector('[value="all"]');
+    if (all) { all.disabled = totalItems > 1000; all.textContent = totalItems <= 1000 ? `全部（${totalItems} 条）` : '全部（最多 1000 条）'; }
 }
 
-// ===================== 交互 =====================
 function openTask(viewToken, rowEl) {
-    markRead(viewToken);
-    rowEl.classList.add('read');
-    const dot = rowEl.querySelector('.read-dot');
-    if (dot) dot.remove();
-    updateUnreadBadgeFromDOM();
-    window.open(`/view/${viewToken}`, '_blank');
+    if (rowEl) { markRead(viewToken); rowEl.classList.add('read'); updateUnreadBadgeFromDOM(); }
+    saveHistoryPosition();
+    window.open(`/view/${encodeURIComponent(viewToken)}`, '_blank', 'noopener');
 }
 
-// ===================== 摘要预览 =====================
-function onRowHover(e) {
-    const rowEl = e.currentTarget;   // 必须在 handler 内先存引用，setTimeout 后 currentTarget 会被置 null
-    const vt = rowEl.dataset.vt;
-    if (!vt) return;
-    summaryDebounce = setTimeout(() => fetchSummary(vt, rowEl), 300);
+function closeSummary() {
+    previewController?.abort();
+    if (activePreview) {
+        activePreview.panel.hidden = true;
+        activePreview.button.setAttribute('aria-expanded', 'false');
+        activePreview.button.textContent = '摘要';
+    }
+    activePreview = null;
 }
-function onRowMove(e) {
-    const tooltip = document.getElementById('summaryTooltip');
-    if (summaryVisible) positionTooltip(e);
+function summaryPlainText(value) {
+    return String(value || '').replace(/^#{1,6}\s+/gm, '').replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1').trim();
 }
-function onRowLeave() {
-    clearTimeout(summaryDebounce);
-    setTimeout(() => {
-        document.getElementById('summaryTooltip').classList.remove('visible');
-        summaryVisible = false;
-    }, 150);
-}
-
-async function fetchSummary(viewToken, rowEl) {
+async function toggleSummary(viewToken, row, button) {
+    if (activePreview?.button === button) { closeSummary(); return; }
+    closeSummary();
+    const panel = row.querySelector('.history-row-summary');
+    const target = { panel, button };
+    activePreview = target;
+    panel.hidden = false;
+    button.setAttribute('aria-expanded', 'true'); button.textContent = '收起摘要';
+    panel.textContent = '正在读取摘要…';
+    previewController = new AbortController();
+    const signal = previewController.signal;
     try {
-        const res = await apiFetch('/api/audit/summary', { view_token: viewToken });
-        if (res.code === 200) {
-            const title = rowEl.querySelector('.task-title')?.textContent || '';
-            document.getElementById('tooltipTitle').textContent = title;
-            document.getElementById('tooltipContent').textContent = res.data.summary || '（暂无摘要）';
-            const tooltip = document.getElementById('summaryTooltip');
-            tooltip.classList.add('visible');
-            summaryVisible = true;
-
-            // position:fixed 相对视口，不加 scrollY
-            const rect = rowEl.getBoundingClientRect();
-            const top = rect.bottom + 8;
-            const left = Math.min(rect.left, window.innerWidth - 360);
-            // 若下方空间不足，改为显示在行上方
-            const fitsBelow = top + 200 < window.innerHeight;
-            tooltip.style.top = fitsBelow ? top + 'px' : (rect.top - 8 - 200) + 'px';
-            tooltip.style.left = Math.max(0, left) + 'px';
+        let summary = previewCache.get(viewToken);
+        if (summary === undefined) {
+            const res = await apiFetch('/api/audit/summary', { view_token: viewToken }, { signal });
+            if (res.code !== 200) throw new Error(res.message || '摘要暂时不可用');
+            summary = summaryPlainText(res.data.summary) || '暂无摘要，可以打开原文继续阅读。';
+            previewCache.set(viewToken, summary);
         }
-    } catch(e) { /* 静默失败 */ }
-}
-
-function positionTooltip(e) {
-    const tooltip = document.getElementById('summaryTooltip');
-    // clientY/clientX 对应 position:fixed 的视口坐标
-    tooltip.style.top = Math.min(e.clientY + 12, window.innerHeight - 220) + 'px';
-    tooltip.style.left = Math.min(e.clientX + 8, window.innerWidth - 360) + 'px';
+        if (signal.aborted || activePreview !== target || !row.isConnected) return;
+        panel.textContent = summary;
+    } catch (error) {
+        if (error.name === 'AbortError' || activePreview !== target) return;
+        panel.textContent = '摘要暂时无法读取，请收起后重试，或直接打开内容。';
+    }
 }
 
 // ===================== Webhook 别名 =====================
@@ -1536,7 +2036,7 @@ function buildAliasRows() {
     container.innerHTML = filterOptions.webhooks.map(w => `
         <div class="alias-row">
             <span class="alias-url" title="${esc(w)}">${esc(w)}</span>
-            <input class="alias-input" type="text" placeholder="设置别名..."
+            <input class="alias-input" type="text" placeholder="设置别名..." aria-label="Webhook 别名"
                    data-url="${esc(w)}"
                    value="${esc(aliasMap[w] || '')}">
         </div>
@@ -1558,14 +2058,18 @@ function saveAliases() {
 
 // ===================== UI 辅助 =====================
 function showListLoading() {
-    document.getElementById('listArea').innerHTML =
-        `<div class="state-box"><div class="icon">—</div><div>加载中...</div></div>`;
+    if (displayedItems.length || document.querySelector('#listArea .task-list')) return;
+    document.getElementById('listArea').innerHTML = `<div class="state-box"><div>正在读取历史记录…</div><p>首次读取可能需要几秒，返回时会保留近期结果。</p></div>`;
 }
-function showError(msg) {
-    document.getElementById('listArea').innerHTML =
-        `<div class="state-box"><div class="icon">!</div><div>${esc(msg)}</div><br>
-         <button class="btn btn-ghost" onclick="loadHistory(0)" style="margin-top:8px">重试</button></div>`;
+function showError(message) {
+    setHistoryBusy(false, message);
+    if (displayedItems.length) {
+        showStatus('err', '暂时无法更新，已保留当前记录。点击刷新记录重试。');
+        return;
+    }
+    document.getElementById('listArea').innerHTML = `<div class="state-box"><div>${esc(message)}</div><button class="btn btn-ghost" onclick="refreshHistory()">重试</button></div>`;
 }
+
 function showStatus(type, msg) {
     const el = document.getElementById('authStatus');
     el.style.display = '';
@@ -1576,15 +2080,82 @@ function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ===================== 回车触发查询 =====================
-document.getElementById('apiKeyInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') loadHistory(0);
-});
-
 // 过滤栏任意子元素 change → 实时写入 URL（冒泡监听，无需逐一绑定）
 document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { const opener = activePreview?.button; closeSummary(); opener?.focus(); }
+    });
+    window.addEventListener('pagehide', saveHistoryPosition);
+    window.addEventListener('learnflux:authchange', event => {
+        const nextOwner = `${event.detail?.user?.user_id || ''}:${event.detail?.expires_at || ''}`;
+        if (event.detail?.authenticated && (!cacheOwner || nextOwner === cacheOwner)) return;
+        historyRequest += 1;
+        historyController?.abort(); closeSummary(); responseCache.clear(); previewCache.clear(); clearSelection();
+        try {
+            const keys = JSON.parse(sessionStorage.getItem(cacheKey('keys')) || '[]');
+            keys.forEach(key => sessionStorage.removeItem(cacheKey(key)));
+            sessionStorage.removeItem(cacheKey('keys'));
+            sessionStorage.removeItem(historyStateKey());
+        } catch (_) {}
+        historyCoverAssignments.clear();
+        cacheOwner = ''; filtersPromise = null; filtersLoadedAt = 0; currentMasked = ''; locationRestored = false;
+        renderTendedero([], false);
+        filterOptions = { webhooks: [], platforms: [], platform_counts: [], authors: [] };
+        historyFilterOptionsLoaded = false;
+        document.getElementById('platformChips').replaceChildren();
+        document.getElementById('authorOptions').replaceChildren();
+        document.getElementById('filterAuthor').value = '';
+        document.getElementById('authorDisplay').textContent = '全部';
+        document.getElementById('totalCount').textContent = '';
+        document.getElementById('unreadBadge').textContent = '';
+        document.getElementById('unreadBadge').style.display = 'none';
+        document.getElementById('statsBar').style.display = 'none';
+        document.getElementById('filterBar').style.display = 'none';
+        document.querySelectorAll('.history-task-filters').forEach(element => { element.hidden = true; });
+        const params = new URLSearchParams(location.search); params.delete('author');
+        history.replaceState(null, '', params.size ? '?' + params.toString() : location.pathname);
+        displayedItems = []; document.getElementById('listArea').replaceChildren();
+        document.getElementById('paginationBar').style.display = 'none';
+        if (event.detail?.authenticated) void loadHistory(0);
+    });
     const bar = document.getElementById('filterBar');
     if (bar) bar.addEventListener('change', serializeFiltersToURL);
+    ['filterStartDate', 'filterEndDate'].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('change', () => {
+            syncDateRangePreset();
+            currentPage = 0;
+            serializeFiltersToURL();
+            loadHistory(0);
+        });
+    });
+
+    const platformChips = document.getElementById('platformChips');
+    if (platformChips) platformChips.addEventListener('click', event => {
+        const button = event.target.closest('.platform-chip');
+        if (!button) return;
+        document.getElementById('filterPlatform').value = button.dataset.platform || '';
+        updatePlatformChips();
+        currentPage = 0;
+        serializeFiltersToURL();
+        loadHistory(0);
+    });
+
+    const contentTypeChips = document.getElementById('contentTypeChips');
+    if (contentTypeChips) contentTypeChips.addEventListener('click', event => {
+        const button = event.target.closest('.type-chip');
+        if (!button) return;
+        window.__historyContentType = button.dataset.contentType || 'all';
+        updateContentTypeChips();
+        currentPage = 0;
+        serializeFiltersToURL();
+        loadHistory(0);
+    });
+
+    const tendedero = document.getElementById('tendederoTrack');
+    if (tendedero) tendedero.addEventListener('scroll', updateTendederoPosition, { passive: true });
+    window.addEventListener('resize', () => requestAnimationFrame(layoutTendederoRope), { passive: true });
 
     // 搜索框：回车立即搜索，输入 500ms 防抖自动搜索
     const qInput = document.getElementById('filterQ');
@@ -1593,41 +2164,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') { clearTimeout(searchDebounce); serializeFiltersToURL(); loadHistory(0); }
     });
     qInput.addEventListener('input', () => {
+        historyRequest += 1; historyController?.abort(); closeSummary(); clearSelection();
         clearTimeout(searchDebounce);
         searchDebounce = setTimeout(() => { serializeFiltersToURL(); loadHistory(0); }, 500);
     });
 });
 let searchDebounce = null;
 
-// ===================== 从主页 localStorage 读取 Token（与主页共用同一 Key）=====================
-function tryLoadMainPageToken() {
-    // 主页用简单加密存在 vta_bearer_token，加密 key 是固定字符串
-    const ENCRYPT_KEY = 'vta_encrypt_key_2024';
-    function simpleDecrypt(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.endsWith(ENCRYPT_KEY)
-                ? decoded.slice(0, -ENCRYPT_KEY.length)
-                : encoded;
-        } catch (e) { return encoded; }
-    }
-    const raw = localStorage.getItem('vta_bearer_token');
-    return raw ? simpleDecrypt(raw) : '';
-}
-
 // ===================== 初始化 =====================
-loadSavedKey();
-// 如果没有缓存的 key，尝试从主页自动填入
-if (!document.getElementById('apiKeyInput').value) {
-    const mainKey = tryLoadMainPageToken();
-    if (mainKey) document.getElementById('apiKeyInput').value = mainKey;
-}
-// 有 key 就自动查询，无需手动点击
-if (document.getElementById('apiKeyInput').value) {
-    loadHistory();
-}
+window.LearnFluxAuth.ready.then(function (authState) {
+    if (authState.authenticated) {
+        loadHistory();
+        return;
+    }
+    const authGate = document.getElementById('history-auth-gate');
+    authGate.hidden = false;
+    window.LearnFluxAuth.renderAuthGate(authGate, {
+        title: '连接后查看历史记录',
+        reason: '输入管理口令后读取学习任务与复盘记录；当前筛选链接会保留。',
+        onAuthenticated: () => loadHistory(0)
+    });
+});
 </script>
 </body>
 </html>

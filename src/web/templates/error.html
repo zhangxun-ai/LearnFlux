@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 
+{% block body_class %}page-result page-error workbench-meadow{% endblock %}
+
 {% block title %}{{ title or "出现错误" }} - LearnFlux{% endblock %}
+
+{% block product_linear_adapter %}
+<link rel="stylesheet" href="/static/css/product-linear-system.css?v={{ asset_ver }}">
+<link rel="stylesheet" href="/static/css/workbench-wildwood.css?v={{ asset_ver }}">
+{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -64,6 +71,9 @@
                 <a class="error-btn error-btn-primary" href="/add_task_by_web">解析新内容</a>
                 <a class="error-btn" href="/static/history.html" data-feature="history" hidden>查看历史记录</a>
             </div>
+            {% if task_id %}
+            <div id="asr-retry-actions" class="error-actions" hidden></div>
+            {% endif %}
 
             {% if url %}
             <div style="margin-top: 20px;">
@@ -110,5 +120,43 @@
     document.querySelector('[data-reload-page]')?.addEventListener('click', function () {
         window.location.reload();
     });
+    {% if task_id %}
+    (async function () {
+        const taskId = {{ task_id | tojson }};
+        const actions = document.getElementById('asr-retry-actions');
+        try {
+            const response = await fetch(`/api/task/${encodeURIComponent(taskId)}`);
+            if (!response.ok) return;
+            const payload = await response.json();
+            const task = payload.data || payload;
+            if (!task.progress?.evidence?.retry_available) return;
+            actions.hidden = false;
+            for (const [strategy, label] of [['local', '重试本地'], ['cloud', '改用云端并看费用']]) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'error-btn';
+                button.textContent = label;
+                button.onclick = async () => {
+                    actions.querySelectorAll('button').forEach(item => item.disabled = true);
+                    try {
+                        const retried = await fetch(`/api/task/${encodeURIComponent(taskId)}/asr-retry`, {
+                            method: 'POST', headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({transcription_strategy: strategy}),
+                        });
+                        const data = await retried.json();
+                        if (!retried.ok) throw new Error(data.detail || '重试失败');
+                        window.location.reload();
+                    } catch (error) {
+                        document.querySelector('.error-message').textContent = error.message;
+                        actions.querySelectorAll('button').forEach(item => item.disabled = false);
+                    }
+                };
+                actions.appendChild(button);
+            }
+        } catch (error) {
+            console.debug('Unable to load retry actions');
+        }
+    })();
+    {% endif %}
 </script>
 {% endblock %}

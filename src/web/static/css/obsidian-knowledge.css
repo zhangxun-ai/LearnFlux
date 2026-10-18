@@ -48,7 +48,9 @@
     gap: 8px;
     margin: 20px 0;
 }
-.obsidian-knowledge-settings select {
+.obsidian-knowledge-settings select,
+.obsidian-knowledge-settings input[type="text"],
+#obsidian-knowledge-directory {
     min-height: 42px;
     border: 1px solid var(--line, #e6dfd5);
     border-radius: 9px;
@@ -165,3 +167,7 @@
         width: auto;
     }
 }
+
+.obsidian-content-options { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.obsidian-content-options label { display: inline-flex; align-items: center; gap: 6px; }
+#obsidian-knowledge-conflicts { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .85rem; background: #fff8e8; padding: 12px; }

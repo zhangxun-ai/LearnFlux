@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="/static/css/product-linear.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/product-linear-core.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/reading.css?v=__ASSET_VERSION__">
+    <script src="/static/js/auth-session.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/ui-features.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/reading-flow.js?v=__ASSET_VERSION__" defer></script>
@@ -33,13 +34,15 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=__ASSET_VERSION__">
 </head>
-<body class="app-shell has-app-shell product-linear page-reading">
+<body class="app-shell has-app-shell product-linear page-reading workbench-meadow">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
             <a class="brand-link" href="/" aria-label="LearnFlux 首页">
-                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-leaf.svg" alt=""></span>
                 <span class="brand-text">LearnFlux</span>
             </a>
         </div>
@@ -153,6 +156,7 @@
                 </div>
             </header>
             <p class="reading-status" id="reading-status" role="status" aria-live="polite"></p>
+            <div id="reading-auth-gate" hidden></div>
 
             <article class="reading-continue-card" id="reading-continue-card" hidden>
                 <div class="reading-continue-cover" id="reading-continue-cover">

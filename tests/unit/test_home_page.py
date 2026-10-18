@@ -1,13 +1,22 @@
-def test_home_page_exposes_local_video_study_entry():
+def test_home_page_introduces_the_personal_learning_workflow():
     from video_transcript_api.api.routes.views import _HOME_HTML
 
-    assert "本地视频学习" in _HOME_HTML
-    assert "/add_task_by_web#local-video-study" in _HOME_HTML
-    assert "单篇深度学习" in _HOME_HTML
-    assert "边播边学" in _HOME_HTML
-    assert "/static/images/landing/01-single-study.png" in _HOME_HTML
-    assert "/static/icon/learnflux-icon-256.png" in _HOME_HTML
-    assert _HOME_HTML.count("开始深度学习") >= 3
+    assert "让学习，回归生活的美好" in _HOME_HTML
+    assert "在不确定的时代，持续成长" in _HOME_HTML
+    assert "好奇，<br>让平凡的日子发光。" in _HOME_HTML
+    assert 'href="/add_task_by_web"' in _HOME_HTML
+    assert "单次学习" in _HOME_HTML
+    assert "合集学习" in _HOME_HTML
+    assert "学习播放器" in _HOME_HTML
+    assert "/static/images/landing/learnflux-meadow-hero-v2.png" in _HOME_HTML
+    assert 'aria-label="开始学习，进入 LearnFlux 工作台"' in _HOME_HTML
+    assert 'class="lf-flow-strip" id="workflow"' in _HOME_HTML
+    assert "导入内容" in _HOME_HTML
+    assert "AI 解读" in _HOME_HTML
+    assert "复习与沉淀" in _HOME_HTML
+    assert 'class="lf-leaf-mark"' in _HOME_HTML
+    assert 'type="image/svg+xml" sizes="any" href="/static/icon/learnflux-leaf.svg' in _HOME_HTML
+    assert "<figcaption>" not in _HOME_HTML
     assert "请在此处替换" not in _HOME_HTML
     assert "数据不用于模型训练" not in _HOME_HTML
 
@@ -17,6 +26,8 @@ def test_home_page_omits_removed_insight_product_card():
 
     assert 'href="/flywheel"' not in _HOME_HTML
     assert "IP 对标工作流" not in _HOME_HTML
+    assert 'href="/visual-learning"' not in _HOME_HTML
+    assert "图解生成" not in _HOME_HTML
 
 
 def test_workbench_opens_local_file_panel_from_study_hash():
@@ -66,7 +77,7 @@ def test_deep_learning_submit_does_not_route_posts_to_post_insights():
     ]
     assert "window.location.href = '/post?url=" not in submit_fn
     assert "/post?url=" not in submit_fn
-    assert "开始深度学习" in app_js
+    assert "return '开始学习';" in app_js
     assert "function submitLabelForUrl(url)" in app_js
     # 识别仍可标注平台，但动作必须是深度学习，而不是帖子洞察文案。
     assert "action: '深度学习解析'" in app_js
@@ -81,7 +92,7 @@ def test_workbench_upload_reports_http_errors_before_network_fallback():
 
     assert "readUploadResponse" in app_js
     assert "response.text()" in app_js
-    assert "HTTP ' + status" in app_js
+    assert "上传失败（HTTP ${code}）" in app_js
     assert "error && error.message" in app_js
 
 
@@ -194,7 +205,7 @@ def test_workbench_submission_and_history_statuses_keep_polling():
     assert "ensureHistoryStatusPolling" in app_js
     assert "refreshRunningHistoryStatuses" in app_js
     assert "updateHistoryEntryFromStatus" in app_js
-    assert "任务已提交，正在解析" in app_js
+    assert "状态自动更新，可继续提交其他内容。" in app_js
     assert "解析完成" in app_js
     assert "任务提交成功" not in app_js
 
@@ -253,7 +264,7 @@ def test_home_page_loads_scoped_linear_theme_once_and_versions_it():
 
     stylesheet = '/static/css/home-linear.css?v=__ASSET_VERSION__'
     assert html.count(stylesheet) == 1
-    assert '<body class="app-shell has-app-shell product-linear page-home home-linear">' in html
+    assert '<body class="app-shell has-app-shell product-linear page-home home-linear workbench-meadow">' in html
     assert html.count('/static/css/product-linear.css?v=__ASSET_VERSION__') == 1
     assert 'static_dir / "css" / "product-linear.css"' in views
     assert 'static_dir / "css" / "home-linear.css"' in views
@@ -307,12 +318,13 @@ def test_transcription_strategy_and_cloud_quote_controls_are_public():
     app_js = (project_root / "src/web/static/js/app.js").read_text(encoding="utf-8")
 
     assert "本地转录 (免费)" in html
-    assert "云端转录 (极速)" in html
-    assert html.count('value="cloud" checked') == 2
-    assert 'value="local" checked' not in html
-    assert "transcriptionStrategy = 'cloud'" in app_js
-    assert "fileStrategyEl ? fileStrategyEl.value : 'cloud'" in app_js
-    assert "strategyEl ? strategyEl.value : 'cloud'" in app_js
+    assert "云端转录（付费）" in html
+    assert "提交后先查看费用估算" in html
+    assert html.count('value="local" checked') == 2
+    assert 'value="cloud" checked' not in html
+    assert "transcriptionStrategy = 'local'" in app_js
+    assert "fileStrategyEl ? fileStrategyEl.value : 'local'" in app_js
+    assert "strategyEl ? strategyEl.value : 'local'" in app_js
     assert "transcription_strategy" in app_js
     assert "confirmCloudQuote" in app_js
     assert "useLocalForCloudQuote" in app_js

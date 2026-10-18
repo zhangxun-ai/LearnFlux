@@ -30,21 +30,24 @@
     <meta name="apple-mobile-web-app-title" content="心流写作">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/manifest.webmanifest">
-            <link rel="stylesheet" href="/static/css/editorial.css?v=2d2cd8f8152d">
-    <link rel="stylesheet" href="/static/css/app-shell.css?v=2d2cd8f8152d">
+            <link rel="stylesheet" href="/static/css/editorial.css?v=e805773679f4">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=sidebar-reopen-fix-20261016">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css">
-    <link rel="stylesheet" href="/static/css/focus-studio.css?v=2d2cd8f8152d">
-    <link rel="stylesheet" href="/static/css/product-linear.css?v=2d2cd8f8152d">
-    <link rel="stylesheet" href="/static/css/product-linear-core.css?v=2d2cd8f8152d">
-    <script src="/static/js/pwa-register.js?v=2d2cd8f8152d" defer></script>
-    <script src="/static/js/ui-features.js?v=05b7834ae213" defer></script>
-    <script src="/static/js/app-shell.js?v=2d2cd8f8152d" defer></script>
+    <link rel="stylesheet" href="/static/css/focus-studio.css?v=e805773679f4">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=e805773679f4">
+    <link rel="stylesheet" href="/static/css/product-linear-core.css?v=e805773679f4">
+    <script src="/static/js/auth-session.js?v=e805773679f4"></script>
+    <script src="/static/js/pwa-register.js?v=e805773679f4" defer></script>
+    <script src="/static/js/ui-features.js?v=f35b18a5e3ce" defer></script>
+    <script src="/static/js/app-shell.js?v=e805773679f4" defer></script>
 
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=flow-reference-20261017-v5">
 </head>
-<body class="app-shell has-app-shell product-linear page-focus focus-body" data-mode="rainy" data-font="handwriting" data-size="small">
+<body class="app-shell has-app-shell product-linear page-focus focus-body workbench-meadow" data-mode="rainy" data-font="handwriting" data-size="small">
     <script>
     (function () {
         if (new URLSearchParams(window.location.search).has('embedded')) {
@@ -56,7 +59,7 @@
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
             <a class="brand-link" href="/" aria-label="LearnFlux 首页">
-                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-leaf.svg" alt=""></span>
                 <span class="brand-text">LearnFlux</span>
             </a>
         </div>
@@ -162,12 +165,12 @@
             <div class="mode-switch" role="group" aria-label="切换背景模式">
                 <button type="button" class="mode-button active" data-mode="rainy" aria-pressed="true">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14.6A7 7 0 0 1 16 8h1.4A4.6 4.6 0 0 1 20 16.4M8 15v4M12 16v5M16 15v4"/></svg>
-                    <span>Rainy</span>
+                    <span>雨景</span>
                 </button>
                 <span class="mode-divider" aria-hidden="true"></span>
                 <button type="button" class="mode-button" data-mode="snowy" aria-pressed="false">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.6 5.4l14.8 13.2M19.4 5.4 4.6 18.6M2 12h20M7 3.5l5 8.5 5-8.5M7 20.5l5-8.5 5 8.5"/></svg>
-                    <span>Snowy</span>
+                    <span>雪景</span>
                 </button>
             </div>
         </section>
@@ -175,6 +178,8 @@
         <section class="type-zone" aria-label="字体设置">
             <button type="button" class="type-orb" aria-label="字体设置">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5h16v2M12 5v14M9 19h6"/></svg>
+                <span>字体</span>
+                <svg class="type-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             <aside class="type-panel" aria-label="字体与字号">
                 <p class="panel-kicker">字体</p>
@@ -205,6 +210,7 @@
                         <option value="monthly_review">月复盘</option>
                     </select>
                 </div>
+                <label class="sr-only" for="focus-editor">心流写作正文</label>
                 <textarea id="focus-editor" class="focus-editor" spellcheck="false" autocomplete="off" placeholder="开始你的心流写作..."></textarea>
                 <div class="deck-actions">
                     <span class="save-status" id="save-status" aria-live="polite">Saved</span>
@@ -222,30 +228,37 @@
         </section>
 
         <section class="mixer-zone" id="mixer-zone" aria-label="氛围控制台">
-            <div class="timer-readout" id="timer-readout" aria-hidden="true">
+            <aside class="weather-control" aria-label="雨滴和飘雪强度">
+                <div class="weather-control-title">
+                    <svg class="weather-icon weather-icon-rain" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14.6A7 7 0 0 1 16 8h1.4A4.6 4.6 0 0 1 20 16.4M8 15v4M12 16v5M16 15v4"/></svg>
+                    <svg class="weather-icon weather-icon-snow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.6 5.4l14.8 13.2M19.4 5.4 4.6 18.6M2 12h20M7 3.5l5 8.5 5-8.5M7 20.5l5-8.5 5 8.5"/></svg>
+                    <span class="weather-title-rain">雨滴大小</span>
+                    <span class="weather-title-snow">飘雪强度</span>
+                </div>
+                <div class="weather-value-row">
+                    <span class="mix-name" id="weather-name">Rain</span>
+                    <span class="mix-value" id="weather-value">80%</span>
+                </div>
+                <input id="weather-slider" type="range" min="0" max="100" value="80" aria-label="背景强度">
+            </aside>
+            <div class="timer-readout" id="timer-readout">
                 <span class="timer-phase" id="timer-phase">专注</span>
                 <span class="timer-time" id="timer-time">25:00</span>
                 <span class="timer-hint">长按重置</span>
             </div>
             <button type="button" class="mixer-orb" id="timer-toggle" aria-pressed="false" aria-label="开始或暂停番茄钟，长按重置">
-                <svg class="mixer-orb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H3M21 5h-7M14 3v4M8 12H3M21 12h-9M8 10v4M12 19H3M21 19h-5M16 17v4"/></svg>
+                <svg class="timer-play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7z"/></svg>
+                <svg class="timer-pause-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
                 <svg class="timer-ring" viewBox="0 0 64 64" aria-hidden="true">
                     <circle class="timer-ring-track" cx="32" cy="32" r="24"></circle>
                     <circle class="timer-ring-progress" id="timer-ring-progress" cx="32" cy="32" r="24"></circle>
                 </svg>
             </button>
             <aside class="mixer-panel">
-                <div class="mix-group">
-                    <div class="mix-row">
-                        <span class="mix-name" id="weather-name">Rain</span>
-                        <span class="mix-value" id="weather-value">80%</span>
-                    </div>
-                    <input id="weather-slider" type="range" min="0" max="100" value="80" aria-label="背景强度">
-                </div>
-                <span class="mixer-divider" aria-hidden="true"></span>
                 <div class="mix-group sound-group">
                     <div class="mix-row">
                         <button type="button" class="sound-current" id="sound-current" aria-haspopup="true" aria-expanded="false">
+                            <svg class="sound-note" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13M9 18a3 2.5 0 1 1-2-2.36A3 2.5 0 0 1 9 18Zm12-2a3 2.5 0 1 1-2-2.36A3 2.5 0 0 1 21 16Z"/></svg>
                             <span id="sound-name">Volume</span>
                         </button>
                         <span class="mix-value" id="volume-value">40%</span>
@@ -268,14 +281,14 @@
 
             <section class="journal-sidecar" id="journal-sidecar" aria-label="记录侧边栏" aria-hidden="true">
                 <div class="journal-sidecar-head">
-                    <div class="journal-tabs" role="tablist" aria-label="记录侧边栏">
-                        <button class="journal-tab active" type="button" data-journal-tab="history" role="tab" aria-selected="true">历史</button>
-                        <button class="journal-tab" type="button" data-journal-tab="review" role="tab" aria-selected="false">复盘</button>
+                    <div class="journal-tabs" role="tablist" aria-label="记录侧边栏" aria-orientation="horizontal">
+                        <button class="journal-tab active" id="journal-tab-history" type="button" data-journal-tab="history" role="tab" aria-controls="journal-panel-history" aria-selected="true" tabindex="0">历史</button>
+                        <button class="journal-tab" id="journal-tab-review" type="button" data-journal-tab="review" role="tab" aria-controls="journal-panel-review" aria-selected="false" tabindex="-1">复盘</button>
                     </div>
                     <button class="journal-sidecar-close" id="journal-sidecar-close" type="button" aria-label="关闭侧边栏">×</button>
                 </div>
 
-                <div class="journal-panel active" data-journal-panel="history" role="tabpanel">
+                <div class="journal-panel active" id="journal-panel-history" data-journal-panel="history" role="tabpanel" aria-labelledby="journal-tab-history">
                     <h2>历史记录</h2>
                     <p id="journal-history-note">按日期回看记录，选中后回到对应正文。</p>
                     <div class="journal-history-list" id="journal-history-list">
@@ -283,7 +296,7 @@
                     </div>
                 </div>
 
-                <div class="journal-panel" data-journal-panel="review" role="tabpanel" hidden>
+                <div class="journal-panel" id="journal-panel-review" data-journal-panel="review" role="tabpanel" aria-labelledby="journal-tab-review" hidden>
                     <h2>AI 复盘</h2>
                     <p>需要整理时，把这段时间的记录和问题交给 AI。</p>
                     <div class="journal-review-actions">
@@ -307,7 +320,7 @@
         </section>
     </main>
 
-    <script src="/static/js/focus-studio.js?v=2d2cd8f8152d"></script>
-    <script src="/static/js/focus-journal.js?v=2d2cd8f8152d"></script>
+    <script src="/static/js/focus-studio.js?v=flow-reference-20261017-v2"></script>
+    <script src="/static/js/focus-journal.js?v=e805773679f4"></script>
 </body>
 </html>

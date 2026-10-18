@@ -35,6 +35,7 @@
     <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/product-linear.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/home-linear.css?v=__ASSET_VERSION__">
+    <script src="/static/js/auth-session.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/ui-features.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
@@ -42,13 +43,17 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/learning-history-meadow.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/single-study-improvements.css?v=__ASSET_VERSION__">
 </head>
-<body class="app-shell has-app-shell product-linear page-home home-linear">
+<body class="app-shell has-app-shell product-linear page-home home-linear workbench-meadow">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
             <a class="brand-link" href="/" aria-label="LearnFlux 首页">
-                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-leaf.svg" alt=""></span>
                 <span class="brand-text">LearnFlux</span>
             </a>
         </div>
@@ -145,8 +150,11 @@
             <div class="topbar-title"><span class="topbar-page-title">单篇深度学习</span></div>
         </header>
         <section class="page-stage">
-    <h1 class="sr-only">单篇深度学习</h1>
     <div class="container app-home">
+        <header class="workbench-hero">
+            <h1>单篇深度学习</h1>
+            <p>导入一篇内容，AI 帮你深入理解、提炼要点，建立属于你的知识。</p>
+        </header>
 
         <div class="main-content">
             <!-- ===== 输入卡片：链接 / 本地文件 / 文字 ===== -->
@@ -155,17 +163,20 @@
                     <button type="button" class="input-tab active" id="tab-link"
                             data-panel="panel-link" role="tab" aria-controls="panel-link"
                             aria-selected="true" tabindex="0">
-                        粘贴链接
+                        <span class="input-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l3-3A5 5 0 0 0 13 2.9l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/></svg></span>
+                        <span>粘贴链接</span>
                     </button>
                     <button type="button" class="input-tab" id="tab-file"
                             data-panel="panel-file" role="tab" aria-controls="panel-file"
                             aria-selected="false" tabindex="-1">
-                        本地文件
+                        <span class="input-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3.5h8l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1z"/><path d="M14 3.5V8h4M9 13h6M9 17h6"/></svg></span>
+                        <span>本地文件</span>
                     </button>
                     <button type="button" class="input-tab" id="tab-text"
                             data-panel="panel-text" role="tab" aria-controls="panel-text"
                             aria-selected="false" tabindex="-1">
-                        粘贴文字
+                        <span class="input-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16M12 5v14M8 19h8"/><path d="M7 9h10"/></svg></span>
+                        <span>粘贴文字</span>
                     </button>
                 </div>
 
@@ -174,6 +185,7 @@
                     <form id="transcribe-form" class="form-container" autocomplete="off" data-form-type="other">
                         <div class="form-group">
                             <label class="sr-only" for="share-content">链接或待解析内容</label>
+                            <span class="link-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l3-3A5 5 0 0 0 13 2.9l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/></svg></span>
                             <textarea
                                 id="share-content"
                                 name="deep-learning-source-content"
@@ -186,8 +198,9 @@
                                 data-lpignore="true"
                                 data-1p-ignore="true"
                                 data-form-type="other"
-                                placeholder="粘贴链接 (支持 视频号 / 公众号 / 小红书 / Bilibili / YouTube / 播客等)"
+                                placeholder="粘贴视频或文章链接，系统将识别来源并开始整理"
                                 rows="3"></textarea>
+                            <p class="source-support-line">支持视频号、公众号、小红书、Bilibili、YouTube、播客等</p>
 
                             <!-- URL 提取与选择（app.js 既有机制） -->
                             <div id="url-preview" class="url-preview" hidden>
@@ -201,70 +214,85 @@
 
                         <div class="form-group compact-strategy-toggle" role="group" aria-label="转录方式">
                             <label class="strategy-card">
-                                <input type="radio" name="transcription-strategy" value="local" class="sr-only">
+                                <input type="radio" name="transcription-strategy" value="local" checked class="sr-only">
                                 <div class="strategy-card-content">
-                                    <div class="strategy-icon">💻</div>
+                                    <div class="strategy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="13" rx="2"/><path d="M8 21h8M12 17v4M7 9h10"/></svg></div>
                                     <div class="strategy-text">
-                                        <strong>本地转录 (免费)</strong>
-                                        <span>利用本机算力，保护隐私且无使用费用</span>
+                                        <strong>本地转录 · 免费</strong>
+                                        <span>使用本机算力完成转录</span>
                                     </div>
                                 </div>
                             </label>
                             <label class="strategy-card">
-                                <input type="radio" name="transcription-strategy" value="cloud" checked class="sr-only">
+                                <input type="radio" name="transcription-strategy" value="cloud" class="sr-only">
                                 <div class="strategy-card-content">
-                                    <div class="strategy-icon">☁️</div>
+                                    <div class="strategy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7.2 18.5h10.1a4.2 4.2 0 0 0 .4-8.4A5.8 5.8 0 0 0 6.6 9 4.8 4.8 0 0 0 7.2 18.5Z"/><path d="M12 11v7m-2.5-2.5L12 18l2.5-2.5"/></svg></div>
                                     <div class="strategy-text">
-                                        <strong>云端转录 (极速)</strong>
-                                        <span>高准确率与并发处理，确认时长后按量计费</span>
+                                        <strong>云端转录 · 付费</strong>
+                                        <span>先看费用估算，确认后提交；费用以服务商账单为准</span>
                                     </div>
                                 </div>
                             </label>
                         </div>
+                        <p class="study-cloud-note" id="link-cloud-note" role="status" hidden>先查看费用估算，确认后才会调用云端转录服务。</p>
 
                         <div class="form-group">
                             <button type="submit" id="submit-btn" class="submit-btn" disabled>
-                                <span class="btn-icon" aria-hidden="true">↗</span>
-                                <span class="btn-text">开始解析</span>
+                                <span class="btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/><path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z"/></svg></span>
+                                <span class="btn-text">开始学习</span>
+                                <span class="btn-arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 5l7 7-7 7"/></svg></span>
                             </button>
-                            <div id="submit-hint" class="submit-hint" role="status" aria-live="polite">粘贴或选择一个链接后即可开始解析。</div>
+                            <div id="submit-hint" class="submit-hint" role="status" aria-live="polite">粘贴链接或选择文件后即可开始。</div>
                         </div>
                     </form>
                 </div>
 
                 <!-- 本地文件面板：视频/音频上传转录 -->
                 <div class="input-panel" id="panel-file" role="tabpanel" aria-labelledby="tab-file" hidden>
-                    <div class="form-group compact-strategy-toggle" role="group" aria-label="音视频转录方式">
+                    <div class="form-group compact-strategy-toggle" id="file-transcription-options" role="group" aria-label="音视频转录方式">
                         <label class="strategy-card">
-                            <input type="radio" name="file-transcription-strategy" value="local" class="sr-only">
+                            <input type="radio" name="file-transcription-strategy" value="local" checked class="sr-only">
                             <div class="strategy-card-content">
-                                <div class="strategy-icon">💻</div>
+                                <div class="strategy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="13" rx="2"/><path d="M8 21h8M12 17v4M7 9h10"/></svg></div>
                                 <div class="strategy-text">
                                     <strong>本地转录 (免费)</strong>
-                                    <span>利用本机算力，保护隐私且无使用费用</span>
+                                    <span>使用本机算力完成转录</span>
                                 </div>
                             </div>
                         </label>
                         <label class="strategy-card">
-                            <input type="radio" name="file-transcription-strategy" value="cloud" checked class="sr-only">
+                            <input type="radio" name="file-transcription-strategy" value="cloud" class="sr-only">
                             <div class="strategy-card-content">
-                                <div class="strategy-icon">☁️</div>
+                                <div class="strategy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7.2 18.5h10.1a4.2 4.2 0 0 0 .4-8.4A5.8 5.8 0 0 0 6.6 9 4.8 4.8 0 0 0 7.2 18.5Z"/><path d="M12 11v7m-2.5-2.5L12 18l2.5-2.5"/></svg></div>
                                 <div class="strategy-text">
-                                    <strong>云端转录 (极速)</strong>
-                                    <span>高准确率与并发处理，确认时长后按量计费</span>
+                                    <strong>云端转录（付费）</strong>
+                                    <span>提交后先查看费用估算，确认后才会调用云端服务；最终费用以服务商账单为准。</span>
                                 </div>
                             </div>
                         </label>
                     </div>
                     <input type="file" id="file-input"
-                           accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.mov,.mkv,.webm,.txt,.md,.markdown,.csv,.log,.html,.htm,.pdf,.docx"
+                           accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.ts,.mov,.mkv,.webm,.avi,.m4v,.txt,.md,.markdown,.csv,.log,.html,.htm,.pdf,.docx"
                            hidden>
                     <button type="button" class="file-dropzone" id="file-dropzone" aria-describedby="dropzone-hint">
                         <div class="dropzone-icon" aria-hidden="true">+</div>
                         <div class="dropzone-title">点击或将文件拖拽至此处</div>
-                        <div class="dropzone-sub">支持音视频及各类图文文档 (PDF/MD/Docx 等)</div>
-                        <div class="dropzone-badge" id="dropzone-hint">音视频资源将自动启用本地沉浸学习模式</div>
+                        <div class="dropzone-sub">支持音视频、PDF、DOCX、Markdown 及纯文本</div>
+                        <div class="dropzone-badge" id="dropzone-hint">选择后确认文件，再开始学习；PDF 需包含可复制文字。</div>
                     </button>
+                    <div class="study-file-selection" id="file-selection" hidden>
+                        <div class="study-file-summary">
+                            <strong id="selected-file-name"></strong>
+                            <span id="selected-file-details"></span>
+                        </div>
+                        <button type="button" class="study-text-action" id="file-remove">移除</button>
+                    </div>
+                    <p class="study-cloud-note" id="file-cloud-note" role="status" hidden>提交后先查看费用估算，确认后才会调用云端转录服务。</p>
+                    <div class="study-file-actions" id="file-actions" hidden>
+                        <button type="button" id="file-submit" class="submit-btn"><span class="btn-text">开始学习</span></button>
+                        <button type="button" class="study-text-action" id="file-cancel" hidden>取消上传</button>
+                    </div>
+                    <p class="submit-hint" id="file-upload-status" role="status" aria-live="polite"></p>
                 </div>
 
                 <div class="input-panel" id="panel-text" role="tabpanel" aria-labelledby="tab-text" hidden>
@@ -279,6 +307,11 @@
                             <textarea class="form-textarea" id="study-text-content"
                                       maxlength="200000" rows="10"
                                       placeholder="粘贴文章、笔记或其他文字内容"></textarea>
+                            <div class="study-text-meta">
+                                <span id="study-text-count">0 / 200,000 字</span>
+                                <span id="study-draft-note"></span>
+                                <button type="button" class="study-text-action" id="study-draft-clear" hidden>清空草稿</button>
+                            </div>
                         </div>
                         <div class="form-group">
                             <button type="submit" id="study-text-submit" class="submit-btn" disabled>
@@ -292,6 +325,26 @@
 
             </div>
 
+            <section class="learning-steps" aria-label="学习流程">
+                <article class="learning-step">
+                    <span class="learning-step-number" aria-hidden="true">01</span>
+                    <span class="learning-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l3-3A5 5 0 0 0 13 2.9l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/></svg></span>
+                    <div><h2>导入内容</h2><p>视频、音频、文档或文字</p></div>
+                </article>
+                <span class="learning-step-arrow" aria-hidden="true">→</span>
+                <article class="learning-step">
+                    <span class="learning-step-number" aria-hidden="true">02</span>
+                    <span class="learning-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg></span>
+                    <div><h2>AI 解读</h2><p>自动整理内容，提炼要点</p></div>
+                </article>
+                <span class="learning-step-arrow" aria-hidden="true">→</span>
+                <article class="learning-step">
+                    <span class="learning-step-number" aria-hidden="true">03</span>
+                    <span class="learning-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 5a3 3 0 0 1 3-3h3a3 3 0 0 1 3 3v16a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3z"/><path d="M21 5a3 3 0 0 0-3-3h-3a3 3 0 0 0-3 3v16a3 3 0 0 1 3-3h3a3 3 0 0 1 3 3z"/></svg></span>
+                    <div><h2>复习与沉淀</h2><p>形成你的知识，随时回顾</p></div>
+                </article>
+            </section>
+
             <!-- 状态显示 -->
             <div id="status-container" class="status-container" style="display: none;">
                 <div id="status-content" class="status-content"></div>
@@ -299,32 +352,11 @@
             <!-- 历史记录 -->
             <div id="history-container" class="history-container" style="display: none;">
                 <div class="history-header">
-                    <h3>最近解析</h3>
-                    <div class="history-controls">
-                        <div class="history-filter" id="history-filter">
-                            <button type="button" class="filter-chip active" data-filter="all">全部</button>
-                            <button type="button" class="filter-chip" data-filter="marked">精华</button>
-                            <button type="button" class="filter-chip" data-filter="video">视频</button>
-                            <button type="button" class="filter-chip" data-filter="post">帖文</button>
-                            <button type="button" class="filter-chip" data-filter="file">文件</button>
-                        </div>
-                        <select id="history-status" class="hist-date-select" aria-label="按状态筛选">
-                            <option value="all">全部状态</option>
-                            <option value="done">成功</option>
-                            <option value="failed">失败</option>
-                            <option value="running">处理中</option>
-                        </select>
-                        <select id="history-date" class="hist-date-select" aria-label="按日期筛选">
-                            <option value="all">全部时间</option>
-                            <option value="today">今天</option>
-                            <option value="7d">近 7 天</option>
-                            <option value="30d">近 30 天</option>
-                            <option value="90d">近 90 天</option>
-                        </select>
-                    </div>
+                    <h3>近期任务</h3>
+                    <a class="history-all-link" href="/static/history.html">查看全部历史 <span aria-hidden="true">→</span></a>
                 </div>
                 <div id="history-list" class="history-list"></div>
-                <div id="history-pagination" class="history-pagination"></div>
+                <p class="study-recent-note">显示最近 4 个任务，完整记录与筛选请前往历史记录。<a href="/static/history.html?marked=1" data-filter="marked">查看精华</a></p>
             </div>
         </div> <!-- end main-content -->
 
@@ -336,5 +368,6 @@
     </main>
 
     <script src="/static/js/app.js?v=__ASSET_VERSION__"></script>
+    <script src="/static/js/home-history-platforms.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

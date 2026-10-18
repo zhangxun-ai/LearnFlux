@@ -46,9 +46,12 @@ def test_focus_studio_contains_lightweight_journal_ui():
     assert "togglePanel" in js
     assert "mouseleave" in js
     assert "journal-sidecar-close" in js
-    assert "vta_bearer_token" in js
+    assert "window.LearnFluxAuth.getTokenPlaceholder()" in js
+    assert "vta_bearer_token" not in js
     assert "NO_TOKEN" in js
 
+    assert "/static/js/auth-session.js" in html
+    assert "/static/js/auth-session.js" in sw
     assert "/static/js/focus-journal.js" in sw
 
 
@@ -72,6 +75,17 @@ def test_focus_editor_has_a_subtle_scrollbar_and_reserved_ui_space():
     assert "width: 0.3125rem;" in webkit_scrollbar_rule
     webkit_thumb_rule = _css_rule(css, ".focus-editor::-webkit-scrollbar-thumb")
     assert "background: rgba(255, 255, 255, 0.20);" in webkit_thumb_rule
+
+
+def test_workbench_theme_preserves_focus_scenes_and_only_recolors_the_writing_surface():
+    css = (PROJECT_ROOT / "src/web/static/css/workbench-wildwood.css").read_text(encoding="utf-8")
+    focus_rules = css[css.index("/* Focus writing:"):css.index("/* Study result detail:")]
+
+    assert ".focus-canvas" not in focus_rules
+    assert ".focus-vignette" not in focus_rules
+    assert "filter: brightness" not in focus_rules
+    assert "opacity: 0.22" not in focus_rules
+    assert "background: rgba(255, 255, 255, 0.88);" in focus_rules
 
 
 def test_focus_mixer_is_compact_and_does_not_block_editor_clicks():

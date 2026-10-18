@@ -1,4 +1,4 @@
-const CACHE_NAME = 'learnflux-pwa-20260722-shell';
+const CACHE_NAME = 'learnflux-pwa-20261016-workbench-meadow';
 
 const PRECACHE_URLS = [
   '/',
@@ -10,6 +10,7 @@ const PRECACHE_URLS = [
   '/static/focus-studio.html',
   '/manifest.webmanifest',
   '/static/css/app-shell.css',
+  '/static/css/auth-gate.css',
   '/static/css/editorial.css',
   '/static/css/styles.css',
   '/static/css/workbench.css',
@@ -20,9 +21,10 @@ const PRECACHE_URLS = [
   '/static/css/visual-learning.css',
   '/static/css/product-linear.css',
   '/static/css/product-linear-core.css',
-  '/static/css/product-linear-insights.css',
   '/static/css/product-linear-system.css',
+  '/static/css/workbench-wildwood.css',
   '/static/js/app.js',
+  '/static/js/auth-session.js',
   '/static/js/app-shell.js',
   '/static/js/ui-features.js',
   '/static/js/collections.js',
@@ -37,12 +39,15 @@ const PRECACHE_URLS = [
   '/static/audio/snow.mp3',
   '/static/audio/stream.mp3',
   '/static/icon/learnflux-logo.png',
+  '/static/icon/learnflux-leaf.svg',
   '/static/icon/learnflux-favicon-32.png',
   '/static/icon/learnflux-icon-256.png',
   '/static/icon/learnflux-apple-touch-icon.png',
   '/static/icon/learnflux-og.png',
   '/static/img/focus/rain-bg.jpg',
-  '/static/img/focus/snow-bg.jpg'
+  '/static/img/focus/snow-bg.jpg',
+  '/static/images/landing/learnflux-meadow-hero-v2.png',
+  '/static/images/landing/learnflux-reading-nook-cover.webp'
 ];
 
 const CACHEABLE_PATHS = [

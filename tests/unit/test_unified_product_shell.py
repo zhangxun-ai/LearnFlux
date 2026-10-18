@@ -287,7 +287,7 @@ class TestNavigationMarkup:
         ).read_text(encoding="utf-8")
 
         assert [group["id"] for group in navigation["groups"]] == [
-            "core", "flow", "insight", "system",
+            "core", "flow", "system",
         ]
         for removed_item in ("visual_learning", "post_insight", "trend_radar", "flywheel"):
             assert removed_item not in navigation["items"]
@@ -315,6 +315,9 @@ class TestNavigationMarkup:
     def test_static_shells_use_generated_navigation_and_feature_config_first(self):
         for filename in STATIC_SHELLS:
             html = (STATIC_ROOT / filename).read_text(encoding="utf-8")
+            nav_start = html.index("PRODUCT_NAV_START")
+            nav_end = html.index("PRODUCT_NAV_END", nav_start)
+            navigation = html[nav_start:nav_end]
             assert html.count("PRODUCT_NAV_START") == 1, filename
             assert html.count("PRODUCT_NAV_END") == 1, filename
             assert html.index("ui-features.js") < html.index("app-shell.js"), filename
@@ -393,7 +396,8 @@ class TestAssetVersions:
         source = (STATIC_ROOT / "service-worker.js").read_text(encoding="utf-8")
 
         assert "/static/js/ui-features.js" in source
-        assert "learnflux-pwa-20260722-shell" in source
+        assert "learnflux-pwa-20261016-workbench-meadow" in source
+        assert "/static/js/auth-session.js" in source
 
 
 class TestProductDesignSystem:
@@ -406,7 +410,7 @@ class TestProductDesignSystem:
             "--product-surface: #FFFFFF",
             "--product-ink: #172033",
             "--product-muted: #596579",
-            "--product-subtle: #68758A",
+            "--product-subtle: #5F6C80",
             "--product-line: #DCE2EA",
             "--product-accent: #2868D8",
             "--product-accent-hover: #1F57B6",

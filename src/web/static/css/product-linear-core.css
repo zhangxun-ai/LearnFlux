@@ -25,9 +25,9 @@ body.product-linear.page-collections.lc-study-focus .lc-page {
 
 body.product-linear.page-collections .lc-tab.active {
     border-color: transparent;
-    background: #fff;
+    background: var(--product-surface);
     color: var(--product-ink);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--product-shadow-sm);
 }
 
 body.product-linear.page-collections .lc-meta-chip {
@@ -37,7 +37,44 @@ body.product-linear.page-collections .lc-meta-chip {
 
 body.product-linear.page-collections .lc-status-pill[data-tone="ready"],
 body.product-linear.page-collections .lc-summary-status-badge.is-ready {
-    border-color: rgba(22, 163, 74, 0.2);
+    border-color: color-mix(in srgb, var(--product-success) 36%, transparent);
+    background: var(--product-success-soft);
+    color: var(--product-success);
+}
+
+body.product-linear.page-collections .lc-status-pill[data-tone="working"],
+body.product-linear.page-collections .lc-summary-status-badge.is-working {
+    border-color: color-mix(in srgb, var(--product-info) 36%, transparent);
+    background: var(--product-info-soft);
+    color: var(--product-info);
+}
+
+body.product-linear.page-collections .lc-status-pill[data-tone="danger"],
+body.product-linear.page-collections .lc-summary-status-badge.is-failed {
+    border-color: color-mix(in srgb, var(--product-danger) 36%, transparent);
+    background: var(--product-danger-soft);
+    color: var(--product-danger);
+}
+
+body.product-linear.page-collections .lc-status.summary_pending {
+    background: var(--product-warning-soft);
+    color: var(--product-warning);
+}
+
+body.product-linear.page-collections .lc-status.success {
+    background: var(--product-success-soft);
+    color: var(--product-success);
+}
+
+body.product-linear.page-collections .lc-status.failed {
+    background: var(--product-danger-soft);
+    color: var(--product-danger);
+}
+
+body.product-linear.page-collections .lc-status.processing,
+body.product-linear.page-collections .lc-status.calibrating {
+    background: var(--product-info-soft);
+    color: var(--product-info);
 }
 
 body.product-linear.page-collections .lc-board.is-summary-reading:not(.sources-expanded) .lc-summary-inline-article {

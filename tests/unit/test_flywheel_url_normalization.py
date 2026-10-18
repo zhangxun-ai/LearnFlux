@@ -241,8 +241,8 @@ def test_frontend_module_names_keep_workflows_separate():
     assert '<main class="main-area"' in shell_sources
     assert "单篇深度学习" in shell_sources
     assert "系列深度学习" in shell_sources
-    assert "帖子洞察" in shell_sources
-    assert "IP 对标" in shell_sources
+    assert 'class="nav-label">帖子洞察</span>' not in shell_sources
+    assert 'class="nav-label">IP 对标</span>' not in shell_sources
     assert "机会雷达" not in shell_sources
     assert "/flywheel#opportunities" not in shell_sources
     assert "历史" in shell_sources

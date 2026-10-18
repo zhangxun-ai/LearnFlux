@@ -1,6 +1,4 @@
 (function () {
-    const STORAGE_KEY = 'vta_bearer_token';
-    const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
     const VIDEO_EXTS = ['.mp4', '.ts', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.mp3', '.m4a', '.wav', '.aac', '.flac'];
     const DOC_EXTS = ['.txt', '.md', '.markdown', '.csv', '.log', '.html', '.htm', '.pdf', '.docx'];
     const POLL_MS = 2500;
@@ -97,15 +95,20 @@
         importPreview: document.getElementById('import-preview'),
         collectionHistoryList: document.getElementById('collection-history-list'),
         collectionHistoryCount: document.getElementById('collection-history-count'),
+        catalogPage: document.getElementById('collection-catalog-page'),
+        createPage: document.getElementById('collection-import-panel'),
+        createOpen: document.getElementById('collection-create-open'),
+        createBack: document.getElementById('collection-create-back'),
+        collectionBack: document.getElementById('collection-back'),
         historyCreatorFilter: document.getElementById('history-creator-filter'),
         historyTopicFilter: document.getElementById('history-topic-filter'),
-        historyDateFilter: document.getElementById('history-date-filter'),
-        historyTypeFilter: document.getElementById('history-type-filter'),
-        historyStatusFilter: document.getElementById('history-status-filter'),
         historyReset: document.getElementById('history-reset'),
+        historyMore: document.getElementById('collection-history-more'),
         tokenHint: document.getElementById('token-hint'),
+        authGate: document.getElementById('collection-auth-gate'),
         workspaceTitle: document.getElementById('workspace-title'),
         workspaceSubtitle: document.getElementById('workspace-subtitle'),
+        topicCreatorLabel: document.getElementById('topic-creator-label'),
         workspaceStatusPill: document.getElementById('workspace-status-pill'),
         collectionWorkspace: document.getElementById('collection-workspace'),
         collectionImportPanel: document.getElementById('collection-import-panel'),
@@ -176,6 +179,7 @@
         collectionSummaryVisualRoot: document.getElementById('collection-summary-visual-root'),
         collectionSummaryToc: document.getElementById('collection-summary-toc'),
         collectionSummaryTocNav: document.getElementById('collection-summary-toc-nav'),
+        collectionSummaryTocTrigger: document.getElementById('collection-summary-toc-trigger'),
         collectionSummaryTocPin: document.getElementById('collection-summary-toc-pin'),
         collectionSummaryReadingLayout: document.getElementById('collection-summary-reading-layout'),
         generateSummary: document.getElementById('generate-summary'),
@@ -211,16 +215,41 @@
         collectionImmersiveReader: document.getElementById('collection-immersive-reader'),
         collectionBoard: document.getElementById('collection-board'),
         collectionSources: document.getElementById('collection-sources'),
+        chapterSearch: document.getElementById('chapter-search'),
+        sourcePaneSummary: document.getElementById('source-pane-summary'),
+        sourcePaneTranscript: document.getElementById('source-pane-transcript'),
+        sourceSummaryPane: document.getElementById('source-summary-pane'),
+        sourceTranscriptPane: document.getElementById('source-transcript-pane'),
+        appendDialog: document.getElementById('collection-append-dialog'),
+        appendTitle: document.getElementById('collection-append-title'),
+        appendFolderName: document.getElementById('collection-append-folder'),
+        appendNewCount: document.getElementById('collection-append-new-count'),
+        appendExistingCount: document.getElementById('collection-append-existing-count'),
+        appendList: document.getElementById('collection-append-list'),
+        appendStrategy: document.getElementById('collection-append-strategy'),
+        appendClose: document.getElementById('collection-append-close'),
+        appendCancel: document.getElementById('collection-append-cancel'),
+        appendConfirm: document.getElementById('collection-append-confirm'),
         sourcesPanelToggle: document.getElementById('sources-panel-toggle'),
         toast: document.getElementById('toast')
     };
 
     let activeType = 'video_course';
     let collections = [];
+    let collectionsHaveMore = false;
+    let loadingMoreCollections = false;
+    let historySearchPending = false;
+    let collectionsRequestVersion = 0;
+    let historySearchTimer = null;
+    const COLLECTIONS_PAGE_SIZE = 50;
     let filterOptions = { creator_names: [], titles: [] };
     let currentCollection = null;
     let selectedSourceId = null;
     let currentView = 'summary';
+    let sourceContentPane = 'summary';
+    let pageMode = 'catalog';
+    let pendingAppendPreview = null;
+    let chapterSearchQuery = '';
     let knowledgeMapScope = 'collection';
     let selectedMapNodeId = null;
     let knowledgeMaps = { collection: null, sources: {} };
@@ -238,7 +267,8 @@
     let summaryMode = 'guide';
     let collectionSummaryMode = 'text';
     let sourcesExpandedInSummary = false;
-    let collectionSummaryTocPinned = false;
+    let collectionSummaryTocPinned = typeof window.matchMedia === 'function'
+        && window.matchMedia('(min-width: 1100px)').matches;
     let collectionSummaryTocObserver = null;
     let lastSummaryTrigger = null;
     const sourceDetailRequests = new Map();
@@ -277,6 +307,9 @@
         scrollY: 0
     };
     let initialTarget = readInitialTarget();
+    const initialView = new URLSearchParams(window.location.search).get('view');
+    if (initialTarget.collectionId) pageMode = 'topic';
+    else if (initialView === 'create') pageMode = 'create';
     const SUMMARY_CARD_META = {
         problem: {
             title: '这个系列解决什么问题',
@@ -326,19 +359,10 @@
         };
     }
 
-    function decryptToken(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.replace(ENCRYPTION_KEY, '');
-        } catch (error) {
-            return encoded;
-        }
-    }
-
     function getToken() {
-        return decryptToken(localStorage.getItem(STORAGE_KEY));
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : '';
     }
 
     function showToast(message) {
@@ -441,6 +465,8 @@
         }
         if (els.progressValue) {
             els.progressValue.textContent = `${percent}%`;
+            els.progressValue.setAttribute('aria-label', `导入进度 ${percent}%`);
+            els.progressValue.title = `导入进度 ${percent}%`;
         }
         if (els.progressFill) {
             els.progressFill.style.width = `${percent}%`;
@@ -661,11 +687,13 @@
     }
 
     async function apiJSON(url, options) {
-        const token = getToken();
-        if (!token) {
-            throw new Error('请先在工作台设置 API 令牌');
+        if (!getToken()) {
+            await window.LearnFluxAuth.requireSession({
+                title: '连接后继续系列学习',
+                reason: '输入管理口令后继续当前操作；已经填写的专题信息和已选择的文件不会丢失。'
+            });
         }
-
+        const token = getToken();
         const init = options || {};
         const headers = new Headers(init.headers || {});
         headers.set('Authorization', `Bearer ${token}`);
@@ -964,6 +992,25 @@
             return { status: 'summary_pending', label: '解读失败' };
         }
         return { status, label: statusLabel(status) };
+    }
+
+    function sourceStatusIcon(status) {
+        if (status === 'success') {
+            return '<svg aria-hidden="true" viewBox="0 0 20 20"><path d="m5 10.5 3.2 3.2L15.5 6.8"/></svg>';
+        }
+        if (status === 'failed' || status === 'summary_pending') {
+            return '<svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 5.5v5"/><path d="M10 14.2h.01"/><circle cx="10" cy="10" r="7.3"/></svg>';
+        }
+        if (status === 'processing' || status === 'calibrating') {
+            return '<span class="lc-source-status-spinner" aria-hidden="true"></span>';
+        }
+        if (status === 'canceled') {
+            return '<svg aria-hidden="true" viewBox="0 0 20 20"><path d="M6 10h8"/><circle cx="10" cy="10" r="7.3"/></svg>';
+        }
+        if (status === 'no_transcript') {
+            return '<svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 9v4"/><path d="M10 6.5h.01"/><circle cx="10" cy="10" r="7.3"/></svg>';
+        }
+        return '<svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.3"/><path d="M10 6.5v3.8l2.4 1.5"/></svg>';
     }
 
     function previewText(text, limit) {
@@ -1371,33 +1418,48 @@
 
     function selectedHistoryFilters() {
         const params = new URLSearchParams();
-        const values = {
-            creator_name: els.historyCreatorFilter.value,
-            title: els.historyTopicFilter.value,
-            collection_type: els.historyTypeFilter.value,
-            status: els.historyStatusFilter.value
-        };
-        Object.keys(values).forEach((key) => {
-            if (values[key]) params.set(key, values[key]);
-        });
-        const dateParams = dateRangeParams(els.historyDateFilter.value);
-        Object.keys(dateParams).forEach((key) => params.set(key, dateParams[key]));
+        if (els.historyCreatorFilter.value) {
+            params.set('creator_name', els.historyCreatorFilter.value);
+        }
+        const query = String(els.historyTopicFilter.value || '').trim();
+        if (query) params.set('q', query);
         return params;
     }
 
     async function loadCollections(options) {
         const opts = options || {};
+        const append = opts.append === true;
+        if (append && (loadingMoreCollections || !collectionsHaveMore)) return;
+        if (!append) {
+            collectionsRequestVersion += 1;
+            loadingMoreCollections = false;
+            historySearchPending = false;
+        }
+        const requestVersion = collectionsRequestVersion;
         if (!getToken()) {
             collections = [];
+            collectionsHaveMore = false;
             renderHistory();
             return;
         }
 
+        let loadedSuccessfully = false;
+        if (append) {
+            loadingMoreCollections = true;
+            renderHistory();
+        }
         try {
             const params = selectedHistoryFilters();
-            const query = params.toString();
-            const payload = await apiJSON(query ? `/api/collections?${query}` : '/api/collections');
-            collections = (payload.data && payload.data.collections) || [];
+            const offset = append ? collections.length : 0;
+            params.set('limit', String(COLLECTIONS_PAGE_SIZE));
+            params.set('offset', String(offset));
+            const payload = await apiJSON(`/api/collections?${params.toString()}`);
+            if (requestVersion !== collectionsRequestVersion) return;
+            const data = payload.data || {};
+            const page = Array.isArray(data.collections) ? data.collections : [];
+            collections = append ? collections.concat(page) : page;
+            collectionsHaveMore = data.has_more === true;
+            loadedSuccessfully = true;
             renderHistory();
             applyInitialPanelLayoutOnce();
             // Only open a history item when explicitly requested. Auto-selecting
@@ -1406,8 +1468,15 @@
                 await selectCollection(collections[0].id, { silent: true });
             }
         } catch (error) {
-            collections = [];
+            if (requestVersion !== collectionsRequestVersion) return;
+            if (!append) collections = [];
+            collectionsHaveMore = false;
             renderHistory(error.message || '历史专题加载失败');
+        } finally {
+            if (requestVersion === collectionsRequestVersion) {
+                loadingMoreCollections = false;
+                if (append && loadedSuccessfully) renderHistory();
+            }
         }
     }
 
@@ -1429,25 +1498,30 @@
         mapZoom = DEFAULT_MAP_ZOOM;
         mapFocused = false;
         currentView = opts.sourceId ? 'source' : 'summary';
+        sourceContentPane = 'summary';
+        setSourceContentPane('summary');
         knowledgeMapScope = opts.sourceId ? 'source' : 'collection';
         selectedMapNodeId = null;
         clearCollectionKnowledgePreview();
         collectionKnowledgeBinding = null;
         await refreshCollection(collectionId);
-        updateStudyChromeLayout({ collapseChrome: true });
+        setCollectionPageMode('topic', { replaceUrl: opts.replaceUrl === true || opts.silent === true });
+        updateStudyChromeLayout();
         const sources = currentCollection ? (currentCollection.sources || []) : [];
         const finished = sources.length > 0 && sources.every((source) => isTerminalSourceStatus(source.task_status));
         if (!finished) startPolling();
         if (!opts.silent) showToast('已打开历史专题');
     }
 
-    async function importSourcesFromLocalPath(collectionId, directory) {
+    async function importSourcesFromLocalPath(collectionId, directory, options) {
+        const opts = options || {};
         return apiJSON(`/api/collections/${encodeURIComponent(collectionId)}/sources/from-local-paths`, {
             method: 'POST',
             body: JSON.stringify({
-                directory,
-                transcription_strategy: selectedTranscriptionStrategy(),
-                transcription_concurrency: selectedTranscriptionConcurrency()
+                directory: directory || '',
+                paths: Array.isArray(opts.paths) ? opts.paths : [],
+                transcription_strategy: opts.transcription_strategy || selectedTranscriptionStrategy(),
+                transcription_concurrency: Number(opts.transcription_concurrency) || selectedTranscriptionConcurrency()
             })
         });
     }
@@ -1607,7 +1681,7 @@
                     throw new Error('未选择文件夹');
                 }
                 if (pathPickerMode === 'append') {
-                    await appendLocalDirectoryToCurrentCollection(nativePath, 'local_path');
+                    await previewAppendDirectory(nativePath, 'local_path');
                 } else {
                     await importSelectedLocalDirectory(nativePath, 'local_path');
                 }
@@ -1659,7 +1733,7 @@
         }
         closeLocalPathPicker();
         if (pathPickerMode === 'append') {
-            appendLocalDirectoryToCurrentCollection(directory, 'local_path').catch((error) => {
+            previewAppendDirectory(directory, 'local_path').catch((error) => {
                 showToast(error.message || '追加失败');
             });
             return;
@@ -1728,6 +1802,7 @@
         try {
             const collection = await createCollection();
             currentCollection = collection;
+            setCollectionPageMode('topic');
             resetCollectionVisualState(collection.id);
             selectedSourceId = null;
             knowledgeMapScope = 'collection';
@@ -1916,7 +1991,111 @@
         });
     }
 
-    async function appendLocalDirectoryToCurrentCollection(directory, importMethod) {
+    function formatAppendFileSize(value) {
+        const bytes = Math.max(0, Number(value) || 0);
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function closeAppendDialog() {
+        pendingAppendPreview = null;
+        if (els.appendDialog && els.appendDialog.open) els.appendDialog.close();
+    }
+
+    async function previewAppendDirectory(directory, importMethod) {
+        if (!currentCollection) {
+            showToast('请先打开一个专题');
+            return;
+        }
+        const path = String(directory || '').trim();
+        if (!path) {
+            showToast('请先选择一个文件夹');
+            return;
+        }
+        setBusy(true);
+        showToast('正在扫描文件夹…');
+        try {
+            const payload = await apiJSON(
+                `/api/collections/${encodeURIComponent(currentCollection.id)}/sources/preview-local-paths`,
+                { method: 'POST', body: JSON.stringify({ directory: path }) }
+            );
+            const preview = payload.data || {};
+            pendingAppendPreview = {
+                directory: path,
+                importMethod: importMethod || 'local_path',
+                paths: Array.isArray(preview.paths) ? preview.paths : [],
+                items: Array.isArray(preview.items) ? preview.items : [],
+                candidateCount: Number(preview.candidate_count) || 0,
+                newCount: Number(preview.new_source_count) || 0,
+                existingCount: Number(preview.existing_source_count) || 0
+            };
+            renderAppendPreview();
+            if (els.appendDialog && typeof els.appendDialog.showModal === 'function') {
+                els.appendDialog.showModal();
+            } else if (els.appendDialog) {
+                els.appendDialog.setAttribute('open', 'open');
+            }
+        } catch (error) {
+            showToast(error.message || '扫描文件夹失败');
+        } finally {
+            setBusy(false);
+            render();
+            if (els.appendDialog && els.appendDialog.open) renderAppendPreview();
+        }
+    }
+
+    function renderAppendPreview() {
+        if (!pendingAppendPreview || !els.appendDialog) return;
+        const preview = pendingAppendPreview;
+        const title = currentCollection ? currentCollection.title : '当前专题';
+        const strategy = (currentCollection && currentCollection.transcription_strategy) || 'local';
+        const concurrency = Number((currentCollection && currentCollection.transcription_concurrency) || 1);
+        if (els.appendTitle) els.appendTitle.textContent = `追加到「${title}」`;
+        if (els.appendFolderName) els.appendFolderName.textContent = folderDisplayName(preview.directory);
+        if (els.appendNewCount) els.appendNewCount.textContent = String(preview.newCount);
+        if (els.appendExistingCount) {
+            els.appendExistingCount.textContent = `${preview.existingCount} 个已在专题中，将自动略过`;
+        }
+        if (els.appendStrategy) {
+            els.appendStrategy.textContent = strategy === 'cloud'
+                ? `沿用云端转录 · 并发 ${concurrency}`
+                : '沿用本地转录设置';
+        }
+        if (els.appendList) {
+            els.appendList.innerHTML = preview.items.map((item) => `
+                <li class="${item.existing ? 'is-existing' : 'is-new'}">
+                    <span class="lc-append-item-mark" aria-hidden="true">${item.existing
+                        ? '<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>'
+                        : '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'}</span>
+                    <span class="lc-append-item-name" title="${escapeHTML(item.name)}">${escapeHTML(item.name)}</span>
+                    <small>${escapeHTML(formatAppendFileSize(item.size))}</small>
+                </li>
+            `).join('');
+        }
+        if (els.appendConfirm) {
+            els.appendConfirm.disabled = preview.newCount === 0 || busy;
+            els.appendConfirm.textContent = preview.newCount ? `追加 ${preview.newCount} 个` : '已全部存在';
+        }
+    }
+
+    async function confirmAppendPreview() {
+        if (!pendingAppendPreview || !currentCollection) return;
+        const preview = pendingAppendPreview;
+        if (!preview.paths.length) {
+            closeAppendDialog();
+            showToast('这些内容已在当前专题中');
+            return;
+        }
+        closeAppendDialog();
+        await appendLocalDirectoryToCurrentCollection(
+            preview.directory,
+            preview.importMethod,
+            preview.paths
+        );
+    }
+
+    async function appendLocalDirectoryToCurrentCollection(directory, importMethod, paths) {
         if (!currentCollection) {
             showToast('请先打开或创建一个专题');
             return;
@@ -1929,7 +2108,9 @@
         pendingImportMethod = importMethod || 'local_path';
         previewLocalPath(path);
         cloudQuoteFeedbackVisible = true;
-        cloudQuoteAutoOpenRequested = selectedTranscriptionStrategy() === 'cloud';
+        const strategy = currentCollection.transcription_strategy || 'local';
+        const concurrency = Number(currentCollection.transcription_concurrency || 1);
+        cloudQuoteAutoOpenRequested = strategy === 'cloud';
         lastImportError = '';
         setBusy(true);
         setImportStatus({
@@ -1940,7 +2121,11 @@
             message: '正在按本机路径追加文件（不复制）…'
         });
         try {
-            const payload = await importSourcesFromLocalPath(currentCollection.id, path);
+            const payload = await importSourcesFromLocalPath(currentCollection.id, '', {
+                paths: Array.isArray(paths) ? paths : [path],
+                transcription_strategy: strategy,
+                transcription_concurrency: concurrency
+            });
             const summary = localImportSummary(payload);
             const count = summary.scanned;
             selectedCandidateCount = count;
@@ -2403,62 +2588,66 @@
 
     function renderFilterOptions() {
         const creatorValue = els.historyCreatorFilter.value;
-        let topicValue = els.historyTopicFilter.value;
         const creators = filterOptions.creator_names || [];
-        const titles = titlesForHistoryCreator(creatorValue);
-        // Drop a stale topic filter that does not belong to the selected IP.
-        if (topicValue && titles.indexOf(topicValue) < 0) {
-            topicValue = '';
-            els.historyTopicFilter.value = '';
-        }
 
         els.creatorOptions.innerHTML = creators.map((name) => `<option value="${escapeHTML(name)}"></option>`).join('');
         els.historyCreatorFilter.innerHTML = '<option value="">全部 IP</option>' + creators.map((name) => {
             const selected = name === creatorValue ? ' selected' : '';
             return `<option value="${escapeHTML(name)}"${selected}>${escapeHTML(name)}</option>`;
         }).join('');
-        els.historyTopicFilter.innerHTML = '<option value="">全部专题</option>' + titles.map((title) => {
-            const selected = title === topicValue ? ' selected' : '';
-            return `<option value="${escapeHTML(title)}"${selected}>${escapeHTML(title)}</option>`;
-        }).join('');
     }
 
     function renderHistory(errorMessage) {
         if (!els.collectionHistoryList || !els.collectionHistoryCount) return;
-
-        els.collectionHistoryCount.textContent = collections.length ? `${collections.length} 个` : '0 个';
         if (errorMessage) {
+            els.collectionHistoryCount.textContent = '—';
             els.collectionHistoryList.innerHTML = `<div class="lc-history-empty">${escapeHTML(errorMessage)}</div>`;
+            if (els.historyMore) els.historyMore.hidden = true;
             return;
         }
         if (!getToken()) {
+            els.collectionHistoryCount.textContent = '—';
             els.collectionHistoryList.innerHTML = '<div class="lc-history-empty">设置 API 令牌后显示历史专题</div>';
+            if (els.historyMore) els.historyMore.hidden = true;
             return;
         }
-        if (!collections.length) {
-            els.collectionHistoryList.innerHTML = '<div class="lc-history-empty">暂无历史专题</div>';
+        const query = String(els.historyTopicFilter.value || '').trim().toLocaleLowerCase();
+        const visibleCollections = collections.filter((collection) => (
+            !query || String(collection.title || '').toLocaleLowerCase().includes(query)
+        ));
+        els.collectionHistoryCount.textContent = `${visibleCollections.length}${collectionsHaveMore ? '+' : ''} 个`;
+        if (els.historyReset) {
+            els.historyReset.hidden = !els.historyCreatorFilter.value && !query;
+        }
+        if (!visibleCollections.length) {
+            const emptyText = query
+                ? `没有找到「${escapeHTML(els.historyTopicFilter.value.trim())}」`
+                : '暂无专题';
+            els.collectionHistoryList.innerHTML = `<div class="lc-history-empty">${emptyText}</div>`;
+            if (els.historyMore) els.historyMore.hidden = true;
             return;
         }
 
-        // Show more history items so recent courses are not hidden after cleanup.
-        els.collectionHistoryList.innerHTML = collections.slice(0, 30).map((collection) => {
+        els.collectionHistoryList.innerHTML = visibleCollections.map((collection) => {
             const active = currentCollection && collection.id === currentCollection.id ? ' active' : '';
-            const type = collectionTypeLabel(collection.collection_type);
             const count = Number(collection.source_count || 0);
-            const metrics = collection.metrics || {};
-            const elapsed = metrics.elapsed_seconds ? ` · ${formatDuration(metrics.elapsed_seconds)}` : '';
-            const date = formatDate(collection.created_at);
             const collectionId = escapeHTML(collection.id);
+            const icon = collection.collection_type === 'document_topic'
+                ? '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>'
+                : '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="m10 8 6 4-6 4z"/></svg>';
             return `
                 <div class="lc-history-item${active}" data-collection-id="${collectionId}">
                     <button class="lc-history-open" type="button" data-collection-id="${collectionId}">
-                        <span>
+                        <span class="lc-history-type-mark">${icon}</span>
+                        <span class="lc-history-copy">
                             <strong>${escapeHTML(collection.title)}</strong>
-                            <small>${escapeHTML(collection.creator_name || '未归属')} · ${escapeHTML(type)} · ${count} 个 source${escapeHTML(elapsed)}${date ? ' · ' + escapeHTML(date) : ''}</small>
+                            <small>${escapeHTML(collection.creator_name || '未归属')} · ${count} 章</small>
                         </span>
-                        <em>${escapeHTML(collectionStatusLabel(collection))}</em>
+                        <svg class="lc-history-arrow" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
                     </button>
-                    <button class="lc-history-delete" type="button" data-collection-id="${collectionId}" aria-label="删除专题" title="删除专题">删除</button>
+                    <button class="lc-history-delete" type="button" data-collection-id="${collectionId}" aria-label="删除专题" title="删除专题">
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>
+                    </button>
                 </div>
             `;
         }).join('');
@@ -2481,6 +2670,15 @@
                 });
             });
         });
+        if (els.historyMore) {
+            els.historyMore.hidden = !collectionsHaveMore || historySearchPending;
+            els.historyMore.disabled = loadingMoreCollections;
+            els.historyMore.innerHTML = loadingMoreCollections
+                ? '<span>正在载入…</span>'
+                    + '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
+                : '<span>更多专题</span>'
+                    + '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg>';
+        }
     }
 
     async function confirmDeleteCollection(collectionId, collectionMeta) {
@@ -2543,23 +2741,45 @@
     function applyInitialPanelLayoutOnce() {
         if (didApplyInitialPanelLayout) return;
         didApplyInitialPanelLayout = true;
-        if (currentCollection || !collections.length) return;
-        if (els.collectionHistoryPanel) els.collectionHistoryPanel.open = true;
-        if (els.collectionImportPanel) els.collectionImportPanel.open = false;
     }
 
-    function updateStudyChromeLayout(options) {
+    function applyCollectionPageMode() {
+        if (els.catalogPage) els.catalogPage.hidden = pageMode !== 'catalog';
+        if (els.createPage) els.createPage.hidden = pageMode !== 'create';
+        if (els.collectionWorkspace) els.collectionWorkspace.hidden = pageMode !== 'topic';
+        document.body.classList.toggle('lc-study-focus', pageMode === 'topic');
+    }
+
+    function setCollectionPageMode(mode, options) {
         const opts = options || {};
-        const studying = Boolean(currentCollection);
+        pageMode = ['catalog', 'create', 'topic'].includes(mode) ? mode : 'catalog';
+        applyCollectionPageMode();
+        if (opts.updateUrl === false) return;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('collection_id');
+        url.searchParams.delete('source_id');
+        if (pageMode === 'create') {
+            url.searchParams.set('view', 'create');
+        } else {
+            url.searchParams.delete('view');
+            if (pageMode === 'topic' && currentCollection) {
+                url.searchParams.set('collection_id', currentCollection.id);
+                if (currentView === 'source' && selectedSourceId) {
+                    url.searchParams.set('source_id', selectedSourceId);
+                }
+            }
+        }
+        const method = opts.replaceUrl ? 'replaceState' : 'pushState';
+        window.history[method]({ collectionView: pageMode }, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    function updateStudyChromeLayout() {
+        const studying = pageMode === 'topic';
         document.body.classList.toggle('lc-study-focus', studying);
         if (els.collectionWorkspace) {
             els.collectionWorkspace.classList.toggle('is-studying', studying);
         }
-        // Only force-collapse chrome when entering a collection, not on every poll/render.
-        if (studying && opts.collapseChrome) {
-            if (els.collectionImportPanel) els.collectionImportPanel.open = false;
-            if (els.collectionHistoryPanel) els.collectionHistoryPanel.open = false;
-        }
+        applyCollectionPageMode();
     }
 
     function workspaceStatusMeta(collection) {
@@ -3146,6 +3366,13 @@
 
     function renderKnowledgeMap() {
         if (!els.mapView) return;
+        // The map feature is retired from Series Learning. Keep its legacy DOM
+        // hidden so unrelated helpers remain compatible, but do not issue map
+        // requests while users open or read a collection.
+        els.mapView.hidden = true;
+        els.mapView.setAttribute('aria-hidden', 'true');
+        return;
+
         const source = selectedSource();
         els.mapView.classList.toggle('focused', mapFocused);
         const key = currentMapKey();
@@ -3273,7 +3500,7 @@
 
     function renderSources() {
         const sources = currentCollection ? (currentCollection.sources || []) : [];
-        els.sourceCount.textContent = sources.length ? `${sources.length} 个 source` : '0 个';
+        els.sourceCount.textContent = sources.length ? `${sources.length} 章` : '0 章';
 
         if (!sources.length) {
             if (importStatus) {
@@ -3303,22 +3530,36 @@
             return;
         }
 
-        els.sourceList.innerHTML = sources.map((source, index) => {
+        const visibleSources = chapterSearchQuery
+            ? sources.filter((source) => displaySourceTitle(source).toLocaleLowerCase().includes(chapterSearchQuery))
+            : sources;
+        if (!visibleSources.length) {
+            els.sourceList.innerHTML = '<div class="lc-empty">没有找到匹配的章节</div>';
+            return;
+        }
+
+        els.sourceList.innerHTML = visibleSources.map((source) => {
+            const index = sources.indexOf(source);
             const active = source.id === selectedSourceId ? ' active' : '';
             const badge = sourceStatusBadge(source);
             const stage = sourceStageText(source);
-            const duration = source.elapsed_seconds ? ` · ${formatDuration(source.elapsed_seconds)}` : '';
+            const duration = source.elapsed_seconds ? formatDuration(source.elapsed_seconds) : '';
             const taskTitle = source.task_title
                 ? displaySourceTitle({ title: source.task_title })
                 : '';
+            const title = displaySourceTitle(source);
+            const listTitle = title.replace(/^\s*(?:第\s*)?\d{1,3}\s*(?:[章节讲]\s*|[.、:：\-—_]\s*)/, '').trim() || title;
+            const accessibleDetails = Array.from(new Set([badge.label, stage || taskTitle || source.source_type, duration]))
+                .filter(Boolean)
+                .join(' · ');
             return `
-                <button class="lc-source-item${active}" type="button" data-source-id="${escapeHTML(source.id)}">
-                    <span class="lc-source-index">${index + 1}</span>
+                <button class="lc-source-item${active}" type="button" data-source-id="${escapeHTML(source.id)}" aria-label="${escapeHTML(`${index + 1}. ${listTitle} · ${accessibleDetails}`)}" title="${escapeHTML(`${title} · ${accessibleDetails}`)}">
+                    <span class="lc-source-index">${String(index + 1).padStart(2, '0')}</span>
                     <span class="lc-source-main">
-                        <span class="lc-source-title" title="${escapeHTML(source.title)}">${escapeHTML(displaySourceTitle(source))}</span>
-                        <span class="lc-source-meta">${escapeHTML(stage || taskTitle || source.source_type || '')}${escapeHTML(duration)}</span>
+                        <span class="lc-source-title">${escapeHTML(listTitle)}</span>
+                        <span class="lc-source-meta">${escapeHTML(stage || taskTitle || source.source_type || '')}${duration ? ` · ${escapeHTML(duration)}` : ''}</span>
                     </span>
-                    <span class="lc-status ${escapeHTML(badge.status)}">${escapeHTML(badge.label)}</span>
+                    <span class="lc-status ${escapeHTML(badge.status)}" role="img" aria-label="${escapeHTML(badge.label)}" title="${escapeHTML(badge.label)}">${sourceStatusIcon(badge.status)}<span class="sr-only">${escapeHTML(badge.label)}</span></span>
                 </button>
             `;
         }).join('');
@@ -3330,6 +3571,9 @@
                 selectedMapNodeId = null;
                 setKnowledgeMapError(currentMapKey(), '');
                 currentView = 'source';
+                sourceContentPane = 'summary';
+                setSourceContentPane('summary');
+                setCollectionPageMode('topic', { replaceUrl: true });
                 render();
             });
         });
@@ -3346,28 +3590,38 @@
         const percent = sources.length
             ? Math.round(sources.reduce((sum, source) => sum + sourceProgressPercent(source), 0) / sources.length)
             : 0;
-        els.progressValue.textContent = `${percent}%`;
+        els.progressValue.textContent = `${done}/${sources.length} 章`;
+        els.progressValue.setAttribute('aria-label', `${done}/${sources.length} 章已完成，当前进度 ${percent}%`);
+        els.progressValue.title = `当前进度 ${percent}%`;
         els.progressFill.style.width = `${percent}%`;
         if (!sources.length) {
             if (lastImportError && currentCollection) {
                 els.workspaceSubtitle.textContent = `导入失败：${lastImportError}`;
             } else {
                 els.workspaceSubtitle.textContent = currentCollection
-                    ? '该专题尚无 source。请用「追加文件夹」导入视频后开始解析。'
-                    : '请在上方展开「历史专题」并点击课程进行学习，或新建导入新专题。';
+                    ? '0 章 · 选择「追加内容」开始导入'
+                    : '';
             }
             return;
         }
-        const metrics = currentCollection.metrics || {};
-        const elapsed = metrics.elapsed_seconds ? ` · 总耗时 ${formatDuration(metrics.elapsed_seconds)}` : '';
         const canceled = sources.filter((source) => source.task_status === 'canceled').length;
-        const stopped = canceled ? ` · 已停止 ${canceled} 个` : '';
+        const failed = sources.filter((source) => source.task_status === 'failed').length;
         const active = sources.find((source) => !isTerminalSourceStatus(source.task_status));
-        const stage = active ? ` · 当前：${sourceStageText(active)}` : '';
+        const pending = sources.length - done;
         const quoteSummary = cloudQuote && cloudQuote.state === 'ready'
-            ? ` · 云端报价待确认 ${cloudQuote.pending_count || cloudQuote.items.length} 个（含遗留等待和新增）`
+            ? `待确认云端报价 · ${cloudQuote.pending_count || cloudQuote.items.length} 个`
             : '';
-        els.workspaceSubtitle.textContent = `${done}/${sources.length} 个 source 已完成${stopped}${elapsed}${stage}${quoteSummary}`;
+        if (quoteSummary) {
+            els.workspaceSubtitle.textContent = quoteSummary;
+        } else if (active) {
+            els.workspaceSubtitle.textContent = `${sourceStageText(active)}${pending ? ` · ${pending} 章待处理` : ''}`;
+        } else if (failed || canceled) {
+            els.workspaceSubtitle.textContent = [failed ? `${failed} 章失败` : '', canceled ? `${canceled} 章已停止` : '']
+                .filter(Boolean)
+                .join(' · ');
+        } else {
+            els.workspaceSubtitle.textContent = '';
+        }
     }
 
     function renderWorkspaceActions() {
@@ -3379,6 +3633,7 @@
             els.appendFolder.disabled = busy || !hasCollection;
         }
         if (els.cancelCollection) {
+            els.cancelCollection.hidden = !hasActive;
             els.cancelCollection.disabled = busy || !hasActive;
         }
         if (els.continueCollection) {
@@ -3704,6 +3959,35 @@
             return;
         }
         renderMarkdownPreview(els.sourceSummary, content, fallback);
+        collapseSourceSummarySections();
+    }
+
+    function collapseSourceSummarySections() {
+        const root = els.sourceSummary;
+        if (!root || root.classList.contains('lc-markdown-source')) return;
+        const children = Array.from(root.childNodes);
+        const headingTag = children.some((node) => node.nodeType === 1 && node.tagName === 'H2') ? 'H2' : 'H3';
+        if (!children.some((node) => node.nodeType === 1 && node.tagName === headingTag)) return;
+
+        const fragment = document.createDocumentFragment();
+        let currentSection = null;
+        let sectionCount = 0;
+        children.forEach((node) => {
+            if (node.nodeType === 1 && node.tagName === headingTag) {
+                currentSection = document.createElement('details');
+                currentSection.className = 'lc-source-summary-section';
+                currentSection.open = sectionCount === 0;
+                const summary = document.createElement('summary');
+                summary.appendChild(node);
+                currentSection.appendChild(summary);
+                fragment.appendChild(currentSection);
+                sectionCount += 1;
+                return;
+            }
+            if (currentSection) currentSection.appendChild(node);
+            else fragment.appendChild(node);
+        });
+        root.replaceChildren(fragment);
     }
 
     function sourceFailureReason(source, detail) {
@@ -3754,13 +4038,19 @@
             els.summaryView.classList.toggle('is-ready', Boolean(markdown));
         }
         if (els.summaryDescription) {
+            const parsedCount = sources.filter((source) => source.task_status === 'success').length;
+            const totalCount = sources.length;
             els.summaryDescription.textContent = markdown
-                ? '已从课前导览和课后复习两个场景提炼全集主线、章节作用和复习路径。'
+                ? `基于 ${parsedCount}/${totalCount} 个已解析章节生成。追加内容解析完成后可重新生成。`
                 : (generating
-                    ? `${summaryProgress.label}。可以离开本页，稍后再回来查看结果。`
+                    ? `${summaryProgress.label}。完成后会自动更新。`
                     : (interrupted
-                        ? '上一次生成已中断，点击按钮即可从可用状态重新生成。'
-                        : (ready ? '所有源内容已解析完成，点击“生成全系列解读”建立全集视角。' : (complete ? '没有可用于生成全系列解读的逐字稿。' : '导入并解析完成后，先建立全集主线，再按复习目的定位具体章节。'))));
+                        ? '上次生成已中断，可以重新生成。'
+                        : (ready
+                            ? `已解析 ${parsedCount}/${totalCount} 章，可以生成全系列主线。`
+                            : (complete
+                                ? '当前内容没有可用于生成主线的逐字稿。'
+                                : `已解析 ${parsedCount}/${totalCount} 章，解析完成后可生成主线。`))));
         }
         const waitingText = ready ? '点击生成后展示。' : '解析完成后生成。';
         renderSummaryCard(els.summaryProblem, markdown ? summarizeMarkdownSection(markdown, ['这个系列解决什么问题', '解决什么问题', '中心问题'], 2) : [], waitingText);
@@ -3904,10 +4194,12 @@
 
         selectedSourceId = source.id;
         els.sourceTitle.textContent = displaySourceTitle(source);
-        els.sourceMeta.textContent = `${statusLabel(source.task_status)} · ${sourceStageText(source)}`;
+        els.sourceMeta.textContent = statusLabel(source.task_status);
         els.sourceTiming.textContent = source.elapsed_seconds
-            ? `从提交到完成 ${formatDuration(source.elapsed_seconds)}`
-            : (source.progress && source.progress.percent !== undefined ? `当前进度 ${source.progress.percent}%` : '');
+            ? formatDuration(source.elapsed_seconds)
+            : (source.progress && source.progress.percent !== undefined
+                ? `${sourceStageText(source)} · ${source.progress.percent}%`
+                : '');
         const canOpenSource = source.view_token && source.task_status !== 'no_transcript';
         els.openSource.href = canOpenSource ? `/view/${source.view_token}` : '#';
         els.openSource.classList.toggle('hidden', !canOpenSource);
@@ -4383,7 +4675,8 @@
 
     function collectCollectionSummaryHeadings(article) {
         if (!article) return [];
-        const headings = Array.from(article.querySelectorAll('h2, h3'));
+        const levelTwo = Array.from(article.querySelectorAll('h2'));
+        const headings = levelTwo.length ? levelTwo : Array.from(article.querySelectorAll('h3'));
         return headings.map((heading, index) => {
             const title = String(heading.textContent || '').replace(/\s+/g, ' ').trim();
             if (!title) return null;
@@ -4432,6 +4725,7 @@
         if (els.collectionSummaryReadingLayout) {
             els.collectionSummaryReadingLayout.classList.toggle('has-toc', Boolean(showToc));
             els.collectionSummaryReadingLayout.classList.toggle('toc-pinned', collectionSummaryTocPinned);
+            els.collectionSummaryReadingLayout.classList.toggle('toc-open', Boolean(showToc && collectionSummaryTocPinned));
         }
         if (els.collectionSummaryTocPin) {
             els.collectionSummaryTocPin.setAttribute('aria-pressed', collectionSummaryTocPinned ? 'true' : 'false');
@@ -4440,6 +4734,10 @@
                 ? '取消固定（恢复悬停展开）'
                 : '固定目录（常显，不随鼠标离开收起）';
         }
+        if (els.collectionSummaryTocTrigger) {
+            els.collectionSummaryTocTrigger.setAttribute('aria-expanded', collectionSummaryTocPinned ? 'true' : 'false');
+            els.collectionSummaryTocTrigger.setAttribute('aria-label', collectionSummaryTocPinned ? '目录已展开' : '展开目录');
+        }
     }
 
     function bindCollectionSummaryTocHover() {
@@ -4447,13 +4745,23 @@
         els.collectionSummaryToc.dataset.hoverBound = '1';
         const syncOpen = () => {
             const visible = !els.collectionSummaryToc.hidden;
+            const open = visible && (
+                collectionSummaryTocPinned
+                || els.collectionSummaryToc.matches(':hover')
+                || els.collectionSummaryToc.contains(document.activeElement)
+            );
             document.body.classList.toggle(
                 'lc-summary-toc-open',
-                visible && (collectionSummaryTocPinned || els.collectionSummaryToc.matches(':hover'))
+                open
             );
+            if (els.collectionSummaryReadingLayout) {
+                els.collectionSummaryReadingLayout.classList.toggle('toc-open', open);
+            }
         };
         els.collectionSummaryToc.addEventListener('mouseenter', syncOpen);
         els.collectionSummaryToc.addEventListener('mouseleave', syncOpen);
+        els.collectionSummaryToc.addEventListener('focusin', syncOpen);
+        els.collectionSummaryToc.addEventListener('focusout', syncOpen);
     }
 
     function renderCollectionSummaryToc(headings) {
@@ -4986,6 +5294,21 @@
         }
     }
 
+    function setSourceContentPane(mode) {
+        sourceContentPane = mode === 'transcript' ? 'transcript' : 'summary';
+        const showingSummary = sourceContentPane === 'summary';
+        if (els.sourcePaneSummary) {
+            els.sourcePaneSummary.classList.toggle('active', showingSummary);
+            els.sourcePaneSummary.setAttribute('aria-selected', showingSummary ? 'true' : 'false');
+        }
+        if (els.sourcePaneTranscript) {
+            els.sourcePaneTranscript.classList.toggle('active', !showingSummary);
+            els.sourcePaneTranscript.setAttribute('aria-selected', showingSummary ? 'false' : 'true');
+        }
+        if (els.sourceSummaryPane) els.sourceSummaryPane.hidden = !showingSummary;
+        if (els.sourceTranscriptPane) els.sourceTranscriptPane.hidden = showingSummary;
+    }
+
     function renderTabs() {
         // Knowledge map UI is retired; never surface the map tab/view.
         if (currentView === 'map' || currentView === 'visual') {
@@ -4998,7 +5321,10 @@
             els.mapView.classList.add('hidden');
             els.mapView.hidden = true;
         }
-        els.visualView.classList.toggle('hidden', currentView !== 'visual');
+        if (els.visualView) {
+            els.visualView.classList.add('hidden');
+            els.visualView.hidden = true;
+        }
         els.summaryView.classList.toggle('hidden', currentView !== 'summary');
         els.sourceView.classList.toggle('hidden', currentView !== 'source');
         els.markdownView.classList.toggle('hidden', currentView !== 'markdown');
@@ -5009,19 +5335,20 @@
         } else if (els.collectionSummaryToc) {
             renderCollectionSummaryToc([]);
         }
+        setSourceContentPane(sourceContentPane);
     }
 
     let collectionVaultDirectories = [];
     let collectionKnowledgeBusy = false;
     let collectionDirectoryPanelOpen = false;
+    let collectionDirectoriesReady = false;
 
     function normalizeCollectionDirectoryName(value) {
-        return String(value || '')
-            .trim()
-            .replace(/^\/+|\/+$/g, '')
-            .split('/')
-            .filter(Boolean)
-            .pop() || '';
+        return String(value || '').trim();
+    }
+
+    function collectionDocumentTypes() {
+        return Array.from(document.querySelectorAll('input[name="obsidian-collection-type"]:checked')).map(input => input.value);
     }
 
     function scoreCollectionDirectoryMatch(directoryName, collection) {
@@ -5049,28 +5376,16 @@
         return score;
     }
 
-    async function loadCollectionVaultDirectories(category) {
-        const cat = String(category || '').trim();
-        if (!cat) {
-            collectionVaultDirectories = [];
-            return [];
+    async function loadCollectionVaultDirectories() {
+        collectionDirectoriesReady = false;
+        collectionVaultDirectories = [];
+        renderCollectionDirectoryPanel('');
+        const payload = await apiJSON('/api/obsidian/directories?root=vault', { cache: 'no-store' });
+        if (!payload.data || payload.data.knowledge_sync_version !== 2) {
+            throw new Error('Obsidian 同步功能已更新，请重启 LearnFlux 服务后刷新页面');
         }
-        try {
-            const payload = await apiJSON('/api/obsidian/directories?root=raw');
-            const items = (payload.data && payload.data.items) || [];
-            const prefix = `raw/${cat}/`;
-            collectionVaultDirectories = items
-                .filter((path) => {
-                    const text = String(path || '');
-                    if (!text.startsWith(prefix)) return false;
-                    const rest = text.slice(prefix.length);
-                    return rest && !rest.includes('/');
-                })
-                .map((path) => path.slice(prefix.length))
-                .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
-        } catch (_error) {
-            collectionVaultDirectories = [];
-        }
+        collectionVaultDirectories = ['', ...(payload.data.items || [])];
+        collectionDirectoriesReady = true;
         return collectionVaultDirectories;
     }
 
@@ -5084,21 +5399,18 @@
     }
 
     function updateCollectionDirectoryMeta(name) {
-        const category = (els.obsidianCollectionCategory && els.obsidianCollectionCategory.value || '').trim();
         const directory = normalizeCollectionDirectoryName(
             name != null ? name : (els.obsidianCollectionDirectory && els.obsidianCollectionDirectory.value)
         );
-        const exists = Boolean(directory && collectionVaultDirectories.includes(directory));
+        const exists = collectionVaultDirectories.includes(directory);
         if (els.obsidianCollectionDirectoryPathPreview) {
-            els.obsidianCollectionDirectoryPathPreview.textContent = category && directory
-                ? `raw/${category}/${directory}`
-                : (category ? `raw/${category}/…` : 'raw/…');
+            els.obsidianCollectionDirectoryPathPreview.textContent = directory || '知识库根目录';
         }
         if (els.obsidianCollectionDirectoryStatus) {
             if (!directory) {
                 els.obsidianCollectionDirectoryStatus.hidden = false;
                 els.obsidianCollectionDirectoryStatus.dataset.tone = 'empty';
-                els.obsidianCollectionDirectoryStatus.textContent = '待填写';
+                els.obsidianCollectionDirectoryStatus.textContent = '根目录';
             } else if (exists) {
                 els.obsidianCollectionDirectoryStatus.hidden = false;
                 els.obsidianCollectionDirectoryStatus.dataset.tone = 'exists';
@@ -5141,8 +5453,9 @@
             button.dataset.value = name;
             button.setAttribute('role', 'option');
             button.setAttribute('aria-selected', name === selected ? 'true' : 'false');
-            button.textContent = name;
+            button.textContent = name || '知识库根目录';
             button.addEventListener('click', () => {
+                if (collectionKnowledgeBusy) return;
                 setCollectionDirectoryValue(name);
                 closeCollectionDirectoryPanel();
                 clearCollectionKnowledgePreview();
@@ -5155,7 +5468,7 @@
     }
 
     function openCollectionDirectoryPanel() {
-        if (!els.obsidianCollectionDirectoryPanel) return;
+        if (!els.obsidianCollectionDirectoryPanel || !collectionDirectoriesReady) return;
         collectionDirectoryPanelOpen = true;
         els.obsidianCollectionDirectoryPanel.hidden = false;
         if (els.obsidianCollectionDirectoryCombobox) {
@@ -5188,30 +5501,14 @@
     }
 
     function chooseCollectionDirectoryValue(bindingData) {
-        const binding = collectionKnowledgeBinding;
-        if (binding && binding.collection_directory) {
-            return normalizeCollectionDirectoryName(binding.collection_directory);
-        }
-        const defaultDirectory = normalizeCollectionDirectoryName(
-            (bindingData && bindingData.default_collection_directory) || ''
-        );
-        const ranked = collectionVaultDirectories
-            .map((name) => ({
-                name,
-                score: scoreCollectionDirectoryMatch(name, currentCollection)
-            }))
-            .filter((item) => item.score >= 4)
-            .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'zh-Hans-CN'));
-        if (ranked.length) {
-            return ranked[0].name;
-        }
-        return defaultDirectory;
+        const title = String((bindingData && bindingData.default_collection_directory) || currentCollection.title || '合集').replace(/[\\/:*?"<>|]/g, '-');
+        return (collectionVaultDirectories.includes('03-知识') ? '03-知识/' : '') + title;
     }
 
     function refreshCollectionKnowledgeApplyState() {
         if (!els.obsidianCollectionApply) return;
         const hasSelection = checkedCollectionSourceIds().length > 0;
-        els.obsidianCollectionApply.disabled = collectionKnowledgeBusy || !hasSelection;
+        els.obsidianCollectionApply.disabled = collectionKnowledgeBusy || !collectionDirectoriesReady || !hasSelection || !collectionDocumentTypes().length;
         els.obsidianCollectionApply.title = collectionKnowledgePreview
             ? '按最近一次预览结果写入 Obsidian'
             : (hasSelection
@@ -5223,69 +5520,65 @@
     }
 
     async function openCollectionKnowledgeDialog() {
-        if (!currentCollection) {
-            showToast('请先选择一个专题');
-            return;
-        }
+        if (!currentCollection || collectionKnowledgeBusy) return;
         clearCollectionKnowledgePreview();
-        setCollectionKnowledgeMessage('正在读取分类、合集绑定与分集…');
+        setCollectionDirectoryValue('');
+        collectionKnowledgeBinding = null;
+        setCollectionKnowledgeMessage('正在读取知识库目录…');
         els.obsidianCollectionDialog.showModal();
         setCollectionKnowledgeBusy(true);
         try {
-            const collectionId = encodeURIComponent(currentCollection.id);
-            const [categoriesPayload, bindingPayload, recommendationPayload] = await Promise.all([
-                apiJSON('/api/obsidian/knowledge/categories'),
-                apiJSON(`/api/obsidian/knowledge/collections/${collectionId}/binding`),
-                apiJSON(`/api/obsidian/knowledge/collections/${collectionId}/recommend-category`, {
-                    method: 'POST'
-                })
+            const [bindingPayload] = await Promise.all([
+                apiJSON(`/api/obsidian/knowledge/collections/${encodeURIComponent(currentCollection.id)}/binding`),
+                loadCollectionVaultDirectories()
             ]);
-            const categories = (categoriesPayload.data && categoriesPayload.data.items) || [];
-            const bindingData = bindingPayload.data || {};
-            const recommendationData = recommendationPayload.data || {};
-            collectionKnowledgeBinding = bindingData.binding || null;
-            els.obsidianCollectionCategory.replaceChildren();
-            categories.forEach((category) => {
-                const option = document.createElement('option');
-                option.value = category;
-                option.textContent = category;
-                els.obsidianCollectionCategory.append(option);
-            });
-            const category = collectionKnowledgeBinding
-                ? collectionKnowledgeBinding.category
-                : recommendationData.category;
-            if (category) els.obsidianCollectionCategory.value = category;
-            await loadCollectionVaultDirectories(els.obsidianCollectionCategory.value);
-            const directory = chooseCollectionDirectoryValue(bindingData);
-            if (els.obsidianCollectionDirectory) {
-                els.obsidianCollectionDirectory.readOnly = false;
-                els.obsidianCollectionDirectory.disabled = false;
-            }
+            collectionKnowledgeBinding = (bindingPayload.data || {}).binding || null;
+            const directory = chooseCollectionDirectoryValue(bindingPayload.data || {});
             setCollectionDirectoryValue(directory);
             closeCollectionDirectoryPanel();
             renderCollectionDirectoryPanel(directory);
-            els.obsidianCollectionRecommendation.textContent = recommendationData.category
-                ? `建议：${recommendationData.category}${recommendationData.reason ? ` · ${recommendationData.reason}` : ''}`
-                : '未能生成分类建议，请手动选择。';
             renderCollectionKnowledgeSources({ selectAll: true });
-            const reusedExisting = collectionVaultDirectories.includes(directory);
-            setCollectionKnowledgeMessage(
-                categories.length
-                    ? (reusedExisting
-                        ? `已匹配已有目录「${directory}」，可直接确认同步。`
-                        : '目录可编辑；点右侧图标可浏览已有目录。不存在将在同步时自动创建。')
-                    : 'raw 下没有一级分类，请先在 Vault 中创建分类目录。',
-                categories.length ? (reusedExisting ? 'success' : '') : 'error'
-            );
-            refreshCollectionKnowledgeApplyState();
+            setCollectionKnowledgeMessage('可浏览已有目录或输入完整路径；留空同步到知识库根目录。');
         } catch (error) {
-            setCollectionKnowledgeMessage(
-                `加载失败：${error.message}。请检查 Obsidian 配置和登录状态。`,
-                'error'
-            );
+            collectionDirectoriesReady = false;
+            collectionVaultDirectories = [];
+            renderCollectionDirectoryPanel('');
+            setCollectionKnowledgeMessage(`目录加载失败：${error.message}。请刷新后重试。`, 'error');
         } finally {
             setCollectionKnowledgeBusy(false);
         }
+    }
+
+    async function refreshCollectionKnowledgeDirectories() {
+        if (collectionKnowledgeBusy || !currentCollection) return;
+        clearCollectionKnowledgePreview();
+        setCollectionKnowledgeBusy(true);
+        setCollectionKnowledgeMessage('正在刷新目录…');
+        const previousDirectory = els.obsidianCollectionDirectory.value;
+        try {
+            await loadCollectionVaultDirectories();
+            if (!collectionKnowledgeBinding) {
+                const payload = await apiJSON(`/api/obsidian/knowledge/collections/${encodeURIComponent(currentCollection.id)}/binding`);
+                collectionKnowledgeBinding = (payload.data || {}).binding || null;
+            }
+            // Initial loading may have failed before the chapter list was rendered.
+            // Recover it without clearing the user's existing chapter selection.
+            if (!els.obsidianCollectionSources.querySelectorAll('input[type="checkbox"]').length) {
+                renderCollectionKnowledgeSources({ selectAll: true });
+            }
+            setCollectionDirectoryValue(previousDirectory);
+            renderCollectionDirectoryPanel(previousDirectory);
+            openCollectionDirectoryPanel();
+            setCollectionKnowledgeMessage(collectionVaultDirectories.includes(previousDirectory)
+                ? '目录已刷新，请选择目标目录。'
+                : '目录已刷新，当前路径不存在，同步时将创建。请核对目标路径。');
+        } catch (error) {
+            collectionDirectoriesReady = false;
+            collectionVaultDirectories = [];
+            renderCollectionDirectoryPanel('');
+            closeCollectionDirectoryPanel();
+            setCollectionKnowledgeMessage(`目录刷新失败：${error.message}`, 'error');
+        } finally { setCollectionKnowledgeBusy(false); }
     }
 
     function clearCollectionKnowledgePreview() {
@@ -5312,6 +5605,9 @@
             els.obsidianCollectionDirectoryBrowse
         ].forEach((control) => {
             if (control) control.disabled = collectionKnowledgeBusy;
+        });
+        els.obsidianCollectionDialog.querySelectorAll('input, button').forEach(control => {
+            control.disabled = collectionKnowledgeBusy;
         });
         refreshCollectionKnowledgeApplyState();
     }
@@ -5344,7 +5640,7 @@
                 });
                 const title = document.createElement('span');
                 const niceTitle = displaySourceTitle(source) || source.id;
-                title.textContent = `${source.position || ''} ${niceTitle}`.trim();
+                title.textContent = /^\s*\d+[.、．\s-]/.test(niceTitle) ? niceTitle : `${source.position || ''} ${niceTitle}`.trim();
                 title.title = source.title || niceTitle;
                 const status = document.createElement('small');
                 status.textContent = source.task_status || 'unknown';
@@ -5361,17 +5657,9 @@
     }
 
     async function ensureCollectionKnowledgeBinding() {
-        const category = els.obsidianCollectionCategory.value;
-        const collectionDirectory = els.obsidianCollectionDirectory.value.trim();
-        if (!category) throw new Error('请选择一级分类');
-        if (!collectionDirectory) throw new Error('请填写合集目录');
-        if (
-            collectionKnowledgeBinding
-            && collectionKnowledgeBinding.category === category
-            && collectionKnowledgeBinding.collection_directory === collectionDirectory
-        ) {
-            return collectionKnowledgeBinding;
-        }
+        if (collectionKnowledgeBinding) return collectionKnowledgeBinding;
+        const category = '知识';
+        const collectionDirectory = '';
         const payload = await apiJSON(
             `/api/obsidian/knowledge/collections/${encodeURIComponent(currentCollection.id)}/binding`,
             {
@@ -5391,11 +5679,11 @@
 
     function collectionKnowledgeStateLabel(state) {
         return {
-            new: 'new',
-            unchanged: 'unchanged',
-            changed: 'changed',
-            externally_modified: 'externally_modified',
-            relocated: 'relocated'
+            new: '新建',
+            unchanged: '无变化',
+            changed: '更新',
+            externally_modified: 'Obsidian 中已修改',
+            relocated: '目标位置变化'
         }[state] || state;
     }
 
@@ -5415,7 +5703,7 @@
                 row.className = 'obsidian-collection-document';
                 row.dataset.state = previewDocument.state;
                 const label = document.createElement('span');
-                label.textContent = `${previewDocument.document_type} · ${collectionKnowledgeStateLabel(previewDocument.state)}`;
+                label.textContent = `${previewDocument.document_type === 'analysis' ? 'AI 总结' : '逐字稿'} · ${collectionKnowledgeStateLabel(previewDocument.state)}`;
                 const path = document.createElement('code');
                 path.textContent = previewDocument.relative_path;
                 const diff = document.createElement('pre');
@@ -5429,7 +5717,7 @@
         (data.unavailable || []).forEach((unavailable) => {
             const row = document.createElement('p');
             row.className = 'obsidian-collection-unavailable';
-            row.textContent = `${unavailable.source_id}: unavailable (${unavailable.code})`;
+            row.textContent = `${unavailable.source_id}: 内容未就绪或所选内容尚未生成（${unavailable.code}）`;
             els.obsidianCollectionPreviewList.append(row);
         });
         els.obsidianCollectionApply.textContent = externallyModified
@@ -5443,7 +5731,13 @@
     }
 
     async function requestCollectionKnowledgePreview(request) {
-        if (!currentCollection) return null;
+        if (!currentCollection || collectionKnowledgeBusy || !collectionDirectoriesReady) return null;
+        const documentTypes = collectionDocumentTypes();
+        if (!documentTypes.length) {
+            setCollectionKnowledgeMessage('请至少选择 AI 总结或逐字稿。', 'error');
+            return null;
+        }
+        request = { ...request, target_directory: normalizeCollectionDirectoryName(els.obsidianCollectionDirectory.value), document_types: documentTypes };
         setCollectionKnowledgeBusy(true);
         clearCollectionKnowledgePreview();
         setCollectionKnowledgeMessage('正在生成合集同步预览…');
@@ -5507,7 +5801,7 @@
     }
 
     async function applyCollectionKnowledgePreview() {
-        if (!currentCollection) return;
+        if (!currentCollection || collectionKnowledgeBusy || !collectionDirectoriesReady) return;
         const selectedSourceIds = checkedCollectionSourceIds();
         if (!selectedSourceIds.length) {
             setCollectionKnowledgeMessage('请至少勾选一篇分集。', 'error');
@@ -5548,6 +5842,7 @@
                     method: 'POST',
                     body: JSON.stringify({
                         ...collectionKnowledgeRequest,
+                        force: collectionPreviewHasExternalModifications(collectionKnowledgePreview) || collectionKnowledgeRequest.force,
                         expected_binding_revision: collectionKnowledgePreview.binding_revision,
                         preconditions: collectionKnowledgePreview.preconditions
                     })
@@ -5565,23 +5860,24 @@
             });
             (data.unavailable || []).forEach((unavailable) => {
                 const row = document.createElement('p');
-                row.textContent = `${unavailable.source_id}: unavailable (${unavailable.code})`;
+                row.textContent = `${unavailable.source_id}: 内容未就绪或所选内容尚未生成（${unavailable.code}）`;
                 els.obsidianCollectionPreviewList.append(row);
             });
             const failed = data.counts && data.counts.failed;
+            const skipped = (data.unavailable || []).length;
             const created = Number((data.counts && data.counts.created) || 0);
             const updated = Number((data.counts && data.counts.updated) || 0);
             const unchanged = Number((data.counts && data.counts.unchanged) || 0);
             setCollectionKnowledgeMessage(
                 failed
                     ? '部分文件失败，可重新同步后安全重试。'
-                    : `同步完成：新建 ${created} · 更新 ${updated} · 未变 ${unchanged}`,
-                failed ? 'warning' : 'success'
+                    : `${skipped ? `部分未就绪，已跳过 ${skipped} 篇；` : '同步完成：'}新建 ${created} · 更新 ${updated} · 未变 ${unchanged}`,
+                (failed || skipped) ? 'warning' : 'success'
             );
             collectionKnowledgePreview = null;
             collectionKnowledgeRequest = null;
             refreshCollectionKnowledgeApplyState();
-            if (!failed && els.obsidianCollectionDialog && els.obsidianCollectionDialog.open) {
+            if (!failed && !skipped && els.obsidianCollectionDialog && els.obsidianCollectionDialog.open) {
                 window.setTimeout(() => {
                     if (els.obsidianCollectionDialog && els.obsidianCollectionDialog.open) {
                         closeCollectionDirectoryPanel();
@@ -5596,9 +5892,9 @@
                 if (latest) {
                     renderCollectionKnowledgePreview(latest);
                 } else {
-                    await requestCollectionKnowledgePreview(collectionKnowledgeRequest);
+                    clearCollectionKnowledgePreview();
                 }
-                setCollectionKnowledgeMessage('预览已过期并刷新，请重新确认。', 'warning');
+                setCollectionKnowledgeMessage(latest ? '预览已过期并刷新，请重新确认。' : '预览已过期，请重新预览后确认。', 'warning');
             } else {
                 setCollectionKnowledgeMessage(`同步失败：${error.message}`, 'error');
             }
@@ -5616,6 +5912,10 @@
             els.workspaceStatusPill.dataset.tone = status.tone;
         }
         if (!collection) {
+            if (els.topicCreatorLabel) {
+                els.topicCreatorLabel.textContent = '';
+                els.topicCreatorLabel.hidden = true;
+            }
             els.metadataCreator.textContent = els.creator.value.trim() || '未选择';
             els.metadataType.textContent = collectionTypeLabel(activeType);
             els.metadataDescription.textContent = '解析完成后由 AI 生成';
@@ -5628,6 +5928,10 @@
         }
 
         const metrics = collection.metrics || {};
+        if (els.topicCreatorLabel) {
+            els.topicCreatorLabel.textContent = collection.creator_name || '';
+            els.topicCreatorLabel.hidden = !collection.creator_name;
+        }
         els.metadataCreator.textContent = collection.creator_name || '未归属';
         els.metadataType.textContent = collectionTypeLabel(collection.collection_type);
         els.metadataDescription.textContent = collection.description || '解析完成后由 AI 生成';
@@ -5747,6 +6051,55 @@
     }
 
     function bindEvents() {
+        if (els.createOpen) {
+            els.createOpen.addEventListener('click', () => {
+                window.clearInterval(pollTimer);
+                currentCollection = null;
+                selectedSourceId = null;
+                currentView = 'summary';
+                setCollectionPageMode('create');
+                render();
+                if (els.creator) els.creator.focus();
+            });
+        }
+        if (els.createBack) {
+            els.createBack.addEventListener('click', () => {
+                setCollectionPageMode('catalog');
+                render();
+            });
+        }
+        if (els.collectionBack) {
+            els.collectionBack.addEventListener('click', () => {
+                window.clearInterval(pollTimer);
+                currentCollection = null;
+                selectedSourceId = null;
+                currentView = 'summary';
+                setCollectionPageMode('catalog');
+                loadCollections({ selectLatest: false }).catch((error) => {
+                    showToast(error.message || '专题列表加载失败');
+                });
+                render();
+            });
+        }
+        window.addEventListener('popstate', () => {
+            const params = new URLSearchParams(window.location.search);
+            const collectionId = params.get('collection_id') || '';
+            const sourceId = params.get('source_id') || '';
+            if (collectionId) {
+                selectCollection(collectionId, {
+                    silent: true,
+                    replaceUrl: true,
+                    sourceId
+                }).catch((error) => showToast(error.message || '打开专题失败'));
+                return;
+            }
+            window.clearInterval(pollTimer);
+            currentCollection = null;
+            selectedSourceId = null;
+            pageMode = params.get('view') === 'create' ? 'create' : 'catalog';
+            render();
+        });
+
         els.typeTabs.forEach((tab) => {
             tab.addEventListener('click', () => setActiveType(tab.dataset.type));
         });
@@ -5768,14 +6121,10 @@
             });
         });
 
-        [els.historyCreatorFilter, els.historyTopicFilter, els.historyDateFilter, els.historyTypeFilter, els.historyStatusFilter].forEach((field) => {
-            field.addEventListener('change', () => {
-                // Changing IP must clear a leftover topic from another creator,
-                // otherwise the combined filter returns zero collections.
-                if (field === els.historyCreatorFilter) {
-                    els.historyTopicFilter.value = '';
-                    renderFilterOptions();
-                }
+        if (els.historyCreatorFilter) {
+            els.historyCreatorFilter.addEventListener('change', () => {
+                window.clearTimeout(historySearchTimer);
+                historySearchPending = false;
                 currentCollection = null;
                 resetCollectionVisualState('');
                 selectedSourceId = null;
@@ -5790,19 +6139,41 @@
                 customMapPositions = {};
                 mapZoom = DEFAULT_MAP_ZOOM;
                 mapFocused = false;
+                setCollectionPageMode('catalog', { replaceUrl: true });
                 loadCollections({ selectLatest: false }).catch((error) => {
                     showToast(error.message || '历史专题筛选失败');
                 });
                 render();
             });
-        });
+        }
+        if (els.historyTopicFilter) {
+            els.historyTopicFilter.addEventListener('input', () => {
+                collectionsRequestVersion += 1;
+                collectionsHaveMore = false;
+                loadingMoreCollections = false;
+                historySearchPending = true;
+                renderHistory();
+                window.clearTimeout(historySearchTimer);
+                historySearchTimer = window.setTimeout(() => {
+                    loadCollections({ selectLatest: false }).catch((error) => {
+                        showToast(error.message || '专题搜索失败');
+                    });
+                }, 220);
+            });
+        }
+        if (els.historyMore) {
+            els.historyMore.addEventListener('click', () => {
+                loadCollections({ append: true }).catch((error) => {
+                    showToast(error.message || '加载更多专题失败');
+                });
+            });
+        }
 
-        els.historyReset.addEventListener('click', () => {
+        if (els.historyReset) els.historyReset.addEventListener('click', () => {
+            window.clearTimeout(historySearchTimer);
+            historySearchPending = false;
             els.historyCreatorFilter.value = '';
             els.historyTopicFilter.value = '';
-            els.historyDateFilter.value = '';
-            els.historyTypeFilter.value = '';
-            els.historyStatusFilter.value = '';
             resetCollectionVisualState('');
             currentCollection = null;
             selectedSourceId = null;
@@ -5817,11 +6188,50 @@
             customMapPositions = {};
             mapZoom = DEFAULT_MAP_ZOOM;
             mapFocused = false;
+            setCollectionPageMode('catalog', { replaceUrl: true });
             loadCollections({ selectLatest: false }).catch((error) => {
                 showToast(error.message || '历史专题加载失败');
             });
             render();
         });
+        if (els.chapterSearch) {
+            els.chapterSearch.addEventListener('input', () => {
+                chapterSearchQuery = String(els.chapterSearch.value || '').trim().toLocaleLowerCase();
+                renderSources();
+            });
+        }
+        if (els.sourceList) {
+            els.sourceList.addEventListener('wheel', (event) => {
+                const atTop = els.sourceList.scrollTop <= 0;
+                const atBottom = els.sourceList.scrollTop + els.sourceList.clientHeight
+                    >= els.sourceList.scrollHeight - 1;
+                if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+        }
+        if (els.sourcePaneSummary) {
+            els.sourcePaneSummary.addEventListener('click', () => setSourceContentPane('summary'));
+        }
+        if (els.sourcePaneTranscript) {
+            els.sourcePaneTranscript.addEventListener('click', () => setSourceContentPane('transcript'));
+        }
+        if (els.appendClose) els.appendClose.addEventListener('click', closeAppendDialog);
+        if (els.appendCancel) els.appendCancel.addEventListener('click', closeAppendDialog);
+        if (els.appendConfirm) {
+            els.appendConfirm.addEventListener('click', () => {
+                confirmAppendPreview().catch((error) => showToast(error.message || '追加失败'));
+            });
+        }
+        if (els.appendDialog) {
+            els.appendDialog.addEventListener('click', (event) => {
+                if (event.target === els.appendDialog) closeAppendDialog();
+            });
+            els.appendDialog.addEventListener('cancel', (event) => {
+                event.preventDefault();
+                closeAppendDialog();
+            });
+        }
 
         if (els.importLocalPath) {
             els.importLocalPath.addEventListener('click', () => {
@@ -5883,7 +6293,7 @@
         }
         if (els.obsidianCollectionDialog) {
             els.obsidianCollectionDialog.addEventListener('click', (event) => {
-                if (event.target === els.obsidianCollectionDialog) {
+                if (!collectionKnowledgeBusy && event.target === els.obsidianCollectionDialog) {
                     els.obsidianCollectionDialog.close();
                 }
             });
@@ -5912,26 +6322,10 @@
                 refreshCollectionKnowledgeApplyState();
             });
         }
-        if (els.obsidianCollectionCategory) {
-            els.obsidianCollectionCategory.addEventListener('change', async () => {
-                clearCollectionKnowledgePreview();
-                closeCollectionDirectoryPanel();
-                setCollectionKnowledgeBusy(true);
-                try {
-                    await loadCollectionVaultDirectories(els.obsidianCollectionCategory.value);
-                    const preferred = chooseCollectionDirectoryValue({
-                        default_collection_directory: (
-                            els.obsidianCollectionDirectory && els.obsidianCollectionDirectory.value
-                        ) || ''
-                    });
-                    setCollectionDirectoryValue(preferred || '');
-                    renderCollectionDirectoryPanel(preferred || '');
-                    setCollectionKnowledgeMessage('分类已更新。可继续编辑目录，或点右侧图标浏览已有目录。');
-                } finally {
-                    setCollectionKnowledgeBusy(false);
-                }
-            });
-        }
+        document.querySelectorAll('input[name="obsidian-collection-type"]').forEach(input => {
+            input.addEventListener('change', () => { clearCollectionKnowledgePreview(); });
+        });
+        document.getElementById('obsidian-collection-refresh').addEventListener('click', refreshCollectionKnowledgeDirectories);
         if (els.obsidianCollectionDirectoryBrowse) {
             els.obsidianCollectionDirectoryBrowse.addEventListener('click', (event) => {
                 event.preventDefault();
@@ -5952,7 +6346,7 @@
                 clearCollectionKnowledgePreview();
                 const name = normalizeCollectionDirectoryName(els.obsidianCollectionDirectory.value);
                 setCollectionDirectoryValue(name);
-                setCollectionKnowledgeMessage(name ? `目录已设为「${name}」` : '请填写合集目录名。');
+                setCollectionKnowledgeMessage(name ? `目录已设为「${name}」` : '将同步到知识库根目录。');
                 refreshCollectionKnowledgeApplyState();
             });
             els.obsidianCollectionDirectory.addEventListener('keydown', (event) => {
@@ -5971,6 +6365,9 @@
             closeCollectionDirectoryPanel();
         });
         if (els.obsidianCollectionDialog) {
+            els.obsidianCollectionDialog.addEventListener('cancel', event => {
+                if (collectionKnowledgeBusy) event.preventDefault();
+            });
             els.obsidianCollectionDialog.addEventListener('close', () => {
                 closeCollectionDirectoryPanel();
             });
@@ -6157,6 +6554,13 @@
                 syncCollectionSummaryTocChrome(Boolean(visible));
             });
         }
+        if (els.collectionSummaryTocTrigger) {
+            els.collectionSummaryTocTrigger.addEventListener('click', () => {
+                collectionSummaryTocPinned = !collectionSummaryTocPinned;
+                const visible = els.collectionSummaryToc && !els.collectionSummaryToc.hidden;
+                syncCollectionSummaryTocChrome(Boolean(visible));
+            });
+        }
         if (els.collectionVisualOverviewRetry) {
             els.collectionVisualOverviewRetry.addEventListener('click', () => retryCollectionVisual('overview'));
         }
@@ -6232,17 +6636,9 @@
         els.exportMarkdown.addEventListener('click', exportMarkdown);
     }
 
-    async function init() {
-        setActiveType(activeType);
-        bindEvents();
-        clearImportIdentityFields();
-        // Browser bfcache / autofill may restore old IP/topic values after navigation.
-        window.addEventListener('pageshow', () => clearImportIdentityFields());
-        const token = getToken();
-        if (els.tokenHint) {
-            els.tokenHint.textContent = token ? '' : '需要 API 令牌，请先在工作台设置。';
-        }
-        render();
+    async function loadAuthenticatedWorkspace() {
+        if (els.authGate) els.authGate.hidden = true;
+        if (els.tokenHint) els.tokenHint.textContent = '';
         await loadFilterOptions();
         // Clear again after datalist options load, so history names never stick as values.
         clearImportIdentityFields();
@@ -6258,6 +6654,28 @@
             await loadCollections({ selectLatest: false });
         }
         clearImportIdentityFields();
+    }
+
+    async function init() {
+        setActiveType(activeType);
+        bindEvents();
+        clearImportIdentityFields();
+        // Browser bfcache / autofill may restore old IP/topic values after navigation.
+        window.addEventListener('pageshow', () => clearImportIdentityFields());
+        render();
+        const authState = await window.LearnFluxAuth.ready;
+        if (!authState.authenticated) {
+            if (els.authGate) {
+                els.authGate.hidden = false;
+                window.LearnFluxAuth.renderAuthGate(els.authGate, {
+                    title: '连接后管理系列学习',
+                    reason: '输入管理口令后，可导入新专题并查看已有系列；当前页面不会跳转。',
+                    onAuthenticated: loadAuthenticatedWorkspace
+                });
+            }
+            return;
+        }
+        await loadAuthenticatedWorkspace();
     }
 
     init().catch((error) => showToast(error.message || '初始化失败'));

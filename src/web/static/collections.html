@@ -34,6 +34,7 @@
     <link rel="stylesheet" href="/static/css/collections.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/product-linear.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/product-linear-core.css?v=__ASSET_VERSION__">
+    <script src="/static/js/auth-session.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/pwa-register.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/ui-features.js?v=__ASSET_VERSION__" defer></script>
     <script src="/static/js/app-shell.js?v=__ASSET_VERSION__" defer></script>
@@ -41,13 +42,15 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=__ASSET_VERSION__">
 </head>
-<body class="app-shell has-app-shell product-linear page-collections">
+<body class="app-shell has-app-shell product-linear page-collections workbench-meadow">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
             <a class="brand-link" href="/" aria-label="LearnFlux 首页">
-                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-leaf.svg" alt=""></span>
                 <span class="brand-text">LearnFlux</span>
             </a>
         </div>
@@ -145,21 +148,60 @@
         </header>
         <section class="page-stage">
 
-    <section class="lc-page">
-        <section class="lc-intro-strip" aria-label="系列深度学习说明">
-            <div>
-                <h1>系列深度学习</h1>
-                <p class="lc-intro-copy">导入连续课程或文档合集，按顺序解析沉淀为可复用的笔记体系。</p>
+    <section class="lc-page" id="series-learning-page">
+        <div id="collection-auth-gate" hidden></div>
+
+        <section class="lc-catalog-page" id="collection-catalog-page" aria-labelledby="collection-catalog-title">
+            <header class="lc-library-head">
+                <h1 id="collection-catalog-title">系列深度学习</h1>
+                <button class="lc-btn primary" id="collection-create-open" type="button">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    <span>新建专题</span>
+                </button>
+            </header>
+
+            <div class="lc-library-filters" aria-label="查找专题">
+                <label class="lc-filter-control lc-ip-filter">
+                    <span class="sr-only">按 IP 筛选</span>
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5.4 20a6.6 6.6 0 0 1 13.2 0"/></svg>
+                    <select id="history-creator-filter" aria-label="按 IP 名称筛选">
+                        <option value="">全部 IP</option>
+                    </select>
+                    <svg class="lc-select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg>
+                </label>
+                <label class="lc-filter-control lc-topic-search">
+                    <span class="sr-only">搜索专题名称</span>
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg>
+                    <input id="history-topic-filter" type="search" placeholder="搜索专题" autocomplete="off" aria-label="按专题名称搜索">
+                    <button id="history-reset" type="button" aria-label="清除筛选" title="清除筛选" hidden>
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg>
+                    </button>
+                </label>
             </div>
+
+            <section class="lc-history lc-history-panel" id="collection-history-panel" aria-labelledby="collection-history-heading">
+                <header class="lc-library-section-head">
+                    <h2 id="collection-history-heading">专题</h2>
+                    <span id="collection-history-count">0 个</span>
+                </header>
+                <div class="lc-history-list lc-clothesline" id="collection-history-list" aria-live="polite">
+                    <div class="lc-history-empty">暂无专题</div>
+                </div>
+                <button class="lc-history-more" id="collection-history-more" type="button" hidden>
+                    <span>更多专题</span>
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg>
+                </button>
+            </section>
         </section>
 
-        <details class="lc-import-wrap lc-history-panel" id="collection-import-panel" open>
-            <summary class="lc-history-summary">
-                <strong>新建专题</strong>
-                <span>导入课程或文档</span>
-            </summary>
-            <div class="lc-history-content" style="padding: 0; border-top: none;">
-                <section class="lc-import-card" style="border: none; box-shadow: none; margin: 0; border-radius: 0 0 12px 12px; padding-top: 4px;" aria-label="创建学习集合">
+        <section class="lc-create-page" id="collection-import-panel" aria-labelledby="collection-create-title" hidden>
+            <header class="lc-create-head">
+                <button class="lc-icon-btn lc-back-button" id="collection-create-back" type="button" aria-label="返回专题库" title="返回专题库">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7M8 12h12"/></svg>
+                </button>
+                <h1 id="collection-create-title">新建专题</h1>
+            </header>
+            <section class="lc-import-card lc-create-card" aria-label="创建学习集合">
             <form id="collection-import-identity" class="lc-import-fields" autocomplete="off" onsubmit="return false;">
                 <div>
                     <label class="lc-label required" for="collection-creator">IP 名称</label>
@@ -197,17 +239,19 @@
 
             <div class="lc-import-primary" id="drop-action" role="group" aria-labelledby="drop-title" aria-describedby="drop-subtitle">
                 <button class="lc-btn primary lc-import-cta" id="browse-local-path" type="button">
-                    <span class="lc-import-cta-icon" aria-hidden="true">+</span>
+                    <span class="lc-import-cta-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    </span>
                     <span class="lc-import-cta-copy">
                         <strong id="drop-title">选择文件夹并导入</strong>
-                        <span id="drop-subtitle">选完即开始，不额外占用磁盘</span>
+                        <span id="drop-subtitle">视频按本机路径解析，不复制原文件</span>
                     </span>
                 </button>
                 <div class="lc-import-preview is-idle" id="import-preview" aria-live="polite"></div>
             </div>
 
             <details class="lc-import-advanced">
-                <summary>更多选项</summary>
+                <summary>导入方式与并发设置</summary>
                 <div class="lc-import-advanced-body">
                     <div class="lc-local-path-field">
                         <label class="lc-label" for="local-import-path">粘贴文件夹路径</label>
@@ -219,70 +263,43 @@
                     <button class="lc-btn ghost" id="pick-files" type="button" title="仅适合小体积文档">上传文件副本</button>
                 </div>
             </details>
-            <!-- Kept for append actions / legacy document upload; folder pick no longer copies videos. -->
+            <!-- Folder import references local files; document upload remains available for small files. -->
             <input id="folder-input" type="file" webkitdirectory multiple hidden>
             <input id="files-input" type="file" multiple hidden>
             <input id="append-folder-input" type="file" webkitdirectory multiple hidden>
             <input id="append-local-path" type="hidden">
-                </section>
-            </div>
-        </details>
+            </section>
+        </section>
 
-        <details class="lc-history lc-history-panel" id="collection-history-panel">
-            <summary class="lc-history-summary">
-                <strong>历史专题</strong>
-                <span id="collection-history-count">0 个</span>
-            </summary>
-            <div class="lc-history-content">
-                <div class="lc-history-filters" aria-label="历史专题筛选">
-                    <select id="history-creator-filter" aria-label="按 IP 名称筛选">
-                        <option value="">全部 IP</option>
-                    </select>
-                    <select id="history-topic-filter" aria-label="按专题名称筛选">
-                        <option value="">全部专题</option>
-                    </select>
-                    <select id="history-date-filter" aria-label="按解析日期筛选">
-                        <option value="">全部日期</option>
-                        <option value="today">今天</option>
-                        <option value="7d">最近 7 天</option>
-                        <option value="30d">最近 30 天</option>
-                    </select>
-                    <select id="history-type-filter" aria-label="按内容类型筛选">
-                        <option value="">全部类型</option>
-                        <option value="video_course">视频课程</option>
-                        <option value="document_topic">文档专题</option>
-                    </select>
-                    <select id="history-status-filter" aria-label="按状态筛选">
-                        <option value="">全部状态</option>
-                        <option value="summarized">已总结</option>
-                        <option value="ready">待总结</option>
-                        <option value="processing">解析中</option>
-                        <option value="stopped">已停止</option>
-                        <option value="failed">有失败</option>
-                        <option value="draft">未导入</option>
-                    </select>
-                    <button class="lc-btn ghost" id="history-reset" type="button">重置</button>
-                </div>
-                <div class="lc-history-list" id="collection-history-list">
-                    <div class="lc-history-empty">暂无历史专题</div>
-                </div>
-            </div>
-        </details>
-
-        <section class="lc-workspace" id="collection-workspace">
+        <section class="lc-workspace" id="collection-workspace" hidden>
             <header class="lc-workspace-head">
                 <div class="lc-workspace-heading">
+                    <button class="lc-back-link" id="collection-back" type="button">
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7M8 12h12"/></svg>
+                        <span>专题库</span>
+                    </button>
                     <div class="lc-workspace-title-row">
                         <h2 id="workspace-title">尚未选择专题</h2>
+                        <span class="lc-topic-creator" id="topic-creator-label"></span>
                         <span class="lc-status-pill" id="workspace-status-pill" hidden>未选择</span>
                     </div>
-                    <p id="workspace-subtitle">请在上方展开「历史专题」并点击课程进行学习，或新建导入新专题。</p>
+                    <p id="workspace-subtitle"></p>
                 </div>
                 <div class="lc-workspace-tools">
                     <div class="lc-workspace-actions" aria-label="当前专题操作">
-                        <button class="lc-btn ghost" id="append-folder" type="button">追加文件夹</button>
+                        <button class="lc-btn ghost" id="append-folder" type="button">
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                            <span>追加内容</span>
+                        </button>
                         <button class="lc-btn ghost hidden" id="continue-collection" type="button">继续解析</button>
-                        <button class="lc-btn ghost" id="obsidian-collection-open" type="button">沉淀到 Obsidian</button>
+                        <button class="lc-icon-btn lc-obsidian-action" id="obsidian-collection-open" type="button" aria-label="同步到 Obsidian" title="同步到 Obsidian">
+                            <svg aria-hidden="true" viewBox="0 0 32 32">
+                                <path fill="#7C3AED" d="M17.3 2.5 25 8.9l3.1 12.4-8.8 7.9-11-2.8-4-10.8L10.1 4z"/>
+                                <path fill="#A78BFA" d="m17.3 2.5 1 12.2-9.9 1L10.1 4z"/>
+                                <path fill="#5B21B6" d="m8.4 15.7 9.9-1L20 29.2 8.3 26.4l-4-10.8z"/>
+                                <path fill="#C4B5FD" d="m18.3 14.7 9.8 6.6-8.8 7.9z"/>
+                            </svg>
+                        </button>
                         <button class="lc-btn danger" id="cancel-collection" type="button">停止解析</button>
                     </div>
                     <div class="lc-progress">
@@ -294,6 +311,10 @@
 
             <section class="lc-transcription-feedback lc-quote-summary hidden" id="collection-transcription-feedback" aria-live="polite"></section>
 
+            <details class="lc-topic-info">
+                <summary aria-label="专题信息与运行详情" title="专题信息与运行详情">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg>
+                </summary>
             <section class="lc-meta-bar" aria-label="当前专题概览">
                 <div class="lc-meta-chip"><span>IP</span><strong id="metadata-creator">未选择</strong></div>
                 <div class="lc-meta-chip"><span>类型</span><strong id="metadata-type">-</strong></div>
@@ -309,6 +330,7 @@
                     </div>
                 </details>
             </section>
+            </details>
 
             <div class="lc-board" id="collection-board">
                 <aside class="lc-sources" id="collection-sources">
@@ -316,6 +338,11 @@
                         <h3>章节</h3>
                         <span id="source-count">0 个</span>
                     </div>
+                    <label class="lc-chapter-search">
+                        <span class="sr-only">搜索章节</span>
+                        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg>
+                        <input id="chapter-search" type="search" placeholder="搜索章节" autocomplete="off">
+                    </label>
                     <div class="lc-source-list" id="source-list">
                         <div class="lc-empty">导入后，这里会显示每个章节的解析状态。</div>
                     </div>
@@ -328,7 +355,7 @@
                             <button class="lc-tab hidden" data-view="map" type="button" hidden aria-hidden="true">知识地图</button>
                             <button class="lc-tab active" data-view="summary" type="button" role="tab">主线总结</button>
                             <button class="lc-tab" data-view="markdown" type="button" style="display: none;">导出笔记</button>
-                            <button class="lc-tab" data-view="source" type="button" role="tab">源内容</button>
+                            <button class="lc-tab" data-view="source" type="button" role="tab">章节解读</button>
                         </div>
                         <button class="lc-btn compact" id="sources-panel-toggle" type="button" hidden aria-controls="collection-sources" aria-expanded="false">章节</button>
                     </div>
@@ -404,6 +431,99 @@
                         </div>
                     </article>
 
+                    <article class="lc-card hidden" id="summary-view">
+                        <div class="lc-summary-toolbar">
+                            <div class="lc-summary-toolbar-meta">
+                                <div class="lc-summary-toolbar-title-row">
+                                    <h3 class="lc-summary-toolbar-title">主线解读</h3>
+                                    <strong id="summary-status" class="lc-summary-status-badge">等待生成</strong>
+                                </div>
+                                <p id="summary-description" class="lc-summary-toolbar-desc">解析完成后，一键生成全集主线与复习路径。</p>
+                            </div>
+                            <div class="lc-summary-toolbar-actions">
+                                <button class="lc-btn primary" id="generate-summary" type="button">
+                                    <span id="summary-progress-text">生成全系列解读</span>
+                                    <span class="lc-btn-progress" aria-hidden="true"><span id="summary-progress-fill"></span></span>
+                                </button>
+                                <button class="lc-btn" id="export-markdown" type="button">一键导出</button>
+                                <button class="lc-summary-mode-legacy" id="collection-summary-text" type="button" role="tab" aria-selected="true" aria-controls="collection-summary-text-panel" hidden>文字版</button>
+                                <button id="collection-summary-visual" type="button" role="tab" aria-selected="false" aria-controls="collection-summary-visual-panel" hidden>图解版</button>
+                            </div>
+                        </div>
+                        <div class="lc-summary-view-panel is-active" id="collection-summary-text-panel" role="tabpanel" aria-labelledby="collection-summary-text">
+                            <div class="lc-summary-reading-layout" id="collection-summary-reading-layout">
+                                <div class="lc-preview-container lc-summary-reading-main">
+                                    <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('collection-summary-article').innerText)" aria-label="复制" title="复制全部">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    </button>
+                                    <article class="lc-summary-inline-article lc-markdown-preview" id="collection-summary-article">生成全系列解读后显示。</article>
+                                </div>
+                                <aside class="lc-summary-inline-toc" id="collection-summary-toc" aria-label="主线解读目录" hidden>
+                                    <button class="lc-summary-toc-trigger" id="collection-summary-toc-trigger" type="button" aria-label="展开目录" aria-expanded="false" title="目录">
+                                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+                                    </button>
+                                    <div class="lc-summary-inline-toc-panel">
+                                        <div class="lc-summary-inline-toc-head">
+                                            <strong>目录</strong>
+                                            <button class="lc-btn compact" id="collection-summary-toc-pin" type="button" aria-pressed="false" title="固定目录（悬停时展开，固定后常显）">固定</button>
+                                        </div>
+                                        <nav class="lc-summary-inline-toc-nav" id="collection-summary-toc-nav"></nav>
+                                    </div>
+                                </aside>
+                            </div>
+                        </div>
+                        <div class="lc-summary-view-panel" id="collection-summary-visual-panel" role="tabpanel" aria-labelledby="collection-summary-visual" hidden aria-hidden="true">
+                            <div class="lc-summary-inline-visual" id="collection-summary-visual-root">图解生成后显示。</div>
+                        </div>
+                    </article>
+
+                    <article class="lc-card hidden" id="source-view">
+                        <h3 id="source-title">选择一个源内容</h3>
+                        <p id="source-meta">左侧选择后查看详情。</p>
+                        <div class="lc-source-timing" id="source-timing"></div>
+                        <div class="lc-source-error hidden" id="source-error" role="alert"></div>
+                        <div class="lc-source-actions">
+                            <button class="lc-btn primary" id="open-source-file" type="button">打开源内容</button>
+                            <a class="lc-btn" id="open-source" href="#" target="_blank" rel="noopener">查看解读页</a>
+                            <button class="lc-btn danger hidden" id="retry-source" type="button">重新解析</button>
+                            <button class="lc-btn compact hidden" id="regenerate-source-summary" type="button">重新生成 AI 解读</button>
+                        </div>
+                        <div class="lc-source-content-tabs" role="tablist" aria-label="章节内容">
+                            <button class="active" id="source-pane-summary" type="button" role="tab" aria-selected="true" aria-controls="source-summary-pane">AI 解读</button>
+                            <button id="source-pane-transcript" type="button" role="tab" aria-selected="false" aria-controls="source-transcript-pane">逐字稿</button>
+                        </div>
+                        <div class="lc-source-content">
+                            <section id="source-summary-pane" role="tabpanel" aria-labelledby="source-pane-summary">
+                                <div class="lc-section-head">
+                                    <h4>AI 解读摘要</h4>
+                                    <div class="lc-summary-tools">
+                                        <div class="lc-view-toggle" role="group" aria-label="AI 解读摘要显示方式">
+                                            <button class="active" id="source-summary-preview" type="button">预览</button>
+                                            <button id="source-summary-source" type="button">源码</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="lc-preview-container">
+                                    <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('source-summary').textContent)" aria-label="复制" title="复制全部">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    </button>
+                                    <div id="source-summary" class="lc-text-preview lc-markdown-preview">解析完成后显示。</div>
+                                </div>
+                            </section>
+                            <section id="source-transcript-pane" role="tabpanel" aria-labelledby="source-pane-transcript" hidden>
+                                <div class="lc-section-head" style="margin-bottom: 12px;">
+                                    <h4 style="margin: 0;">逐字稿预览</h4>
+                                </div>
+                                <div class="lc-preview-container">
+                                    <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('source-transcript').textContent)" aria-label="复制" title="复制全部">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    </button>
+                                    <pre id="source-transcript" class="lc-transcript-preview">解析完成后显示。</pre>
+                                </div>
+                            </section>
+                        </div>
+                    </article>
+
                     <article class="lc-card lc-visual-view hidden" id="visual-view">
                         <header class="lc-visual-head">
                             <div>
@@ -438,98 +558,6 @@
                         </div>
                         <div class="lc-visual-root" id="collection-visual-root" data-vl-theme="study-notes">
                             <p class="lc-visual-empty">打开“图解”后生成合集全局图解。</p>
-                        </div>
-                    </article>
-
-                    <article class="lc-card hidden" id="summary-view">
-                        <div class="lc-summary-toolbar">
-                            <div class="lc-summary-toolbar-meta">
-                                <div class="lc-summary-toolbar-title-row">
-                                    <h3 class="lc-summary-toolbar-title">主线解读</h3>
-                                    <strong id="summary-status" class="lc-summary-status-badge">等待生成</strong>
-                                </div>
-                                <p id="summary-description" class="lc-summary-toolbar-desc">解析完成后，一键生成全集主线与复习路径。</p>
-                            </div>
-                            <div class="lc-summary-toolbar-actions">
-                                <button class="lc-btn primary" id="generate-summary" type="button">
-                                    <span id="summary-progress-text">生成全系列解读</span>
-                                    <span class="lc-btn-progress" aria-hidden="true"><span id="summary-progress-fill"></span></span>
-                                </button>
-                                <button class="lc-btn" id="export-markdown" type="button">一键导出</button>
-                                <div class="lc-summary-reader-actions" role="tablist" aria-label="全系列解读视图">
-                                    <button class="active" id="collection-summary-text" type="button" role="tab" aria-selected="true" aria-controls="collection-summary-text-panel">文字版</button>
-                                    <button id="collection-summary-visual" type="button" role="tab" aria-selected="false" aria-controls="collection-summary-visual-panel">图解版</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="lc-summary-view-panel is-active" id="collection-summary-text-panel" role="tabpanel" aria-labelledby="collection-summary-text">
-                            <div class="lc-summary-reading-layout" id="collection-summary-reading-layout">
-                                <div class="lc-preview-container lc-summary-reading-main">
-                                    <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('collection-summary-article').innerText)" aria-label="复制" title="复制全部">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    </button>
-                                    <article class="lc-summary-inline-article lc-markdown-preview" id="collection-summary-article">生成全系列解读后显示。</article>
-                                </div>
-                                <aside class="lc-summary-inline-toc" id="collection-summary-toc" aria-label="主线解读目录" hidden>
-                                    <div class="lc-summary-toc-rail" aria-hidden="true">
-                                        <span></span><span></span><span></span><span></span>
-                                    </div>
-                                    <div class="lc-summary-inline-toc-panel">
-                                        <div class="lc-summary-inline-toc-head">
-                                            <strong>目录</strong>
-                                            <button class="lc-btn compact" id="collection-summary-toc-pin" type="button" aria-pressed="false" title="固定目录（悬停时展开，固定后常显）">固定</button>
-                                        </div>
-                                        <nav class="lc-summary-inline-toc-nav" id="collection-summary-toc-nav"></nav>
-                                    </div>
-                                </aside>
-                            </div>
-                        </div>
-                        <div class="lc-summary-view-panel" id="collection-summary-visual-panel" role="tabpanel" aria-labelledby="collection-summary-visual" hidden>
-                            <div class="lc-summary-inline-visual" id="collection-summary-visual-root">图解生成后显示。</div>
-                        </div>
-                    </article>
-
-                    <article class="lc-card hidden" id="source-view">
-                        <h3 id="source-title">选择一个源内容</h3>
-                        <p id="source-meta">左侧选择后查看详情。</p>
-                        <div class="lc-source-timing" id="source-timing"></div>
-                        <div class="lc-source-error hidden" id="source-error" role="alert"></div>
-                        <div class="lc-source-actions">
-                            <button class="lc-btn primary" id="open-source-file" type="button">打开源内容</button>
-                            <a class="lc-btn hidden" id="open-study-player" href="/study" data-feature="study_player" hidden>边播边学</a>
-                            <a class="lc-btn" id="open-source" href="#" target="_blank" rel="noopener">查看解读页</a>
-                            <button class="lc-btn danger hidden" id="retry-source" type="button">重新解析</button>
-                        </div>
-                        <div class="lc-source-content">
-                            <section>
-                                <div class="lc-section-head">
-                                    <h4>AI 解读摘要</h4>
-                                    <div class="lc-summary-tools">
-                                        <button class="lc-btn compact" id="regenerate-source-summary" type="button">重新生成</button>
-                                        <div class="lc-view-toggle" role="group" aria-label="AI 解读摘要显示方式">
-                                            <button class="active" id="source-summary-preview" type="button">预览</button>
-                                            <button id="source-summary-source" type="button">源码</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="lc-preview-container">
-                                    <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('source-summary').innerText)" aria-label="复制" title="复制全部">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    </button>
-                                    <div id="source-summary" class="lc-text-preview lc-markdown-preview">解析完成后显示。</div>
-                                </div>
-                            </section>
-                            <section>
-                                <div class="lc-section-head" style="margin-bottom: 12px;">
-                                    <h4 style="margin: 0;">逐字稿预览</h4>
-                                </div>
-                                <div class="lc-preview-container">
-                                    <button class="lc-copy-overlay-btn" type="button" onclick="copyToClipboard(document.getElementById('source-transcript').textContent)" aria-label="复制" title="复制全部">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    </button>
-                                    <pre id="source-transcript" class="lc-transcript-preview">解析完成后显示。</pre>
-                                </div>
-                            </section>
                         </div>
                     </article>
 
@@ -598,27 +626,53 @@
         </div>
     </dialog>
 
+    <dialog class="lc-append-dialog" id="collection-append-dialog" aria-labelledby="collection-append-title">
+        <div class="lc-append-panel">
+            <header class="lc-append-head">
+                <div>
+                    <h3 id="collection-append-title">追加内容</h3>
+                    <p id="collection-append-folder"></p>
+                </div>
+                <button class="lc-icon-btn" id="collection-append-close" type="button" aria-label="关闭追加预览" title="关闭">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+                </button>
+            </header>
+            <div class="lc-append-counts" aria-live="polite">
+                <strong><span id="collection-append-new-count">0</span> 个待追加</strong>
+                <span id="collection-append-existing-count">0 个已在专题中</span>
+            </div>
+            <ul class="lc-append-list" id="collection-append-list"></ul>
+            <p class="lc-append-note" id="collection-append-strategy"></p>
+            <footer class="lc-append-actions">
+                <button class="lc-btn ghost" id="collection-append-cancel" type="button">取消</button>
+                <button class="lc-btn primary" id="collection-append-confirm" type="button">确认追加</button>
+            </footer>
+        </div>
+    </dialog>
+
     <dialog class="obsidian-collection-dialog" id="obsidian-collection-dialog" aria-labelledby="obsidian-collection-title">
         <div class="obsidian-collection-panel">
             <header class="obsidian-collection-head">
                 <div>
                     <p class="obsidian-collection-kicker">知识沉淀</p>
                     <h3 id="obsidian-collection-title">同步到 Obsidian</h3>
-                    <p class="obsidian-collection-subhead">选择分类与目录后同步；原文与 AI 解读分别写入 raw / processed。</p>
+                    <p class="obsidian-collection-subhead">选择目标目录、同步内容和分集。</p>
                 </div>
                 <button class="lc-icon-btn" id="obsidian-collection-close" type="button" aria-label="关闭"><span aria-hidden="true">×</span></button>
             </header>
 
+            <div class="obsidian-collection-body">
             <section class="obsidian-collection-setup" aria-label="同步目标">
-                <div class="obsidian-field">
-                    <label class="obsidian-field-label" for="obsidian-collection-category">一级分类</label>
-                    <select id="obsidian-collection-category" class="obsidian-field-control"></select>
-                    <p id="obsidian-collection-recommendation" class="obsidian-field-meta">正在读取分类建议…</p>
+                <div class="obsidian-field obsidian-content-options">
+                    <strong>同步内容</strong>
+                    <label><input type="checkbox" name="obsidian-collection-type" value="analysis" checked> AI 总结</label>
+                    <label><input type="checkbox" name="obsidian-collection-type" value="raw" checked> 逐字稿</label>
+                    <button type="button" class="lc-btn ghost compact" id="obsidian-collection-refresh">刷新目录</button>
                 </div>
 
                 <div class="obsidian-field">
                     <div class="obsidian-field-label-row">
-                        <label class="obsidian-field-label" for="obsidian-collection-directory">合集目录</label>
+                        <label class="obsidian-field-label" for="obsidian-collection-directory">目标目录</label>
                         <span id="obsidian-collection-directory-status" class="obsidian-dir-status" hidden></span>
                     </div>
                     <div class="obsidian-dir-combobox" id="obsidian-collection-directory-combobox">
@@ -626,8 +680,8 @@
                             id="obsidian-collection-directory"
                             class="obsidian-field-control obsidian-dir-input"
                             type="text"
-                            maxlength="160"
-                            placeholder="输入目录名，不存在将在同步时自动创建"
+                            maxlength="1024"
+                            placeholder="输入完整相对路径；留空为知识库根目录"
                             autocomplete="off"
                             spellcheck="false"
                             aria-autocomplete="list"
@@ -649,7 +703,7 @@
                             role="listbox"
                             hidden
                         >
-                            <div class="obsidian-dir-panel-head">当前分类下的已有目录</div>
+                            <div class="obsidian-dir-panel-head">知识库中的已有目录</div>
                             <div class="obsidian-dir-panel-list" id="obsidian-collection-directory-list"></div>
                             <div class="obsidian-dir-panel-empty" id="obsidian-collection-directory-empty" hidden>
                                 暂无已有目录，可直接输入新名称
@@ -657,7 +711,7 @@
                         </div>
                     </div>
                     <p id="obsidian-collection-directory-hint" class="obsidian-field-meta">
-                        将写入 <code id="obsidian-collection-directory-path-preview">raw/…</code> · 不存在则同步时自动创建
+                        将写入 <code id="obsidian-collection-directory-path-preview">知识库根目录</code> · 在此目录下分别存放 AI 总结 / 逐字稿，不存在则同步时自动创建
                     </p>
                 </div>
             </section>
@@ -676,17 +730,19 @@
             <p id="obsidian-collection-message" class="obsidian-collection-message" role="status" aria-live="polite"></p>
             <section id="obsidian-collection-preview-list" class="obsidian-collection-preview-list" aria-label="同步预览"></section>
 
+            <details class="obsidian-collection-advanced">
+                <summary>高级</summary>
+                <p>强制重新预览全部已就绪分集，确认后才写入。</p>
+                <button class="lc-btn danger compact" id="obsidian-collection-force" type="button">强制重新同步全部</button>
+            </details>
+            </div>
             <footer class="obsidian-collection-actions">
                 <button class="lc-btn ghost" id="obsidian-collection-preview-selected" type="button">预览</button>
                 <button class="lc-btn ghost" id="obsidian-collection-incremental" type="button">增量全部</button>
                 <button class="lc-btn primary" id="obsidian-collection-apply" type="button" title="未预览时会先预览，无冲突则直接写入">确认同步</button>
             </footer>
 
-            <details class="obsidian-collection-advanced">
-                <summary>高级</summary>
-                <p>强制重新预览全部已就绪分集，确认后才写入。</p>
-                <button class="lc-btn danger compact" id="obsidian-collection-force" type="button">强制重新同步全部</button>
-            </details>
+
         </div>
     </dialog>
 

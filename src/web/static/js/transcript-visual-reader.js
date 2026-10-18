@@ -83,8 +83,6 @@
 
     if (typeof document === 'undefined') return;
 
-    const STORAGE_KEY = 'vta_bearer_token';
-    const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
     const POLL_MS = 2500;
     const textButton = document.getElementById('transcript-reader-text');
     const visualButton = document.getElementById('transcript-reader-visual');
@@ -110,21 +108,10 @@
         return element;
     }
 
-    function decryptToken(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.replace(ENCRYPTION_KEY, '');
-        } catch (_error) {
-            return encoded;
-        }
-    }
-
     function getToken() {
-        return decryptToken(localStorage.getItem(STORAGE_KEY))
-            || localStorage.getItem('api_key')
-            || '';
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : '';
     }
 
     async function apiJSON(url, options) {

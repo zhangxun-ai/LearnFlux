@@ -101,7 +101,6 @@ def test_visual_css_is_scoped_and_includes_accessibility_states():
     for filename in (
         "product-linear.css",
         "product-linear-core.css",
-        "product-linear-insights.css",
         "product-linear-system.css",
     ):
         css = _source(CSS_DIR / filename)
@@ -143,7 +142,6 @@ def test_versioned_routes_include_the_new_visual_assets():
     for filename in (
         "product-linear.css",
         "product-linear-core.css",
-        "product-linear-insights.css",
         "product-linear-system.css",
     ):
         assert f'"{filename}"' in context
@@ -152,12 +150,12 @@ def test_versioned_routes_include_the_new_visual_assets():
 def test_service_worker_refreshes_and_precaches_the_visual_system():
     service_worker = _source(STATIC_DIR / "service-worker.js")
 
-    assert "learnflux-pwa-20260722-shell" in service_worker
+    assert "learnflux-pwa-20261016-workbench-meadow" in service_worker
+    assert "/static/js/auth-session.js" in service_worker
     assert "/static/js/ui-features.js" in service_worker
     for filename in (
         "product-linear.css",
         "product-linear-core.css",
-        "product-linear-insights.css",
         "product-linear-system.css",
     ):
         assert f"/static/css/{filename}" in service_worker

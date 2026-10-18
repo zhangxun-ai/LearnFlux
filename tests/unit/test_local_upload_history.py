@@ -1,10 +1,8 @@
-from pathlib import Path
+"""A successful upload must keep a recent-task entry and navigate to its view."""
+
+from tests.unit.test_single_study_behavior import test_single_study_import_behavior as _check_import_behavior
 
 
 def test_local_media_upload_is_added_to_recent_history():
-    app_js = Path("src/web/static/js/app.js").read_text(encoding="utf-8")
-
-    local_upload_block = app_js[app_js.index("if (d && d.code === 202"):app_js.index("window.location.href = '/view/'")]
-
-    assert "TaskHistoryManager.addTask({" in local_upload_block
-    assert "if (!mediaFile)" not in local_upload_block
+    # The Node flow asserts a 202 upload adds the media task, title and view link.
+    _check_import_behavior()

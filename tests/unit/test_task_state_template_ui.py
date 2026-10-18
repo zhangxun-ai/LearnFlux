@@ -1,8 +1,25 @@
 from pathlib import Path
 
+import shutil
+import subprocess
+
+import pytest
+
 
 TEMPLATE_DIR = Path(__file__).parents[2] / "src" / "web" / "templates"
 STATIC_DIR = Path(__file__).parents[2] / "src" / "web" / "static"
+
+
+def test_processing_quote_refresh_behavior():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for processing quote behavior checks")
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [node, "tests/frontend/processing_quote_behavior.cjs"],
+        cwd=root, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_error_page_exposes_a_single_clear_alert_and_non_inline_reload_action():

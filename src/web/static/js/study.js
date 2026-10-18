@@ -1,6 +1,4 @@
 (function () {
-    const STORAGE_KEY = 'vta_bearer_token';
-    const ENCRYPTION_KEY = 'vta_encrypt_key_2024';
     const PLAYBACK_RATE_KEY = 'vta_study_playback_rate';
     let viewToken = window.STUDY_VIEW_TOKEN || '';
     let collectionId = window.STUDY_COLLECTION_ID || '';
@@ -40,6 +38,7 @@
     };
 
     const els = {
+        authGate: document.getElementById('study-auth-gate'),
         title: document.getElementById('study-title'),
         studyPageContext: document.getElementById('study-page-context'),
         studyWorkbenchTitle: document.getElementById('study-workbench-title'),
@@ -163,19 +162,10 @@
         return `${studyApiBase()}/obsidian-binding`;
     }
 
-    function decryptToken(encoded) {
-        if (!encoded) return '';
-        try {
-            const reversed = encoded.split('').reverse().join('');
-            const decoded = decodeURIComponent(escape(atob(reversed)));
-            return decoded.replace(ENCRYPTION_KEY, '');
-        } catch (error) {
-            return encoded;
-        }
-    }
-
     function getToken() {
-        return decryptToken(localStorage.getItem(STORAGE_KEY));
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : '';
     }
 
     function showToast(message) {
@@ -186,10 +176,13 @@
     }
 
     async function apiJSON(url, options) {
-        const token = getToken();
-        if (!token) {
-            throw new Error('请先在工作台设置 API 令牌');
+        if (!getToken()) {
+            await window.LearnFluxAuth.requireSession({
+                title: '连接后继续边播边学',
+                reason: '输入管理口令后继续当前操作；播放器位置、提问和笔记草稿会保留。'
+            });
         }
+        const token = getToken();
         const init = options || {};
         const headers = new Headers(init.headers || {});
         headers.set('Authorization', `Bearer ${token}`);
@@ -1167,21 +1160,48 @@
             .replace(/'/g, '&#39;');
     }
 
-    function bindTabs() {
-        document.querySelectorAll('.right-tabs [data-tab]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const tab = button.dataset.tab;
-                document.querySelectorAll('.right-tabs [data-tab]').forEach((item) => {
-                    item.classList.toggle('is-active', item === button);
-                });
-                document.querySelectorAll('.study-panel-view').forEach((panel) => {
-                    panel.classList.toggle('is-active', panel.id === `tab-${tab}`);
-                });
-                state.visualTabActive = tab === 'visual';
-                if (tab === 'visual') activateVisualLearning();
-                if (tab === 'notes' && !state.noteDocument) loadStudyNote(true);
+    function bindRovingTabKeys(buttons, activate) {
+        const tabs = Array.from(buttons);
+        tabs.forEach((button) => {
+            button.addEventListener('keydown', (event) => {
+                const currentIndex = tabs.indexOf(button);
+                let nextIndex = currentIndex;
+                if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+                else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                else if (event.key === 'Home') nextIndex = 0;
+                else if (event.key === 'End') nextIndex = tabs.length - 1;
+                else return;
+                event.preventDefault();
+                tabs[nextIndex].focus();
+                activate(tabs[nextIndex]);
             });
         });
+    }
+
+    function activateStudyTab(button) {
+        const tab = button.dataset.tab;
+        document.querySelectorAll('.right-tabs [data-tab]').forEach((item) => {
+            const active = item === button;
+            item.classList.toggle('is-active', active);
+            item.setAttribute('aria-selected', active ? 'true' : 'false');
+            item.tabIndex = active ? 0 : -1;
+        });
+        document.querySelectorAll('.study-panel-view').forEach((panel) => {
+            const active = panel.id === `tab-${tab}`;
+            panel.classList.toggle('is-active', active);
+            panel.hidden = !active;
+        });
+        state.visualTabActive = tab === 'visual';
+        if (tab === 'visual') activateVisualLearning();
+        if (tab === 'notes' && !state.noteDocument) loadStudyNote(true);
+    }
+
+    function bindTabs() {
+        const buttons = document.querySelectorAll('.right-tabs [data-tab]');
+        buttons.forEach((button) => {
+            button.addEventListener('click', () => activateStudyTab(button));
+        });
+        bindRovingTabKeys(buttons, activateStudyTab);
     }
 
     function bindTranscript() {
@@ -1275,7 +1295,6 @@
     }
 
     function setPlaybackButtonState(isPlaying) {
-        els.playToggle.textContent = isPlaying ? 'Ⅱ' : '▶';
         els.playToggle.setAttribute('aria-label', isPlaying ? '暂停' : '播放');
         els.playToggle.title = isPlaying ? '暂停' : '播放';
     }
@@ -1647,6 +1666,7 @@
             const active = button.dataset.libraryKind === state.libraryKind;
             button.classList.toggle('is-active', active);
             button.setAttribute('aria-selected', active ? 'true' : 'false');
+            button.tabIndex = active ? 0 : -1;
         });
         els.singleImport.hidden = state.libraryKind !== 'single';
         els.collectionImport.hidden = state.libraryKind !== 'collection';
@@ -1687,8 +1707,13 @@
             const meta = isCollection
                 ? `${item.source_count || 0} 集 · ${item.ready_count || 0} 集已解析${item.creator_name ? ` · ${item.creator_name}` : ''}`
                 : `${item.source_kind === 'audio' ? '音频' : '视频'} · ${stateLabel(item.state)}${item.author ? ` · ${item.author}` : ''}`;
+            const libraryIcon = isCollection
+                ? '<svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="7" height="7" rx="1"/><rect x="13.5" y="4" width="7" height="7" rx="1"/><rect x="3.5" y="13" width="7" height="7" rx="1"/><rect x="13.5" y="13" width="7" height="7" rx="1"/></svg>'
+                : item.source_kind === 'audio'
+                    ? '<svg viewBox="0 0 24 24"><path d="M4 10v4m4-7v10m4-14v18m4-15v12m4-8v4"/></svg>'
+                    : '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></svg>';
             return `<a class="study-library-card" href="${escapeHTML(item.study_url || '#')}">
-                <span class="study-library-card-icon" aria-hidden="true">${isCollection ? '▥' : (item.source_kind === 'audio' ? '♪' : '▶')}</span>
+                <span class="study-library-card-icon" aria-hidden="true">${libraryIcon}</span>
                 <span><strong>${escapeHTML(item.title || '未命名内容')}</strong><span>${escapeHTML(meta)}</span></span>
                 <span class="study-library-card-action">${isCollection ? '选择一集' : '进入播放器'} →</span>
             </a>`;
@@ -1822,9 +1847,11 @@
     }
 
     function bindLibrary() {
-        document.querySelectorAll('[data-library-kind]').forEach((button) => {
+        const libraryTabs = document.querySelectorAll('[data-library-kind]');
+        libraryTabs.forEach((button) => {
             button.addEventListener('click', () => setLibraryKind(button.dataset.libraryKind));
         });
+        bindRovingTabKeys(libraryTabs, (button) => setLibraryKind(button.dataset.libraryKind));
         els.librarySearch.addEventListener('input', () => {
             window.clearTimeout(state.libraryTimer);
             state.libraryTimer = window.setTimeout(loadLibrary, 260);
@@ -1901,7 +1928,20 @@
         }
     }
 
-    function init() {
+    function loadAuthenticatedStudy() {
+        if (els.authGate) els.authGate.hidden = true;
+        if (pageMode === 'library') {
+            els.library.hidden = false;
+            els.player.hidden = true;
+            loadLibrary();
+        } else {
+            els.library.hidden = true;
+            els.player.hidden = false;
+            loadSession();
+        }
+    }
+
+    async function init() {
         bindTabs();
         bindTranscript();
         bindPanelSeek();
@@ -1912,15 +1952,21 @@
         bindVisualLearning();
         bindLibrary();
         bindCollectionNavigation();
-        if (pageMode === 'library') {
-            els.library.hidden = false;
-            els.player.hidden = true;
-            loadLibrary();
-        } else {
+        const authState = await window.LearnFluxAuth.ready;
+        if (!authState.authenticated) {
             els.library.hidden = true;
-            els.player.hidden = false;
-            loadSession();
+            els.player.hidden = true;
+            if (els.authGate) {
+                els.authGate.hidden = false;
+                window.LearnFluxAuth.renderAuthGate(els.authGate, {
+                    title: '连接后进入学习空间',
+                    reason: '输入管理口令后打开已解析内容、文稿和笔记；当前链接会保留。',
+                    onAuthenticated: loadAuthenticatedStudy
+                });
+            }
+            return;
         }
+        loadAuthenticatedStudy();
     }
 
     init();

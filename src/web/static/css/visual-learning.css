@@ -852,6 +852,11 @@
     box-shadow: var(--shadow-sm);
 }
 
+.vl-auth-gate {
+    grid-column: 1 / -1;
+    padding: 20px 24px 0;
+}
+
 .vl-control-pane {
     min-width: 0;
     padding: 24px;

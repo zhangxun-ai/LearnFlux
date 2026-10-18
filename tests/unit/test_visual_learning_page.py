@@ -73,5 +73,5 @@ def test_visual_workbench_is_precached():
         PROJECT_ROOT / "src/web/static/service-worker.js"
     ).read_text(encoding="utf-8")
 
-    assert "/visual-learning" in service_worker
-    assert "/static/js/visual-learning-workbench.js" in service_worker
+    assert "'/visual-learning'" in service_worker
+    assert "'/static/js/visual-learning-workbench.js'" in service_worker

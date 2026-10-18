@@ -475,9 +475,10 @@
 <!-- 入口 -->
 <div class="section post-entry" id="entry-section">
     <div class="entry-row">
+        <label class="sr-only" for="post-url">帖子或文章链接</label>
         <input type="text" id="post-url" placeholder="X / 小红书 / 微信公众号帖子或文章链接均可"
                value="{{ prefill_url or '' }}" autocomplete="off" spellcheck="false">
-        <button class="btn-analyze" id="analyze-btn">分析</button>
+        <button class="btn-analyze" id="analyze-btn" type="button">分析</button>
     </div>
 </div>
 
@@ -519,20 +520,10 @@
 {% block extra_js %}
 <script>
 (function () {
-    var TOKEN_KEY = 'vta_bearer_token';
-    // 首页 app.js 用 simpleEncrypt 加密存储令牌（btoa + 反转字符串）。
-    // 这里必须用同样的算法解密，否则会把密文当令牌发出去 → 服务器 401。
-    var ENCRYPTION_KEY = 'vta_encrypt_key_2024';
-
     function getToken() {
-        try {
-            var raw = localStorage.getItem(TOKEN_KEY);
-            if (!raw) return '';
-            var reversed = raw.split('').reverse().join('');
-            return decodeURIComponent(escape(atob(reversed))).replace(ENCRYPTION_KEY, '');
-        } catch (e) {
-            return '';
-        }
+        return window.LearnFluxAuth
+            ? window.LearnFluxAuth.getTokenPlaceholder()
+            : '';
     }
 
     var $ = function (id) { return document.getElementById(id); };
@@ -549,8 +540,15 @@
     function showError(title, message, withSettingsLink) {
         hide(loading); hide(result);
         $('error-title').textContent = title;
-        $('error-message').innerHTML = message +
-            (withSettingsLink ? ' <a href="/add_task_by_web">前往首页设置令牌</a>' : '');
+        var messageBox = $('error-message');
+        messageBox.textContent = message || '';
+        if (withSettingsLink) {
+            messageBox.appendChild(document.createTextNode(' '));
+            var settingsLink = document.createElement('a');
+            settingsLink.href = '/settings';
+            settingsLink.textContent = '前往系统设置';
+            messageBox.appendChild(settingsLink);
+        }
         show(errorBox);
         btn.disabled = false;
     }
@@ -580,16 +578,30 @@
 
     function renderResult(data) {
         // 来源头部
-        var srcUrl = escapeHtml(data.source_url || '');
-        var parts = [];
-        parts.push('<span class="author">@' + escapeHtml(data.author || 'Unknown') + '</span>');
+        var sourceMeta = $('source-meta');
+        sourceMeta.replaceChildren();
+        var author = document.createElement('span');
+        author.className = 'author';
+        author.textContent = '@' + (data.author || 'Unknown');
+        sourceMeta.appendChild(author);
         if (data.source_url) {
-            parts.push('<a href="' + srcUrl + '" target="_blank" rel="noopener">查看原文</a>');
+            try {
+                var parsedSource = new URL(data.source_url);
+                if (parsedSource.protocol === 'http:' || parsedSource.protocol === 'https:') {
+                    var sourceLink = document.createElement('a');
+                    sourceLink.href = parsedSource.href;
+                    sourceLink.target = '_blank';
+                    sourceLink.rel = 'noopener';
+                    sourceLink.textContent = '查看原文';
+                    sourceMeta.appendChild(sourceLink);
+                }
+            } catch (e) {}
         }
-        var fetched = data.fetched_comment_count || 0;
-        var analyzed = data.analyzed_comment_count || 0;
-        parts.push('<span class="meta-dim">抓取回复 ' + fetched + ' 条 · 分析 ' + analyzed + ' 条</span>');
-        $('source-meta').innerHTML = parts.join('');
+        var counts = document.createElement('span');
+        counts.className = 'meta-dim';
+        counts.textContent = '抓取回复 ' + Number(data.fetched_comment_count || 0) +
+            ' 条 · 分析 ' + Number(data.analyzed_comment_count || 0) + ' 条';
+        sourceMeta.appendChild(counts);
 
         // 分段卡片
         var container = $('sections-container');
@@ -602,7 +614,8 @@
             h2.textContent = sec.title || '';
             var body = document.createElement('div');
             body.className = 'content';
-            body.innerHTML = sec.html || '';
+            body.dataset.trustedHtml = 'nh3';
+            body.innerHTML = sec.sanitized_html || '';
             card.appendChild(h2);
             card.appendChild(body);
             container.appendChild(card);

@@ -245,11 +245,12 @@ def test_reading_script_keeps_the_optional_deep_link_document_id():
     assert "decodeURIComponent" in js
 
 
-def test_reading_decrypts_the_shared_workbench_token():
+def test_reading_uses_the_shared_httponly_browser_session():
     js = (STATIC_ROOT / "js/reading.js").read_text(encoding="utf-8")
 
-    assert "vta_encrypt_key_2024" in js
-    assert "decryptToken(localStorage.getItem(TOKEN_KEY))" in js
+    assert "window.LearnFluxAuth.getTokenPlaceholder()" in js
+    assert "vta_encrypt_key_2024" not in js
+    assert "localStorage.getItem(TOKEN_KEY)" not in js
 
 
 def test_app_shell_reconciles_the_canonical_navigation():
@@ -265,7 +266,6 @@ def test_app_shell_reconciles_the_canonical_navigation():
         "核心工具",
         "单篇深度学习",
         "系列深度学习",
-        "图解生成",
         "边播边学",
         "复盘",
         "心流空间",

@@ -10,6 +10,7 @@ from ..transcriber.control_database import SQLiteControlDatabase
 from ..utils.logging import setup_logger
 from ..utils.task_progress import build_progress
 from ..utils.task_status import TaskStatus
+from ..utils.timeutil import BEIJING_TIMEZONE
 from .identity import normalize_collection_identity_field
 
 logger = setup_logger("learning_collections")
@@ -627,12 +628,29 @@ class LearningCollectionRepository:
             where.append("LOWER(c.title) LIKE LOWER(?) ESCAPE '!'")
             params.append(f"%{escaped_query}%")
         source_date_where = []
+        # Source timestamps are UTC; filter the Beijing calendar day shown in the UI.
+        # Normalize legacy SQLite ISO/space formats and PostgreSQL timestamps alike.
+        source_time = "REPLACE(CAST(s_date.created_at AS TEXT), 'T', ' ')"
+        try:
+            first_day = datetime.date.fromisoformat(date_from.strip()) if date_from else None
+            last_day = datetime.date.fromisoformat(date_to.strip()) if date_to else None
+        except ValueError:
+            # Preserve the empty result returned by the former SQL DATE filters.
+            return []
         if date_from:
-            source_date_where.append("DATE(s_date.created_at) >= DATE(?)")
-            params.append(date_from.strip())
+            start = datetime.datetime.combine(
+                first_day, datetime.time.min,
+                tzinfo=BEIJING_TIMEZONE,
+            ).astimezone(datetime.timezone.utc)
+            source_date_where.append(f"{source_time} >= ?")
+            params.append(start.strftime("%Y-%m-%d %H:%M:%S"))
         if date_to:
-            source_date_where.append("DATE(s_date.created_at) <= DATE(?)")
-            params.append(date_to.strip())
+            end = datetime.datetime.combine(
+                last_day + datetime.timedelta(days=1),
+                datetime.time.min, tzinfo=BEIJING_TIMEZONE,
+            ).astimezone(datetime.timezone.utc)
+            source_date_where.append(f"{source_time} < ?")
+            params.append(end.strftime("%Y-%m-%d %H:%M:%S"))
         if source_date_where:
             where.append(
                 """

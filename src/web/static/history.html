@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
+    <script src="/static/js/time.js?v=__ASSET_VERSION__"></script>
         <script>
         (function() {
             try {
@@ -1071,10 +1072,7 @@ function updateRecordTypeFilterUI(normalizeStatus = true) {
 }
 
 function localDateString(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return LearnFluxTime.dateKey(date);
 }
 
 function syncDateRangePreset() {
@@ -1085,9 +1083,7 @@ function syncDateRangePreset() {
     if (!start && !end) { preset.value = 'all'; return; }
     const todayText = localDateString(new Date());
     const exactPreset = [7, 30, 90].find(days => {
-        const first = new Date();
-        first.setDate(first.getDate() - (days - 1));
-        return start === localDateString(first) && end === todayText;
+        return start === LearnFluxTime.shiftDate(todayText, 1 - days) && end === todayText;
     });
     preset.value = exactPreset ? String(exactPreset) : 'custom';
 }
@@ -1107,11 +1103,9 @@ function applyDateRangePreset(value) {
         endInput.value = '';
     } else {
         const days = Number(value);
-        const today = new Date();
-        const first = new Date(today);
-        first.setDate(first.getDate() - (days - 1));
-        startInput.value = localDateString(first);
-        endInput.value = localDateString(today);
+        const today = LearnFluxTime.dateKey();
+        startInput.value = LearnFluxTime.shiftDate(today, 1 - days);
+        endInput.value = today;
     }
     currentPage = 0;
     serializeFiltersToURL();

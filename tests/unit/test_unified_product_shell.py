@@ -396,8 +396,9 @@ class TestAssetVersions:
         source = (STATIC_ROOT / "service-worker.js").read_text(encoding="utf-8")
 
         assert "/static/js/ui-features.js" in source
-        assert "learnflux-pwa-20261016-workbench-meadow" in source
+        assert "learnflux-pwa-20261022-beijing-time" in source
         assert "/static/js/auth-session.js" in source
+        assert "/static/js/time.js" in source
 
 
 class TestProductDesignSystem:

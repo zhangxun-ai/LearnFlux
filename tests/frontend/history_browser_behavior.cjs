@@ -23,7 +23,7 @@ function harness(search = '') {
     const auth = { ready: { then() {} }, isAuthenticated: () => true, getState: () => user, getTokenPlaceholder: () => 'session', requireSession: async () => {} };
     const window = { LearnFluxAuth: auth, location, addEventListener() {}, matchMedia: () => ({ matches: false }) };
     const history = { replaceState(_, __, url) { location.search = url.startsWith('?') ? url : ''; } };
-    const sandbox = { window, document, location, history, localStorage, sessionStorage, URL, URLSearchParams,
+    const sandbox = { LearnFluxTime: require('../../src/web/static/js/time.js'), window, document, location, history, localStorage, sessionStorage, URL, URLSearchParams,
         console, setTimeout, clearTimeout, AbortController, requestAnimationFrame: fn => fn(), fetch: () => { throw new Error('Unexpected fetch'); } };
     const context = vm.createContext(sandbox); vm.runInContext(source, context);
     // Rendering is verified in the real browser; these tests isolate async state transitions.

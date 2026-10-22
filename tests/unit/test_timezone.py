@@ -1,172 +1,65 @@
-#!/usr/bin/env python3
-"""
-测试时区转换功能
-"""
-import os
-import sys
-from datetime import datetime, timezone, timedelta
+"""Beijing display rules and legacy UTC timestamp regression tests."""
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import shutil
+import subprocess
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+import pytest
 
-def test_timezone_functionality():
-    """测试时区功能"""
-    print("开始测试时区转换功能...")
-    
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(project_root)
-    
-    try:
-        from video_transcript_api.utils.timeutil import (
-            parse_timezone_offset,
-            get_configured_timezone,
-            format_datetime_with_timezone,
-            format_datetime_for_display,
-        )
-        
-        # 1. 测试时区解析
-        print("\n步骤1: 测试时区字符串解析...")
-        
-        test_timezones = [
-            "UTC+8",
-            "UTC-5", 
-            "UTC+08:30",
-            "UTC-05:30",
-            "UTC",
-            "utc+8",  # 测试大小写不敏感
-            "UTC+0",
-            "UTC+12",
-            "UTC-12",
-            "INVALID"  # 无效格式
-        ]
-        
-        for tz_str in test_timezones:
-            result = parse_timezone_offset(tz_str)
-            if result:
-                offset = result.utcoffset(datetime.now())
-                hours = offset.total_seconds() / 3600
-                print(f"  [OK] {tz_str} -> {hours:+.1f}小时偏移")
-            else:
-                print(f"  [WARN] {tz_str} -> 解析失败")
-        
-        # 2. 测试配置获取
-        print("\n步骤2: 测试配置的时区获取...")
-        
-        configured_tz = get_configured_timezone()
-        offset = configured_tz.utcoffset(datetime.now())
-        hours = offset.total_seconds() / 3600
-        print(f"[OK] 配置的时区偏移: {hours:+.1f}小时")
-        
-        # 3. 测试时间格式转换
-        print("\n步骤3: 测试时间格式转换...")
-        
-        test_times = [
-            "2025-08-20 12:34:56",
-            "2025-08-20T12:34:56", 
-            "2025-08-20T12:34:56Z",
-            "2025-08-20 12:34:56.123456",
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ]
-        
-        for test_time in test_times:
-            try:
-                formatted_time = format_datetime_with_timezone(test_time)
-                print(f"  [OK] {test_time} -> {formatted_time}")
-            except Exception as e:
-                print(f"  [ERROR] {test_time} -> {e}")
-        
-        # 4. 测试显示格式
-        print("\n步骤4: 测试用户显示格式...")
-        
-        current_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        display_format = format_datetime_for_display(current_utc)
-        print(f"[OK] 当前UTC时间 {current_utc} -> 显示为: {display_format}")
-        
-        # 5. 测试不同时区配置
-        print("\n步骤5: 测试不同时区配置...")
-        
-        # 临时修改配置测试
-        from video_transcript_api.utils.logging import load_config
-        
-        original_config = load_config()
-        test_timezones_config = ["UTC+0", "UTC-5", "UTC+9", "UTC+05:30"]
-        
-        for tz in test_timezones_config:
-            # 模拟不同时区配置
-            original_config["web"]["timezone"] = tz
-            
-            # 重新导入模块以获取新配置
-            import importlib
-            import video_transcript_api.utils.timeutil.timezone_helper as timezone_helper_module
+from video_transcript_api.utils.timeutil import (
+    datetime_for_api,
+    format_datetime_for_display,
+    format_datetime_with_timezone,
+    get_configured_timezone,
+    parse_timezone_offset,
+)
 
-            importlib.reload(timezone_helper_module)
 
-            from video_transcript_api.utils.timeutil import (
-                get_configured_timezone,
-                format_datetime_for_display,
-            )
-            
-            test_time = "2025-08-20 12:00:00"
-            display_time = format_datetime_for_display(test_time)
-            print(f"  [OK] {tz}: {test_time} UTC -> {display_time}")
-        
-        # 恢复原始配置
-        original_config["web"]["timezone"] = "UTC+8"
-        
-        print("\n[SUCCESS] 时区转换功能测试完成！")
-        print("功能总结:")
-        print("  [OK] 时区字符串解析")
-        print("  [OK] 配置文件时区读取")
-        print("  [OK] UTC时间转本地时间")
-        print("  [OK] 用户友好的时间显示格式")
-        print("  [OK] 多种时区格式支持")
-        
-        return True
-        
-    except Exception as e:
-        print(f"[ERROR] 测试过程中出现异常: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
+@pytest.mark.parametrize("value", [
+    "2026-10-22 00:30:00",
+    "2026-10-22T00:30:00",
+    "2026-10-22T00:30:00Z",
+    "2026-10-22T00:30:00+00:00",
+    "2026-10-22T08:30:00+08:00",
+    "2026-10-21T19:30:00-05:00",
+    datetime(2026, 10, 22, 0, 30),
+    datetime(2026, 10, 22, 8, 30, tzinfo=timezone(timedelta(hours=8))),
+])
+def test_same_instant_has_one_beijing_display(value):
+    assert format_datetime_with_timezone(value) == "2026-10-22 08:30:00"
+    assert datetime_for_api(value) == "2026-10-22T08:30:00+08:00"
 
-def test_edge_cases():
-    """测试边界情况"""
-    print("\n测试边界情况...")
-    
-    try:
-        from video_transcript_api.utils.timeutil import (
-            format_datetime_with_timezone,
-            format_datetime_for_display,
-        )
-        
-        edge_cases = [
-            "",           # 空字符串
-            None,         # None值
-            "invalid",    # 无效格式
-            "2025-13-45 25:61:99",  # 无效日期时间
-        ]
-        
-        for case in edge_cases:
-            try:
-                result1 = format_datetime_with_timezone(str(case) if case is not None else "")
-                result2 = format_datetime_for_display(str(case) if case is not None else "")
-                print(f"  [OK] 边界情况 '{case}' 处理正常")
-            except Exception as e:
-                print(f"  [WARN] 边界情况 '{case}': {e}")
-        
-        print("[OK] 边界情况测试完成")
-        return True
-        
-    except Exception as e:
-        print(f"[ERROR] 边界情况测试异常: {e}")
-        return False
 
-if __name__ == "__main__":
-    success = test_timezone_functionality()
-    edge_success = test_edge_cases()
-    
-    if success and edge_success:
-        print("\n✅ 所有时区功能测试通过！")
-        sys.exit(0)
-    else:
-        print("\n❌ 部分测试失败")
-        sys.exit(1)
+def test_beijing_calendar_rollover_and_fractional_seconds():
+    assert format_datetime_with_timezone("2026-10-21T16:00:00Z") == "2026-10-22 00:00:00"
+    assert datetime_for_api("2026-10-21 16:00:00.123456") == "2026-10-22T00:00:00.123456+08:00"
+    assert format_datetime_for_display("2026-10-21T16:00:00Z") == "2026年10月22日 00:00 (UTC+8)"
+
+
+def test_display_timezone_is_always_beijing(monkeypatch):
+    for host_timezone in ["UTC", "America/Los_Angeles", "Asia/Shanghai"]:
+        monkeypatch.setenv("TZ", host_timezone)
+        assert get_configured_timezone().utcoffset(None) == timedelta(hours=8)
+
+
+@pytest.mark.parametrize("value", [None, "", "invalid", "2026-13-45 25:61:99"])
+def test_invalid_api_timestamps_do_not_invent_an_instant(value):
+    assert datetime_for_api(value) is None
+    assert format_datetime_with_timezone(value) == (value or "")
+
+
+@pytest.mark.parametrize("value,hours", [("UTC+8", 8), ("utc+8", 8), ("UTC", 0), ("UTC-05:30", -5.5)])
+def test_legacy_offset_parser(value, hours):
+    assert parse_timezone_offset(value).utcoffset(None).total_seconds() == hours * 3600
+
+
+def test_browser_time_rules_across_host_timezones():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for browser time behavior tests")
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [node, "tests/frontend/timezone_behavior.cjs"], cwd=root,
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

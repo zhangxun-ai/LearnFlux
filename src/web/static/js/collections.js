@@ -528,7 +528,7 @@
         }
         const status = String(job.status || '');
         const phase = String(job.phase || 'queued');
-        const leaseUntil = Date.parse(String(job.lease_until || ''));
+        const leaseUntil = LearnFluxTime.parse(job.lease_until);
         const leaseExpired = status === 'running'
             && Number.isFinite(leaseUntil)
             && Date.now() > leaseUntil;
@@ -878,20 +878,16 @@
 
     function formatDateTime(value) {
         if (!value) return '-';
-        const parsed = new Date(value);
-        if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 16);
-        return `${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')} ${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+        return LearnFluxTime.format(value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) || String(value).slice(0, 16);
     }
 
     function formatDate(value) {
         if (!value) return '';
-        const parsed = new Date(value);
-        if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
-        return `${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+        return LearnFluxTime.format(value, { month: '2-digit', day: '2-digit' }) || String(value).slice(0, 10);
     }
 
     function toDateParam(date) {
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        return LearnFluxTime.dateKey(date);
     }
 
     function dateRangeParams(value) {
@@ -903,9 +899,8 @@
         }
         if (value === '7d' || value === '30d') {
             const days = value === '7d' ? 7 : 30;
-            const start = new Date(now);
-            start.setDate(start.getDate() - days + 1);
-            return { date_from: toDateParam(start), date_to: toDateParam(now) };
+            const today = toDateParam(now);
+            return { date_from: LearnFluxTime.shiftDate(today, 1 - days), date_to: today };
         }
         return {};
     }

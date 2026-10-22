@@ -150,7 +150,7 @@
 
     function itemTimestamp(item, field) {
         const value = item[field] || item.updated_at || item.created_at || '';
-        const timestamp = Date.parse(value);
+        const timestamp = LearnFluxTime.parse(value);
         return Number.isNaN(timestamp) ? 0 : timestamp;
     }
 

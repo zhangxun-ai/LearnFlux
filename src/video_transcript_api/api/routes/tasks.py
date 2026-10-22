@@ -49,6 +49,7 @@ from ..context import get_transcription_control_database
 from ...utils.notifications import send_view_link_wechat, get_notification_router
 from ...utils.accounts.user_manager import get_user_manager
 from ...utils.task_status import TERMINAL_STATUSES, TaskStatus, http_code_for_status
+from ...utils.timeutil import datetime_for_api
 
 logger = get_logger()
 config = get_config()
@@ -156,6 +157,8 @@ def _task_history_item(task_info: dict) -> dict:
         "error_message",
     )
     item = {field: task_info.get(field) for field in fields}
+    for field in ("created_at", "updated_at", "completed_at"):
+        item[field] = datetime_for_api(item[field])
     progress = _history_progress(task_info)
     if progress:
         item["progress"] = progress

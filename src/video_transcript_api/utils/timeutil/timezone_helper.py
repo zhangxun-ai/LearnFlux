@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from ..logging import setup_logger, load_config
+from ..logging import setup_logger
 
 logger = setup_logger("timezone_helper")
 
@@ -67,84 +67,48 @@ def parse_timezone_offset(timezone_str: str) -> Optional[timezone]:
         logger.error(f"解析时区失败 {timezone_str}: {e}")
         return None
 
+BEIJING_TIMEZONE = timezone(timedelta(hours=8))
+
+
 def get_configured_timezone() -> timezone:
-    """
-    获取配置的时区对象
-    
-    Returns:
-        配置的timezone对象，默认为UTC+8
-    """
+    """Return Beijing time for all user-facing dates (legacy public name)."""
+    return BEIJING_TIMEZONE
+
+
+def parse_utc_datetime(value: str | datetime) -> datetime:
+    """Parse a persisted instant; legacy timestamps without an offset are UTC."""
+    parsed = value if isinstance(value, datetime) else datetime.fromisoformat(
+        value.strip().replace("Z", "+00:00")
+    )
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def datetime_for_api(value: str | datetime | None) -> str | None:
+    """Serialize a timestamp with an explicit Beijing offset; never guess on error."""
+    if not value:
+        return None
     try:
-        config = load_config()
-        timezone_str = config.get("web", {}).get("timezone", "UTC+8")
-        
-        parsed_tz = parse_timezone_offset(timezone_str)
-        if parsed_tz is None:
-            logger.warning(f"使用默认时区 UTC+8，因为配置的时区无效: {timezone_str}")
-            return timezone(timedelta(hours=8))  # 默认UTC+8
-            
-        return parsed_tz
-        
-    except Exception as e:
-        logger.error(f"获取时区配置失败: {e}")
-        return timezone(timedelta(hours=8))  # 默认UTC+8
+        return parse_utc_datetime(value).astimezone(BEIJING_TIMEZONE).isoformat()
+    except (ValueError, TypeError, AttributeError):
+        logger.warning("Invalid persisted timestamp")
+        return None
+
 
 def format_datetime_with_timezone(
     dt_str: str | datetime,
     output_format: str = "%Y-%m-%d %H:%M:%S",
 ) -> str:
-    """
-    将数据库中的UTC时间字符串转换为配置时区的格式化字符串
-    
-    Args:
-        dt_str: 数据库中的时间字符串 (SQLite默认格式)
-        output_format: 输出格式，默认为 YYYY-MM-DD HH:MM:SS
-        
-    Returns:
-        格式化后的本地化时间字符串
-    """
+    """Format UTC or offset-aware database timestamps in Beijing time."""
+    if not dt_str:
+        return ""
     try:
-        if not dt_str:
-            return ""
-            
-        # SQLite的默认时间格式：YYYY-MM-DD HH:MM:SS
-        # 尝试解析不同的时间格式
-        dt_formats = [
-            "%Y-%m-%d %H:%M:%S",      # 2025-08-20 12:34:56
-            "%Y-%m-%d %H:%M:%S.%f",   # 2025-08-20 12:34:56.123456
-            "%Y-%m-%dT%H:%M:%S",      # 2025-08-20T12:34:56
-            "%Y-%m-%dT%H:%M:%S.%f",   # 2025-08-20T12:34:56.123456
-            "%Y-%m-%dT%H:%M:%SZ",     # 2025-08-20T12:34:56Z
-            "%Y-%m-%dT%H:%M:%S.%fZ",  # 2025-08-20T12:34:56.123456Z
-        ]
-        
-        utc_dt = dt_str if isinstance(dt_str, datetime) else None
-        if utc_dt is None:
-            for fmt in dt_formats:
-                try:
-                    utc_dt = datetime.strptime(dt_str, fmt)
-                    break
-                except ValueError:
-                    continue
-        
-        if utc_dt is None:
-            logger.warning(f"无法解析时间格式: {dt_str}")
-            return dt_str  # 返回原始字符串
-        
-        # 设置为UTC时区
-        if utc_dt.tzinfo is None:
-            utc_dt = utc_dt.replace(tzinfo=timezone.utc)
-        
-        # 转换到配置的时区
-        target_tz = get_configured_timezone()
-        local_dt = utc_dt.astimezone(target_tz)
-        
-        # 格式化输出
-        return local_dt.strftime(output_format)
-        
-    except Exception as e:
-        logger.error(f"时间转换失败 {dt_str}: {e}")
-        return dt_str  # 出错时返回原始字符串
+        return parse_utc_datetime(dt_str).astimezone(BEIJING_TIMEZONE).strftime(output_format)
+    except (ValueError, TypeError, AttributeError):
+        logger.warning("Invalid timestamp for display")
+        return str(dt_str)
+
 
 def format_datetime_for_display(dt_str: str) -> str:
     """
@@ -192,4 +156,4 @@ def get_current_time_display() -> str:
         return current_time.strftime("%Y年%m月%d日 %H:%M")
     except Exception as e:
         logger.error(f"获取当前时间失败: {e}")
-        return datetime.now().strftime("%Y年%m月%d日 %H:%M")
+        return datetime.now(BEIJING_TIMEZONE).strftime("%Y年%m月%d日 %H:%M")

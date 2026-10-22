@@ -1,8 +1,9 @@
 import calendar
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Callable
 
 from ..llm import call_llm_api
+from ..utils.timeutil import BEIJING_TIMEZONE
 from .repository import JournalRepository
 
 ENTRY_TYPES = {
@@ -188,7 +189,7 @@ class JournalService:
 
     def _parse_date(self, value: str | None) -> date:
         if not value:
-            return date.today()
+            return datetime.now(BEIJING_TIMEZONE).date()
         try:
             return date.fromisoformat(value)
         except ValueError as exc:

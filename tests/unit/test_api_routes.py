@@ -622,6 +622,10 @@ class TestListRecentTasks:
         quote = body["data"]["items"][0]["progress"]["evidence"]["cloud_quote"]
         assert quote["max_cost_cny"] == "0.10362"
         assert "quote_token" not in quote
+        item = body["data"]["items"][0]
+        assert item["created_at"] == "2026-08-24T08:00:00+08:00"
+        assert item["updated_at"] == "2026-08-24T08:01:00+08:00"
+        assert item["completed_at"] is None
         assert body["data"]["has_more"] is False
         mock_cache_manager.list_recent_tasks.assert_called_once_with(
             owner_user_id="test-user",
@@ -650,6 +654,24 @@ class TestListRecentTasks:
             "task-1",
         ]
         assert body["data"]["has_more"] is True
+
+    @pytest.mark.parametrize("created_at", [
+        "2026-10-21 16:00:00.123456", "2026-10-21T16:00:00.123456Z",
+        "2026-10-22T00:00:00.123456+08:00",
+    ])
+    def test_legacy_and_aware_timestamps_have_explicit_beijing_offset(
+        self, client, mock_cache_manager, created_at
+    ):
+        mock_cache_manager.list_recent_tasks.return_value = [{
+            "task_id": "recent", "status": "success", "created_at": created_at,
+            "completed_at": "2026-10-21T16:01:00Z",
+        }]
+        response = client.get("/api/tasks")
+        assert response.status_code == 200
+        item = response.json()["data"]["items"][0]
+        assert item["created_at"] == "2026-10-22T00:00:00.123456+08:00"
+        assert item["completed_at"] == "2026-10-22T00:01:00+08:00"
+        assert item["updated_at"] is None
 
 
 class TestDeleteTask:

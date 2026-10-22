@@ -401,9 +401,9 @@
         els.metrics.hot.textContent = String(metrics.hot ?? trendRadarData.filter((item) => item.stage === "overheated").length);
         els.metrics.confidence.textContent = String(metrics.confidence ?? averageConfidence(trendRadarData)) + "%";
         if (els.updated) {
-            const generated = report.generated_at ? new Date(report.generated_at) : null;
+            const generated = report.generated_at ? new Date(LearnFluxTime.parse(report.generated_at)) : null;
             els.updated.textContent = generated && !Number.isNaN(generated.valueOf())
-                ? generated.toLocaleString("zh-CN", { hour12: false })
+                ? generated.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })
                 : "样例报告";
             if (generated) els.updated.dateTime = generated.toISOString();
         }

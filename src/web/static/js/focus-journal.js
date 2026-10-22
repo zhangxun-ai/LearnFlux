@@ -68,15 +68,13 @@
     }
 
     function todayISO() {
-        const now = new Date();
-        const offset = now.getTimezoneOffset() * 60000;
-        return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+        return LearnFluxTime.dateKey();
     }
 
     function formatDateLabel(value) {
-        const date = new Date(value + 'T00:00:00');
+        const date = new Date(value + 'T00:00:00+08:00');
         if (Number.isNaN(date.getTime())) return value;
-        return date.toLocaleDateString('zh-CN', {
+        return date.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai',
             year: 'numeric',
             month: 'long',
             day: 'numeric',
@@ -86,9 +84,9 @@
 
     function formatClock(value) {
         if (!value) return '';
-        const date = new Date(value);
+        const date = new Date(LearnFluxTime.parse(value));
         if (Number.isNaN(date.getTime())) return '';
-        return date.toLocaleTimeString('zh-CN', {
+        return date.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai',
             hour: '2-digit',
             minute: '2-digit',
             hour12: false
@@ -234,10 +232,8 @@
     }
 
     function mondayOf(dateValue) {
-        const date = new Date(dateValue + 'T00:00:00');
-        const day = date.getDay() || 7;
-        date.setDate(date.getDate() - day + 1);
-        return toISO(date);
+        const day = new Date(dateValue + 'T00:00:00Z').getUTCDay() || 7;
+        return LearnFluxTime.shiftDate(dateValue, 1 - day);
     }
 
     function monthStart(dateValue) {
@@ -245,8 +241,7 @@
     }
 
     function toISO(date) {
-        const offset = date.getTimezoneOffset() * 60000;
-        return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+        return LearnFluxTime.dateKey(date);
     }
 
     async function runReview(range) {

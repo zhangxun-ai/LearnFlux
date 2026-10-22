@@ -150,8 +150,9 @@ def test_versioned_routes_include_the_new_visual_assets():
 def test_service_worker_refreshes_and_precaches_the_visual_system():
     service_worker = _source(STATIC_DIR / "service-worker.js")
 
-    assert "learnflux-pwa-20261016-workbench-meadow" in service_worker
+    assert "learnflux-pwa-20261022-beijing-time" in service_worker
     assert "/static/js/auth-session.js" in service_worker
+    assert "/static/js/time.js" in service_worker
     assert "/static/js/ui-features.js" in service_worker
     for filename in (
         "product-linear.css",

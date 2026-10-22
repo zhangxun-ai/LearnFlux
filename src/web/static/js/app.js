@@ -3,6 +3,9 @@
  * 负责URL提取、本地存储、API调用等核心功能
  */
 
+const AppTime = typeof module !== 'undefined' && module.exports
+    ? require('./time.js') : globalThis.LearnFluxTime;
+
 // 应用配置
 const APP_CONFIG = {
     STORAGE_KEYS: {
@@ -598,7 +601,7 @@ class TaskHistoryManager {
 
     static timestampFromServer(value) {
         if (!value) return Date.now();
-        const parsed = Date.parse(String(value));
+        const parsed = AppTime.parse(value);
         return Number.isNaN(parsed) ? Date.now() : parsed;
     }
 
@@ -1207,7 +1210,7 @@ function formatRelativeTime(ts) {
     if (h < 24) return h + ' 小时前';
     const d = Math.floor(h / 24);
     if (d < 30) return d + ' 天前';
-    try { return new Date(ts).toLocaleDateString('zh-CN'); } catch (e) { return ''; }
+    return AppTime.format(ts);
 }
 
 function escapeHtml(s) {
@@ -1245,9 +1248,7 @@ function inDateRange(ts, rangeKey) {
     const now = Date.now();
     const DAY = 86400000;
     if (rangeKey === 'today') {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        return ts >= d.getTime();
+        return ts >= AppTime.startOfDay(now) && ts <= now;
     }
     if (rangeKey === '7d') return ts >= now - 7 * DAY;
     if (rangeKey === '30d') return ts >= now - 30 * DAY;
@@ -1811,8 +1812,7 @@ function refreshHistoryMarks() {
 function historyTimestampFromAuditItem(item) {
     const raw = String(item && item.request_time || '').trim();
     if (!raw) return Date.now();
-    const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
-    const parsed = Date.parse(normalized);
+    const parsed = AppTime.parse(raw);
     return Number.isNaN(parsed) ? Date.now() : parsed;
 }
 
@@ -2628,5 +2628,5 @@ if (typeof window !== 'undefined') {
 
 // 纯 URL 工具同时供 Node 回归测试复用，浏览器行为保持不变。
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {URLExtractor, renderURLPreview, UIManager, renderSubmittedTaskStatus, APIManager, TaskHistoryManager, initializeTranscriptionStrategy, initializeTextImport, initializeFileImport};
+    module.exports = {formatRelativeTime, inDateRange, URLExtractor, renderURLPreview, UIManager, renderSubmittedTaskStatus, APIManager, TaskHistoryManager, initializeTranscriptionStrategy, initializeTextImport, initializeFileImport};
 }

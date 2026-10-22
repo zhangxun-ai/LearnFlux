@@ -256,8 +256,7 @@
     };
 
     function localISODate(value = new Date()) {
-        const offset = value.getTimezoneOffset() * 60000;
-        return new Date(value.getTime() - offset).toISOString().slice(0, 10);
+        return LearnFluxTime.dateKey(value);
     }
 
     function initialTab() {
@@ -369,7 +368,7 @@
     function readDraft(item) {
         try {
             const draft = JSON.parse(localStorage.getItem(draftKey(item.id)) || 'null');
-            const serverTime = Date.parse(item.updated_at || 0) || 0;
+            const serverTime = LearnFluxTime.parse(item.updated_at || 0) || 0;
             if (draft?.saved_at > serverTime && draft.payload) return {...item, ...draft.payload, _draft: true};
         } catch (error) {}
         return item;
@@ -785,11 +784,9 @@
 
     function weeklySourceRows(data, focusIds) {
         const byDay = groupBy(data.daily_events || [], (item) => item.review_date);
-        const start = new Date(`${data.period.start}T12:00:00`);
+        const start = data.period.start;
         return Array.from({length: 7}, (_, offset) => {
-            const day = new Date(start);
-            day.setDate(start.getDate() + offset);
-            const key = localISODate(day);
+            const key = LearnFluxTime.shiftDate(start, offset);
             const items = byDay[key] || [];
             if (!items.length) {
                 return `<div class="review-week-source is-empty"><span><b>${escapeHTML(weekdayLabel(key))}</b><small>${escapeHTML(key.slice(5))}</small></span><strong>没有记录</strong><i aria-hidden="true"></i></div>`;
@@ -1701,9 +1698,9 @@
 
     function formatTime(value) {
         if (!value) return '尚未保存';
-        const date = new Date(value);
+        const date = new Date(LearnFluxTime.parse(value));
         if (Number.isNaN(date.getTime())) return String(value);
-        return new Intl.DateTimeFormat('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'}).format(date);
+        return new Intl.DateTimeFormat('zh-CN', {timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false}).format(date);
     }
 
     function shiftPeriod(direction) {
@@ -1711,13 +1708,11 @@
         if (state.tab === 'monthly') captureMonthlyDraft();
         if (state.tab === 'annual') captureAnnualDraft();
         if (state.tab === 'daily' || state.tab === 'weekly') {
-            const date = new Date(`${state.date}T12:00:00`);
-            date.setDate(date.getDate() + direction * (state.tab === 'weekly' ? 7 : 1));
-            state.date = localISODate(date);
+            state.date = LearnFluxTime.shiftDate(state.date, direction * (state.tab === 'weekly' ? 7 : 1));
         } else if (state.tab === 'monthly') {
             const [year, month] = state.month.split('-').map(Number);
-            const date = new Date(year, month - 1 + direction, 1, 12);
-            state.month = localISODate(date).slice(0, 7);
+            const date = new Date(Date.UTC(year, month - 1 + direction, 1));
+            state.month = date.toISOString().slice(0, 7);
         } else if (state.tab === 'annual') state.year = String(Number(state.year) + direction);
         updateTabChrome();
         loadCurrentView();

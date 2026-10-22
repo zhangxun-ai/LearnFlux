@@ -2286,3 +2286,34 @@ def test_collection_api_filters_and_options(tmp_path, monkeypatch):
     options = client.get("/api/collections/filter-options")
     assert options.status_code == 200
     assert "屠龙胭脂" in options.json()["data"]["creator_names"]
+
+
+def test_collection_date_filter_uses_beijing_midnight(tmp_path):
+    from video_transcript_api.collections.repository import LearningCollectionRepository
+
+    repo = LearningCollectionRepository(str(tmp_path / "beijing-collections.db"))
+    timestamps = [
+        "2026-10-21 15:59:59.999999",
+        "2026-10-21T16:00:00+00:00",
+        "2026-10-22 15:59:59.999999",
+        "2026-10-22T16:00:00+00:00",
+    ]
+    ids = []
+    for index, timestamp in enumerate(timestamps):
+        collection = repo.create_collection(
+            title=f"Boundary {index}", creator_name="Time test", collection_type="video_course",
+        )
+        ids.append(collection["id"])
+        repo.add_source(
+            collection_id=collection["id"], task_id=f"task-{index}",
+            view_token=f"view-{index}", title="source.mp4", source_type="video", position=1,
+        )
+        with repo._get_cursor(write=True) as cursor:
+            cursor.execute(
+                "UPDATE learning_collection_sources SET created_at = ? WHERE collection_id = ?",
+                (timestamp, collection["id"]),
+            )
+    items = repo.list_collections(date_from="2026-10-22", date_to="2026-10-22")
+    assert {item["id"] for item in items} == set(ids[1:3])
+    assert repo.list_collections(date_from="invalid") == []
+    assert repo.list_collections(date_to="invalid") == []

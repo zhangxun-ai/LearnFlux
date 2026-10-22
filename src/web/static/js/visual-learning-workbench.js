@@ -116,7 +116,7 @@
         const meta = [];
         if (Number.isFinite(percent)) meta.push(`${Math.round(percent)}%`);
         if (state.startedAt) meta.push(`已耗时 ${formatElapsed()}`);
-        if (value.updated_at) meta.push(`更新于 ${new Date(value.updated_at).toLocaleTimeString()}`);
+        if (value.updated_at) meta.push(`更新于 ${LearnFluxTime.format(value.updated_at, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`);
         els.statusMeta.textContent = meta.join(' · ');
         els.statusFill.style.width = Number.isFinite(percent)
             ? `${Math.max(0, Math.min(100, percent))}%`

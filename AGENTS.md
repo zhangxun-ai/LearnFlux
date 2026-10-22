@@ -39,6 +39,9 @@ uv run python tests/manual/test_transcribe.py <audio_path>
 ## Coding Style & Naming Conventions
 Target Python 3.11+, keep PEP 8 spacing (4-space indents), and use snake_case for modules, functions, and variables. Follow the established Google-style docstrings on public APIs. Route logging through `video_transcript_api.utils.logging.setup_logger` so loguru manages stdout and rotation in `logs/`. Keep console and test output in English ASCII; communicate with the user in Chinese. Prefer type hints and build on helpers inside the relevant `utils.*` subpackages to keep features modular.
 
+## Time and Date Rules
+Use Beijing time (UTC+8 / `Asia/Shanghai`) for user-facing timestamps and calendar-day filters. Persist instants in UTC; legacy database timestamps without an offset are UTC. Use `utils.timeutil` on the backend and `src/web/static/js/time.js` in the browser. API timestamps must include an explicit offset. Do not parse naive database timestamps as the browser's local time.
+
 ## Testing Guidelines
 Use pytest. `verify-fast` covers unit tests; `verify-full` covers the default offline suite. Feature, integration, LLM, platform, manual, and performance tests must be run explicitly. Mock CapsWriter, FunASR, TikHub, and WeCom clients in fast feedback tests. Redirect transient media into `tests/cache/` and clean up afterward to avoid polluting `data/`. Update `tests/README.md` when you add new suites or flags.
 

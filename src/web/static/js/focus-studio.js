@@ -863,9 +863,9 @@
 
     function formatClock(value) {
         if (!value) return '';
-        const date = new Date(value);
+        const date = new Date(LearnFluxTime.parse(value));
         if (Number.isNaN(date.getTime())) return '';
-        return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+        return date.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false });
     }
 
     function updateSaveStatus(label) {
@@ -883,13 +883,9 @@
     }
 
     function safeFileStamp() {
-        const date = new Date();
-        const pad = (value) => String(value).padStart(2, '0');
-        return [
-            date.getFullYear(),
-            pad(date.getMonth() + 1),
-            pad(date.getDate())
-        ].join('-') + '-' + pad(date.getHours()) + pad(date.getMinutes());
+        return LearnFluxTime.dateKey() + '-' + LearnFluxTime.format(Date.now(), {
+            hour: '2-digit', minute: '2-digit', hour12: false
+        }).replace(':', '');
     }
 
     function exportText(format) {

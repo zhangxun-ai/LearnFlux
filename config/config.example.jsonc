@@ -123,7 +123,7 @@
     "web": {
         "base_url": "http://localhost:8000",  // Web 服务基础 URL
         "enable_view_links": true,       // 是否在响应中返回查看链接
-        "timezone": "UTC+8"              // 时区设置
+        "timezone": "UTC+8"              // 兼容字段；应用统一使用北京时间 UTC+8
     },
 
     // ============================================================

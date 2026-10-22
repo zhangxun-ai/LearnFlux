@@ -1,4 +1,4 @@
-const CACHE_NAME = 'learnflux-pwa-20261016-workbench-meadow';
+const CACHE_NAME = 'learnflux-pwa-20261022-beijing-time';
 
 const PRECACHE_URLS = [
   '/',
@@ -24,6 +24,7 @@ const PRECACHE_URLS = [
   '/static/css/product-linear-system.css',
   '/static/css/workbench-wildwood.css',
   '/static/js/app.js',
+  '/static/js/time.js',
   '/static/js/auth-session.js',
   '/static/js/app-shell.js',
   '/static/js/ui-features.js',

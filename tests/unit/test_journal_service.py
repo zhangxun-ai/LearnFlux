@@ -74,3 +74,18 @@ def test_journal_service_review_requires_records_or_question(tmp_path):
 
     with pytest.raises(ValueError):
         service.review("user-1", "2026-07-01", "2026-07-07", "")
+
+
+def test_default_journal_date_uses_beijing(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from video_transcript_api.journal import service
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            assert tz.utcoffset(None) == timedelta(hours=8)
+            return datetime(2026, 10, 21, 16, 0, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(service, "datetime", Clock)
+    journal = service.JournalService(repository=None)
+    assert journal._parse_date(None).isoformat() == "2026-10-22"

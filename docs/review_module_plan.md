@@ -29,12 +29,12 @@
 - 数据：沿用 repository 模式与 `get_repository_database()`，同时兼容 SQLite 路径、SQLite 适配器和 PostgreSQL 适配器。项目当前没有 ORM 或 Alembic；PostgreSQL 使用编号 SQL migration，因此新增同风格 migration。
 - LLM：沿用 `call_llm_api()`、项目当前模型配置、结构化 `response_schema`、既有重试与错误返回。现有 HTTP 层没有可直接复用的流式响应基元，第一版采用有加载状态的完整结构化响应，不伪造流式输出。
 - Obsidian：复用 `resolve_vault_path()`、`ensure_vault_directory_tree()` 与 `atomic_write_text()`；不另造 Vault 选择或文件写入体系。
-- 时间：沿用项目配置时区；周界固定默认为周一至周日，并在偏好中保留周起始日字段。
+- 时间：统一使用北京时间（UTC+8 / Asia/Shanghai）；周界固定默认为周一至周日，并在偏好中保留周起始日字段。
 - 日志：沿用项目 logger，console 消息使用英文。
 
 ## 4. 数据模型
 
-所有主键使用带类型前缀的稳定 UUID，时间字段使用 UTC ISO 时间，业务日期使用用户配置时区的 `YYYY-MM-DD`。
+所有主键使用带类型前缀的稳定 UUID，时间字段使用 UTC ISO 时间，业务日期使用北京时间的 `YYYY-MM-DD`。
 
 | 表 | 主要职责 |
 | --- | --- |

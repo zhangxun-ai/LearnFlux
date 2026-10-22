@@ -1050,9 +1050,10 @@
     {% block extra_css %}{% endblock %}
     {% block product_linear_adapter %}<link rel="stylesheet" href="/static/css/product-linear-system.css?v={{ asset_ver }}">{% endblock %}
 
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
-    <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-icon-256.png">
-    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-leaf-32.png">
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/static/icon/learnflux-leaf.svg?v=20261018">
+    <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-leaf-256.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-leaf-180.png">
 </head>
 <body class="app-shell has-app-shell product-linear {% block body_class %}page-result{% endblock %}">
     {% set shell_path = request.url.path if request is defined else '' %}
@@ -1063,7 +1064,7 @@
     <aside class="sidebar" aria-label="应用导航">
         <div class="sidebar-brand">
             <a class="brand-link" href="/" aria-label="LearnFlux 首页">
-                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-icon-256.png" alt=""></span>
+                <span class="brand-mark" aria-hidden="true"><img src="/static/icon/learnflux-leaf.svg" alt=""></span>
                 <span class="brand-text">LearnFlux</span>
             </a>
         </div>

@@ -384,8 +384,8 @@ _HOME_HTML = """\
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" sizes="any" href="/static/icon/learnflux-leaf.svg?v=__ASSET_VERSION__">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-favicon-32.png">
-    <link rel="apple-touch-icon" href="/static/icon/learnflux-apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-leaf-32.png">
+    <link rel="apple-touch-icon" href="/static/icon/learnflux-leaf-180.png">
     <meta property="og:title" content="LearnFlux · 让学习，回归生活的美好">
     <meta property="og:description" content="个人 AI 学习工作台：导入内容、理解重点、整理笔记。">
     <meta property="og:type" content="website">
@@ -485,7 +485,7 @@ async def home():
     """Local product introduction page for first-time orientation."""
     static_dir = get_static_dir()
     version_files = [
-        static_dir / "icon" / "learnflux-icon-256.png",
+        static_dir / "icon" / "learnflux-leaf-256.png",
         static_dir / "icon" / "learnflux-leaf.svg",
         static_dir / "images" / "landing" / "01-single-study.png",
         static_dir / "images" / "landing" / "02-collections.png",

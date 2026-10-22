@@ -551,3 +551,21 @@ class TestFeatureEntryCoverage:
             assert tags, path.name
             assert all(f'data-feature="{feature_id}"' in tag for tag in tags)
             assert all(" hidden" in tag for tag in tags)
+
+
+def test_all_workbench_brand_marks_and_favicons_use_canonical_leaf():
+    """Result templates, tools, and browser/install icons share one identity."""
+    pages = [STATIC_ROOT / name for name in STATIC_SHELLS]
+    pages += [TEMPLATE_ROOT / name for name in ("base.html", "flywheel.html", "review_ui_lab.html")]
+    for page in pages:
+        source = page.read_text(encoding="utf-8")
+        marks = re.findall(r'<span class="(?:mock-)?brand-mark"[^>]*><img src="([^"]+)"', source)
+        assert marks and all(mark == "/static/icon/learnflux-leaf.svg" for mark in marks), page.name
+        icons = re.findall(r'<link rel="(?:icon|apple-touch-icon)"[^>]+href="([^"]+)"', source)
+        assert icons and all("/static/icon/learnflux-leaf" in icon for icon in icons), page.name
+        for icon in icons:
+            assert (STATIC_ROOT / icon.split("/static/", 1)[1].split("?", 1)[0]).is_file(), icon
+    manifest = json.loads((STATIC_ROOT / "manifest.webmanifest").read_text())
+    for entry in manifest["icons"] + [icon for shortcut in manifest["shortcuts"] for icon in shortcut["icons"]]:
+        assert "learnflux-leaf-" in entry["src"]
+        assert (STATIC_ROOT / entry["src"].split("/static/", 1)[1]).is_file()

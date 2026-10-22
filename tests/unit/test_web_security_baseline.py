@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 
 import pytest
 from fastapi import Depends, FastAPI
@@ -12,6 +13,7 @@ from video_transcript_api.api.browser_auth import BrowserSessionStore
 from video_transcript_api.api.routes import auth as auth_routes
 from video_transcript_api.api.security import configure_web_security, resolve_cors_origins
 from video_transcript_api.api.services.transcription import verify_token
+from video_transcript_api.utils.accounts.user_manager import UserManager
 
 
 VALID_TOKEN = "test-management-token"
@@ -140,6 +142,43 @@ def test_automatic_browser_login_rejects_untrusted_or_disabled_requests(case):
     response = client.get("/api/auth/session", headers=headers)
     assert response.status_code == (403 if case == "cross_origin" else 401)
     assert "set-cookie" not in response.headers
+
+
+def test_local_management_with_mobile_alias_preserves_identity_and_permissions(tmp_path):
+    config = {"api": {"auth_token": VALID_TOKEN, "browser_local_management_access": True}}
+    users_file = tmp_path / "users.json"
+    users_file.write_text(json.dumps({"users": {"mobile-test-token": {
+        "user_id": "legacy_user", "name": "Mobile", "enabled": True, "permissions": [],
+    }}}))
+    app = _session_app()
+    app.state.app_config = config
+    manager = app.state.user_manager = UserManager(str(users_file), config)
+
+    @app.get("/management-check")
+    async def management_check(user: dict = Depends(verify_token)):
+        return {"owner": user["user_id"], "can_recalibrate": manager.check_permission(user, "recalibrate"),
+                "management_key": user["api_key"] == VALID_TOKEN}
+
+    with TestClient(app, base_url="http://localhost", client=("127.0.0.1", 50000)) as client:
+        for restart in (False, True):
+            if restart:
+                app.state.browser_sessions = BrowserSessionStore()
+            response = client.get("/api/auth/session", headers={"Sec-Fetch-Site": "same-origin"})
+            assert response.status_code == 200
+            assert client.get("/management-check").json() == {
+                "owner": "legacy_user", "can_recalibrate": True, "management_key": True,
+            }
+            assert client.post("/protected", headers={"Origin": "http://localhost",
+                "X-CSRF-Token": response.json()["csrf_token"]}).status_code == 200
+        # The phone credential must keep its own limited permission set.
+        assert client.get("/management-check", headers={
+            "Authorization": "Bearer mobile-test-token"}).json()["can_recalibrate"] is False
+        client.cookies.clear()
+        for headers in ({"Sec-Fetch-Site": "cross-site"},
+                        {"Sec-Fetch-Site": "same-origin", "X-Forwarded-For": "127.0.0.1"},
+                        {"Sec-Fetch-Site": "same-origin", "Host": "learn.example.org"}):
+            assert client.get("/api/auth/session", headers=headers).status_code == 401
+        assert client.get("/protected").status_code == 401
 
 
 def test_security_headers_are_applied_without_enabling_cross_origin_access():

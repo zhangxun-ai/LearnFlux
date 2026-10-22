@@ -35,6 +35,7 @@ class BrowserSession:
     csrf_token: str
     created_at: float
     expires_at: float
+    management_identity: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +74,7 @@ class BrowserSessionStore:
         self._sessions: dict[str, BrowserSession] = {}
         self._lock = threading.Lock()
 
-    def create(self, user_id: str) -> BrowserSession:
+    def create(self, user_id: str, *, management_identity: bool = False) -> BrowserSession:
         """Create a fresh session and evict expired/oldest entries if needed."""
         normalized_user_id = str(user_id or "").strip()
         if not normalized_user_id:
@@ -86,6 +87,7 @@ class BrowserSessionStore:
             csrf_token=secrets.token_urlsafe(32),
             created_at=now,
             expires_at=now + self.ttl_seconds,
+            management_identity=management_identity,
         )
         with self._lock:
             self._remove_expired_locked(now)
@@ -219,7 +221,16 @@ def resolve_session_user(request: Request, user_manager, config: dict | None = N
     if lookup.status != "valid" or lookup.session is None:
         raise HTTPException(status_code=401, detail="未提供授权令牌")
 
-    user_info = user_manager.get_user_by_id(lookup.session.user_id)
+    if lookup.session.management_identity:
+        # A mobile API key may share the owner's user_id but have fewer permissions.
+        # Resolve management sessions through their original credential class.
+        effective_config = getattr(request.app.state, "app_config", None) or config or {}
+        token = (effective_config.get("api") or {}).get("auth_token")
+        user_info = user_manager.validate_token(token) if token else None
+        if user_info and user_info.get("user_id") != lookup.session.user_id:
+            user_info = None
+    else:
+        user_info = user_manager.get_user_by_id(lookup.session.user_id)
     if not user_info or not user_info.get("enabled", True):
         get_browser_session_store(request, config).revoke(session_id)
         raise HTTPException(status_code=401, detail="浏览器会话无效")

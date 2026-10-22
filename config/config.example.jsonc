@@ -7,6 +7,7 @@
         "host": "0.0.0.0",               // 服务监听地址，0.0.0.0 表示所有网卡
         "auth_token": "your-auth-token-here", // API 访问令牌；浏览器只用它换取短期 HttpOnly 会话
         "browser_local_auto_login": true, // 本机直连浏览器自动连接；远程、代理和多用户模式仍需口令
+        "browser_local_management_access": false, // 个人工作台可开启：配置手机等 API 令牌后，本机仍自动使用管理身份；不开放远程免登录
         "browser_session_ttl_seconds": 28800, // 浏览器会话有效期，允许 300-86400 秒；服务重启后失效
         "browser_session_cookie_secure": false, // HTTPS 请求会自动启用；TLS 代理未传递协议时设为 true
         "cors_allowed_origins": [],       // 默认仅同源；跨域 Bearer API 前端需逐项填写完整 Origin，禁止 *

@@ -88,7 +88,10 @@ def _create_session_response(request: Request, user_info: dict) -> JSONResponse:
     """Issue the same opaque cookie for manual and local automatic login."""
     store = get_browser_session_store(request, _config(request))
     store.revoke(request.cookies.get(SESSION_COOKIE_NAME))
-    session = store.create(user_info.get("user_id") or "")
+    session = store.create(
+        user_info.get("user_id") or "",
+        management_identity=user_info.get("is_legacy") is True,
+    )
     response = JSONResponse(
         _session_payload(session, user_info),
         headers=_no_store_headers(),
@@ -131,9 +134,10 @@ async def get_browser_session(request: Request):
         if error.status_code != 401 or not _local_auto_login_allowed(request):
             raise
         manager = _user_manager(request)
-        if manager.is_multi_user_mode():
+        api = _config(request).get("api") or {}
+        if manager.is_multi_user_mode() and api.get("browser_local_management_access") is not True:
             raise error
-        token = (_config(request).get("api") or {}).get("auth_token")
+        token = api.get("auth_token")
         user_info = manager.validate_token(token) if token else None
         if not user_info or not user_info.get("enabled", True):
             raise error

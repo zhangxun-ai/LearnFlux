@@ -97,6 +97,10 @@ LEARNFLUX_ALIYUN_ASR_MODE=resume LEARNFLUX_ALIYUN_ASR_SAMPLE=zh_terms_clean_15s 
   uv run --extra dev pytest tests/integration/test_aliyun_funasr_acceptance.py -q -s
 ```
 
+## 飞书自动归档回归
+
+`uv run --extra dev pytest tests/unit/test_feishu_archive.py` 使用模拟本地 API 和 CLI，覆盖完整正文、安全转义、只处理启用时间后成功的任务、重启去重、回读失败重试、授权拒绝、未知写入结果核对以及截断检测。不会调用飞书或产生解析费用。真实验收需独立授权目标知识库，使用已有完整解析结果创建文档并回读全文，再重复运行确认不产生第二篇。
+
 ## 首页任务状态回归
 
 `test_cloud_pricing.py`、`test_cloud_asr_config.py` 覆盖官方价格解析、后台刷新失败沿用旧值、旧核验日期正常报价；`test_asr_retry.py`、`test_cloud_retry_retention.py` 覆盖音频身份、24 小时保留、并发重试、任务归属、防重复云端提交和真实任务存储的重试标记；`test_local_whisper_runtime.py` 覆盖长音频时限与安全错误提示。均使用离线模拟，不提交付费任务。
@@ -106,3 +110,23 @@ LEARNFLUX_ALIYUN_ASR_MODE=resume LEARNFLUX_ALIYUN_ASR_SAMPLE=zh_terms_clean_15s 
 ```bash
 node tests/frontend/task_status_behavior.cjs
 ```
+
+
+## 小红书解析回归
+
+以下离线用例覆盖登录页包装的短链接、签名保留、可信主机校验、App V2 视频/图文识别、签名 Web V3 备用接口、HTTP 200 内的上游错误，以及统一的笔记身份和缓存。不会触达 TikHub 或付费转录服务。
+
+```bash
+uv run --extra dev pytest tests/unit/test_xiaohongshu_urls.py tests/unit/test_xiaohongshu_api.py tests/unit/test_xiaohongshu_downloader.py tests/unit/test_url_parser.py tests/unit/test_xiaohongshu_deep_learning.py tests/unit/test_xiaohongshu_post_fetcher.py tests/unit/test_flywheel_url_normalization.py
+```
+
+真实验收须另行检查可访问的原链接、视频下载、非空逐字稿和 AI 解读；通过模拟用例不代表远端接口始终可用。
+
+## 北京时间回归
+
+```bash
+uv run --extra dev pytest tests/unit/test_timezone.py tests/unit/test_api_routes.py tests/unit/test_history_routes.py tests/unit/test_learning_collections.py
+node tests/frontend/timezone_behavior.cjs
+```
+
+覆盖无时区 UTC、`Z`、正负偏移、微秒、北京时间跨日、近期任务相对时间及“今天”筛选；前端用北京、UTC、洛杉矶和基里蒂马蒂四种宿主时区重复验证，不调用付费服务。

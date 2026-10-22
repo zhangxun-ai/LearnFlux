@@ -13,6 +13,8 @@
 | [BBDown 指南](guides/api/bbdown_guide.md) | Bilibili 下载器配置 |
 | [FunASR 客户端 API](guides/api/funasr_spk_server_client_api.md) | FunASR WebSocket 服务与响应格式 |
 | [多用户配置](guides/multi_user_setup.md) | 本地静态 API Token 配置 |
+| [手机快捷指令](guides/mobile-shortcut.md) | 手机直达本地任务、隧道范围、独立令牌和验收 |
+| [自动保存到飞书知识库](guides/feishu-archive.md) | 将完整解析结果自动归档为飞书文档，并持久化重试与去重状态 |
 | [PostgreSQL 指南](guides/postgresql.md) | SQLite 到 PostgreSQL 的迁移、验收和回滚 |
 
 macOS 用户也可以复制[本地快速启动提示词](prompts/macos-local-quick-start.md)，交给有本机终端权限的 Agent 检查依赖并启动服务。

@@ -18,6 +18,8 @@ from urllib.parse import parse_qs, urlparse
 from ..utils.logging import setup_logger
 from .fetchers import _as_int, _first
 from .models import MediaType
+from ..utils.xiaohongshu_url import normalize_xiaohongshu_url, xiaohongshu_note_id
+from ..utils.xiaohongshu_api import note_detail_candidates, response_data
 
 logger = setup_logger("flywheel_text_acquisition")
 
@@ -44,13 +46,11 @@ def normalize_note_url(value: str) -> str:
     match = _URL_RE.search(raw)
     if not match:
         return raw
-    return match.group(0).rstrip(".,，。；;、）)]】》\"'")
+    return normalize_xiaohongshu_url(match.group(0).rstrip(".,，。；;、）)]】》\"'"))
 
 
 def _note_id_from_url(url: str) -> str:
-    url = normalize_note_url(url)
-    m = re.search(r"/(?:discovery/item|explore|item)/([0-9a-zA-Z]+)", url)
-    return m.group(1) if m else ""
+    return xiaohongshu_note_id(normalize_note_url(url))
 
 
 def _resolve_short_url(url: str) -> str:
@@ -73,30 +73,16 @@ def _xsec_from_url(url: str) -> str:
 
 
 def _endpoint_candidates(url: str, note_id: str, xsec: str) -> list[tuple[str, dict]]:
-    candidates: list[tuple[str, dict]] = []
-    if xsec:
-        candidates.append(("/api/v1/xiaohongshu/web_v3/fetch_note_detail",
-                           {"note_id": note_id, "xsec_token": xsec}))
-    candidates.append(("/api/v1/xiaohongshu/web/get_note_info_v7",
-                       {"note_id": note_id, "share_text": url}))
-    candidates.append(("/api/v1/xiaohongshu/app_v2/get_image_note_detail",
-                       {"note_id": note_id, "share_text": url}))
-    candidates.append(("/api/v1/xiaohongshu/web/get_note_info_v4",
-                       {"note_id": note_id, "share_text": url}))
-    return candidates
+    return note_detail_candidates(url, note_id)
 
 
 def _data(resp: Any) -> Any:
-    if not isinstance(resp, dict):
-        raise ValueError("小红书 API 返回无效响应")
-    if resp.get("code") not in (None, 0, 200) and not resp.get("success", True):
-        raise ValueError(resp.get("msg") or "小红书 API 返回错误")
-    return resp.get("data", resp)
+    return response_data(resp)
 
 
 def _find_note_dict(obj: Any) -> Optional[dict]:
     if isinstance(obj, dict):
-        if "desc" in obj or "title" in obj or "interact_info" in obj or "type" in obj:
+        if "desc" in obj or "title" in obj:
             return obj
         for v in obj.values():
             found = _find_note_dict(v)
@@ -127,7 +113,8 @@ def _extract_note(resp: Any) -> Optional[dict]:
 
 def _media_type(note: dict) -> MediaType:
     t = str(_first(note, ("type", "note_type"), "normal")).lower()
-    return MediaType.VIDEO if t == "video" else MediaType.ARTICLE
+    has_video = any(note.get(key) for key in ("video", "video_info", "video_info_v2"))
+    return MediaType.VIDEO if t == "video" or has_video else MediaType.ARTICLE
 
 
 def fetch_note_detail(url: str, *, api_request: Optional[ApiRequest] = None) -> NoteDetail:
@@ -167,7 +154,7 @@ def fetch_note_detail(url: str, *, api_request: Optional[ApiRequest] = None) -> 
                 author_user_id=str(_first(user, ("user_id", "userId", "id"), "")),
                 like_count=_as_int(_first(interact, ("liked_count", "like_count"), 0)),
                 collect_count=_as_int(_first(interact, ("collected_count", "collect_count"), 0)),
-                comment_count=_as_int(_first(interact, ("comment_count", "comments"), 0)),
+                comment_count=_as_int(_first(interact, ("comment_count", "comments_count", "comments"), 0)),
             )
         except Exception as exc:  # noqa: BLE001
             last_error = exc

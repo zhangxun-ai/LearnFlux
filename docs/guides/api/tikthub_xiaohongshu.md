@@ -1,3 +1,19 @@
+# 小红书内容获取与故障排查
+
+当前实现（2026-10-18 实测）：
+
+- `xhslink.com` / `xhslink.cn` 短链接可能跳到登录页；真实内容地址在 `redirectPath` 中。所有入口共用 `utils/xiaohongshu_url.py`，只解包可信的小红书笔记地址，保留原始签名查询参数。不能把登录页当作媒体或用它建立 generic 缓存身份。
+- 图文和视频类型识别优先使用 App V2 `get_image_note_detail`。视频封面不是视频流；识别到视频后必须调用 App V2 `get_video_note_detail` 下载并转录，不能用视频简介代替逐字稿。
+- 视频下载优先使用 `/api/v1/xiaohongshu/app_v2/get_video_note_detail`，只传已校验的 `note_id`。签名 Web V3 是备用接口，缺少 `xsec_token` 时不调用。旧的 App V1、Web V2/V4 下载接口已实测返回 404，不再作为备用。
+- TikHub 外层 `code=200` 不代表内容获取成功；仍须检查内层 `code` / `success`，避免把上游错误文本保存成正文。失效、已删除或无权访问的笔记不保证可获取。
+- 诊断先检查短链接解析、平台和 note_id，再检查上游响应与媒体流，最后检查下载、转录和 AI 解读；不要反复提交相同任务代替定位。真实调用使用当前配置的 TikHub，可能产生现有服务费用。
+
+官方契约：[视频 App V2](https://docs.tikhub.io/420136392e0)、[笔记 App V2](https://docs.tikhub.io/420136391e0)、[Web V3](https://docs.tikhub.io/438852168e0)。
+
+以下保留旧版 OpenAPI 作为历史资料，不能据此选择当前接口。
+
+---
+
 # 获取视频笔记信息 V1/ Get video note info V1
 
 ## OpenAPI Specification

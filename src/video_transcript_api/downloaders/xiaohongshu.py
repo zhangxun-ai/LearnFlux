@@ -10,6 +10,10 @@ from .base import BaseDownloader
 from .models import VideoMetadata, DownloadInfo
 from ..utils.logging import setup_logger
 from ..utils import create_debug_dir
+from ..utils.xiaohongshu_api import APP_VIDEO_DETAIL, WEB_NOTE_DETAIL, response_data
+from ..utils.xiaohongshu_url import (
+    normalize_xiaohongshu_url, xiaohongshu_note_id, url_without_query,
+)
 
 # 创建日志记录器
 logger = setup_logger("xiaohongshu_downloader")
@@ -19,7 +23,7 @@ DEBUG_DIR = create_debug_dir()
 
 def _xsec_token(url: str) -> str:
     try:
-        return parse_qs(urlparse(url).query).get("xsec_token", [""])[0]
+        return parse_qs(urlparse(normalize_xiaohongshu_url(url)).query).get("xsec_token", [""])[0]
     except Exception:
         return ""
 
@@ -30,35 +34,18 @@ def _xsec_token(url: str) -> str:
 # 按优先级排列的 TikHub 端点配置
 _ENDPOINT_CONFIGS: list[dict[str, Any]] = [
     {
+        "name": "app_v2_video",
+        "path": APP_VIDEO_DETAIL,
+        "params_builder": lambda url, note_id: {"note_id": note_id},
+    },
+    {
         "name": "web_v3_detail",
-        "path": "/api/v1/xiaohongshu/web_v3/fetch_note_detail",
+        "path": WEB_NOTE_DETAIL,
+        "requires_xsec": True,
         "params_builder": lambda url, note_id: {
             "note_id": note_id,
             "xsec_token": _xsec_token(url),
         },
-    },
-    {
-        "name": "app_video_note",
-        "path": "/api/v1/xiaohongshu/app/get_video_note_info",
-        "params_builder": lambda url, note_id: {"share_text": url},
-    },
-    {
-        "name": "web_v4",
-        "path": "/api/v1/xiaohongshu/web/get_note_info_v4",
-        "params_builder": lambda url, note_id: {"share_text": url},
-    },
-    {
-        "name": "app_note",
-        "path": "/api/v1/xiaohongshu/app/get_note_info",
-        "params_builder": lambda url, note_id: {
-            "share_text": url,
-            "force_video_enabled": "true",
-        },
-    },
-    {
-        "name": "web_v2",
-        "path": "/api/v1/xiaohongshu/web/get_note_info_v2",
-        "params_builder": lambda url, note_id: {"share_text": url},
     },
 ]
 
@@ -113,6 +100,7 @@ class XiaohongshuDownloader(BaseDownloader):
     def __init__(self) -> None:
         super().__init__()
         self._cached_video_info: dict[str, dict] = {}
+        self._resolved_content_urls: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # 公共接口（保持不变）
@@ -159,51 +147,29 @@ class XiaohongshuDownloader(BaseDownloader):
     # ------------------------------------------------------------------
 
     def _resolve_content_url(self, url: str) -> str:
-        """Resolve Xiaohongshu short links before reading URL parameters."""
-        if "xhslink.com" not in url and "xhslink.cn" not in url:
-            return url
-
-        logger.info(f"Resolving xiaohongshu short link: {url}")
-        resolved_url = self.resolve_short_url(url)
-        logger.info(f"Resolved to full URL: {resolved_url}")
-        return resolved_url
+        """Resolve once per downloader and unwrap login-wrapped content URLs."""
+        if url in self._resolved_content_urls:
+            return self._resolved_content_urls[url]
+        resolved = url
+        if "xhslink.com" in url or "xhslink.cn" in url:
+            logger.info(f"Resolving xiaohongshu short link: {url_without_query(url)}")
+            resolved = self.resolve_short_url(url)
+        content_url = normalize_xiaohongshu_url(resolved)
+        if xiaohongshu_note_id(content_url):
+            self._resolved_content_urls[url] = content_url
+        logger.info(f"Resolved Xiaohongshu content URL: {url_without_query(content_url)}")
+        return content_url
 
     def _extract_note_id(self, url: str) -> str:
-        """从 URL 中提取笔记 ID。
-
-        Args:
-            url: 视频 URL
-
-        Returns:
-            笔记 ID
-
-        Raises:
-            ValueError: 无法提取笔记 ID
-        """
-        url = self._resolve_content_url(url)
-
-        # 尝试多种模式提取笔记ID
-        patterns = [
-            r'explore/(\w+)',
-            r'discovery/item/(\w+)',
-            r'items/(\w+)',
-            r'/(\w{24})',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, url)
-            if match:
-                note_id = match.group(1)
-                logger.info(f"Extracted xiaohongshu note ID: {note_id}")
-                return note_id
-
-        # 如果用户直接提供了ID，尝试验证其格式
-        if re.match(r'^\w{24}$', url):
-            logger.info(f"User provided raw xiaohongshu note ID: {url}")
-            return url
-
-        logger.error(f"Failed to extract note ID from URL: {url}")
-        raise ValueError(f"Failed to extract note ID from URL: {url}")
+        """Extract a real note ID, including trusted login redirect wrappers."""
+        content = self._resolve_content_url(url)
+        note_id = xiaohongshu_note_id(content)
+        if note_id:
+            return note_id
+        raise ValueError(
+            "Failed to extract note ID from URL: " + url_without_query(content)
+            + "; the share link did not resolve to a valid Xiaohongshu note"
+        )
 
     # ------------------------------------------------------------------
     # 核心：多端点回退获取视频信息
@@ -237,6 +203,8 @@ class XiaohongshuDownloader(BaseDownloader):
 
         for config in _ENDPOINT_CONFIGS:
             name = config["name"]
+            if config.get("requires_xsec") and not _xsec_token(resolved_url):
+                continue
             try:
                 result = self._try_endpoint(resolved_url, note_id, config)
                 # 成功 — 缓存并返回
@@ -250,9 +218,9 @@ class XiaohongshuDownloader(BaseDownloader):
 
         # 所有端点均失败
         combined = "; ".join(errors)
-        logger.error(f"All endpoints failed for {url}: {combined}")
+        logger.error(f"All endpoints failed for {url_without_query(url)}: {combined}")
         raise ValueError(
-            f"All xiaohongshu API endpoints failed for {url}: {combined}"
+            f"All xiaohongshu API endpoints failed for {url_without_query(url)}: {combined}"
         )
 
     # ------------------------------------------------------------------
@@ -436,6 +404,7 @@ class XiaohongshuDownloader(BaseDownloader):
                 f"[{name}] API response is not a dict: {type(response)}"
             )
 
+        response_data(response)
         code = response.get("code")
         if code != 200:
             msg = response.get("message", "unknown error")

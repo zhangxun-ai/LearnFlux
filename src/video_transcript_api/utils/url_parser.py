@@ -10,7 +10,9 @@ import hashlib
 import requests
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import urlsplit
 from .logging import setup_logger
+from .xiaohongshu_url import normalize_xiaohongshu_url, xiaohongshu_note_id, url_without_query
 
 # 创建日志记录器
 logger = setup_logger("url_parser")
@@ -122,7 +124,7 @@ class URLParser:
             raise ValueError("URL must be a non-empty string")
 
         original_url = url.strip()
-        logger.info(f"开始解析 URL: {original_url}")
+        logger.info(f"开始解析 URL: {url_without_query(original_url)}")
 
         # 步骤1: 检测并解析短链接
         is_short_url = self._is_short_url(original_url)
@@ -130,11 +132,13 @@ class URLParser:
             logger.info(f"检测到短链接，尝试解析: {original_url}")
             normalized_url = self._resolve_short_url(original_url, timeout)
             if normalized_url != original_url:
-                logger.info(f"短链接解析成功: {normalized_url}")
+                logger.info(f"短链接解析成功: {url_without_query(normalized_url)}")
             else:
                 logger.warning(f"短链接解析失败，使用原始 URL: {original_url}")
         else:
             normalized_url = original_url
+
+        normalized_url = normalize_xiaohongshu_url(normalized_url)
 
         # 步骤2: 正则匹配提取 platform 和 video_id
         platform, video_id = self._extract_platform_and_id(normalized_url)
@@ -231,6 +235,17 @@ class URLParser:
             tuple: (platform, video_id)，无法识别时返回 ('generic', '')
         """
         for platform, patterns in self.PATTERNS.items():
+            if platform == "xiaohongshu":
+                note_id = xiaohongshu_note_id(url)
+                if note_id:
+                    return platform, note_id
+                # Unresolved short links retain their platform, but note IDs
+                # must never be read from an arbitrary login query or hostname.
+                try:
+                    if urlsplit(url).hostname not in {"xhslink.com", "xhslink.cn"}:
+                        continue
+                except ValueError:
+                    continue
             for pattern in patterns:
                 # 使用 IGNORECASE 标志使匹配不区分大小写
                 match = re.search(pattern, url, re.IGNORECASE)
@@ -246,7 +261,7 @@ class URLParser:
                     return platform, video_id
 
         # 未匹配到任何平台
-        logger.debug(f"未匹配到任何已知平台: {url}")
+        logger.debug(f"未匹配到任何已知平台: {url_without_query(url)}")
         return 'generic', ''
 
     def _generate_hash_id(self, url: str) -> str:

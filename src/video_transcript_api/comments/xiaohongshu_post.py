@@ -1,7 +1,7 @@
 """Fetch a Xiaohongshu 图文 (image-text) note as a post for insight analysis.
 
-The note's textual content (title + desc) is available via TikHub
-`web/get_note_info_v7` (verified 2026-06-09: data[0].note_list[0].desc / .title).
+The note's textual content (title + desc) is acquired through shared App V2
+and signed Web V3 contracts. Retired Web V7/V4 endpoints are not used.
 Image-embedded text (OCR) is NOT provided by the API — that would require
 downloading images and running OCR/vision, deferred as a future enhancement.
 
@@ -15,13 +15,15 @@ from urllib.parse import parse_qs, urlparse
 from ..downloaders import create_downloader
 from ..utils.logging import setup_logger
 from .selector import CommentItem
+from ..utils.xiaohongshu_url import normalize_xiaohongshu_url
+from ..utils.xiaohongshu_api import note_detail_candidates, response_data
 
 logger = setup_logger("xiaohongshu_post_fetcher")
 
 
 def _xsec_token(url: str) -> str:
     try:
-        return parse_qs(urlparse(url).query).get("xsec_token", [""])[0]
+        return parse_qs(urlparse(normalize_xiaohongshu_url(url)).query).get("xsec_token", [""])[0]
     except Exception:
         return ""
 
@@ -48,9 +50,9 @@ class XhsPostFetcher:
 
         TikHub's XHS note endpoints are individually flaky (some 400 for a given
         note while others succeed), so we try several and take the first that
-        yields content. ``fetch_note_detail`` (note_id + xsec_token) is the most
-        reliable in testing and goes first. Comments are not fetched in v1
-        (the comment endpoints are unstable); the analyzer handles empty comments.
+        yields content. App V2 is preferred; signed Web V3
+        provides an independent fallback. Comments are best effort; the analyzer
+        handles an empty comment list when the comment endpoint is unavailable.
         """
         downloader = self.downloader_factory(url)
         candidates = self._endpoint_candidates(url, note_id)
@@ -85,37 +87,12 @@ class XhsPostFetcher:
 
     @staticmethod
     def _endpoint_candidates(url: str, note_id: str) -> list[tuple[str, dict[str, Any]]]:
-        """Ordered endpoints. fetch_note_detail (xsec) first — most reliable."""
-        xsec = _xsec_token(url)
-        candidates: list[tuple[str, dict[str, Any]]] = []
-        if xsec:
-            candidates.append(
-                ("/api/v1/xiaohongshu/web_v3/fetch_note_detail",
-                 {"note_id": note_id, "xsec_token": xsec})
-            )
-        candidates.append(
-            ("/api/v1/xiaohongshu/web/get_note_info_v7",
-             {"note_id": note_id, "share_text": url})
-        )
-        candidates.append(
-            ("/api/v1/xiaohongshu/app_v2/get_image_note_detail",
-             {"note_id": note_id, "share_text": url})
-        )
-        candidates.append(
-            ("/api/v1/xiaohongshu/web/get_note_info_v4",
-             {"note_id": note_id, "share_text": url})
-        )
-        return candidates
-
-    # --- helpers -----------------------------------------------------------
+        """Use the same active endpoints as single-note acquisition."""
+        return note_detail_candidates(url, note_id)
 
     @staticmethod
     def _data(response: Any) -> Any:
-        if not isinstance(response, dict):
-            raise ValueError("小红书 API 返回无效响应")
-        if response.get("code") not in (None, 0, 200) and not response.get("success", True):
-            raise ValueError(response.get("msg") or "小红书 API 返回错误")
-        return response.get("data", response)
+        return response_data(response)
 
     def _extract_note(self, response: Any) -> dict[str, Any]:
         """Locate the note dict across known response shapes."""

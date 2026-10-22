@@ -82,8 +82,8 @@ def test_fetch_note_detail_resolves_xhslink_share_text(monkeypatch):
     assert detail.note_id == "6a2fd6d1000000001702f4b6"
     assert detail.title == "韩红站台被骂背后的商业大洗牌"
     assert calls[0] == (
-        "/api/v1/xiaohongshu/web_v3/fetch_note_detail",
-        {"note_id": "6a2fd6d1000000001702f4b6", "xsec_token": "tok123"},
+        "/api/v1/xiaohongshu/app_v2/get_image_note_detail",
+        {"note_id": "6a2fd6d1000000001702f4b6"},
     )
 
 

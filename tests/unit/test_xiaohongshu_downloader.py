@@ -264,14 +264,14 @@ class TestMultiEndpointFallback:
             patch.object(
                 downloader,
                 "make_api_request",
-                return_value=response,
+                side_effect=[ValueError("App temporarily unavailable"), response],
             ) as mock_api,
         ):
             result = downloader.get_video_info(short_url)
 
         mock_resolve.assert_called_once_with(short_url)
-        assert mock_api.call_args_list[0].args == (
-            _ENDPOINT_CONFIGS[0]["path"],
+        assert mock_api.call_args_list[1].args == (
+            _ENDPOINT_CONFIGS[1]["path"],
             {
                 "note_id": "6a8846bc000000002a031bb5",
                 "xsec_token": "token-from-resolved-url",
@@ -313,7 +313,7 @@ class TestMultiEndpointFallback:
 
         with patch.object(downloader, "make_api_request", side_effect=mock_api):
             result = downloader.get_video_info(
-                "https://www.xiaohongshu.com/explore/6501a1234b5c6d7e8f901234"
+                "https://www.xiaohongshu.com/explore/6501a1234b5c6d7e8f901234?xsec_token=fallback-token"
             )
 
         assert result["video_title"] == "App Video"
@@ -339,17 +339,17 @@ class TestMultiEndpointFallback:
         def mock_api(endpoint, params):
             nonlocal call_count
             call_count += 1
-            if call_count <= 2:
+            if call_count == 1:
                 raise ValueError("API request failed")
             return success_response
 
         with patch.object(downloader, "make_api_request", side_effect=mock_api):
             result = downloader.get_video_info(
-                "https://www.xiaohongshu.com/explore/6501a1234b5c6d7e8f901234"
+                "https://www.xiaohongshu.com/explore/6501a1234b5c6d7e8f901234?xsec_token=fallback-token"
             )
 
         assert result["video_title"] == "Test Video Title"
-        assert call_count == 3  # first two failed, third succeeded
+        assert call_count == 2  # App V2 failed; signed Web V3 succeeded
 
 
 # ===========================================================================
@@ -722,7 +722,7 @@ class TestRealWorldResponseFormats:
         })
 
         with patch.object(
-            downloader, "make_api_request", return_value=api_response
+            downloader, "make_api_request", side_effect=[ValueError("App temporarily unavailable"), api_response]
         ) as mock_api:
             result = downloader.get_video_info(
                 "https://www.xiaohongshu.com/discovery/item/6a4468d0000000001101d673"
@@ -730,10 +730,10 @@ class TestRealWorldResponseFormats:
             )
 
         assert (
-            mock_api.call_args_list[0][0][0]
+            mock_api.call_args_list[1][0][0]
             == "/api/v1/xiaohongshu/web_v3/fetch_note_detail"
         )
-        assert mock_api.call_args_list[0][0][1] == {
+        assert mock_api.call_args_list[1][0][1] == {
             "note_id": "6a4468d0000000001101d673",
             "xsec_token": "tok123",
         }

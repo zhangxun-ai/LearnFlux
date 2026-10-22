@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "api_base": "http://127.0.0.1:8000",
+  "users_file": "./config/users.json",
+  "api_user_name": "Mobile Shortcut",
+  "cli_path": "lark-cli",
+  "state_db": "./data/feishu_archive/archive.db",
+  "space_id": "<wiki-space-id>",
+  "parent_node_token": "<automatic-collection-node-token>",
+  "since": "<activation-time-in-UTC-ISO-8601>",
+  "include_task_ids": [],
+  "poll_seconds": 30
+}

@@ -1,428 +1,297 @@
 # LearnFlux
 
-> 将视频、音频、文档和文字整理成逐字稿、总结与学习笔记，并支持按时间轴复习和持续复盘。
+> 把视频、音频和文档，变成读得懂、查得到、用得上的知识。
 
-LearnFlux 是一个可自托管的 AI 学习工作台。导入平台链接、本地音视频、文档或已有文本后，可以生成逐字稿和 AI 解读，再按时间轴复习、整理笔记并定期复盘：
+LearnFlux 是可自托管的 **AI 学习工作台**。给它一个链接、一份文件或一段文字，整理出正文 / 逐字稿和 AI 解读；继续围绕原文提问、对照多份资料，并把有用的内容留在 Obsidian 或飞书。
 
-**导入 → 转录 / 解析 → AI 校对与解读 → 边播边学 / 心流阅读 → 图解与笔记 → 定期复盘 → Obsidian 沉淀**
+**导入内容 → 获取原文 → AI 理解 → 核对与筛选 → 保存到自己的知识库**
 
-<p align="center">
-  <img src="docs/images/landing-review-top.png" alt="LearnFlux 产品首页预览" width="920" />
-</p>
+> **版本说明（2026-10-23）**：本次发布 README、截图和使用文档。正文检索、带出处的跨资料问答、普通链接任务重启恢复、飞书文档读取，以及新版结果排版与交付状态，仍在本地开发工作区，尚未合入 `main`。下文将这些能力标为“开发中”；仅克隆 `main` 不会自动获得它们。
+
+[快速开始](#快速开始) · [核心功能](#核心功能) · [页面与用法](#页面与用法) · [服务配置提示词](#按需配置服务给-agent-的提示词) · [文档中心](docs/README.md)
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-MIT%20%2B%20Commons%20Clause-E6A700.svg)](LICENSE)
 
-## 为什么用 LearnFlux
+<p align="center">
+  <img src="docs/images/readme-20261023/01-import.png" alt="当前单篇深度学习页面：粘贴链接、本地文件、粘贴文字和近期任务" width="1040" />
+</p>
 
-- **保留内容上下文**：逐字稿保留时间轴，可生成校对稿、总结、难点解释、问答和图解。
-- **支持多种来源**：YouTube、Bilibili、抖音、小红书、小宇宙、微信视频号、音视频直链、本地文件和文档。
-- **支持持续学习**：按单篇或系列组织内容，并用知识地图、心流阅读和心流写作继续整理。
-- **记录复盘和行动**：提供今日、周度、月度、年度复盘，记录证据、洞察和行动实验。
-- **数据保存在自己的环境**：默认使用本地 SQLite 和文件系统，也可迁移到 PostgreSQL；笔记可同步到 Obsidian。
-- **可被 Agent 调用**：仓库内置 agentskills.io 标准 skill，可供 Claude Code、OpenClaw、Hermes 等工具调用。
+截图更新于 **2026-10-23**，由当前工作区的页面、模板和静态资源在浏览器中渲染截取。记录、正文、问答与交付状态使用演示数据，展示操作和排版；不包含个人资料、真实令牌，也不代表第三方服务已替新用户配置完成。截图不使用旧版设计稿。
 
-LearnFlux 更适合个人学习者、内容研究者和希望自托管知识工作流的开发者。它不是开箱即用的多租户商业 SaaS，目前也不包含计费、完整团队权限和托管式 GPU 转录服务。
+## 核心功能
+
+| 你想完成的事 | LearnFlux 怎么帮你 |
+| --- | --- |
+| **快速读懂一篇内容** | 导入平台链接、本地音视频、文档或文字；获取原文、校对转录并生成结构化解读。 |
+| **学完一门课或一个专题** | 按系列组织资料，批量处理课程与本地目录，回看章节，生成全系列解读和知识地图。 |
+| **带着问题看资料（开发中）** | 长资料问答检索相关原文段落；从历史页选择 **2–5 份资料**对照提问，展开依据并回到来源核对。 |
+| **找回学过的内容** | 按标题、作者及来源、时间、状态查找，标记精华；正文搜索与命中片段为最新开发能力。 |
+| **在手机上收集** | iPhone 快捷指令把剪贴板链接发送到自己的本地工作台；后台解析，任务进度和结果可回看。 |
+| **把成果保存下来** | 同步到本机 Obsidian Vault，或自动保存为飞书知识库文档；结果页交付状态和打开入口开发中。 |
+
+音视频内容还可以在 **边播边学** 中联动播放、字幕与笔记；阅读文档可进入 **心流阅读**。心流写作和复盘也保留在工作台中，按需使用。
+
+### 支持哪些来源
+
+- **平台内容**：YouTube、Bilibili、抖音、小红书、小宇宙、微信视频号等；支持原生字幕优先和下载后转录。
+- **自己的文件**：本地视频、音频；PDF、EPUB、DOCX、TXT、Markdown 等阅读文档，以及已有文字。
+- **飞书文档（开发中）**：经本机 CLI 授权读取 Wiki / Docx 正文，直接走文本学习，不做音视频转录。[读取范围与配置](docs/guides/feishu-documents.md)
+
+平台能力有各自前置条件：抖音、小红书等社媒来源通常需要 TikHub；视频号可能需要独立解密服务；部分来源需要登录或特定网络环境。平台限流、失效链接和权限限制仍会影响获取，不能保证任意链接都可解析。
+
+## 页面与用法
+
+### 1. 导入：从一篇内容开始
+
+打开 **单篇深度学习**，选择“粘贴链接 / 本地文件 / 粘贴文字”，提交后在近期任务查看进度。第一次建议用一段短文本验证 AI 配置，再尝试短音视频；文字学习不需要安装转录模型。
+
+处理在后台运行，不需要一直停留在提交页。最新开发版还为新提交的普通本地链接任务保存恢复信息，服务重启后按规则恢复；这项能力尚未合入 `main`，上传任务和云端任务也不会一律自动重放。
+
+### 2. 理解：读总结，也能核对原文
+
+结果页可以标记精华、查看校对文本、导出，或保存到已配置的知识工具。下图展示最新开发版的分层排版，区分标题、章节、正文、强调和引用，并适配暗色与窄屏；新版排版尚未合入 `main`。
+
+<p align="center">
+  <img src="docs/images/readme-20261023/02-result.png" alt="当前结果页：分层排版的内容总结、标记精华、Obsidian 导出和飞书同步状态" width="1040" />
+</p>
+
+飞书自动归档可按需配置。最新开发版另增加“等待同步 / 正在校验 / 已同步 / 需要核对”等页面状态、安全重试与同文档更新保护；这些增强尚未合入 `main`。[归档与版本边界](docs/guides/feishu-archive.md)
+
+### 3. 查找与对照：从原文里找答案（开发中）
+
+在 **历史记录** 搜索标题、作者或正文。勾选同一页内 **2–5 条已完成记录**，点击“对照提问”，例如：
+
+> 这几位作者的方法有什么区别，各自适合什么场景？请给出原文依据。
+
+回答附资料和段落编号，“核对原文”可展开相关内容并跳回资料位置。检索使用本地词语匹配；长文只把相关段落或明确说明的抽样交给模型，找不到依据时会提示，不承诺模型判断永远正确。
+
+<p align="center">
+  <img src="docs/images/readme-20261023/03-compare.png" alt="当前历史页：选择两份资料对照提问，查看回答和原文依据" width="1040" />
+</p>
+
+### 4. 手机：随手收集，在飞书阅读
+
+**复制链接 → 运行快捷指令 / 轻点背面 → 本地后台解析 → 自动保存到飞书 → 手机打开文档**
+
+这条路径需要分别启用手机入口与飞书归档，不依赖云端 Agent 或飞书群扫描。Mac **锁屏可以继续运行**，但休眠、关机、退出登录、断网会影响处理；没有云端收件箱时，电脑离线的提交需要重试。已保存到飞书的文档可独立在手机阅读。
+
+配置方法见[手机快捷指令](docs/guides/mobile-shortcut.md)和[飞书归档](docs/guides/feishu-archive.md)，也可直接复制下方对应的 Agent 提示词。
 
 ## 快速开始
 
-### 1. 准备环境
+推荐首次体验环境：**Apple Silicon Mac + 本机 Whisper + 一个有效的大模型 API**。只处理文字 / 文档时，不必先部署 ASR。新安装默认使用本地 SQLite 与文件，不需要先装 PostgreSQL。
 
-推荐环境：
+### 推荐：让 Agent 帮你安装
 
-- Python 3.11+
-- Git 与可访问依赖源的网络
-- macOS 或 Linux；Windows 推荐 Docker / WSL，也可手动安装 Python 依赖和 FFmpeg
-- 至少一种可用的转录方式，见[转录引擎怎么选](#转录引擎怎么选)
+把以下整段复制给 **Codex、Claude Code、WorkBuddy 等能操作本机终端的 Agent**。它会识别环境、复用已有配置并逐项验证；需要你私下填写密钥或完成授权的地方会明确列出。
 
-初始化脚本会安装项目依赖、检查 FFmpeg，并且只在配置不存在时创建 `config/config.jsonc`，不会覆盖已有配置。
+```text
+请在我的电脑上安装并启动 LearnFlux，完成到可以实际使用。我授权安装缺少的项目依赖；涉及管理员权限、新建付费服务或开放公网时先说明。
+
+1. 先阅读 https://github.com/zhangxun-ai/LearnFlux 的 README、AGENTS.md 和 scripts/bootstrap.sh。
+   已有仓库就复用，没有再克隆；保留已有配置、数据、虚拟环境和正在运行的服务。
+2. 检查操作系统、CPU 架构、磁盘、Git、Python、uv、FFmpeg 与端口。
+   使用仓库固定的 Python 版本；安装缺少的依赖后检查当前终端的 PATH。
+3. Apple Silicon Mac 优先使用本机 mlx-whisper。
+   先检查已有安装；需要新装时使用 bash scripts/bootstrap.sh --with-local-whisper，并在配置中启用 local_whisper、填写实际可执行文件路径。
+   脚本只安装依赖，首次转录还会下载模型，请先告知磁盘和下载要求。
+4. Intel Mac、Linux、Windows 不套用 MLX 安装。
+   先核对当前转录策略与平台支持；可以先跑通文本学习。
+   若音视频路径尚不兼容，明确说明，不把网页能打开当成转录可用。
+5. 仅在 config/config.jsonc 不存在时从模板创建。
+   为新配置生成随机 api.auth_token，默认只监听 127.0.0.1，个人本机开启 browser_local_auto_login。
+   密钥仅在本机保存和使用，不输出到聊天、终端、截图或 Git。
+6. AI 解读需要有效的 LLM API Key、Base URL 和模型。
+   检查配置是否齐全，缺少时告诉我应在本机设置页填写哪些字段；不要要求我把密钥发到聊天。
+   TikHub 仅在需要对应社媒来源时配置，PostgreSQL、飞书、隧道和云端 ASR 都不作为基础安装前置项。
+7. 在仓库根目录使用 ./server.sh start；需要前台排错时用 uv run python main.py --start。
+   端口被占用时识别已有服务，不擅自结束进程；不要重复创建启动项。
+8. 打开本地工作台，检查 /health 并解释异常组件。
+   已有 LLM 配置时，用不含隐私的短文本完成一次学习；启用本地转录后另用我允许的短音频验证实际结果。
+   不要未经确认调用付费云端 ASR。
+9. 分别汇报“页面启动、AI 学习、本机转录”哪些已验证，给出访问地址和仍缺少的配置。
+   需要密钥或人工授权才继续的步骤，明确列出，不声称全部成功。
+```
+
+[单独打开这份安装提示词](docs/prompts/macos-local-quick-start.md)。推荐路径不等于所有系统都已完成安装验收：Intel Mac、Linux、Windows 需按实际转录引擎和依赖核对；当前“本地转录”入口主要面向 MLX，不能直接把 CapsWriter 地址填上就视为等价支持。
+
+### 手动安装（Apple Silicon Mac）
+
+准备 Git；安装 FFmpeg 时需要 Homebrew。Python 运行环境与依赖由 uv 管理，仓库当前固定 Python 3.11。
 
 ```bash
 git clone https://github.com/zhangxun-ai/LearnFlux.git
 cd LearnFlux
-bash scripts/bootstrap.sh
-```
-
-需要编程 Agent 帮你检查本机环境、安装缺少的依赖并启动服务时，可复制[macOS 本地快速启动提示词](docs/prompts/macos-local-quick-start.md)给能访问终端的 Agent。
-
-如果不运行初始化脚本，也可以手动复制配置模板：
-
-```bash
-cp config/config.example.jsonc config/config.jsonc
-```
-
-云端 ASR、PostgreSQL 或 S3 才需要额外创建 `.env`：
-
-```bash
-cp .env.example .env
-chmod 600 .env
-```
-
-配置模板不含真实密钥，但其中的端口、服务监听地址和模型等示例值仍需按你的环境检查。首次启动前，至少要设置 `api.auth_token`；需要 AI 或社媒解析时，再按[配置与 API Key 指南](docs/guides/configuration.md)填写对应密钥和模型参数。不要把 `config/config.jsonc`、`.env` 或 `config/users.json` 上传到 GitHub。
-
-macOS / Linux 上建议限制配置文件的本机读取权限：
-
-```bash
-chmod 600 config/config.jsonc
-```
-
-Apple Silicon Mac 可以同时安装本机 `mlx-whisper`：
-
-```bash
 bash scripts/bootstrap.sh --with-local-whisper
 ```
 
-说明：macOS 自动安装 FFmpeg 需要先有 Homebrew；Linux 自动安装需要 `apt-get` 和 `sudo`。如果你已经准备好依赖，也可以只运行：
+脚本会安装 uv（缺少时）、FFmpeg、项目依赖和本机 Whisper 包，仅在主配置不存在时创建 `config/config.jsonc`。它**不会自动启用 Whisper、申请 API Key 或配置独立服务**；首次实际转录还需下载模型。如果新装的 uv 未进入当前终端 PATH，请重新打开终端或使用其实际路径。
 
-```bash
-uv sync --extra dev
-```
+随后编辑 `config/config.jsonc`，保留模板其他字段，至少检查：
 
-### 2. 设置管理口令
+| 配置 | 本地首次使用怎么填 |
+| --- | --- |
+| `api.auth_token` | 将占位值改为自己生成的强随机口令，勿上传仓库。 |
+| `api.host` | 个人本机建议 `127.0.0.1`。 |
+| `api.browser_local_auto_login` | 个人本机保留 `true`，同源直连浏览器可自动建立会话。 |
+| `local_whisper.enabled` / `binary` | 音视频转录时启用，并使用安装输出的实际 `mlx_whisper` 路径。 |
+| `llm.api_key` / `base_url` / 模型字段 | AI 校对、总结、问答需要有效配置；也可启动后在系统设置中填写。 |
 
-先编辑 `config/config.jsonc`，把示例口令换成你自己的强随机字符串：
+字段和 Key 获取入口见[配置指南](docs/guides/configuration.md)。个人 Mac 同时配置手机用户时，可按[本机免口令说明](docs/guides/mobile-shortcut.md#本机免口令)开启本机管理访问；远程和 API 请求仍鉴权。共享或多用户环境不要直接套用个人模式。
 
-```jsonc
-"api": {
-  "port": 8000,
-  "host": "0.0.0.0",
-  "auth_token": "replace-with-a-long-random-token",
-  "ui_lab_enabled": false
-}
-```
-
-可以用下面的命令生成随机口令：
-
-```bash
-openssl rand -hex 32
-```
-
-`api.auth_token` 必须先在配置文件中设置。系统设置页会用它验证管理员身份，但不会替你创建或修改这个口令。CLI、Agent 和其它 API 客户端使用标准 `Authorization: Bearer ...`。
-
-### 3. 选择转录方式
-
-Apple Silicon Mac 使用本机转录时，在 `config/config.jsonc` 中启用：
-
-```jsonc
-"local_whisper": {
-  "enabled": true,
-  "binary": "~/.venvs/mlx-whisper/bin/mlx_whisper",
-  "model": "mlx-community/whisper-large-v3-turbo",
-  "language": "",
-  "timeout": 1800
-}
-```
-
-其他环境需要连接 CapsWriter、按需连接 FunASR，或显式启用云端 ASR。服务本体不会自动部署这些独立转录服务。
-
-### 4. 启动并检查
-
-macOS / Linux 后台运行：
+在仓库根目录启动：
 
 ```bash
 ./server.sh start
 ./server.sh status
-curl -s http://localhost:8000/health
+curl http://localhost:8000/health
 ```
 
-前台运行或 Windows 手动运行：
+前台排错使用 `uv run python main.py --start`。默认访问：
+
+- 工作台：<http://localhost:8000/add_task_by_web>
+- 设置：<http://localhost:8000/settings>
+- API 文档：<http://localhost:8000/docs>
+
+macOS 的 `server.sh` 使用用户 LaunchAgent 管理后台运行，登录后启动。配置修改后先检查在途任务，再执行 `./server.sh restart`。
+
+**首次验收**：页面可打开 → 短文本完成 AI 解读 → 短音视频出现可读逐字稿。`/health` 只说明受检组件状态，**不会完整验证 LLM、模型下载或一次真实转录**；未安装 ASR 时可能降级，但不应据此把文本学习误判为不可用。
+
+## 按需配置服务：给 Agent 的提示词
+
+不必把下列服务全部安装。先跑通一次学习，再按来源和阅读习惯添加。
+
+提示词要求 Agent 先核对当前分支的实际实现。标为开发中的能力尚未随本次文档发布；仅安装服务或保存配置不会补齐缺少的功能代码。
+
+| 组件 | 什么时候需要 | 是否必须 |
+| --- | --- | --- |
+| LLM API | AI 校对、解读、问答；密钥在本机填写 | 使用 AI 时需要，可能产生服务商费用 |
+| 本机 Whisper / ASR | 无可用字幕的音视频转录 | 纯文字学习不需要；MLX 仅 Apple Silicon |
+| TikHub | 抖音、小红书等相应来源 | 按需，有独立 Key 和服务商计费 |
+| 飞书 CLI | 读取飞书文档 / 自动保存到知识库 | 可选，须用户登录与文档权限 |
+| Cloudflare Tunnel | 手机在外网向本地提交链接 | 可选，须域名 / 隧道配置 |
+| Obsidian | 保存到本机 Vault | 可选，不附带手机云同步 |
+| FunASR / CapsWriter | 说话人识别 / 独立转录服务 | 按需，先核对当前调用路径与平台兼容性 |
+| PostgreSQL / S3 | 自选数据库与对象存储后端 | 可选，新安装不要求 |
+
+<details>
+<summary><strong>我要自动保存到飞书知识库：复制此提示词</strong></summary>
+
+```text
+请为已运行的 LearnFlux 配置“完成后自动保存到飞书知识库”。先读 AGENTS.md、docs/guides/feishu-archive.md、docs/guides/feishu-documents.md 和 config/feishu_archive.example.json。
+
+复用本机已有飞书 CLI；没有时查阅其当前官方安装与授权说明，只安装所需 CLI，不安装云端 Agent。登录和授权由我本人完成，禁止提取或输出令牌。
+
+向我确认目标知识库链接和本地任务所属身份，确认有写权限。使用独立 API 用户且 user_id 与网页资料库一致；归档配置放私人目录，since 设为本次启用时间，不默认上传全部历史任务。设置 LEARNFLUX_FEISHU_ARCHIVE_CONFIG 指向同一配置，保留所有已有密钥与资料。
+
+运行独立 scripts/feishu_archive_worker.py，并在我的系统支持时配置用户级自启动；保持本地业务数据库与归档状态库分离。用我同意的一条无隐私结果验证：只创建一篇文档、正文与解读完整、回读通过；当前分支具有交付状态接口时，再验证结果页显示与打开入口。缺少开发中的接口时明确报告，不声称页面能力已启用。重复运行不新增文档；人工修改不得被强制覆盖。
+
+最后给我飞书手机查看方式、后台运行状态和停用方法。只配置这一集成，不开放知识库分享，不部署公网站点。
+```
+
+</details>
+
+<details>
+<summary><strong>我要用 iPhone 快捷指令收集：复制此提示词</strong></summary>
+
+```text
+请为已运行的 LearnFlux 配置“iPhone 快捷指令 → 本地后台解析”。先读 AGENTS.md 和 docs/guides/mobile-shortcut.md。
+
+复用已有域名和 Cloudflare Tunnel；缺少域名或登录授权时由我提供并确认，不自动购买。安装缺少的 cloudflared，只为我指定的子域名建立 HTTPS 收集入口，精确放行 /api/transcribe，其余路径返回 404，不直接公开设置或文件接口。
+
+生成手机专用随机 Bearer Token，保留本地资料身份，使 user_id 与网页所有者一致。凭据仅在私人配置和我自己的快捷指令内使用，不在聊天、日志、截图或公开文件里展示。个人机器同时配置手机用户时，按指南保持本机管理会话自动恢复。
+
+在可操作的快捷指令 App 内完成配置：获取剪贴板 → 提取 URL → 取第一项 → POST 到 https://<我的子域名>/api/transcribe；JSON 的 url 使用第一项变量，transcription_strategy 设为 local。通知只表示快捷指令已执行，不误报解析成功。
+
+配置本地服务和隧道的用户级自启动。先验证无凭据拒绝、有效请求受理、其他公网路径拒绝、本地结果可读，再请我用手机移动网络实测。不要调用付费云端 ASR。说明锁屏与休眠的区别、电脑离线时如何重试，以及如何停用入口。
+```
+
+</details>
+
+<details>
+<summary><strong>我要配置其他转录服务：复制此提示词</strong></summary>
+
+```text
+请根据我的系统和音视频需求，核对 LearnFlux 当前转录路径，帮我配置最少的必要服务。先阅读 AGENTS.md、scripts/bootstrap.sh、config/config.example.jsonc 和 transcriber/providers 的实际实现。
+
+Apple Silicon 优先复用本机 mlx-whisper；其他系统先确认显式 local 策略的兼容性，不能只填 CapsWriter 地址就声称可用。需要 CapsWriter 或 FunASR 时，查阅对应服务当前官方部署说明，核对硬件、下载量、依赖与 WebSocket 地址；FunASR 仅在我需要说话人识别时安装。
+
+保留已有环境与服务，不自动启用云端 ASR，不开公网端口。若当前代码不支持我的平台或所选策略，先说明缺口和最小解决方案，不擅自改业务代码。配置后用我允许的短音频验证真实转录和可读结果，分别报告服务连通性与实际识别效果。
+```
+
+</details>
+
+LLM / TikHub 通常是填写已有服务凭据，按[配置与 API Key 指南](docs/guides/configuration.md)操作；本地转录不产生云端 ASR 费用，**不代表 LLM、TikHub 等第三方调用免费**。云端 ASR 默认关闭，启用后仍先估算、确认再提交。
+
+## 部署、API 与开发
+
+<details>
+<summary><strong>常用命令与 API 示例</strong></summary>
 
 ```bash
-uv run python main.py --start
-```
-
-默认入口：
-
-- Web：<http://localhost:8000>
-- 健康检查：<http://localhost:8000/health>
-- Swagger API 文档：<http://localhost:8000/docs>
-
-健康检查返回 `"status": "healthy"` 表示核心服务可用。`optional_unhealthy` 中只出现未启用的 FunASR 等可选能力时，不影响不带说话人识别的基础流程。
-
-### 5. 完成第一次学习
-
-1. 打开 <http://localhost:8000/settings>，输入刚设置的管理口令。
-2. 配置 LLM 的 API Key、Base URL 和模型；需要抖音、小红书等社媒能力时再配置 TikHub。
-3. 修改配置后执行 `./server.sh restart`。
-4. 打开 **单篇深度学习**，粘贴公开链接、上传本地音视频，或粘贴已有文本。
-5. 第一次先关闭说话人识别，选择本地免费路径，缩短排查链路。
-
-成功标志：
-
-- 任务从排队 / 处理中进入成功状态
-- 结果页出现可阅读的逐字稿
-- 配置了 LLM 后出现校对稿、总结或解读
-- 音视频内容可以在“边播边学”中按时间轴联动
-
-## 转录引擎怎么选
-
-| 方案 | 适合场景 | 优点 | 使用前需要 |
-| --- | --- | --- | --- |
-| `local_whisper`（mlx） | Apple Silicon Mac 个人使用 | 数据留在本机，不依赖独立 ASR 服务 | `bootstrap.sh --with-local-whisper` 并启用配置 |
-| CapsWriter | Linux、Windows、局域网服务器 | 通用音频转录，可独立扩容 | 自行部署可访问的 CapsWriter WebSocket 服务 |
-| FunASR 说话人识别 | 访谈、会议、圆桌 | 区分不同说话人 | 自行部署 FunASR 服务；只在需要时勾选 |
-| `cloud_asr` | 不想维护本地模型或临时扩容 | 无需本地 GPU | DashScope 环境变量；确认报价后才会提交付费任务 |
-| 平台原生字幕 | 有字幕的 YouTube 等内容 | 通常最快 | 平台字幕可访问 |
-
-默认建议：
-
-1. Apple Silicon Mac 先用 `local_whisper`。
-2. 长期服务器使用 CapsWriter，只有多人内容再启用 FunASR。
-3. 云端 ASR 默认关闭；只有明确接受费用时再开启。
-
-CapsWriter 示例：
-
-```jsonc
-"capswriter": {
-  "server_url": "ws://YOUR_ASR_HOST:6016"
-}
-```
-
-FunASR 示例：
-
-```jsonc
-"funasr_spk_server": {
-  "server_url": "ws://YOUR_ASR_HOST:8767"
-}
-```
-
-## 产品能力
-
-### 内容导入与转录
-
-- 平台链接：YouTube、Bilibili、抖音、小红书、小宇宙、微信视频号
-- 通用音视频直链与本地音视频上传
-- PDF、EPUB、DOCX、TXT、Markdown 等阅读文档
-- 已有文字直接进入学习流程，无需重复 ASR
-- 原生字幕优先、下载器回退、任务缓存和异步队列
-
-部分平台需要额外能力：抖音和小红书主要依赖 TikHub；Bilibili 可使用 BBDown；微信视频号通常需要本地解密服务。平台登录、地区和版权限制仍可能影响解析。
-
-### AI 理解与学习
-
-- 转录文本校对、结构化总结、难点解释与全文问答
-- 时间轴字幕、原视频 / 音频、AI 解读和个人笔记联动
-- 单篇深度学习、系列课程、全系列解读与知识地图
-- 图解生成、心流阅读、心流写作和历史回看
-- 学习笔记与源内容同步到 Obsidian
-
-### 复盘与行动
-
-- 今日、周度、月度、年度复盘
-- 从事实、感受、意义、行动和结果建立可追溯连接
-- 枝叶 / 树干 / 树根三级洞察，保留证据、反例和不确定性
-- AI 只生成候选，用户编辑并确认后才进入正式复盘数据
-- 4W1H 行动实验、成功信号、复查日期与结果记录
-
-## 界面预览
-
-| 单篇深度学习 | 系列深度学习 |
-| :---: | :---: |
-| <img src="docs/images/01-single-study.png" alt="单篇深度学习" width="420" /> | <img src="docs/images/02-collections.png" alt="系列深度学习" width="420" /> |
-
-| 边播边学 | 图解生成 |
-| :---: | :---: |
-| <img src="docs/images/03-study-player.png" alt="边播边学" width="420" /> | <img src="docs/images/04-visual-learning.png" alt="图解生成" width="420" /> |
-
-| 心流阅读 | 心流写作 |
-| :---: | :---: |
-| <img src="docs/images/07-reading.png" alt="心流阅读" width="420" /> | <img src="docs/images/10-focus-studio.png" alt="心流写作" width="420" /> |
-
-单篇学习和边播边学支持生成内容图解；系列学习支持系列级图解。
-
-## 产品入口
-
-| 分组 | 页面 | 路径 | 用途 |
-| --- | --- | --- | --- |
-| 核心工具 | 单篇深度学习 | `/add_task_by_web` | 导入链接、文件或文字，完成转录与 AI 解读 |
-| 核心工具 | 系列深度学习 | `/collections` | 管理课程 / 专题，生成系列解读和知识地图 |
-| 核心工具 | 边播边学 | `/study` | 播放、字幕、解读和笔记按时间轴联动 |
-| 核心工具 | 复盘 | `/review` | 今日、周、月、年复盘与内在洞察 |
-| 心流空间 | 心流阅读 | `/reading` | 导入文档、沉浸阅读、标记和摘录 |
-| 心流空间 | 心流写作 | `/static/focus-studio.html` | 写作、材料整理与本地草稿 |
-| 系统 | 历史记录 | `/static/history.html` | 回看任务与复盘记录 |
-| 系统 | 系统设置 | `/settings` | 配置 LLM、TikHub、ASR 和 Obsidian |
-
-## 常用配置
-
-配置模板：[`config/config.example.jsonc`](config/config.example.jsonc)。真实配置默认位于被 Git 忽略的 `config/config.jsonc`。如何复制模板、申请密钥和填写字段见[配置与 API Key 指南](docs/guides/configuration.md)。
-
-常见凭据与获取入口：
-
-| 服务 | 什么时候需要 | 必填项 | 获取入口 |
-| --- | --- | --- | --- |
-| 大模型 API | AI 校对、总结、问答、图解和复盘 | `llm.api_key`、`llm.base_url`、所选模型对应的 `llm.*_model` | [OpenAI](https://platform.openai.com/api-keys)、[DeepSeek](https://api-docs.deepseek.com/zh-cn/)、[Gemini](https://aistudio.google.com/apikey)、[阿里云百炼](https://help.aliyun.com/zh/model-studio/get-api-key) |
-| TikHub | 抖音、小红书及部分社媒解析 | `tikhub.api_key`；通常保留模板中的 `tikhub.base_url` | [TikHub 用户中心](https://user.tikhub.io/dashboard/api) |
-| 阿里云百炼云端 ASR | 明确启用付费云端转录时 | `.env` 中的 `DASHSCOPE_API_KEY`、`DASHSCOPE_WORKSPACE_ID`、`DASHSCOPE_API_HOST` | [API Key 指南](https://help.aliyun.com/zh/model-studio/get-api-key)、[Workspace ID 指南](https://help.aliyun.com/zh/model-studio/obtain-the-app-id-and-workspace-id) |
-
-其他按需凭据包括远程 YouTube API Server Key，以及仅在选择 PostgreSQL / S3 时需要的数据库或对象存储凭据。具体字段、用途和填写位置见[配置指南](docs/guides/configuration.md)。
-
-设置页预置 OpenAI、DeepSeek、Google Gemini、Moonshot / Kimi、智谱 GLM、阿里云百炼、火山方舟和 SiliconFlow；也支持填写其他 OpenAI 兼容服务商。各服务商官方 Key 页面均列在[配置指南](docs/guides/configuration.md)。
-
-| 配置 | 什么时候需要 | 说明 |
-| --- | --- | --- |
-| `api.auth_token` | 始终 | Web 管理口令与 API Bearer Token |
-| `llm.api_key`、`llm.base_url` | AI 校对、总结、问答、图解和复盘分析 | 支持 OpenAI 兼容接口 |
-| `tikhub.api_key` | 抖音、小红书和部分社媒研究 | TikHub API 密钥 |
-| `local_whisper.*` | Apple Silicon 本机转录 | 启用后普通转录优先走本机 |
-| `capswriter.server_url` | 使用 CapsWriter | 默认示例为 `ws://localhost:6016` |
-| `funasr_spk_server.server_url` | 说话人识别 | 默认示例为 `ws://localhost:8767` |
-| `cloud_asr.*` | 云端转录 | 密钥只从环境变量读取 |
-| `obsidian.enabled`、`obsidian.vault_path` | Obsidian 同步 | 绑定本机 Vault |
-| `storage.*` | 数据保留策略 | 临时文件、缓存、源文件目录与清理周期 |
-
-高级运行配置通过 `.env` / 进程环境提供：
-
-| 环境变量 | 默认 | 用途 |
-| --- | --- | --- |
-| `LEARNFLUX_PERSISTENCE_BACKEND` | `sqlite` | 切换 SQLite / PostgreSQL |
-| `DATABASE_URL` | 空 | PostgreSQL 连接地址 |
-| `LEARNFLUX_OBJECT_BACKEND` | `local` | 切换本地文件 / S3 对象存储 |
-| `DASHSCOPE_API_KEY` | 空 | 阿里云百炼转录 |
-
-环境变量清单见 [`.env.example`](.env.example)。切换 PostgreSQL 前请按[迁移、验收与回滚指南](docs/guides/postgresql.md)完成迁移和验收。
-
-## 部署与运维
-
-### 本机服务管理
-
-```bash
-./server.sh start
 ./server.sh status
 ./server.sh log
 ./server.sh restart
 ./server.sh stop
 ```
 
-macOS 上 `server.sh` 使用 LaunchAgent 保持服务持续运行；其他支持的 Unix 环境使用后台进程。不要在另一个任务正在使用服务时随意 `stop` 或 `restart`。
-
-### Docker
-
-Docker 镜像包含应用、FFmpeg、BBDown 和 Python 依赖，但 CapsWriter / FunASR 等转录服务仍需独立提供。
-
-```bash
-cp config/config.example.jsonc config/config.jsonc
-# 编辑 config/config.jsonc，设置管理口令和所需服务
-cd docker
-docker compose up -d --build
-```
-
-Compose 默认映射 **宿主机 `8200` → 容器 `8000`**：
-
-- Web：<http://localhost:8200>
-- Health：<http://localhost:8200/health>
-
-容器访问宿主机 ASR 时不要使用容器内的 `localhost`，请改用宿主机 IP、局域网地址或 `host.docker.internal`。
-
-### 常见问题
-
-| 现象 | 先检查什么 |
-| --- | --- |
-| 页面打不开 | `./server.sh status`、`curl http://localhost:8000/health` |
-| API 返回 401 | Bearer Token 是否与 `api.auth_token` / `users.json` 一致 |
-| 一直卡在转录 | `/health` 中实际选用的 ASR、`./server.sh log`、音视频是否可访问 |
-| 有逐字稿但没有 AI 解读 | LLM Key、Base URL、模型名，修改后是否重启 |
-| 多人内容没有分角色 | 是否勾选说话人识别、FunASR 是否健康 |
-| Docker 连不上 ASR | 是否错误使用了容器内 `localhost` |
-| 社媒链接解析失败 | TikHub Key、平台登录 / 地区 / 版权限制、链接是否仍有效 |
-
-## API 快速示例
-
-提交任务：
-
 ```bash
 curl -X POST "http://localhost:8000/api/transcribe" \
-  -H "Authorization: Bearer your-auth-token" \
+  -H "Authorization: Bearer <YOUR_TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://www.youtube.com/watch?v=VIDEO_ID",
-    "use_speaker_recognition": false
-  }'
+  -d '{"url":"<SOURCE_URL>","use_speaker_recognition":false,"transcription_strategy":"local"}'
 ```
 
-接口会立即返回 `task_id` 和 `view_token`。任务在后台处理，可继续查询：
+接口返回任务身份后在后台处理，受理不等于完成。[完整 API 流程](docs/guides/api/quickstart.md) · [给 Agent 调用的 skill](skill/README.md)
+
+</details>
+
+<details>
+<summary><strong>其他部署方式、数据与开发</strong></summary>
+
+- **数据库**：新环境默认 SQLite，可选 PostgreSQL；已有部署以实际环境为准。切换前遵循[迁移与回滚指南](docs/guides/postgresql.md)。
+- **Docker**：仓库提供 [Compose](docker/docker-compose.yml)，默认宿主机 8200 → 容器 8000；独立 ASR 不包含在应用容器内。镜像有架构相关依赖，应核对构建日志和所选转录路径，不视为通用跨平台一键包。
+- **数据与访问**：配置、数据库、媒体、日志留在自己的环境；第三方 AI、解析 API 与飞书会按启用的能力处理相应内容。`view_token` 是结果页访问凭据，不公开真实结果 URL 或截图中的令牌。不要提交 `.env`、真实配置或用户数据。
+- **公网**：需 HTTPS、鉴权与入口限制；手机仅收集场景按手机指南收窄路径。没有集成的云端离线收件箱。
+- **Python 包名**：产品名为 LearnFlux，包名仍为 `video_transcript_api`，以兼容现有调用。
 
 ```bash
-curl -s "http://localhost:8000/api/task/TASK_ID" \
-  -H "Authorization: Bearer your-auth-token"
-```
-
-更完整的提交、轮询和结果获取流程见 [API Quick Start](docs/guides/api/quickstart.md)。
-
-`view_token` 对应的结果页和原始文本接口不再要求 Bearer Token，因此它本身相当于访问凭据。不要把真实 `view_token` 发布到公开日志、Issue 或截图中。
-
-## 数据与安全
-
-- 默认元数据存储在 `data/` 下的 SQLite，转录、缓存、日志和源文件也默认保存在本机。
-- 不要提交 `config/config.jsonc`、`config/users.json`、`.env`、访问令牌、API Key 或真实转录数据。
-- 公网部署前必须设置强 `api.auth_token`，并使用反向代理、HTTPS、防火墙和访问控制。
-- 当前项目没有覆盖所有公网部署场景的速率限制；公网部署还需要在反向代理或网关配置访问限制。
-- 云端 ASR 密钥只放环境变量；付费路径会先生成报价，确认后才提交。
-- 处理第三方内容时，请遵守平台条款、隐私要求和版权规则。
-- 生产数据请建立独立备份，并在 PostgreSQL / S3 切换前完成可回滚验收。
-
-## 给 Agent 调用
-
-[`skill/`](skill/) 把 LearnFlux 封装为 agentskills.io 标准 skill，提供：
-
-- 提交视频 / 播客转录任务
-- 主动轮询并返回总结、校对稿或原始文本
-- 按平台、作者、关键词和日期检索历史任务
-- Markdown 与 JSON 两种输出格式
-
-部署方式、环境变量和烟测命令见 [LearnFlux skill 文档](skill/README.md)。
-
-## 项目结构
-
-```text
-LearnFlux/
-├── main.py                         # 服务入口
-├── server.sh                       # 本机启停与状态管理
-├── scripts/bootstrap.sh            # 新环境初始化
-├── config/
-│   └── config.example.jsonc        # 配置模板，真实密钥不入库
-├── docker/                         # Docker Compose 与镜像
-├── skill/                          # Agent skill 与无依赖 CLI
-├── src/
-│   ├── video_transcript_api/       # FastAPI、下载、转录、学习、复盘与持久化
-│   └── web/                        # 页面、静态资源和模板
-├── tests/                          # pytest 测试
-├── data/                           # 运行时数据，默认不提交
-└── docs/                           # 用户指南、架构和设计文档
-```
-
-产品名是 **LearnFlux**；Python 包仍保留历史兼容名称 `video_transcript_api`。
-
-## 开发与验证
-
-```bash
-# 安装项目与测试依赖
 uv sync --extra dev
-
-# 快速单元测试
 uv run --extra dev pytest tests/unit
-
-# 默认离线测试套件
 uv run --extra dev pytest
 ```
 
-集成、LLM、平台、手动和性能测试可能访问网络、真实服务、凭据或本地媒体，不参与默认收集。只运行当前任务需要的文件，具体规则见 [tests/README.md](tests/README.md)。
+集成、平台、LLM 和性能测试按需显式运行，可能访问网络、媒体或收费服务。测试分层见 [tests/README.md](tests/README.md)。
+
+</details>
+
+## 常见问题
+
+| 遇到的问题 | 从这里开始 |
+| --- | --- |
+| 页面打不开 | 检查 `server.sh status`、实际端口和启动日志。 |
+| 有原文，没有 AI 解读 | 检查 LLM Key、Base URL、模型名；改配置后按需重启。 |
+| 音视频一直无法转录 | 检查所选策略、本机模型 / ASR 服务；用短音频单独验证。 |
+| 抖音 / 小红书失败 | 检查 TikHub 配置、链接有效性、平台权限与限流。 |
+| 本机反复要管理口令 | 核对本机直连地址、自动会话配置，以及是否启用了多用户模式。[说明](docs/guides/mobile-shortcut.md#本机免口令) |
+| 手机显示已执行，工作台没结果 | 通知不等于受理成功；检查电脑在线、隧道、身份归属和任务记录。 |
+| 飞书没有收到文档 | 检查独立归档进程；开发版可另查看结果页交付状态。已有人工编辑时先核对，不强制覆盖。 |
 
 ## 文档
 
 | 文档 | 内容 |
 | --- | --- |
-| [文档中心](docs/README.md) | 全部用户与开发文档导航 |
-| [配置与 API Key 指南](docs/guides/configuration.md) | 配置文件复制、API Key 来源、字段与环境变量 |
-| [macOS 本地快速启动提示词](docs/prompts/macos-local-quick-start.md) | 让本机 Agent 检查依赖、准备配置并启动服务 |
-| [系统架构](docs/architecture.md) | 核心模块、处理流程与持久化 |
-| [API Quick Start](docs/guides/api/quickstart.md) | 认证、提交、轮询与结果获取 |
+| [文档中心](docs/README.md) | 用户与开发文档导航 |
+| [配置与 API Key](docs/guides/configuration.md) | 配置位置、字段、凭据来源 |
+| [本地安装提示词](docs/prompts/macos-local-quick-start.md) | 可单独复制给编程 Agent 的安装任务 |
+| [手机快捷指令](docs/guides/mobile-shortcut.md) | 隧道、独立令牌、自启动与移动网络验收 |
+| [飞书知识库归档](docs/guides/feishu-archive.md) | 自动交付、完整性、重试与人工修改保护 |
+| [飞书文档读取](docs/guides/feishu-documents.md) | 授权读取 Wiki / Docx 正文 |
+| [API Quick Start](docs/guides/api/quickstart.md) | 认证、提交、轮询与结果读取 |
+| [系统架构](docs/architecture.md) | 模块与处理流程 |
 | [PostgreSQL 指南](docs/guides/postgresql.md) | 迁移、验收与回滚 |
-| [多用户配置](docs/guides/multi_user_setup.md) | 本地静态 API Token 配置 |
-| [复盘模块方案](docs/review_module_plan.md) | 数据模型、AI 确认边界与 Obsidian 规则 |
-
-阶段性设计和历史方案保存在 `docs/superpowers/` 与 `docs/development/archive/`。遇到冲突时，以当前代码、`config/config.example.jsonc` 和测试为准。
 
 ## 项目来源与致谢
 
@@ -445,12 +314,4 @@ LearnFlux 基于 [VideoTranscriptAPI](https://github.com/zlxlabs/VideoTranscript
 
 ## 反馈与贡献
 
-欢迎通过 [GitHub Issues](https://github.com/zhangxun-ai/LearnFlux/issues) 报告平台解析、转录、部署和文档问题，也欢迎提交 Pull Request。
-
-提交代码前至少运行与改动最相关的测试；一般改动建议先执行：
-
-```bash
-uv run --extra dev pytest tests/unit
-```
-
-第一次使用时，先跑通一条公开短视频或一份小文档，再逐步开启合集、图解、Obsidian 和复盘能力。这样最容易定位配置问题。
+欢迎通过 [GitHub Issues](https://github.com/zhangxun-ai/LearnFlux/issues) 报告解析、转录、部署和文档问题，或提交 Pull Request。反馈时请去除 API Key、真实结果令牌及私有内容。行为说明以当前代码、配置模板和验证为准，历史设计方案不代表已经上线。

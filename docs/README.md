@@ -15,9 +15,10 @@
 | [多用户配置](guides/multi_user_setup.md) | 本地静态 API Token 配置 |
 | [手机快捷指令](guides/mobile-shortcut.md) | 手机直达本地任务、隧道范围、独立令牌和验收 |
 | [自动保存到飞书知识库](guides/feishu-archive.md) | 将完整解析结果自动归档为飞书文档，并持久化重试与去重状态 |
+| [读取飞书文档（开发中）](guides/feishu-documents.md) | 将 Wiki/Docx 正文送入深度学习，保留来源及读取范围；实现尚未合入 main |
 | [PostgreSQL 指南](guides/postgresql.md) | SQLite 到 PostgreSQL 的迁移、验收和回滚 |
 
-macOS 用户也可以复制[本地快速启动提示词](prompts/macos-local-quick-start.md)，交给有本机终端权限的 Agent 检查依赖并启动服务。
+新用户可以复制[本地快速启动提示词](prompts/macos-local-quick-start.md)，交给有本机终端权限的 Codex、Claude Code 或 WorkBuddy 检查依赖并启动服务，优先验证 Apple Silicon Mac 的本机转录路径。飞书归档、手机快捷入口和其他 ASR 的独立配置提示词见 [README 的服务配置](../README.md#按需配置服务给-agent-的提示词)，无需全部安装。
 
 ## 功能说明
 

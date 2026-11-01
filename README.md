@@ -1,3 +1,9 @@
+<!-- project-cover:20261101:start -->
+<p align="center">
+  <img src="assets/project-cover-20261101.webp" alt="LearnFlux — AI-designed project cover" width="1280" />
+</p>
+<!-- project-cover:20261101:end -->
+
 # LearnFlux
 
 > 把视频、音频和文档，变成读得懂、查得到、用得上的知识。

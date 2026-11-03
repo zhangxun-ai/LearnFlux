@@ -1,0 +1,14 @@
+{
+  "project": "zhangxun-ai/LearnFlux",
+  "createdOn": "2026-11-01",
+  "generator": "GPT Image via built-in imagegen",
+  "template": "Poster Layout System / poster-layout-system",
+  "purpose": "Abstract project branding cover, not a screenshot or proof of product output",
+  "prompt": "用途：GitHub 项目 README 顶部封面和个人网站项目轮盘的小卡片，共用的最终成品海报。采用 Poster Layout System 海报排版系统（单张成品，不是 moodboard）。\n项目：LearnFlux，把视频、音频和文档整理为可阅读、可保存的知识；不要承诺未实现的功能。\n主体与任务：制作一张极精致的独立开发者软件项目艺术封面。主视觉是一册由金色光学薄片、半透明琥珀玻璃与暖白纸页构成的抽象开放书本，少数流动细带从视频/声音的节奏形态沉入有序书页。书本作为唯一强烈的雕塑焦点，细带表达知识的流动，而非真实软件界面。\n构图与版式：横向 16:9，1536×864 视觉比例，画面左半部是大而准确的标题 \"LearnFlux\"，暖象牙色、克制的瑞士现代无衬线字体，粗细和字距考究，书本位于右半部，跨入标题附近但不遮字。标题可在 150 像素缩略图中读出。左右各保留 8% 安全区，底部 15% 留白用于网站叠加仓库名。深炭近黑底，少量精密细线和胶片颗粒，琥珀与暖白为唯一强调色。整体像高级独立技术刊物封面，真实材质、柔和轮廓光、干净深邃，不用炫光。\n文字逐字要求：仅 \"LearnFlux\"；不要副标题、说明文字、随机字符、数据、序号、角标或水印。\n约束：这是抽象项目品牌封面，不是截图。无浏览器/手机/电脑外壳，无伪造仪表盘，无用户头像，无图表指标，无卡片网格，无渐变光球，无机器人，无多余 logo。不要添加画框或圆角，整张图铺满深色背景。轮廓、标题、焦点对比明确，小尺寸和大尺寸都精致。",
+  "cover": {
+    "filename": "project-cover-20261101.webp",
+    "width": 1280,
+    "height": 720,
+    "sha256": "8c0dd11086b922b7bd6e7c4791bf5a69efb9bc354bc1ffa0c8ea769ce0e7a7b2"
+  }
+}

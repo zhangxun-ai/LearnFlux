@@ -19,7 +19,7 @@ uv run --extra dev pytest tests/unit/test_init_config.py tests/unit/test_bootstr
 uv run --extra dev pytest tests/integration/test_fresh_install.py -q
 ```
 
-安装回归在临时目录生成随机配置，验证不覆盖已有设置；隔离启动使用新配置与空数据，并阻止外部请求。截图工具检查未知接口与私有路径无回退、处理和删除被禁用、演示时间与视频跳转契约。截图复现命令与来源见[截图说明](../docs/images/readme-20261103/README.md)，浏览器验收和真实模型调用分别报告。
+安装回归在临时目录生成随机配置，验证不覆盖已有设置；隔离启动使用新配置与空数据，并阻止外部请求。截图工具检查未知接口与私有路径无回退、处理和删除被禁用、演示时间与视频跳转契约。截图复现命令与来源见[截图说明](../docs/images/readme-20261103-cases/README.md)，浏览器验收和真实模型调用分别报告。
 
 ```bash
 # verify-fast：快速单元测试

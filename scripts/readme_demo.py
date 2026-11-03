@@ -9,6 +9,8 @@ It is a documentation tool, not an application backend.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
+import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import mimetypes
@@ -29,109 +31,62 @@ WEB = ROOT / "src/web"
 STATIC = WEB / "static"
 DATE = "2026-11-03"
 STAMP = DATE + "T02:00:00+00:00"
-TITLE = "把阅读变成可以复用的笔记"
-TEXT = """读完一篇文章后，先合上原文，写下你最想回答的一个问题。
-把作者的结论和支撑结论的例子分开记录；遇到不确定的地方，保留来源，方便回来核对。
-笔记不必复述所有内容。用自己的话解释一个观点，再记录它适用的条件和一个反例。
-最后，为这个观点设计一个很小的行动：明天用十五分钟试一次，再写下实际发生了什么。
-理解不是把资料存起来，而是在下一次需要时，能够找到、判断并使用它。"""
-SUMMARY = """## 先用一个问题组织阅读
+sys.path.insert(0, str(ROOT / "scripts"))
+from readme_cases import MAIN, COURSE, HISTORY, BOOKS as BOOK_CASES, DIARY, BRIEFINGS, SOURCES as CASE_SOURCES
 
-把“我要读完这份资料”换成一个具体问题：**这段内容能帮助我做什么决定？** 问题越具体，越容易区分需要保留的依据和可以略过的细节。
-
-### 从原文到自己的理解
-
-1. **找结论**：作者希望读者相信什么？
-2. **找依据**：结论依赖哪些事实、例子或假设？
-3. **写解释**：合上原文，用自己的话讲一遍。
-4. **做验证**：选一个小行动，记录实际结果。
-
-> 笔记的价值，在于下次需要时能够找到、判断并使用它。
-
-## 区分适用条件与行动
-
-一个方法有用，并不代表它适合所有情况。记录“什么时候用”和“什么时候不用”，比只记一句结论更容易迁移。
-
-### 一个可以马上尝试的练习
-
-明天阅读一份短资料，用十五分钟写出：一个问题、一条依据、自己的解释，以及下一步行动。回看原文，补上遗漏的条件。
-
-## 回到来源核对
-
-摘要帮助建立结构，原文保留细节。遇到关键数字、观点冲突或准备引用时，回到正文核对，再决定是否采用。
-"""
+TITLE = MAIN["title"]
+TEXT = MAIN["text"]
+SUMMARY = MAIN["summary"]
 SUMMARY_HTML = markdown.markdown(SUMMARY, extensions=["tables", "fenced_code"])
-CHAPTER_TITLES = ["用问题开始阅读", "区分结论与依据", "建立可检索的笔记", "用行动验证理解"]
-RECORD_TITLES = [TITLE, "一门课程，怎样整理成一条主线", "用问题开始一次深度阅读", "从资料收藏到真正理解", "在安静的时间里写下想法", "复盘一次小小的行动"]
 RECORDS = [
     {
-        "id": f"demo-task-{i}", "task_id": f"demo-task-{i}",
-        "view_token": f"demo-note-{i}", "title": title,
-        "author": "LearnFlux 示例", "platform": ["local", "youtube", "bilibili", "xiaohongshu", "douyin", "weixin"][i],
+        **record, "id": f"demo-task-{i}", "task_id": f"demo-task-{i}",
+        "view_token": f"demo-note-{i}",
         "status": "success", "created_at": STAMP, "completed_at": STAMP,
         "request_time": STAMP, "request_time_display": DATE + " 10:00",
-        "description": "原创演示资料 · 保留原文与学习笔记", "is_marked": i == 0,
-        "duration": 360 + i * 60, "summary": SUMMARY,
-        "study_available": True, "study_url": f"/study/demo-note-{i}",
-        "content_type": "text" if i == 0 else "video", "marked": i == 0,
-        "url": "https://example.com/learnflux-demo", "summary_available": True,
+        "is_marked": i == 0, "duration": 2371 if i == 0 else 360 + i * 60,
+        "summary": SUMMARY, "study_available": i == 2,
+        "study_url": "/study/demo-note-1" if i == 2 else None,
+        "content_type": "video" if i == 0 else "post" if i == 1 else "file", "marked": i == 0,
+        "summary_available": True,
     }
-    for i, title in enumerate(RECORD_TITLES)
+    for i, record in enumerate(HISTORY)
 ]
 SOURCES = [
     {
-        "id": f"demo-chapter-{i}", "title": title, "filename": title + ".mp4",
-        "source_type": "video", "task_status": "success", "order_index": i,
+        "id": f"demo-chapter-{i}", "title": chapter["title"],
+        "filename": chapter["title"] + ".md", "source_type": "document",
+        "task_status": "success", "order_index": i,
         "view_token": f"demo-note-{i}", "elapsed_seconds": 90 + i * 15,
-        "duration": 360 + i * 60, "study_available": True,
-        "study_url": f"/study/collections/demo-course/sources/demo-chapter-{i}",
-        "summary": SUMMARY, "transcription_strategy": "local",
+        "duration": 360 + i * 60, "study_available": i == 0,
+        "study_url": "/study/demo-note-1" if i == 0 else None,
+        "summary": chapter["summary"], "transcript": chapter["text"],
+        "transcription_strategy": "local",
     }
-    for i, title in enumerate(CHAPTER_TITLES)
+    for i, chapter in enumerate(COURSE["chapters"])
 ]
 COLLECTION = {
-    "id": "demo-course", "title": "建立自己的学习系统", "creator": "LearnFlux 示例",
-    "collection_type": "video_course", "status": "completed", "created_at": STAMP,
-    "updated_at": STAMP, "sources": SOURCES, "source_count": 4,
-    "total_sources": 4, "completed_sources": 4, "success_count": 4,
-    "summary_markdown": SUMMARY, "summary_status": "success",
+    "id": "demo-course", "title": COURSE["title"], "creator": COURSE["creator"],
+    "collection_type": "document_topic", "status": "completed", "created_at": STAMP,
+    "updated_at": STAMP, "sources": SOURCES, "source_count": len(SOURCES),
+    "total_sources": len(SOURCES), "completed_sources": len(SOURCES), "success_count": len(SOURCES),
+    "summary_markdown": SOURCES[0]["summary"], "summary_status": "success",
     "transcription_strategy": "local", "transcription_concurrency": 1,
 }
-BOOK_TITLES = ["把阅读变成可以复用的笔记", "一份关于专注的练习手册", "观察、提问与理解", "留一点时间给自己的想法"]
 BOOKS = [
-    {"id": f"demo-book-{i}", "title": title, "author": "LearnFlux 示例",
+    {"id": f"demo-book-{i}", "title": book["title"], "author": book["author"],
      "format": "markdown", "status": "ready", "created_at": STAMP,
      "updated_at": STAMP, "last_opened_at": STAMP}
-    for i, title in enumerate(BOOK_TITLES)
+    for i, book in enumerate(BOOK_CASES)
 ]
-PARAGRAPHS = [
-    "清晨翻开一份资料之前，不妨先问自己：今天最想弄清楚的是什么？一个真实的问题，会让注意力从漫无目的的浏览，转向有方向的寻找。",
-    "阅读不必是一场赶路。停下来，把一段话放回它的上下文，看看作者在回答谁的问题、依赖什么条件，也看看自己是否遗漏了另一种解释。",
-    "读到一个有启发的观点，可以暂时合上原文，用最熟悉的话讲给自己听。如果讲不清楚，就把卡住的地方写成一个问题，再回去寻找依据。",
-    "笔记可以很短：一个问题、一条依据、一段自己的解释。保留原文位置，不是为了收集更多材料，而是让未来的自己能够重新检查当时的判断。",
-    "理解还需要与生活相遇。为一个想法安排一次小小的尝试，观察它在具体情境里如何起作用；如果结果不同，也把这个差异写下来。",
-    "下次打开笔记时，先找那个尚未解决的问题。沿着问题继续读，比从头再看一遍更容易把零散的资料连接起来。",
-    "试着区分三件事：资料原本说了什么、你怎样理解、你准备做什么。把它们分别写清楚，下次回看时就不会把自己的推测误当成作者的结论。",
-    "如果两份资料说法不同，先不要急着选边。比较它们讨论的对象、时间和前提，分歧有时来自条件不同，而不是谁完全正确。",
-    "遇到一句很想引用的话，回到原文多读一段。查看上下文，记录来源位置，并把自己尚不确定的地方保留下来。清楚地知道不知道什么，也是一种进步。",
-    "行动可以小到十分钟内完成。比如用今天学到的方法整理一份笔记，或者向同伴解释一个概念，再问问对方哪里还不明白。",
-    "定期回看，不必把每一页重新读一遍。先看最初的问题，再检查行动记录，最后决定哪些资料需要继续深入，哪些可以暂时放下。",
-    "慢慢地，这些短小的记录会形成一条自己的线索。它不追求收藏数量，而是帮助你在具体时刻，做出更清楚的判断。",
+PLAYER_TITLE = "咖啡店越忙，为什么反而不赚钱？（演示短片）"
+PLAYER_LINES = [
+    "假设街角新开了两家咖啡店，隔三差五做买一送一。",
+    "顾客多了，但杯子、咖啡豆和人工都要花钱，利润不一定增加。",
+    "五力模型提醒我们：竞争不只来自隔壁那家店。",
+    "便利店咖啡是替代品，供应商涨价、顾客比价，也会挤压利润。",
+    "先看清这些压力，再考虑门店靠价格、位置还是产品留住顾客。",
 ]
-READING_CHAPTERS = [
-    {"id": f"part-{i}", "title": title, "order_index": i,
-     "sanitized_html": f"<h1>{title}</h1>" + "".join(f"<p>{p}</p>" for p in PARAGRAPHS)}
-    for i, title in enumerate(CHAPTER_TITLES)
-]
-DIARY = """今天，给一个问题留一点时间
-
-傍晚把刚读完的资料重新打开，没有急着收藏更多内容，而是先写下那个还没想明白的问题。
-
-作者的结论很有启发，但真正让我停下来的，是支撑结论的那一个例子。我试着用自己的话重新解释，才发现自己原来省略了一个重要条件。
-
-明天的计划很简单：花十五分钟做一次小练习，记录结果，再回来看看今天的理解有没有改变。
-
-窗外在下雨。先把这些想法写下来。"""
 
 
 def ok(data: object) -> dict:
@@ -139,7 +94,13 @@ def ok(data: object) -> dict:
 
 
 def book_detail(index: int) -> dict:
-    return {"document": BOOKS[index], "chapters": READING_CHAPTERS,
+    chapters = [
+        {"id": f"part-{i}", "title": chapter["title"], "order_index": i,
+         "sanitized_html": f"<h1>{html.escape(chapter['title'])}</h1>" + "".join(
+             f"<p>{html.escape(paragraph)}</p>" for paragraph in chapter["text"].split("\n") if paragraph.strip())}
+        for i, chapter in enumerate(BOOK_CASES[index]["chapters"])
+    ]
+    return {"document": BOOKS[index], "chapters": chapters,
             "progress": {"percent": 28, "locator": {"chapter_id": "part-0", "offset": 0}}}
 
 
@@ -154,9 +115,10 @@ def api_payload(path: str, query: dict) -> object | None:
         rows = [r for r in RECORDS if not platform or r["platform"] == platform]
         return ok({"items": rows, "total": len(rows), "api_key_masked": "demo-user"})
     if path in {"/api/audit/history/filter-options", "/api/audit/filter-options"}:
-        return ok({"platforms": [r["platform"] for r in RECORDS],
-                   "platform_counts": [{"platform": r["platform"], "count": 1} for r in RECORDS],
-                   "authors": ["LearnFlux 示例"], "webhooks": []})
+        counts = Counter(record["platform"] for record in RECORDS)
+        return ok({"platforms": list(counts),
+                   "platform_counts": [{"platform": platform, "count": count} for platform, count in counts.items()],
+                   "authors": sorted({record["author"] for record in RECORDS}), "webhooks": []})
     if path == "/api/audit/summary":
         return ok({"summary": SUMMARY})
     if path.startswith("/api/task/demo-task-"):
@@ -165,15 +127,14 @@ def api_payload(path: str, query: dict) -> object | None:
     if path.startswith("/api/marks/transcripts/demo-"):
         return ok({"marked": path.endswith("demo-note-0")})
     if path == "/api/collections/filter-options":
-        return ok({"creators": ["LearnFlux 示例"], "types": ["video_course"]})
+        return ok({"creators": [COURSE["creator"]], "types": ["document_topic"]})
     if path == "/api/collections":
         return ok({"items": [COLLECTION], "total": 1, "has_more": False})
     if path == "/api/collections/demo-course":
         return ok(COLLECTION)
     if path.startswith("/api/collections/demo-course/sources/"):
         source = next((x for x in SOURCES if x["id"] == path.rsplit("/", 1)[-1]), SOURCES[0])
-        return ok({**source, "summary": SUMMARY, "transcript": TEXT,
-                   "source_access": {"available": False, "reason": "演示内容"}})
+        return ok({**source, "source_access": {"available": False, "reason": "读书案例演示"}})
     if path.endswith("/cloud-quote"):
         return ok({"state": "disabled", "items": [], "enabled": False})
     if path == "/api/reading/documents":
@@ -185,17 +146,17 @@ def api_payload(path: str, query: dict) -> object | None:
         return ok({"layout": "double", "theme": "paper", "font_size": 18, "font_family": "serif"})
     if path.startswith("/api/study/"):
         if path.endswith("/note-document"):
-            return ok({"state": "clean", "document": {"body": "问题：怎样把理解变成行动？\n\n先记录依据，再安排一次十五分钟的尝试。", "revision": 1}})
-        return ok({"state": "ready", "metadata": {"title": "用问题开始阅读（演示视频）", "author": "LearnFlux 示例", "view_token": "demo-note-1"},
+            return ok({"state": "clean", "document": {"body": "门店案例笔记\n\n便利店咖啡和办公室咖啡机，也可能是咖啡店的替代品。别只盯着街对面的同行。", "revision": 1}})
+        return ok({"state": "ready", "metadata": {"title": PLAYER_TITLE, "author": "《竞争战略》读书案例", "view_token": "demo-note-1"},
                    "source": {"kind": "video", "filename": "演示视频.mp4"},
-                   "playback": {"source_available": True, "source_url": "/demo-video.mp4", "duration_seconds": 8},
+                   "playback": {"source_available": True, "source_url": "/demo-video.mp4", "duration_seconds": 45},
                    "transcript": {"lines": [{"id": f"line-{i}", "index": i, "text": text,
-                                             "start_seconds": i * 1.5, "end_seconds": (i + 1) * 1.5, "seekable": True}
-                                            for i, text in enumerate(TEXT.splitlines())]},
-                   "ai": {"overview": SUMMARY, "chat_model": "演示模型"}})
+                                             "start_seconds": i * 8, "end_seconds": (i + 1) * 8, "seekable": True}
+                                            for i, text in enumerate(PLAYER_LINES)]},
+                   "ai": {"overview": SOURCES[0]["summary"], "chat_model": "演示模型"}})
     if path == "/api/journal/entry":
         return ok({"id": "demo-diary", "entry_date": DATE, "entry_type": "daily",
-                   "title": "给一个问题留一点时间", "body": DIARY, "updated_at": STAMP})
+                   "title": "下班后的两小时", "body": DIARY, "updated_at": STAMP})
     if path == "/api/journal/entries":
         return ok({"items": []})
     if path == "/api/briefings":
@@ -222,13 +183,13 @@ def result_html(path: str) -> str:
     if path == "/briefings":
         return env.get_template("briefings.html").render(request=request, title="日报")
     return env.get_template("transcript.html").render(
-        request=request, title=TITLE, author="LearnFlux 示例", platform="text",
+        request=request, title=TITLE, author=MAIN["author"], platform=MAIN["platform"],
         view_token="demo-note-0", summary_html=SUMMARY_HTML,
-        calibrated_html="".join(f"<p>{p}</p>" for p in TEXT.splitlines()),
+        calibrated_html="".join(f"<p>{html.escape(p)}</p>" for p in TEXT.splitlines()),
         transcript=TEXT, source_transcript=TEXT, created_at=STAMP,
         created_at_display="2026-11-03 10:00", completed_at_display="2026-11-03 10:01",
-        duration="6 分钟", media_duration=360, status="success", marked=True,
-        source_language="zh", source_language_name="中文", url="https://example.com/learnflux-demo",
+        duration="39 分 31 秒", media_duration=2371, status="success", marked=True,
+        source_language="zh", source_language_name="中文", url=MAIN["url"],
         summary=SUMMARY, calibrated=TEXT, is_marked=True,
     )
 
@@ -236,11 +197,13 @@ def result_html(path: str) -> str:
 def briefing_html() -> str:
     # A published report is an HTML artifact loaded into the real report iframe.
     # These are authored example articles, never fetched private news or chats.
-    cards = [("把一次阅读变成可复用的笔记", "先问一个具体问题，保留结论与依据，再用一次小行动检验理解。", TEXT),
-             ("给 AI 任务写下验收方式", "把完成标准写成能够观察的行为：输入什么，得到什么，如何回到来源核对。",
-              "把一个大任务拆成几个有明确结果的小步骤。开始前写下输入和预期，完成后用具体例子检查结果，并保留来源。遇到不确定的判断，先记录疑问，再补充依据。自动化应该让重复工作更轻松，也应该让人容易发现哪里出了问题。")]
-    content = "".join(f"<article><small>LearnFlux 示例 · {DATE}</small><h2>{t}</h2><blockquote>值得尝试：{p}</blockquote><p>{body}</p><details><summary>展开解读</summary><p>{p}</p></details></article>" for t, p, body in cards)
-    return "<!doctype html><html lang='zh-CN'><meta charset='utf-8'><style>body{margin:0;color:#33443d;background:#fdfcf8;font:17px/1.85 system-ui}article{padding:28px 32px;margin-bottom:22px;background:white;border:1px solid #e0e8e1;border-radius:16px}small{color:#536b5e}h2{color:#574179;font-size:25px;line-height:1.5;margin:16px 0}blockquote{margin:20px 0;padding:18px 22px;border-radius:12px;background:#f1edf6;color:#493c62}summary{color:#23634f;cursor:pointer}</style>" + content + "</html>"
+    content = "".join(
+        f"<article><small>{html.escape(item['source'])} · {html.escape(item['published'])}</small>"
+        f"<h2>{html.escape(item['title'])}</h2><blockquote>{html.escape(item['why'])}</blockquote>"
+        f"<p>{html.escape(item['body'])}</p><a href='{html.escape(item['source_url'], quote=True)}' target='_blank' rel='noopener'>查看原文 ↗</a></article>"
+        for item in BRIEFINGS
+    )
+    return "<!doctype html><html lang='zh-CN'><meta charset='utf-8'><style>body{margin:0;color:#33443d;background:#fdfcf8;font:17px/1.85 system-ui}article{padding:28px 32px;margin-bottom:22px;background:white;border:1px solid #e0e8e1;border-radius:16px}small{color:#536b5e}h2{color:#574179;font-size:25px;line-height:1.5;margin:16px 0}blockquote{margin:20px 0;padding:18px 22px;border-radius:12px;background:#f1edf6;color:#493c62}a{display:inline-block;color:#23634f;text-decoration:none;margin-top:10px}summary{color:#23634f;cursor:pointer}</style>" + content + "</html>"
 
 
 class DemoHandler(BaseHTTPRequestHandler):
@@ -269,7 +232,7 @@ class DemoHandler(BaseHTTPRequestHandler):
             self.send_body((STATIC / "manifest.webmanifest").read_bytes(), "application/manifest+json")
             return
         if path == "/demo-video.mp4":
-            media = ROOT / "output/playwright/readme-20261103/demo-video.mp4"
+            media = ROOT / "output/playwright/readme-20261103-cases/demo-video.mp4"
             if media.is_file():
                 data = media.read_bytes()
                 requested = self.headers.get("Range", "")
@@ -343,7 +306,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), DemoHandler)
-    print(f"Documentation demo: http://127.0.0.1:{server.server_port} (authored data only)", flush=True)
+    print(f"Documentation demo: http://127.0.0.1:{server.server_port} (public-source notes and demo data only)", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

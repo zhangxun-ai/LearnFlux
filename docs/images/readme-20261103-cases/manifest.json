@@ -1,0 +1,137 @@
+{
+  "fixture_date": "2026-11-03",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "theme": "light",
+  "sidebar_width": 280,
+  "toc_pinned": true,
+  "playwright_cli": "0.1.23",
+  "webp_quality": 88,
+  "asset_version": "ce8122b3ec17",
+  "fixture_sha256": "cc623a8bc15666c88035f2e2694864ba323a2020a73e0960cfcf37cbba281537",
+  "cases_sha256": "112deff66a0940179d3a97a56932d292d52e8875167d571a845b5dd39f240ace",
+  "capture_sha256": "61631e0ec5f3a6c92ab1c53d8ea4cbd4d8b5d3f79a8feb75b3fc833b54b86c3f",
+  "data_source": "public-source reading notes, public-domain books and authored scenarios; no application config, database or provider calls",
+  "sources": [
+    {
+      "title": "Andrej Karpathy: Software Is Changing (Again)",
+      "url": "https://www.ycombinator.com/library/MW-andrej-karpathy-software-is-changing-again",
+      "kind": "public-source",
+      "notes": "YC 官方页面及其公开演讲；中文标题、正文与摘要为手工整理，不是逐字稿或实际模型输出。"
+    },
+    {
+      "title": "Andrej Karpathy: Software Is Changing (Again) — video",
+      "url": "https://www.youtube.com/watch?v=LCEmiRjPEtQ",
+      "kind": "public-source",
+      "notes": "Y Combinator 官方视频。原视频约39分钟；演示播放器不使用该视频或伪造其字幕。"
+    },
+    {
+      "title": "Building effective agents",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents",
+      "kind": "public-source",
+      "notes": "Anthropic 官方文章，2024-12-19；只作简短中文转述。"
+    },
+    {
+      "title": "The Five Forces",
+      "url": "https://www.isc.hbs.edu/strategy/business-strategy/Pages/the-five-forces.aspx",
+      "kind": "public-source",
+      "notes": "HBS 官方五力框架介绍；咖啡店、章节讲解和文字为原创虚构案例，不是书籍原文或私人课程。"
+    },
+    {
+      "title": "Strategy Explained",
+      "url": "https://www.isc.hbs.edu/strategy/Pages/strategy-explained.aspx",
+      "kind": "public-source",
+      "notes": "HBS 官方战略概念介绍，用于核对差异化、取舍与活动配合的一般概念。"
+    },
+    {
+      "title": "背影",
+      "url": "https://zh.wikisource.org/zh-hans/背影",
+      "kind": "public-domain",
+      "notes": "朱自清，1925年原作；公版正文，移除页面零宽格式字符，不含现代注释。"
+    },
+    {
+      "title": "朝花夕拾·小引",
+      "url": "https://zh.wikisource.org/zh-hans/朝花夕拾/小引",
+      "kind": "public-domain",
+      "notes": "鲁迅，1927年原作；公版正文节选，不冒充完整书籍。"
+    },
+    {
+      "title": "桃花源记",
+      "url": "https://zh.wikisource.org/zh-hans/桃花源記",
+      "kind": "public-domain",
+      "notes": "陶渊明原作；正文节选，去除校勘异文和现代注释。"
+    },
+    {
+      "title": "兰亭集序",
+      "url": "https://zh.wikisource.org/zh-hans/蘭亭集序",
+      "kind": "public-domain",
+      "notes": "王羲之原作；正文节选，去除校勘异文和现代注释。"
+    },
+    {
+      "title": "咖啡店案例与生活日记",
+      "url": "https://example.com/learnflux/authored-cases",
+      "kind": "authored-demo",
+      "notes": "为截图编写的原创演示情境，没有读取用户课程、日记或聊天；不声称是真实经营调查或用户经历。"
+    }
+  ],
+  "javascript_errors": 0,
+  "failed_local_requests": 0,
+  "screenshots": [
+    {
+      "file": "01-import.webp",
+      "route": "/add_task_by_web",
+      "bytes": 101738,
+      "sha256": "5ec3711b03662343a622f7a078163a76010fcc9e1e03f2bd1132d1ebfd833911"
+    },
+    {
+      "file": "02-result.webp",
+      "route": "/view/demo-note-0",
+      "bytes": 98358,
+      "sha256": "0b5e675baf3bc220db3489f694b178ce9069572c8b485e328f64ac330cfc3574"
+    },
+    {
+      "file": "03-collections.webp",
+      "route": "/collections?collection_id=demo-course",
+      "bytes": 69850,
+      "sha256": "f4a13e90753f02e6c1969a7ff9702ff970c808aad8dfe8f0b7a83f6bf9f15390"
+    },
+    {
+      "file": "04-reading-library.webp",
+      "route": "/reading",
+      "bytes": 64934,
+      "sha256": "3508891fb7fd4efbc4e3dcf39d51d01826ff95fa81258fba4154adad07dff92d"
+    },
+    {
+      "file": "05-reading.webp",
+      "route": "/reading/demo-book-0",
+      "bytes": 150898,
+      "sha256": "8ef86f229555632d4cff9ddc9ea38d1a34c1442ec6840b422d7e86a2f127ac07"
+    },
+    {
+      "file": "06-writing.webp",
+      "route": "/static/focus-studio.html",
+      "bytes": 233286,
+      "sha256": "8888f7ebebec0ff7e0d3584102422aa8411c898df11c717fbf12de07c0766f31"
+    },
+    {
+      "file": "07-history.webp",
+      "route": "/static/history.html",
+      "bytes": 150342,
+      "sha256": "71a7d84c2b1d31820e6989aec065382f10eafdbb4cd241c31bfc71eac5dd3a2b"
+    },
+    {
+      "file": "08-briefings.webp",
+      "route": "/briefings",
+      "bytes": 82316,
+      "sha256": "679a9a746a1415f6b782cd055c51ff3673e857b9613531d1de5a7df2724a8816"
+    },
+    {
+      "file": "09-player.webp",
+      "route": "/study/demo-note-1",
+      "bytes": 119026,
+      "sha256": "1f6d752b64f8bb51566b35fcdfc29ce86cfc4c6c401049e5c1d40376ff903bdb"
+    }
+  ]
+}

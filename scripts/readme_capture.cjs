@@ -1,6 +1,7 @@
 async (page) => {
     const base = __DEMO_BASE__;
     const output = __CAPTURE_OUTPUT__;
+    const mainTitle = __MAIN_TITLE__;
     const errors = [];
     const failures = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -37,7 +38,7 @@ async (page) => {
 
     await open('/add_task_by_web');
     await page.locator('.workbench-hero h1').waitFor();
-    await page.getByText('把阅读变成可以复用的笔记', { exact: true }).first().waitFor();
+    await page.getByText(mainTitle, { exact: true }).first().waitFor();
     await capture('01-import');
 
     await open('/view/demo-note-0');
@@ -63,6 +64,10 @@ async (page) => {
     await open('/static/focus-studio.html');
     const diary = await page.evaluate(async () => (await (await fetch('/api/journal/entry')).json()).data.body);
     await page.locator('#focus-editor').fill(diary);
+    await page.locator('#focus-editor').evaluate(editor => {
+        editor.setSelectionRange(0, 0);
+        editor.scrollTop = 0;
+    });
     await page.waitForTimeout(850);
     await capture('06-writing');
 
@@ -83,7 +88,7 @@ async (page) => {
         else element.addEventListener('loadeddata', resolve, { once: true });
     }));
     await page.locator('.transcript-segment').nth(2).click();
-    await page.waitForFunction(() => { const v = document.querySelector('video'); return !v.seeking && v.currentTime >= 2.9 && v.readyState >= 2; });
+    await page.waitForFunction(() => { const v = document.querySelector('video'); return !v.seeking && v.currentTime >= 15.9 && v.readyState >= 2; });
     await capture('09-player');
 
     if (errors.length || failures.length) throw new Error(JSON.stringify({ errors, failures }));

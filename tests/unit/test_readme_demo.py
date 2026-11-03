@@ -62,7 +62,7 @@ def test_demo_renders_current_pages_and_authored_history(demo_server):
 
 
 def test_demo_media_range_supports_real_seeking(demo_server, tmp_path, monkeypatch):
-    media = tmp_path / "output/playwright/readme-20261103/demo-video.mp4"
+    media = tmp_path / "output/playwright/readme-20261103-cases/demo-video.mp4"
     media.parent.mkdir(parents=True)
     media.write_bytes(b"0123456789")
     monkeypatch.setattr(demo, "ROOT", tmp_path)

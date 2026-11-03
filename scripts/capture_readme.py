@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import threading
 
-from readme_demo import DemoHandler, ROOT, STATIC, get_static_asset_version
+from readme_demo import CASE_SOURCES, DemoHandler, ROOT, STATIC, TITLE, get_static_asset_version
 
 
 NAMES = ["01-import", "02-result", "03-collections", "04-reading-library",
@@ -24,7 +24,7 @@ NAMES = ["01-import", "02-result", "03-collections", "04-reading-library",
 ROUTES = ["/add_task_by_web", "/view/demo-note-0", "/collections?collection_id=demo-course",
           "/reading", "/reading/demo-book-0", "/static/focus-studio.html",
           "/static/history.html", "/briefings", "/study/demo-note-1"]
-WORK = ROOT / "output/playwright/readme-20261103"
+WORK = ROOT / "output/playwright/readme-20261103-cases"
 
 
 def sha256(path: Path) -> str:
@@ -33,7 +33,7 @@ def sha256(path: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "docs/images/readme-20261103")
+    parser.add_argument("--output", type=Path, default=ROOT / "docs/images/readme-20261103-cases")
     args = parser.parse_args()
     for executable in ("npx", "ffmpeg", "cwebp"):
         if not shutil.which(executable):
@@ -43,7 +43,7 @@ def main() -> None:
     destination.mkdir(parents=True, exist_ok=True)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-loop", "1",
                     "-i", str(STATIC / "images/landing/learnflux-reading-nook-cover.webp"),
-                    "-t", "8", "-vf", "scale=960:-2", "-r", "24", "-c:v", "libx264",
+                    "-t", "45", "-vf", "scale=960:-2", "-r", "24", "-c:v", "libx264",
                     "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(WORK / "demo-video.mp4")], check=True)
     server = ThreadingHTTPServer(("127.0.0.1", 0), DemoHandler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
@@ -52,7 +52,8 @@ def main() -> None:
     session = f"readme-{server.server_port}"
     cli = ["npx", "--yes", "--package", "@playwright/cli@0.1.23", "playwright-cli", "--session", session]
     code = (ROOT / "scripts/readme_capture.cjs").read_text().replace(
-        "__DEMO_BASE__", json.dumps(base)).replace("__CAPTURE_OUTPUT__", json.dumps(str(WORK)))
+        "__DEMO_BASE__", json.dumps(base)).replace("__CAPTURE_OUTPUT__", json.dumps(str(WORK))).replace(
+        "__MAIN_TITLE__", json.dumps(TITLE, ensure_ascii=False))
     try:
         # The dedicated browser session and ephemeral origin contain demo data only.
         subprocess.run([*cli, "open", base], check=True, capture_output=True, text=True)
@@ -76,8 +77,10 @@ def main() -> None:
         "playwright_cli": "0.1.23", "webp_quality": 88,
         "asset_version": get_static_asset_version(STATIC),
         "fixture_sha256": sha256(ROOT / "scripts/readme_demo.py"),
+        "cases_sha256": sha256(ROOT / "scripts/readme_cases.py"),
         "capture_sha256": sha256(ROOT / "scripts/readme_capture.cjs"),
-        "data_source": "authored fixtures; no application config, database or provider calls",
+        "data_source": "public-source reading notes, public-domain books and authored scenarios; no application config, database or provider calls",
+        "sources": CASE_SOURCES,
         "javascript_errors": 0, "failed_local_requests": 0, "screenshots": shots,
     }
     (destination / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")

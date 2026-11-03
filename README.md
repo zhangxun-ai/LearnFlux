@@ -1,8 +1,8 @@
-<!-- project-cover:20261101:start -->
+<!-- project-cover:20261103:start -->
 <p align="center">
-  <img src="assets/project-cover-20261101.webp" alt="LearnFlux — AI-designed project cover" width="1280" />
+  <img src="assets/project-cover-20261103.webp" alt="LearnFlux：视频太长、文章太多？快捷指令一键提交，AI 帮你梳理重点" width="1280" />
 </p>
-<!-- project-cover:20261101:end -->
+<!-- project-cover:20261103:end -->
 
 # LearnFlux
 
@@ -14,11 +14,7 @@ LearnFlux 是一个可以部署在自己电脑或服务器上的 AI 学习工具
 
 **许可：** [MIT + Commons Clause](LICENSE)，包含商业使用限制；使用前请阅读完整条款。
 
-<p align="center">
-  <img src="docs/images/readme-20261103/02-result.webp" alt="一份资料整理后的结果：可读的内容解读、原文核对、精华标记与导出" width="1040" />
-</p>
-
-以下为真实界面截图，使用演示资料。[截图说明](docs/images/readme-20261103/README.md)
+以下为真实界面截图，案例来自公开资料、公版作品及原创演示内容。[截图说明](docs/images/readme-20261103-cases/README.md)
 
 ## 快速开始
 
@@ -50,15 +46,24 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 粘贴链接、上传文件或输入文字。音视频转成逐字稿，文章和文档提取正文，再由 AI 总结要点。阅读时可以回看原文、标记重要内容，也可以导出笔记，或保存到已配置的 Obsidian、飞书。
 
 <p align="center">
-  <img src="docs/images/readme-20261103/01-import.webp" alt="单篇学习：链接、本地文件、文字三种导入方式，以及近期任务" width="1040" />
+  <img src="docs/images/readme-20261103-cases/02-result.webp" alt="Karpathy 公开演讲阅读笔记：AI 编程、代码检查与原文核对" width="1040" />
 </p>
+
+<details>
+<summary>查看导入页面</summary>
+
+<p align="center">
+  <img src="docs/images/readme-20261103-cases/01-import.webp" alt="单篇学习：链接、本地文件、文字三种导入方式，以及近期任务" width="1040" />
+</p>
+
+</details>
 
 ### 系列深度学习：按章节学习，生成课程总结
 
 将一门课程或同一主题的资料放进一个系列，逐章查看原文和 AI 解读，再生成全系列总结。有可播放源文件的章节，可以直接进入 **边播边学**。
 
 <p align="center">
-  <img src="docs/images/readme-20261103/03-collections.webp" alt="系列学习：四节课程的章节列表、处理进度、章节解读和播放器入口" width="1040" />
+  <img src="docs/images/readme-20261103-cases/03-collections.webp" alt="《竞争战略》读书笔记：咖啡店案例、四个章节与重点解读" width="1040" />
 </p>
 
 ### 边播边学：对照文稿看视频，随手记笔记
@@ -66,7 +71,7 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 视频和逐字稿同步显示，点击某段文字就能跳到对应的播放位置。遇到不懂的内容可以向 AI 提问，也可以边看边记笔记。播放需要保留可用的源文件。
 
 <p align="center">
-  <img src="docs/images/readme-20261103/09-player.webp" alt="边播边学：本地演示视频与可定位的分段文稿，旁边保留AI解读和学习笔记" width="1040" />
+  <img src="docs/images/readme-20261103-cases/09-player.webp" alt="边播边学：咖啡店案例演示短片、文稿跳转与学习笔记" width="1040" />
 </p>
 
 ### 心流阅读：沉浸式阅读 PDF、电子书和文档
@@ -74,14 +79,14 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 支持 PDF、EPUB、DOCX、TXT 和 Markdown，导入后统一放在书架中。阅读器支持单页 / 双页、目录、字号和主题切换，并自动保存阅读进度。扫描版 PDF 需要另外安装 OCR（文字识别工具）。
 
 <p align="center">
-  <img src="docs/images/readme-20261103/04-reading-library.webp" alt="文档书架：继续阅读卡片、阅读进度和四份原创示例文档" width="1040" />
+  <img src="docs/images/readme-20261103-cases/04-reading-library.webp" alt="心流书架：《背影》《朝花夕拾》等公版作品与阅读进度" width="1040" />
 </p>
 
 <details>
 <summary>查看双页阅读界面</summary>
 
 <p align="center">
-  <img src="docs/images/readme-20261103/05-reading.webp" alt="沉浸阅读：暖色纸面、双页正文、章节与阅读进度" width="1040" />
+  <img src="docs/images/readme-20261103-cases/05-reading.webp" alt="朱自清《背影》原文的双页阅读界面" width="1040" />
 </p>
 
 </details>
@@ -91,7 +96,7 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 用来写日记、学习笔记或草稿。可以选择雨景或雪景，调整字体与背景音，使用专注计时。文字自动保存，支持导出 TXT 或 Markdown。
 
 <p align="center">
-  <img src="docs/images/readme-20261103/06-writing.webp" alt="心流写作：雨景中的原创演示日记、字体和背景音控制、专注计时与导出" width="1040" />
+  <img src="docs/images/readme-20261103-cases/06-writing.webp" alt="心流写作：下班游泳的演示日记、雨景、背景音与专注计时" width="1040" />
 </p>
 
 ### 历史记录：搜索和回看学过的内容
@@ -99,7 +104,7 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 按标题、作者或正文搜索，也可以按来源、时间和处理状态筛选，重新打开原文和 AI 总结。选中多份资料后，可以向 AI 提问、比较其中的观点，回答会附上引用出处。
 
 <p align="center">
-  <img src="docs/images/readme-20261103/07-history.webp" alt="历史记录：绳夹式最近学习卡片、来源与内容筛选、完整记录列表" width="1040" />
+  <img src="docs/images/readme-20261103-cases/07-history.webp" alt="历史记录：公开演讲、读书笔记与公版散文的卡片和搜索列表" width="1040" />
 </p>
 
 ### 日报：集中阅读 AI 资讯和微信日报
@@ -107,7 +112,7 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 在同一个页面阅读 **AI 导游** 和 **微信日报**，按日期查看往期内容，下载或保存报告。使用前需按[日报指南](docs/guides/daily-briefings.md)配置数据来源和报告生成；打开页面本身不会生成日报。
 
 <p align="center">
-  <img src="docs/images/readme-20261103/08-briefings.webp" alt="日报阅读：AI导游与微信日报切换、期号选择和原创示例报告正文" width="1040" />
+  <img src="docs/images/readme-20261103-cases/08-briefings.webp" alt="日报阅读：Karpathy 演讲与 Anthropic 文章的阅读摘要" width="1040" />
 </p>
 
 复盘模块支持按日、周、月、年记录和回顾。详细操作步骤见[使用指南](docs/guides/product-tour.md)。

@@ -1,281 +1,147 @@
-# 系统架构
+# LearnFlux 架构
 
-本文档详细介绍视频转录 API 的系统架构、核心模块设计和处理流程。
+LearnFlux 是一个可自托管的学习工作台：把链接、文件或文字整理成可阅读的原文与笔记，继续提问、复盘，并按需保存到自己的知识工具。
 
----
+第一次使用只需要 **Python 应用、默认 SQLite 与文件存储，以及已配置的大模型 API**。从一段文字开始，不需要先安装转录模型、TikHub、PostgreSQL 或对象存储。安装步骤见 [README](../README.md#快速开始)，配置字段见 [配置指南](guides/configuration.md)。
 
-## 架构概览
+本文描述当前工作区实现；服务是否可用仍取决于实际配置。模块存在不代表第三方账号、模型、网络和权限已经配置完成。
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     用户请求层                              │
-├─────────────────────────────────────────────────────────────┤
-│  FastAPI → verify_token → audit_logger → task_queue (异步)  │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │               │               │
-    ┌────▼────┐    ┌────▼────┐    ┌──────▼─────┐
-    │ 下载器   │    │ 转录器   │    │ LLM 处理器  │
-    │  工厂    │    │ 双引擎   │    │  协调器     │
-    │+URL解析  │    │         │    │ (模块化）    │
-    └────┬────┘    └────┬────┘    └────┬───────┘
-         │              │               │
-    ┌────▼──────────────▼───────────────▼────┐
-    │         智能缓存与持久化系统             │
-    │  (PostgreSQL / SQLite 兼容后端)          │
-    │  + URL 解析层（提前缓存检测）           │
-    └────────────────────────────────────────┘
+## 一条主链路，按来源分流
+
+```mermaid
+flowchart TD
+    A[浏览器或 API 提交资料] --> B[认证、归属与任务记录]
+    B --> C{资料类型}
+    C -->|文字与文档| D[读取或提取正文]
+    C -->|平台链接与音视频| E[获取字幕或下载媒体]
+    E --> F{已有可用字幕?}
+    F -->|有| G[统一原文与时间戳]
+    F -->|无| H[按配置转录]
+    H --> G
+    D --> I[LLM 校对与解读]
+    G --> I
+    I --> J[保存结果与任务状态]
+    J --> K[阅读、检索、提问与笔记]
+    K --> L[下载导出或按需同步]
 ```
 
----
+文字和文档直接进入文本处理；已有字幕的音视频可复用字幕。只有需要语音识别的媒体才进入 ASR。飞书 Wiki / Docx 也走正文读取路径，不作为媒体下载或转录。
 
-## 多平台下载器
+提交和后台处理分开：浏览器负责显示进度和结果，服务中的任务队列与 LLM 队列负责继续处理。刷新或离开页面不会取消已经接收的任务。
 
-项目使用工厂模式动态匹配下载器，支持以下平台：
+## 模块边界
 
-| 平台 | 下载器类 | 特殊能力 |
-|------|---------|---------|
-| **YouTube** | YoutubeDownloader | 原生字幕、远程 API 服务器、yt-dlp 下载、实例级缓存优化 |
-| **Bilibili** | BilibiliDownloader | TikHub API、BBDown 工具支持 |
-| **抖音** | DouyinDownloader | TikHub API 获取无水印流 |
-| **小红书** | XiaohongshuDownloader | TikHub v3 接口 |
-| **小宇宙播客** | XiaoyuzhouDownloader | 网页爬虫解析 |
-| **通用链接** | GenericDownloader | 直接流式下载、断点续传 |
+| 位置 | 负责什么 |
+| --- | --- |
+| `main.py`、`api/server.py`、`api/app.py` | 读取启动环境、创建 FastAPI 应用、注册路由和后台处理器。 |
+| `api/routes/` | 提交资料、读取进度、展示页面、学习、阅读、复盘及设置等接口。 |
+| `api/services/` | 串起来源获取、转录、LLM、任务恢复与结果交付。 |
+| `downloaders/`、`document_sources/` | 获取平台内容，或在授权后读取文档正文。 |
+| `transcriber/` | 转录策略、不同服务的适配、并发、报价与调用状态。 |
+| `llm/` | 模型调用、校对、说话人处理、分段和总结。 |
+| `cache/`、`persistence/` | 保存任务、解析结果及业务数据，适配 SQLite / PostgreSQL。 |
+| `study/`、`collections/` | 单份资料学习、多资料对照、课程章节与系列解读。 |
+| `reading/`、`reviews/`、`journal/` | 文档阅读、复盘与写作相关数据和操作。 |
+| `exports/`、`obsidian/` | 导出和可选的外部知识工具同步。 |
+| `src/web/` | 页面模板、静态页面、公共导航、样式与浏览器交互。 |
 
-**工厂模式实现**：
+主要协调逻辑仍在 Python 应用中；无需为默认本地使用先拆成多个独立服务。队列和部分后台状态属于应用进程，不能仅增加 Web 进程数量就假设获得了协调一致的分布式任务系统。
 
-```python
-def create_downloader(url):
-    platform_downloaders = [
-        DouyinDownloader(), BilibiliDownloader(),
-        XiaohongshuDownloader(), YoutubeDownloader(),
-        XiaoyuzhouDownloader()
-    ]
-    for downloader in platform_downloaders:
-        if downloader.can_handle(url):
-            return downloader
-    return GenericDownloader()
+## 来源获取与转录
+
+来源获取和语音识别是两个不同边界：平台限制、登录或字幕获取失败，与转录服务的故障需要分别定位。
+
+- **平台来源**：`downloaders/factory.py` 选择对应适配器。YouTube、Bilibili、抖音、小红书、小宇宙等有不同实现；部分平台需要 TikHub、Cookie、独立服务或特定网络条件。
+- **本地文件与文字**：由学习接口和 `api/services/source_preservation.py` 保存来源或提取正文，不必先经过平台下载器。
+- **飞书文档**：`document_sources/feishu.py` 检查配置的所有者与本机 CLI 身份后读取。缓存内容也受归属检查约束；未展开的图片或画板应在结果中说明。
+
+转录按任务选择和配置启用，不要求同时安装以下所有服务：
+
+| 方式 | 实现与前提 |
+| --- | --- |
+| 本机 Whisper | `LocalWhisperProvider` 调用配置的 `mlx_whisper` 程序。当前适配面向 Apple Silicon macOS 的 MLX Whisper；需安装可执行程序并准备模型。 |
+| CapsWriter | 普通转录的另一条本地服务路径，通过 WebSocket 连接独立服务。配置模板地址为 `ws://localhost:6016`。 |
+| FunASR 说话人识别 | 独立的说话人识别客户端；模板地址为 `ws://localhost:8767`。是否使用由任务选项与配置决定。 |
+| 云端转录 | 当前有阿里云 FunASR 适配。默认关闭，凭据来自环境变量；新提交需要可信报价和用户确认。 |
+
+`transcriber/transcriber.py` 保持普通转录的统一入口，适配器返回可供既有处理流程使用的结果。具体支持的音频、时间戳和说话人能力，以所选服务及测试为准。
+
+## LLM 与带出处的学习
+
+`llm/` 将原文交给配置的模型，完成校对与结构化解读；长内容可分段处理。模型选择、调用重试和内容降级由现有配置与客户端负责，不在每个页面重复实现。
+
+`study/` 在已经保存的原文和解析结果上提供播放器、笔记与提问：
+
+1. **先授权，再读资料**：单份或多份资料均检查调用者的访问范围；多资料对照先核对全部所选来源。
+2. **检索有边界**：`study/body_search.py` 读取已授权正文；`study/evidence.py` 用本地词语匹配选择相关段落，不依赖额外向量数据库。
+3. **保留真实位置**：进入模型的片段保留原文行号或时间戳。短资料可完整提供，长资料采用受限检索或明确说明的抽样，不把部分内容描述为全文。
+4. **模型回答可核对**：回答与引用需要回到原文判断；检索命中不等于模型结论必然正确。
+
+系列学习通过 `collections/` 管理资料与章节，组织全系列主线和章节解读。播放器是否可用还取决于媒体文件、字幕与来源是否仍可访问。
+
+## 持久化与恢复
+
+**新安装默认使用 SQLite 与本地文件。** `persistence/runtime.py` 读取 `LEARNFLUX_PERSISTENCE_BACKEND`；未指定时为 `sqlite`。切换 PostgreSQL 需要显式选择后端并配置 `DATABASE_URL`，不会自动替用户迁移数据。
+
+| 数据 | 存放与边界 |
+| --- | --- |
+| 任务、进度与业务元数据 | 由缓存管理器和各业务仓库保存；服务端状态是进度的依据。 |
+| 解析结果 | SQLite 模式主要由缓存目录保存正文和结构化文件；PostgreSQL 模式将解析产物保存到数据库并使用哈希校验。 |
+| 原始媒体与文档 | 来源文件与解析结果有不同保留策略；不要把 ASR 临时目录当作永久资料库。 |
+| 浏览器状态 | 保存导航偏好、部分草稿和近期查询等增强状态，不替代服务端结果与归属校验。 |
+
+持久任务控制存储的 `updated_at` 是进度心跳依据。用户界面按北京时间展示日期，接口时间带明确偏移，保存的时间点按 UTC 处理。
+
+服务启动时会核对可恢复任务，但恢复不等于无条件重放。`api/services/task_recovery.py` 只恢复保存了请求信息且重新通过所有者和状态检查的普通本地链接任务；上传任务、取消任务、禁用用户及云端提交不能照此盲目重试。云端状态不明时须走专门的确认与恢复逻辑，避免重复提交和计费。
+
+PostgreSQL schema 和迁移位于 `persistence/migrations/postgres/`。迁移验收与回滚见 [PostgreSQL 指南](guides/postgresql.md)。对象存储也是单独配置的可选依赖。
+
+## 页面、公共导航与缓存
+
+工作台同时保留静态 HTML 页面和 Jinja 结果模板，共用同一套导航和外壳：
+
+- `src/web/product-navigation.json` 保存菜单数据，`scripts/sync_product_navigation.py` 生成静态导航与模板片段。
+- `app-shell.js` 管理导航交互；`app-shell.css` 与 `workbench-wildwood.css` 提供公共结构和主题。Jinja 页面从 `base.html` 继承，内容区的补充样式放在 `page_styles`。
+- `api/assets.py` 为全部 CSS / JS 计算内容版本，运行时页面和生成脚本共用。页面不维护各自的资源文件清单。
+- `api/static_files.py` 要求 HTML / CSS / JS 重新验证；Service Worker 在线获取绕过旧 HTTP 缓存，断网时保留可用的公共页面回退。API、私密结果和带私密缓存指令的响应不进入公共离线缓存。
+
+这样，修改公共导航或主题时，可以检查同一来源，而不需要为历史页、设置页和结果页分别修一份外观。
+
+常用入口：
+
+| 入口 | 用途 |
+| --- | --- |
+| `/add_task_by_web` | 导入链接、文件或文字。 |
+| `/view/{view_token}` | 查看处理进度、完成结果或错误。查看凭据应作为私密链接处理。 |
+| `/study`、`/collections` | 单份资料播放与学习、系列资料组织。 |
+| `/reading`、`/static/focus-studio.html`、`/review` | 阅读、写作和复盘。 |
+| `/static/history.html` | 搜索并继续过去的学习任务。 |
+| `/settings` | 查看和修改支持在界面中配置的项目。 |
+
+## 按需启用的集成
+
+| 集成 | 何时需要 | 说明 |
+| --- | --- | --- |
+| TikHub 与平台工具 | 导入相应社媒内容时 | 平台接入集中在下载器与配置中；获取能力受账号、网络和服务限制。 |
+| Obsidian | 希望保存到本机笔记库时 | 使用配置的 Vault 和目录，并处理已有文档的修改冲突。 |
+| 飞书归档 | 希望在飞书回看结果时 | 独立启用同步，保留交付状态、去重和版本保护；见 [飞书归档](guides/feishu-archive.md)。 |
+| 日报 | 已有授权来源和已生成报告时 | `/briefings` 只读取发布产物，页面 GET 不同步来源、不生成报告；见 [日报指南](guides/daily-briefings.md)。 |
+| 手动图解 | 用户明确点击生成时 | 可调用付费图片服务；页面打开不会生成，已保存图片不做额外模型审查；见 [图解指南](guides/image-diagrams.md)。 |
+| 手机入口与通知 | 需要远程提交或结果提醒时 | 手机提交、网络入口和通知分别配置；见 [手机快捷指令](guides/mobile-shortcut.md)与[通知指南](guides/notification.md)。 |
+
+这些集成不应成为完成第一次文字学习的前置条件。外部模型与服务可能收费，是否调用由实际操作、配置和服务规则决定。
+
+## 开发与验证
+
+从仓库根目录运行：
+
+```bash
+# 默认离线检查，不主动提交真实平台或模型任务
+uv run --extra dev pytest
+
+# 修改菜单或公共前端资源后同步并核对生成产物
+uv run python scripts/sync_product_navigation.py
+uv run python scripts/sync_product_navigation.py --check
 ```
 
-**实例生命周期**：每个转录任务创建独立的下载器实例，任务结束后自动销毁，无内存泄漏和并发问题。YouTube 下载器支持实例级缓存，避免任务内的重复 API 请求。
-
----
-
-## 双引擎转录
-
-### CapsWriter-Offline（通用转录）
-
-- WebSocket 实时流式传输
-- 音频分段处理：25s 片段 + 2s 重叠
-- 自动格式转换（MP3/WAV/M4A 等）
-- 默认端口：6006
-
-### FunASR（说话人识别）
-
-- 支持分片上传（1MB/片）+ MD5 校验
-- 说话人分离（Diarization）
-- 队列状态查询
-- 默认端口：8767
-
----
-
-## LLM 智能文本处理
-
-采用 **协调器-处理器-核心组件** 三层架构：
-
-```
-src/video_transcript_api/llm/
-├── coordinator.py              # 统一入口 + 场景路由
-├── core/                       # 核心基础组件（共享）
-│   ├── config.py               # LLMConfig 统一配置类
-│   ├── llm_client.py           # LLM 客户端薄封装（重试/翻译/降级由 llm-compat 处理）
-│   ├── key_info_extractor.py   # 关键信息提取器
-│   ├── speaker_inferencer.py   # 说话人推断器
-│   ├── quality_validator.py    # 质量验证器
-│   ├── cache_manager.py        # 缓存管理器
-│   └── errors.py               # 错误分类模块
-├── processors/                 # 独立的处理器
-│   ├── plain_text_processor.py    # 无说话人文本处理器
-│   ├── speaker_aware_processor.py # 有说话人文本处理器
-│   └── summary_processor.py      # 总结处理器
-├── segmenters/                 # 分段器
-│   ├── text_segmenter.py         # 无说话人文本分段器
-│   └── dialog_segmenter.py       # 有说话人文本分段器
-├── prompts/                    # 提示词模板
-│   └── schemas/                # JSON Schema 定义
-└── llm.py                      # LLM API 调用（通过 llm-compat SyncLLMClient）
-```
-
-### 处理流程
-
-```
-LLMCoordinator.process(content, title, ...)
-    │
-    ├── 步骤 1: 模型选择（风险降级）
-    │   └── config.select_models_for_task(has_risk)
-    │
-    ├── 步骤 2: 校对处理（场景路由）
-    │   ├── str  → PlainTextProcessor.process()
-    │   └── list → SpeakerAwareProcessor.process()
-    │
-    ├── 步骤 3: 总结生成（基于校对文本）
-    │   └── SummaryProcessor.process()
-    │
-    └── 步骤 4: 合并结果
-        └── {calibrated_text, summary_text, key_info, stats}
-```
-
-### 校对流程（4 步）
-
-1. **提取关键信息** — 从视频元数据提取人名、术语、品牌（KeyInfoExtractor）
-2. **说话人推断**（仅对话流）— 结合上下文推断真实姓名（SpeakerInferencer）
-3. **智能分段 + 分段校对** — 并发处理，质量验证（TextSegmenter / DialogSegmenter）
-4. **质量验证** — 长度检查 + 可选 LLM 打分（QualityValidator）
-
-### 核心组件
-
-| 组件 | 类名 | 主要职责 |
-|------|------|---------|
-| 统一配置 | `LLMConfig` | 集中管理所有 LLM 配置，支持风险模型切换 |
-| 可靠调用 | `LLMClient` | 薄封装（重试/翻译/降级由 llm-compat SyncLLMClient 内部处理） |
-| 信息辅助 | `KeyInfoExtractor` | 从视频元数据提取关键信息，作为 Prompt 上下文 |
-| 角色还原 | `SpeakerInferencer` | 将 `spk_0` 映射为真实姓名 |
-| 质量防线 | `QualityValidator` | LLM 打分或长度比例验证 |
-| 总结生成 | `SummaryProcessor` | 基于校对文本生成总结，支持单/多说话人模式 |
-
-### 配置参数
-
-**分段处理**：
-- 触发阈值：`enable_threshold`（默认 5000 字符）
-- 每段大小：`segment_size`（默认 2000 字符）
-- 并发数：`concurrent_workers`（默认 10）
-
-**LLM 调用**（通过 llm-compat）：
-- 重试、指数退避、provider 翻译由 llm-compat 内部处理
-- 内容审查降级：主模型被拒时自动切换 fallback 模型（通过 `content_fallbacks` 配置）
-- 可选 Collector 集成：跨项目敏感词积累
-
-**质量阈值**：
-- 整体评分：`overall_score`（默认 8.0）
-- 单项评分：`minimum_single_score`（默认 7.0）
-
----
-
-## 缓存系统
-
-### 可切换持久化架构
-
-- **PostgreSQL（推荐）**：统一存储任务、业务元数据和解析产物；解析内容按原始字节及 SHA-256 保存，不依赖 `data/cache/` 文件。
-- **SQLite（兼容模式）**：`data/cache/cache.db` 保存元数据，文件系统保存转录、LLM 校对/总结和结构化 JSON。
-- **原始媒体**：两种模式均不复制进数据库，只保留外部路径或哈希引用。
-
-版本化 PostgreSQL schema 位于 `src/video_transcript_api/persistence/migrations/postgres/`；现有 SQLite 安装的无损迁移与回滚流程见 [PostgreSQL 持久化与数据迁移](guides/postgresql.md)。
-
-### 目录结构
-
-```
-data/cache/
-└── {platform}/
-    └── {YYYY}/
-        └── {YYYYMM}/
-            └── {media_id}/
-                ├── transcript_funasr.json
-                ├── transcript_capswriter.txt
-                ├── llm_calibrated.txt
-                ├── llm_summary.txt
-                ├── llm_processed.json
-                ├── key_info.json
-                └── speaker_mapping.json
-```
-
-### 智能缓存策略
-
-- 请求带说话人识别时，仅匹配对应缓存
-- 请求不带时，优先返回信息更丰富的说话人转录结果
-- 完整性验证：PostgreSQL 校验解析产物哈希；SQLite 模式校验缓存文件夹
-- URL 解析优化：下载前提前检查缓存，支持短链接自动解析
-
----
-
-## 企业级功能
-
-### 多用户管理
-
-- Bearer Token 认证
-- 用户启用/禁用控制
-- API Key 脱敏显示
-- 配置文件：`config/users.json`
-
-### 审计日志
-
-- 记录 API 端点、请求/响应时间、处理耗时、状态码、用户信息
-- 查询接口：`GET /api/audit/stats`、`GET /api/audit/calls`
-
-### 多渠道通知
-
-- 基于 `wecom-notifier` 库（v0.3.1+），支持企业微信和飞书双平台
-- `NotificationRouter` 路由层按配置自动分发到所有启用的渠道
-- 支持 per-channel webhook：全局配置、用户级配置、per-request 指定
-- 渠道 fallback：目标渠道失败时自动退到备用渠道
-- 超长文本自动分段、URL 保护模式、频率控制（各渠道独立）
-- 通知时机：任务创建、开始处理、缓存命中、转录完成、LLM 完成、ASR 告警
-
-### 风控系统
-
-- 远程动态加载敏感词库
-- 多策略脱敏：`summary`（整体替换）、`title`（前 6 字符）、`general`（全移除）
-- 风险模型自动切换：`risk_calibrate_model`、`risk_summary_model`
-
----
-
-## Web 界面
-
-### 任务提交
-
-访问 `GET /add_task_by_web`，图形化提交转录任务。
-
-### 结果查看
-
-访问 `GET /view/{view_token}`，根据任务状态展示不同页面：
-
-| 状态 | 模板 |
-|------|------|
-| `processing` | `processing.html` |
-| `success` | `transcript.html`（含总结、校对文本、浮动目录） |
-| `failed` | `error.html` |
-| `file_cleaned` | `cleaned.html` |
-
-### 导出模式
-
-| 模式 | 地址 | 返回格式 | 适用场景 |
-|------|------|---------|---------|
-| Raw | `?raw=calibrated` | 纯文本 | 程序抓取、复制到 AI 平台 |
-| Page | `?page=calibrated` | HTML 页面（含 meta 标签） | 爬虫抓取、浏览器阅读 |
-| File | `/export/{token}/{type}` | 文件下载 | 离线使用 |
-
----
-
-## 请求参数
-
-### `POST /api/transcribe`
-
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `url` | string | 是 | 平台链接 |
-| `use_speaker_recognition` | boolean | 否 | 是否启用说话人识别（默认 false） |
-| `wechat_webhook` | string | 否 | 企业微信 webhook 地址（向后兼容） |
-| `notification_config` | object | 否 | 通知配置：`{channel: "feishu", webhook: "..."}` |
-| `download_url` | string | 否 | 实际下载地址（跳过平台下载器） |
-| `metadata_override` | object | 否 | 元数据覆盖（title/description/author） |
-
-详见 [Download URL 与 Metadata Override 功能文档](features/source_url_and_metadata_override.md)。
-
----
-
-## 添加新平台
-
-1. 在 `src/video_transcript_api/downloaders/` 创建下载器类
-2. 继承 `BaseDownloader`，实现 `can_handle()`、`get_video_info()`、`download_file()`
-3. 在 `factory.py` 中注册
-4. 添加测试用例
+更细的单元检查、需显式启用的外部验证和临时文件规则见 [测试说明](../tests/README.md)及 [AGENTS.md](../AGENTS.md)。真实第三方接口、转录模型和部署环境仍需对应的集成验证；离线测试通过不代表这些外部条件已配置成功。

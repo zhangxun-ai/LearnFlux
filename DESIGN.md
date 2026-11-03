@@ -54,7 +54,9 @@ components:
 
 ## 历史记录参考稿对齐（2026-10-18）
 
-历史记录以用户提供的 1586 × 992 参考图为视觉验收依据。桌面侧栏 293px，正文从 x330 开始；标题、搜索、两行筛选、最近学习晾衣绳与全部记录表格保持原稿顺序。筛选与最近学习默认展开；性能缓存、分页大小和当页选择保留。系统导航紧随心流空间，不能被自动推到底部。
+历史记录右侧内容区以用户提供的 1586 × 992 参考图为视觉验收依据；标题、搜索、两行筛选、最近学习晾衣绳与全部记录表格保持原稿顺序。筛选与最近学习默认展开；性能缓存、分页大小和当页选择保留。侧边导航统一使用公共样式与交互，宽度、品牌区、分组位置、选中态、装饰及响应式行为均随公共导航，不在历史页单独覆盖（2026-11-03）。
+
+公共侧栏只有固定与自动隐藏两种桌面状态，状态与宽度跨页面保存；手机使用抽屉导航。移除品牌标语和历史页重复解释，保留明确的页面标题、控件标签与实际错误提示。公共主题由共享壳层引入，内容页仅负责内容样式。
 
 最近学习使用约 216px 宽的纸质卡片、190 × 122px 插画和木夹晾衣绳；表格使用同一条记录的同一插画缩略图。装饰不遮盖控件，不制造示例学习记录。插画资源位于 `src/web/static/images/history/`，由内置 imagegen 按参考图分别重建为窗台猫、书与茶、湖边小镇、书房猫、樱花电车、海岸六种场景，并提供顶部山野和侧栏花丛栅栏背景。纹理细节属于重建插画，不能宣称像素完全一致。
 
@@ -110,11 +112,28 @@ The palette keeps the page light and quiet; green marks the learning path and th
 - **Body** (400, `1rem`, `1.65`): Explanatory copy and step descriptions.
 - **Preview** (400–650, `0.72rem`–`1rem`): Compact product-interface details.
 
+### Reading roles
+
+Parsed results, series explanations and study answers share `output-reading.css`.
+Use system body fonts, a readable `72ch` measure, and type/spacing as the primary hierarchy.
+
+- **Article title:** 700, `clamp(1.55rem, 2.15vw, 2.1rem)`, line-height `1.45`.
+- **Reading body:** 400, `1rem`, line-height `1.9`, natural body ink `#35433C`.
+- **Section heading:** 700, `1.35rem`, leaf ink `#184C3A`; subsection `1.125rem`.
+- **Emphasis:** 700, dark ink `#202E27`; keep emphasis limited to meaningful phrases.
+- **Metadata:** `0.875rem`, secondary ink `#5B6C60`; source links `#23634F` and underlined.
+- **Quotation:** secondary ink on `#F3F7F1`; preserve normal prose size and line-height.
+- **Code:** `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`, `0.875em`.
+
+Dark mode uses separate readable ink roles. Long code and tables scroll inside their
+own container; prose wraps on narrow screens. Avoid applying the headline color
+to entire articles or making ordinary transcript paragraphs look like code.
+
 ## Layout
 
 The landing page is a single, viewport-filling illustrated composition. It has no top navigation or extra feature copy: a LearnFlux wordmark and two short lines of brand copy sit over the landscape, a handwritten note balances the right side, a wide learning-interface preview occupies the middle, and the three-step workflow rests at the bottom. The preview is the unobtrusive entry to `/add_task_by_web`.
 
-The workbench uses a 244px sidebar with three navigation groups and a flexible content area. Page bodies use responsive, readable content widths and white cards on warm paper. The study form, series workspace, player, review pages, reading shelf, immersive reader, writing studio, history, and settings keep their existing controls and interaction states. At narrower widths the content stacks, the book grid reduces columns, and focus controls move below the editor.
+The workbench uses a shared, resizable sidebar (280px by default) with three navigation groups and a flexible content area. Page bodies use responsive, readable content widths and white cards on warm paper. The study form, series workspace, player, review pages, reading shelf, immersive reader, writing studio, history, and settings keep their existing controls and interaction states. At narrower widths the content stacks, the book grid reduces columns, and focus controls move below the editor.
 
 The hero fills the viewport up to 820px and uses the panoramic artwork on extra-wide screens. At widths up to 1200px, the preview hides its note column to keep the transcript readable; below 760px it also hides the miniature sidebar and stacks the workflow steps. The mobile preview keeps the image and transcript side by side with readable text.
 

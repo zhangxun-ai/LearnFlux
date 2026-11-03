@@ -1,0 +1,74 @@
+{
+  "fixture_date": "2026-11-03",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "theme": "light",
+  "sidebar_width": 280,
+  "toc_pinned": true,
+  "playwright_cli": "0.1.23",
+  "webp_quality": 88,
+  "asset_version": "ce8122b3ec17",
+  "fixture_sha256": "7cf89945960feaf3b80e276a208d36ec34cf7c802e0e5e4919382a7a3d4360c1",
+  "capture_sha256": "f550367b59f5ac97734f4a7a9513db1aadd48824dedbb3859afb65594fdc492f",
+  "data_source": "authored fixtures; no application config, database or provider calls",
+  "javascript_errors": 0,
+  "failed_local_requests": 0,
+  "screenshots": [
+    {
+      "file": "01-import.webp",
+      "route": "/add_task_by_web",
+      "bytes": 98880,
+      "sha256": "c5ccde42b197f000a55b8f911521cb2c7fe5dbad5376c8507329e40d2bf614a6"
+    },
+    {
+      "file": "02-result.webp",
+      "route": "/view/demo-note-0",
+      "bytes": 77094,
+      "sha256": "5220cac66ae98d252ea1319be468d8524d89c64495d759c155bee5a199b6beeb"
+    },
+    {
+      "file": "03-collections.webp",
+      "route": "/collections?collection_id=demo-course",
+      "bytes": 65040,
+      "sha256": "b5f2c558ec1f9201063ebbbb061cb02a8432197caa66d8ef4d8116036d94179d"
+    },
+    {
+      "file": "04-reading-library.webp",
+      "route": "/reading",
+      "bytes": 84086,
+      "sha256": "c0f2982b469f47f593ead6e4cc1d76ebfaa59a1523b1334ecbc9c150e2c9a207"
+    },
+    {
+      "file": "05-reading.webp",
+      "route": "/reading/demo-book-0",
+      "bytes": 119998,
+      "sha256": "64a3b9f529f2f57d131fc7804233f6a8aa087fc38b7cf00bc5e8a5ec5b918fe4"
+    },
+    {
+      "file": "06-writing.webp",
+      "route": "/static/focus-studio.html",
+      "bytes": 235582,
+      "sha256": "9f8d338c2825e68640dd4675207b06eef39107fe4479e5d51815760989436939"
+    },
+    {
+      "file": "07-history.webp",
+      "route": "/static/history.html",
+      "bytes": 149614,
+      "sha256": "b0b948ce69509f27cf706565b3b40995196a7fec30603c6b00232912545e5d2d"
+    },
+    {
+      "file": "08-briefings.webp",
+      "route": "/briefings",
+      "bytes": 92708,
+      "sha256": "c2ee9b5059005c74dab245a94d487d99995beada7067cd7f7da6837e86967606"
+    },
+    {
+      "file": "09-player.webp",
+      "route": "/study/demo-note-1",
+      "bytes": 125842,
+      "sha256": "d30398e2864e7ef563423182fa7ac686e8de6d94d28b217b4389818f45803139"
+    }
+  ]
+}

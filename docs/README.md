@@ -6,6 +6,8 @@
 
 | 文档 | 内容 |
 | --- | --- |
+| [第一次使用](guides/quickstart.md) | 最小安装、模型设置、第一份文字笔记与排错 |
+| [功能使用指南](guides/product-tour.md) | 按用户任务选择入口，配合真实界面图解 |
 | [配置与 API Key](guides/configuration.md) | 配置文件复制、第三方 Key 来源、必填字段、环境变量与凭据安全 |
 | [API Quick Start](guides/api/quickstart.md) | Bearer Token、提交任务、轮询状态和获取结果 |
 | [TikHub 与小红书 API](guides/api/tikthub_xiaohongshu.md) | TikHub 接入和小红书相关接口 |
@@ -15,10 +17,10 @@
 | [多用户配置](guides/multi_user_setup.md) | 本地静态 API Token 配置 |
 | [手机快捷指令](guides/mobile-shortcut.md) | 手机直达本地任务、隧道范围、独立令牌和验收 |
 | [自动保存到飞书知识库](guides/feishu-archive.md) | 将完整解析结果自动归档为飞书文档，并持久化重试与去重状态 |
-| [读取飞书文档（开发中）](guides/feishu-documents.md) | 将 Wiki/Docx 正文送入深度学习，保留来源及读取范围；实现尚未合入 main |
+| [读取飞书文档](guides/feishu-documents.md) | 将 Wiki/Docx 正文送入深度学习，保留来源及读取范围 |
 | [PostgreSQL 指南](guides/postgresql.md) | SQLite 到 PostgreSQL 的迁移、验收和回滚 |
 
-新用户可以复制[本地快速启动提示词](prompts/macos-local-quick-start.md)，交给有本机终端权限的 Codex、Claude Code 或 WorkBuddy 检查依赖并启动服务，优先验证 Apple Silicon Mac 的本机转录路径。飞书归档、手机快捷入口和其他 ASR 的独立配置提示词见 [README 的服务配置](../README.md#按需配置服务给-agent-的提示词)，无需全部安装。
+新用户也可以复制[本地快速启动提示词](prompts/macos-local-quick-start.md)，交给有本机终端权限的 Agent 检查依赖并启动服务，先跑通文字学习。飞书归档、手机快捷入口和其他 ASR 的独立配置提示词见[可选服务配置](prompts/optional-services.md)，无需全部安装。
 
 ## 功能说明
 
@@ -31,6 +33,7 @@
 - [系统架构](architecture.md)：模块边界、处理流程和持久化。
 - [开发与验证规则](../AGENTS.md)：项目结构、命令、代码风格和验证边界。
 - [测试说明](../tests/README.md)：默认离线验证及需显式运行的外部检查。
+- [本地发布准备验证](release-readiness.md)：本轮验证结果、截图来源与尚未验收的运行环境。
 - [LLM 工程指南](development/llm/engineering_guide.md)：模型调用、结构化输出与错误处理。
 - [Gemini OpenAI 兼容模式](development/llm/gemini_openai_compat.md)。
 - [JSON 输出模式](development/llm/json_output.md)。

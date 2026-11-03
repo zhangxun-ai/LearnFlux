@@ -1,22 +1,21 @@
 # 本地快速启动提示词
 
-适用于 Codex、Claude Code、WorkBuddy 等具有本机终端与文件权限的 Agent。推荐 Apple Silicon Mac，提示词也要求识别其他平台的实际能力。复制整个代码块即可；无需把 API Key 发到对话里。
+适用于 Codex、Claude Code、WorkBuddy 等具有本机终端与文件权限的 Agent。先验证文字学习，再按需要启用音视频；提示词会识别平台的实际能力。复制整个代码块即可；无需把 API Key 发到对话里。
 
 ```text
 请在我的电脑上安装并启动 LearnFlux，完成到可以实际使用。我授权安装缺少的项目依赖；涉及管理员权限、新建付费服务或开放公网时先说明。
 
 1. 先阅读 https://github.com/zhangxun-ai/LearnFlux 的 README、AGENTS.md 和 scripts/bootstrap.sh。
    已有仓库就复用，没有再克隆；保留已有配置、数据、虚拟环境和正在运行的服务。
-2. 检查操作系统、CPU 架构、磁盘、Git、Python、uv、FFmpeg 与端口。
-   使用仓库固定的 Python 版本；安装缺少的依赖后检查当前终端的 PATH。
-3. Apple Silicon Mac 优先使用本机 mlx-whisper。
-   先检查已有安装；需要新装时使用 bash scripts/bootstrap.sh --with-local-whisper，并在配置中启用 local_whisper、填写实际可执行文件路径。
-   脚本只安装依赖，首次转录还会下载模型，请先告知磁盘和下载要求。
-4. Intel Mac、Linux、Windows 不套用 MLX 安装。
-   先核对当前转录策略与平台支持；可以先跑通文本学习。
-   若音视频路径尚不兼容，明确说明，不把网页能打开当成转录可用。
-5. 仅在 config/config.jsonc 不存在时从模板创建。
-   为新配置生成随机 api.auth_token，默认只监听 127.0.0.1，个人本机开启 browser_local_auto_login。
+2. 检查操作系统、CPU 架构、磁盘、Git、curl、uv 与端口。
+   在项目根目录运行 bash scripts/bootstrap.sh；脚本使用 Python 3.11，首次体验不要求安装 FFmpeg 或 ASR。
+3. 先验证粘贴文字的学习路径。只有我需要音视频时，再核对平台能力、配置转录引擎。
+   Apple Silicon Mac 可按需使用 bash scripts/bootstrap.sh --with-local-whisper；它会准备 FFmpeg 和独立 MLX 环境，随后在配置中启用 local_whisper。
+   Intel Mac、Linux、Windows 不套用 MLX 安装；首次转录/OCR下载模型前说明磁盘和网络需求。
+4. 扫描 PDF 的 OCR 为可选依赖，只有需要时运行 uv sync --extra ocr，并在重启后重试。
+   不把网页能打开当成转录或 OCR 已可用。
+5. 初始化脚本只在 config/config.jsonc 不存在时创建，自动生成随机 api.auth_token 并默认仅监听 127.0.0.1。
+   已有配置保持原样；不要手工复制带空口令的模板启动。
    密钥仅在本机保存和使用，不输出到聊天、终端、截图或 Git。
 6. AI 解读需要有效的 LLM API Key、Base URL 和模型。
    检查配置是否齐全，缺少时告诉我应在本机设置页填写哪些字段；不要要求我把密钥发到聊天。

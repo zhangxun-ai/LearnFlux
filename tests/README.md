@@ -1,8 +1,25 @@
 # 测试说明
 
+本机日报离线回归：`uv run --extra dev pytest tests/unit/test_briefings.py -q`。覆盖所有者与本机限制、动态授权范围、文件完整性、只读预览、同步确认与防覆盖，以及期号与内容日期适配、跨年/历史重生成、Markdown 下载与预览日期一致、微信界面去重时保留内容和出处。不会连接真实飞书或写入用户笔记库。2026-10-31 V2 实测 22 项通过；导航检查 `uv run python scripts/sync_product_navigation.py --check` 通过，依赖仍有 deprecation 警告。接入、来源项目验证和浏览器实测边界见 [日报指南](../docs/guides/daily-briefings.md) 与 [发布准备验证](../docs/release-readiness.md)。
+
+手动 GPT Image 图解的离线回归：`uv run --extra dev pytest tests/unit/test_image_diagram*.py`；浏览器交互模型：`node tests/frontend/image_diagrams_behavior.cjs`。覆盖短文直接一次生图、长文一次提炼、方案复用、彻底取消看图模型调用、来源完整性、权限、去重、未知结果不重发、历史版本与两阶段进度。真实 API 调用不包含在离线测试里，参见 [图解指南](../docs/guides/image-diagrams.md)。
+
 项目使用 pytest。开发、测试和输出规则以根目录的 [AGENTS.md](../AGENTS.md) 为唯一事实来源。
 
+## 公共导航与缓存回归
+
+`uv run --extra dev pytest tests/unit/test_frontend_asset_cache.py tests/unit/test_unified_product_shell.py tests/unit/test_product_linear_ui.py tests/unit/test_transcript_mobile_layout.py -q` 验证统一资源版本、公共主题接入、历史页不覆盖导航、旧侧栏状态迁移、静态 200/304/HEAD 再验证，以及 Service Worker 的旧 HTTP 缓存与断网回退。缓存模型可单独运行 `node tests/frontend/service_worker_cache_behavior.cjs`；导航生成后运行 `uv run python scripts/sync_product_navigation.py --check`。这些检查离线运行，不清除实际浏览器缓存、不调用模型。
+
 ## 默认验证
+
+首次安装与开源图文工具的离线检查：
+
+```bash
+uv run --extra dev pytest tests/unit/test_init_config.py tests/unit/test_bootstrap_script.py tests/unit/test_readme_demo.py -q
+uv run --extra dev pytest tests/integration/test_fresh_install.py -q
+```
+
+安装回归在临时目录生成随机配置，验证不覆盖已有设置；隔离启动使用新配置与空数据，并阻止外部请求。截图工具检查未知接口与私有路径无回退、处理和删除被禁用、演示时间与视频跳转契约。截图复现命令与来源见[截图说明](../docs/images/readme-20261103/README.md)，浏览器验收和真实模型调用分别报告。
 
 ```bash
 # verify-fast：快速单元测试
@@ -48,6 +65,18 @@ node tests/frontend/single_study_behavior.cjs
 页面约定：单篇只显示最近 4 条任务；完整历史提供每页 20/50/100 条与最多 1000 条的全部浏览，选择仅作用于当前页，打开状态以当前浏览器为准。记录缓存按当前用户与会话隔离，保留 60 秒；筛选元数据缓存 5 分钟，点击“刷新记录”可主动更新。
 
 ## 视频解析完整性回归
+
+`test_cloud_progress_display.py` 和 `tests/frontend/processing_quote_behavior.cjs` 覆盖确认后清除旧报价阶段、提交结果未知时明确暂停且不重复计费、查看接口按持久云端状态只读展示、报价失败稳定显示及进度请求不重入、不递归。以下检查不提交云端任务：
+
+```bash
+uv run --extra dev pytest tests/unit/test_cloud_progress_display.py tests/unit/test_task_state_template_ui.py
+```
+
+X 视频分流由 `test_twitter_video.py` 覆盖：帖子含视频、`/video/N`、引用视频、TikHub 两种媒体结构、纯文字帖、播放地址缺失、旧正文缓存隔离及本地/云端转写分流。全部离线模拟；云端流程验证停在费用确认前，不调用付费转写。
+
+```bash
+uv run --extra dev pytest tests/unit/test_twitter_video.py tests/unit/test_twitter_deep_learning.py tests/unit/test_twitter_post_fetcher.py
+```
 
 `test_summary_quality.py`、`test_summary_completion.py`、`test_summary_model_fallback.py` 和 `test_summary_compensation.py` 覆盖长访谈只有概述、短内容自然段、API 非正常结束、备用端点、Qwen Plus 推理参数适配及预算、仅解析重试、保存失败、重复重试，以及原文没有的技术引用和伪引语触发一次自动修订。全部使用离线模拟，不调用付费模型。`test_comment_cache_policy.py`、`test_llm_ops_helpers.py` 覆盖历史残缺总结不能直接复用。
 
@@ -100,6 +129,18 @@ LEARNFLUX_ALIYUN_ASR_MODE=resume LEARNFLUX_ALIYUN_ASR_SAMPLE=zh_terms_clean_15s 
 ## 飞书自动归档回归
 
 `uv run --extra dev pytest tests/unit/test_feishu_archive.py` 使用模拟本地 API 和 CLI，覆盖完整正文、安全转义、只处理启用时间后成功的任务、重启去重、回读失败重试、授权拒绝、未知写入结果核对以及截断检测。不会调用飞书或产生解析费用。真实验收需独立授权目标知识库，使用已有完整解析结果创建文档并回读全文，再重复运行确认不产生第二篇。
+
+`test_feishu_delivery.py` 覆盖结果页交付状态、任务与归档身份隔离、安全重试；归档回归还覆盖原生链接语义、更新基准版本、文字/格式/图片保护，以及未知更新结果不可认领人工富内容。测试只用临时数据库和模拟 CLI。
+
+## 核心质量回归
+
+```bash
+uv run --extra dev pytest tests/unit/test_task_queue_reliability.py tests/unit/test_cache_task_recovery.py tests/unit/test_study_evidence.py tests/unit/test_study_body_search.py tests/unit/test_history_routes.py tests/unit/test_study_routes.py tests/unit/test_feishu_archive.py tests/unit/test_feishu_delivery.py tests/unit/test_evidence_delivery_browser_behavior.py
+```
+
+任务用例覆盖乱序失败归属、有界队列、满载拒绝、最多三次本地恢复、身份/取消/付费保护。检索用例覆盖长课尾部、片段上下文上限、无依据问题、实际来源编号、2–5份资料对照、正文分页与缓存失效。前端用例覆盖来源定位、远端文字安全、身份切换后的旧请求隔离和有限重试。全部为离线模拟，不调用模型或外部内容平台；真实生成质量和模型耗时应单独说明。
+
+`uv run --extra dev pytest tests/unit/test_feishu_documents.py tests/unit/test_url_parser.py` 覆盖飞书 Wiki/Docx 身份、可信主机、完整读取及原始快照、视觉内容提示、CLI/权限失败、缓存前身份限制，以及正文直接进入文字学习而不进入下载/ASR。全部使用模拟 CLI 和临时数据，不登录或调用飞书，也不调用 AI 模型。
 
 ## 首页任务状态回归
 

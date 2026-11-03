@@ -1,13 +1,14 @@
 """
 Multi-channel notification abstraction.
 
-Defines NotificationChannel protocol and concrete implementations
-for WeChat Work (WeComChannel) and Feishu/Lark (FeishuChannel).
+Defines the NotificationChannel protocol and Feishu/Lark implementation.
+WeComChannel remains an inert adapter for historical imports.
 """
 
 import datetime
 import re
 from typing import Optional, Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 from wecom_notifier import FeishuNotifier
 
@@ -45,6 +46,15 @@ def _get_global_feishu_notifier() -> FeishuNotifier:
         logger.warning("Global FeishuNotifier not initialized, auto-initializing")
         init_global_feishu_notifier()
     return _global_feishu_notifier
+
+
+def _is_wecom_webhook(webhook: str) -> bool:
+    """Reject retired WeCom endpoints passed through legacy request fields."""
+    try:
+        host = (urlsplit(webhook).hostname or "").lower()
+    except ValueError:
+        return False
+    return host in {"qyapi.weixin.qq.com", "work.weixin.qq.com"}
 
 
 @runtime_checkable
@@ -238,6 +248,9 @@ class FeishuChannel:
         if not target:
             logger.warning("[feishu] No webhook configured, skipping send_text")
             return False
+        if _is_wecom_webhook(target):
+            logger.warning("[feishu] Ignoring removed WeCom notification endpoint")
+            return False
         if not content or not content.strip():
             logger.warning("[feishu] Empty content, skipping send_text")
             return False
@@ -258,6 +271,9 @@ class FeishuChannel:
         target = webhook or self.webhook
         if not target:
             logger.warning("[feishu] No webhook configured, skipping send_rich")
+            return False
+        if _is_wecom_webhook(target):
+            logger.warning("[feishu] Ignoring removed WeCom notification endpoint")
             return False
         if not content or not content.strip():
             logger.warning("[feishu] Empty content, skipping send_rich")
@@ -291,11 +307,10 @@ class FeishuChannel:
 
 
 class WeComChannel:
-    """WeChat Work notification channel — wraps existing WechatNotifier."""
+    """Disabled compatibility channel; old webhooks cannot re-enable it."""
 
     def __init__(self, webhook: str = None):
-        from .wechat import WechatNotifier
-        self._notifier = WechatNotifier(webhook)
+        self.webhook = None
 
     @property
     def name(self) -> str:
@@ -303,23 +318,15 @@ class WeComChannel:
 
     @property
     def is_enabled(self) -> bool:
-        return bool(self._notifier.webhook)
+        return False
 
     def send_text(self, content: str, webhook: str = None, **kwargs) -> bool:
-        """Send text via WeCom (delegates to WechatNotifier)."""
-        if webhook and webhook != self._notifier.webhook:
-            from .wechat import WechatNotifier
-            notifier = WechatNotifier(webhook)
-            return notifier.send_text(content)
-        return self._notifier.send_text(content)
+        """Never send, including when an explicit webhook is provided."""
+        return False
 
     def send_rich(self, content: str, webhook: str = None, **kwargs) -> bool:
-        """Send rich content via WeCom markdown (delegates to WechatNotifier)."""
-        if webhook and webhook != self._notifier.webhook:
-            from .wechat import WechatNotifier
-            notifier = WechatNotifier(webhook)
-            return notifier.send_markdown_v2(content, skip_risk_control=True)
-        return self._notifier.send_markdown_v2(content, skip_risk_control=True)
+        """Never send, including when an explicit webhook is provided."""
+        return False
 
     def notify_task_status(
         self,
@@ -331,9 +338,5 @@ class WeComChannel:
         transcript: str = None,
         webhook: str = None,
     ) -> bool:
-        """Send task status notification via WeCom."""
-        if webhook and webhook != self._notifier.webhook:
-            from .wechat import WechatNotifier
-            notifier = WechatNotifier(webhook)
-            return notifier.notify_task_status(url, status, error, title, author, transcript)
-        return self._notifier.notify_task_status(url, status, error, title, author, transcript)
+        """Never send, including when an explicit webhook is provided."""
+        return False

@@ -85,6 +85,7 @@ class UserManager:
         # 首先检查多用户配置
         if self._users_data and token in self._users_data:
             user_info = self._users_data[token].copy()
+            user_info["wechat_webhook"] = None
             
             # 检查用户是否启用
             if not user_info.get("enabled", True):
@@ -105,7 +106,7 @@ class UserManager:
                 "user_id": "legacy_user",
                 "name": "Legacy User",
                 "api_key": token,
-                "wechat_webhook": self.fallback_config.get("wechat", {}).get("webhook"),
+                "wechat_webhook": None,
                 "feishu_webhook": self.fallback_config.get("feishu", {}).get("webhook"),
                 "enabled": True,
                 "is_legacy": True  # 标记为回退模式用户
@@ -127,6 +128,7 @@ class UserManager:
         for api_key, user_info in self._users_data.items():
             if user_info.get("user_id") == user_id:
                 result = user_info.copy()
+                result["wechat_webhook"] = None
                 result["api_key"] = api_key
                 return result
         
@@ -138,7 +140,7 @@ class UserManager:
                     "user_id": "legacy_user",
                     "name": "Legacy User",
                     "api_key": fallback_token,
-                    "wechat_webhook": self.fallback_config.get("wechat", {}).get("webhook"),
+                    "wechat_webhook": None,
                     "feishu_webhook": self.fallback_config.get("feishu", {}).get("webhook"),
                     "enabled": True,
                     "is_legacy": True
@@ -147,20 +149,9 @@ class UserManager:
         return None
 
     def get_user_webhook(self, token: str) -> Optional[str]:
-        """
-        获取用户的企业微信webhook地址
-        
-        Args:
-            token: API令牌
-            
-        Returns:
-            str: webhook地址，如果未配置则返回None
-        """
-        user_info = self.validate_token(token)
-        if user_info:
-            return user_info.get("wechat_webhook")
+        """Return no retired enterprise-WeChat destination for legacy callers."""
         return None
-    
+
     def list_all_users(self) -> List[Dict[str, Any]]:
         """
         获取所有用户列表（不包含API密钥）
@@ -173,6 +164,7 @@ class UserManager:
         # 添加多用户配置中的用户
         for api_key, user_info in self._users_data.items():
             user_data = user_info.copy()
+            user_data["wechat_webhook"] = None
             user_data["api_key_masked"] = self._mask_api_key(api_key)
             users.append(user_data)
         
@@ -183,7 +175,7 @@ class UserManager:
                 "user_id": "legacy_user",
                 "name": "Legacy User",
                 "api_key_masked": self._mask_api_key(fallback_token),
-                "wechat_webhook": self.fallback_config.get("wechat", {}).get("webhook"),
+                "wechat_webhook": None,
                 "feishu_webhook": self.fallback_config.get("feishu", {}).get("webhook"),
                 "enabled": True,
                 "is_legacy": True

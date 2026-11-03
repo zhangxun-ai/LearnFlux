@@ -23,9 +23,8 @@ _global_router = None
 
 
 def init_all_notifiers():
-    """Initialize all notification subsystems (call at app startup)."""
+    """Initialize Feishu notifications and the router at app startup."""
     global _global_router
-    init_global_notifier()
     init_global_feishu_notifier()
     _global_router = NotificationRouter()
 
@@ -47,7 +46,7 @@ def get_notification_router() -> NotificationRouter:
 
 
 __all__ = [
-    # Legacy WeCom-specific (backward compatible)
+    # Disabled legacy imports, retained for old callers only
     "WechatNotifier",
     "wechat_notify",
     "send_long_text_wechat",

@@ -357,7 +357,7 @@ async def get_history(
                     and source_path.is_file()
                 )
                 items.append({
-                    "task_id": row[0], "video_url": row[1], "wechat_webhook": row[2],
+                    "task_id": row[0], "video_url": row[1], "wechat_webhook": None,
                     "request_time": row[3],
                     "request_time_display": format_datetime_with_timezone(row[3], "%Y-%m-%d %H:%M"),
                     "api_key_masked": api_key_masked,
@@ -395,7 +395,6 @@ async def get_filter_options(user_info: dict = Depends(verify_token)):
             ).fetchall()
         platform_counts = Counter(row[0] for row in rows)
         authors = Counter(row[1] for row in rows if row[1])
-        webhooks = Counter(row[2] for row in rows if row[2])
         counts = [
             {"platform": platform, "count": count}
             for platform, count in sorted(
@@ -403,7 +402,7 @@ async def get_filter_options(user_info: dict = Depends(verify_token)):
             )
         ]
         return {
-            "webhooks": [value for value, _ in webhooks.most_common(50)],
+            "webhooks": [],
             "platforms": [item["platform"] for item in counts],
             "platform_counts": counts,
             "authors": [value for value, _ in authors.most_common(50)],

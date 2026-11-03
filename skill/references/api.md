@@ -39,7 +39,6 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户管理口令）�
 {
   "url": "https://...",                        // 必填
   "use_speaker_recognition": false,            // 可选，默认 false
-  "wechat_webhook": "https://qyapi...",        // 可选，企微 webhook
   "feishu_webhook": "https://open.feishu.cn/...", // 可选，飞书 webhook
   "download_url": "https://direct-link.mp4",   // 可选，绕过平台解析
   "metadata_override": {                       // 可选
@@ -166,7 +165,7 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户管理口令）�
         "status": "success",
         "request_time": "2026-04-20 12:34:56",
         "video_url": "https://...",
-        "wechat_webhook": "..."
+        "wechat_webhook": null
       }
     ]
   }
@@ -203,7 +202,7 @@ Query：`view_token=...`。返回摘要前 300 字（快速预览用）。
     "user_info": {
       "user_id": "...",
       "api_key": "sk-xxx***",
-      "wechat_webhook": "...",
+      "wechat_webhook": null,
       "permissions": ["recalibrate"]
     },
     "is_multi_user_mode": true

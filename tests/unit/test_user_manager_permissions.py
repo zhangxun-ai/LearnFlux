@@ -190,9 +190,11 @@ class TestUserLookup:
         assert user["is_legacy"] is True
 
     def test_get_user_webhook(self, manager):
-        """Should return user's webhook URL."""
+        """Retired notification credentials must not leave user management."""
         webhook = manager.get_user_webhook("sk-admin-token")
-        assert webhook == "https://qyapi.weixin.qq.com/admin"
+        assert webhook is None
+        assert manager.validate_token("sk-admin-token")["wechat_webhook"] is None
+        assert manager.get_user_by_id("admin")["wechat_webhook"] is None
 
     def test_get_user_webhook_no_webhook(self, manager):
         """Should return None for user without webhook."""

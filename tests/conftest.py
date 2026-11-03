@@ -3,7 +3,7 @@
 """
 pytest 全局配置文件
 
-用于管理测试环境的全局资源，包括企业微信通知器的单例实例。
+用于管理测试环境的全局资源，包括飞书通知资源与路由器。
 """
 
 import os
@@ -22,7 +22,7 @@ from video_transcript_api.utils.notifications import (
 @pytest.fixture(scope="session", autouse=True)
 def setup_global_notifiers():
     """
-    Initialize all notification subsystems (WeCom + Feishu + Router)
+    Initialize all notification subsystems (Feishu + Router)
     once per test session.
     """
     init_all_notifiers()

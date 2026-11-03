@@ -120,6 +120,18 @@ def test_paid_terminal_disabled_and_protected_work_are_not_replayed(manager):
     assert prepare_task_recovery(manager, users(), protected_task_ids={safe}) == []
 
 
+def test_recovery_does_not_restore_retired_wechat_notifications(manager):
+    persist(manager, notification_channel="wechat")
+    user_manager = users()
+    user_manager.get_user_by_id.return_value["wechat_webhook"] = "retired-owner-hook"
+    recovered = prepare_task_recovery(manager, user_manager)
+    assert len(recovered) == 1
+    assert "wechat_webhook" not in recovered[0]
+    assert recovered[0]["notification_webhooks"] == {"feishu": "current-owner-hook"}
+    assert recovered[0]["notification_channel"] is None
+    assert "retired-owner-hook" not in str(recovered[0])
+
+
 def test_recovery_is_bounded_and_suppresses_request_override_notifications(manager):
     task_id = persist(manager, restore_notifications=False)
     for _ in range(3):

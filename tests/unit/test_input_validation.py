@@ -18,6 +18,7 @@ import pytest
 from pydantic import ValidationError
 from video_transcript_api.api.services.transcription import (
     MetadataOverride,
+    NotificationConfig,
     TranscribeRequest,
     RecalibrateRequest,
 )
@@ -30,26 +31,26 @@ class TestWebhookURLValidation:
         """Normal https webhook should be accepted."""
         req = TranscribeRequest(
             url="https://example.com/video",
-            wechat_webhook="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc",
+            feishu_webhook="https://open.feishu.cn/open-apis/bot/v2/hook/test-hook",
         )
-        assert req.wechat_webhook is not None
+        assert req.feishu_webhook is not None
 
     def test_none_webhook_accepted(self):
         """None webhook should be accepted."""
-        req = TranscribeRequest(url="https://example.com/video", wechat_webhook=None)
-        assert req.wechat_webhook is None
+        req = TranscribeRequest(url="https://example.com/video", feishu_webhook=None)
+        assert req.feishu_webhook is None
 
     def test_empty_webhook_accepted(self):
         """Empty string webhook should be accepted."""
-        req = TranscribeRequest(url="https://example.com/video", wechat_webhook="")
-        assert req.wechat_webhook == ""
+        req = TranscribeRequest(url="https://example.com/video", feishu_webhook="")
+        assert req.feishu_webhook == ""
 
     def test_localhost_webhook_rejected(self):
         """Localhost webhook should be rejected (SSRF)."""
         with pytest.raises(ValidationError) as exc_info:
             TranscribeRequest(
                 url="https://example.com/video",
-                wechat_webhook="http://127.0.0.1:8080/hook",
+                feishu_webhook="http://127.0.0.1:8080/hook",
             )
         assert "webhook URL is not allowed" in str(exc_info.value)
 
@@ -58,7 +59,7 @@ class TestWebhookURLValidation:
         with pytest.raises(ValidationError) as exc_info:
             TranscribeRequest(
                 url="https://example.com/video",
-                wechat_webhook="http://192.168.1.1/hook",
+                feishu_webhook="http://192.168.1.1/hook",
             )
         assert "webhook URL is not allowed" in str(exc_info.value)
 
@@ -67,16 +68,31 @@ class TestWebhookURLValidation:
         with pytest.raises(ValidationError):
             RecalibrateRequest(
                 view_token="test-token",
-                wechat_webhook="http://10.0.0.1/hook",
+                feishu_webhook="http://10.0.0.1/hook",
             )
 
     def test_recalibrate_valid_webhook(self):
         """RecalibrateRequest should accept valid webhook."""
         req = RecalibrateRequest(
             view_token="test-token",
-            wechat_webhook="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc",
+            feishu_webhook="https://open.feishu.cn/open-apis/bot/v2/hook/test-hook",
         )
-        assert req.wechat_webhook is not None
+        assert req.feishu_webhook is not None
+
+    @pytest.mark.parametrize("request_type,required", [
+        (TranscribeRequest, {"url": "https://example.com/video"}),
+        (RecalibrateRequest, {"view_token": "test-view-token"}),
+    ])
+    def test_removed_wechat_input_is_ignored_and_not_advertised(self, request_type, required):
+        request = request_type(**required, wechat_webhook="retired-test-secret")
+        assert "wechat_webhook" not in request.model_dump()
+        assert "wechat_webhook" not in request_type.model_json_schema()["properties"]
+
+    def test_notification_channel_accepts_only_feishu(self):
+        assert NotificationConfig(channel="feishu").channel == "feishu"
+        for channel in ("wechat", "wecom", "unrecognized"):
+            with pytest.raises(ValidationError):
+                NotificationConfig(channel=channel)
 
     def test_recalibrate_accepts_regenerate_summary_flag(self):
         """RecalibrateRequest should allow forcing summary regeneration."""

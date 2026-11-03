@@ -262,3 +262,16 @@ def test_existing_cli_commands_remain_available() -> None:
         "profile",
         "health",
     }.issubset(subparsers.choices)
+
+
+def test_retired_wechat_environment_is_not_submitted(monkeypatch, capsys):
+    monkeypatch.setenv("VIDEO_TRANSCRIPT_API_BASE_URL", "http://learnflux.test")
+    monkeypatch.setenv("VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK", "https://retired.example.invalid/hook")
+    sent = []
+    def fake_request(*args, **kwargs):
+        sent.append(kwargs["json_body"])
+        return 202, {"data": {"task_id": "test-task"}}
+    monkeypatch.setattr(cli, "_request", fake_request)
+    assert cli.main(["submit", "https://example.com/video", "--format", "json"]) == 0
+    assert sent == [{"url": "https://example.com/video"}]
+    assert "retired.example.invalid" not in capsys.readouterr().out

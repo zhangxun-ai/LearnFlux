@@ -1,6 +1,6 @@
 """ASR 服务监控模块
 
-后台定时检查 CapsWriter/FunASR 服务状态，连续失败时发送企微告警，
+后台定时检查 CapsWriter/FunASR 服务状态，连续失败时发送已配置渠道的告警，
 恢复后发送恢复通知。内置防抖机制（告警后 30 分钟内不重复告警）。
 """
 
@@ -24,7 +24,7 @@ DEFAULT_DEBOUNCE_SECONDS = 1800  # 30 分钟防抖
 class ASRMonitor:
     """ASR 服务监控器
 
-    定期检查 ASR 服务状态，连续失败时发送企微告警。
+    定期检查 ASR 服务状态，连续失败时发送已配置渠道的告警。
 
     Attributes:
         services: 被监控的服务列表
@@ -47,7 +47,7 @@ class ASRMonitor:
             check_interval: 检查间隔（秒）
             failure_threshold: 连续失败次数阈值
             debounce_seconds: 告警防抖时间（秒）
-            notifier: 通知器实例（WechatNotifier），为 None 时自动创建
+            notifier: 通知路由器实例，为 None 时自动创建
         """
         self.services = services or {}
         self.check_interval = check_interval

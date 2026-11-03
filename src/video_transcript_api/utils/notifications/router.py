@@ -8,7 +8,7 @@ and fallback on failure.
 from typing import Dict, List, Optional
 
 from ..logging import setup_logger, load_config
-from .channel import FeishuChannel, WeComChannel, NotificationChannel
+from .channel import FeishuChannel, NotificationChannel
 
 logger = setup_logger("notification_router")
 
@@ -23,14 +23,6 @@ class NotificationRouter:
     def _init_channels_from_config(self):
         """Detect and initialize channels based on config."""
         config = load_config()
-
-        if config.get("wechat", {}).get("webhook"):
-            try:
-                ch = WeComChannel()
-                self.channels.append(ch)
-                logger.info("[router] WeChat channel initialized")
-            except Exception as e:
-                logger.error(f"[router] Failed to init WeChat channel: {e}")
 
         if config.get("feishu", {}).get("webhook"):
             try:
@@ -48,22 +40,23 @@ class NotificationRouter:
 
     @property
     def is_enabled(self) -> bool:
-        return len(self.channels) > 0
+        return bool(self._resolve_targets())
 
     def _resolve_targets(
         self, channel_name: Optional[str] = None
     ) -> List[NotificationChannel]:
         """Resolve which channels to send to."""
+        active = [ch for ch in self.channels if ch.name not in {"wechat", "wecom"}]
         if channel_name:
-            return [ch for ch in self.channels if ch.name == channel_name]
-        return list(self.channels)
+            return [ch for ch in active if ch.name == channel_name]
+        return active
 
     def _get_fallback_channels(
         self, excluded: List[NotificationChannel]
     ) -> List[NotificationChannel]:
         """Get channels not in the excluded list (for fallback)."""
         excluded_names = {ch.name for ch in excluded}
-        return [ch for ch in self.channels if ch.name not in excluded_names]
+        return [ch for ch in self._resolve_targets() if ch.name not in excluded_names]
 
     def _resolve_webhook(
         self, ch_name: str, webhooks: Optional[Dict[str, str]] = None, webhook: str = None,

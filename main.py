@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from video_transcript_api.utils.logging import setup_logger
 setup_logger()
 
-# 注意：全局 WeComNotifier 会在 FastAPI 的 startup_event 中初始化
+# 注意：飞书通知资源 会在 FastAPI 的 startup_event 中初始化
 # 在 shutdown_event 中清理，无需在 main.py 中重复初始化
 
 from video_transcript_api.api.server import start_server

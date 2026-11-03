@@ -33,7 +33,6 @@ skill/
 | `VIDEO_TRANSCRIPT_API_BASE_URL` | ✅ | **API 请求地址**。内网/tailnet/局域网优先，延迟低。如 `http://localhost:8000` / `http://100.68.21.80:8200` |
 | `VIDEO_TRANSCRIPT_API_TOKEN` | ✅ | Bearer token。优先使用 `users.json` 的独立 key；不要提交到 Git 或粘贴进 Agent 对话 |
 | `VIDEO_TRANSCRIPT_API_PUBLIC_URL` | — | **给用户点的公网地址**（可选）。不设时用 BASE_URL。如 `https://vt.example.com` |
-| `VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK` | — | **企业微信 webhook 默认值**（可选）。设置后 submit 自动带上，`--webhook` 传参时覆盖。如 `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx` |
 | `VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK` | — | **飞书 webhook 默认值**（可选）。设置后 submit 自动带上，`--feishu-webhook` 传参时覆盖。如 `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
 
 **为什么分两个地址**：API 请求追求低延迟，通常走内网；但返给用户的 `/view/<token>` 链接需要能从公网打开。配了 PUBLIC_URL 后，`submit` / `status` / `history` 打印给用户的链接会自动用公网域名拼。
@@ -152,7 +151,7 @@ python3 skill/scripts/videotranscript.py doctor
 | `status <task_id>` | 查任务状态（agent 内部使用），success 时自动附带 view_token |
 | `result <view_token>` | 拉结果文本（`--type summary`/`calibrated`/`transcript`） |
 | `history` | 按平台/作者/关键词/日期/状态查历史任务 |
-| `filter-options` | 列出可选的平台/作者/webhook |
+| `filter-options` | 列出可选的平台/作者 |
 | `profile` | 当前用户信息 |
 | `health` | 服务健康探活 |
 

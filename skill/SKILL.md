@@ -51,7 +51,6 @@ skill 在调用时从环境或用户自己的 `~/.learnflux/agent.env` 读取，
 | `VIDEO_TRANSCRIPT_API_BASE_URL` | ✅ | 脚本发 API 请求用的地址 | `http://localhost:8000` / `http://100.68.21.80:8200`（tailnet）|
 | `VIDEO_TRANSCRIPT_API_TOKEN` | ✅ | Bearer token；优先独立用户 key | `users.json` 的某个 key；可信单用户环境可用 `api.auth_token` |
 | `VIDEO_TRANSCRIPT_API_PUBLIC_URL` | —  | 给用户点的**公网**地址，不设时用 BASE_URL | `https://vt.example.com` |
-| `VIDEO_TRANSCRIPT_API_WECHAT_WEBHOOK` | —  | 企业微信 webhook 默认值，`--webhook` 传参时覆盖 | `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx` |
 | `VIDEO_TRANSCRIPT_API_FEISHU_WEBHOOK` | —  | 飞书 webhook 默认值，`--feishu-webhook` 传参时覆盖 | `https://open.feishu.cn/open-apis/bot/v2/hook/xxx` |
 
 **为啥分两个地址**：服务端常跑在内网/tailnet（BASE_URL 用这个，请求最快），但用户拿 `/view/<token>` 链接可能从公网打开。配 PUBLIC_URL 后，skill 返回给用户的查看页面 URL 用公网域名拼，无论用户在哪张网都点得开。没配 PUBLIC_URL 的场景（纯本机 / 都在一张网内）行为不变。
@@ -78,7 +77,6 @@ python3 scripts/videotranscript.py submit <url> [options]
 
 常用 options：
 - `--speaker`：启用说话人识别（FunASR 引擎，结果会按说话人分段，但更慢）
-- `--webhook URL`：完成后推送企业微信（覆盖服务端默认 webhook）
 - `--feishu-webhook URL`：完成后推送飞书（覆盖服务端默认飞书 webhook）
 - `--title "..."`, `--author "..."`, `--description "..."`：覆盖自动解析的元数据
 - `--download-url URL`：绕过平台解析，用直链下载音视频
@@ -132,7 +130,7 @@ Options：`--platform youtube`、`--author 作者名`、`--q 关键词`、`--sta
 ### 辅助命令
 
 - `status <task_id>`：用 task_id 查详细进度（一般不需要，`result` 已经能判断是否完成）
-- `filter-options`：列出服务端已有的平台/作者/webhook 列表（做下拉时用）
+- `filter-options`：列出服务端已有的平台/作者 列表（做下拉时用）
 - `profile`：查当前 token 对应的用户信息
 - `health`：无鉴权探活，用来排查连不上的问题
 

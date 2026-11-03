@@ -54,11 +54,7 @@ from ...transcriber.media_preparer import (
 from ...transcriber.usage_repository import UsageEventRepository
 from ...transcriber.asr_retry_repository import ASRRetryConflict, ASRRetryRepository
 from ...transcriber.providers.local_whisper import local_transcription_error_message
-from ...utils.notifications import (
-    WechatNotifier,
-    send_long_text_wechat,
-    get_notification_router,
-)
+from ...utils.notifications import get_notification_router
 from ...utils.notifications.channel import _clean_url
 from ...utils.rendering import get_base_url
 from ...utils.perf_tracker import PerfTracker
@@ -2046,7 +2042,7 @@ class MetadataOverride(BaseModel):
 
 class NotificationConfig(BaseModel):
     """通知配置（可选，用于 per-request 指定渠道）"""
-    channel: Optional[str] = Field(None, description="通知渠道: wechat / feishu / None(全部)")
+    channel: Optional[Literal["feishu"]] = Field(None, description="通知渠道: feishu / None(默认)")
     webhook: Optional[str] = Field(None, description="自定义 webhook URL")
 
     @field_validator("webhook")
@@ -2070,9 +2066,6 @@ class TranscribeRequest(BaseModel):
         "local", description="转录策略；旧客户端安全默认使用本地免费"
     )
     use_speaker_recognition: bool = Field(False, description="是否使用说话人识别功能")
-    wechat_webhook: Optional[str] = Field(
-        None, description="企业微信webhook地址"
-    )
     feishu_webhook: Optional[str] = Field(
         None, description="飞书webhook地址"
     )
@@ -2095,7 +2088,7 @@ class TranscribeRequest(BaseModel):
         False, description="是否保存解析过程中下载到的源内容文件"
     )
 
-    @field_validator("wechat_webhook", "feishu_webhook")
+    @field_validator("feishu_webhook")
     @classmethod
     def validate_webhook_url(cls, v):
         """验证 webhook URL 安全性（防止 SSRF）"""
@@ -2116,11 +2109,11 @@ class RecalibrateRequest(BaseModel):
     regenerate_summary: bool = Field(
         False, description="是否强制重新生成内容总结/AI 解读"
     )
-    wechat_webhook: Optional[str] = Field(
-        None, description="企业微信webhook地址，用于发送通知"
+    feishu_webhook: Optional[str] = Field(
+        None, description="飞书webhook地址，用于发送通知"
     )
 
-    @field_validator("wechat_webhook")
+    @field_validator("feishu_webhook")
     @classmethod
     def validate_webhook_url(cls, v):
         """验证 webhook URL 安全性（防止 SSRF）"""

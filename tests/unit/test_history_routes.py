@@ -12,6 +12,7 @@ Module-level singletons are patched to point at the temp files.
 All console output must be in English only (no emoji, no Chinese).
 """
 
+import json
 import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch, PropertyMock
@@ -755,8 +756,8 @@ class TestFilterOptionsEndpoint:
         assert data["platforms"] == []
         assert data["authors"] == []
 
-    def test_returns_distinct_webhooks(self, history_client):
-        """Repeated webhook calls should appear only once."""
+    def test_retired_webhooks_are_not_exposed(self, history_client):
+        """Keep legacy audit rows without returning retired credentials."""
         client, setup = history_client
         al = setup["audit_logger"]
         insert = setup["insert_task"]
@@ -770,9 +771,11 @@ class TestFilterOptionsEndpoint:
         resp = client.get("/api/audit/filter-options")
         assert resp.status_code == 200
         webhooks = resp.json()["data"]["webhooks"]
-        assert len(webhooks) == 2
-        assert _WEBHOOK_A in webhooks
-        assert _WEBHOOK_B in webhooks
+        assert webhooks == []
+        history = client.get("/api/audit/history").json()["data"]
+        assert all(item["wechat_webhook"] is None for item in history["items"])
+        assert _WEBHOOK_A not in json.dumps(history)
+        assert _WEBHOOK_B not in json.dumps(history)
 
     def test_returns_distinct_platforms(self, history_client):
         """Platforms are deduplicated from the cache JOIN."""

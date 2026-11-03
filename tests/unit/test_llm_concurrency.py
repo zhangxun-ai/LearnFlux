@@ -82,8 +82,6 @@ def patched_llm_environment(monkeypatch):
     # Patch llm_ops module-level variables
     monkeypatch.setattr(llm_ops_module, "llm_task_queue", dummy_queue)
     monkeypatch.setattr(llm_ops_module, "cache_manager", dummy_cache)
-    monkeypatch.setattr(llm_ops_module, "send_long_text_wechat", fake_send_long_text)
-    monkeypatch.setattr(llm_ops_module, "WechatNotifier", fake_wechat_notifier)
     monkeypatch.setattr(llm_ops_module, "get_notification_router", lambda: _FakeRouter())
     monkeypatch.setattr(llm_ops_module, "get_base_url", lambda: "https://fake-base")
     monkeypatch.setattr(llm_ops_module, "time", SimpleNamespace(sleep=lambda *_: None))

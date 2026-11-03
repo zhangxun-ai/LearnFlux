@@ -68,6 +68,18 @@ global.FormData = class {
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 (async () => {
+    let submittedURLTask;
+    global.fetch = async (_url, options) => {
+        submittedURLTask = JSON.parse(options.body);
+        return {ok: true, json: async () => ({code: 202, data: {task_id: 'url-task'}})};
+    };
+    await APIManager.submitTranscription('https://example.com/video', false, true, 25, true, 'cloud');
+    assert.deepEqual(submittedURLTask, {
+        url: 'https://example.com/video', use_speaker_recognition: false,
+        include_comments: true, comment_limit: 25, preserve_source_file: true,
+        transcription_strategy: 'cloud',
+    });
+
     initializeTextImport();
     byId('study-text-title').value = 'Draft title';
     byId('study-text-content').value = 'Keep this important draft.';

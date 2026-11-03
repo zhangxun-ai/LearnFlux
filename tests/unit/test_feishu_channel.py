@@ -230,51 +230,31 @@ class TestFeishuNotifyTaskStatus:
 
 
 # ============================================================
-# WeComChannel wrapper
+# Disabled WeCom compatibility channel
 # ============================================================
-
-WECHAT_MODULE = "src.video_transcript_api.utils.notifications.wechat"
 
 
 class TestWeComChannel:
-    """Tests for WeComChannel — thin wrapper around WechatNotifier."""
+    """Legacy imports stay usable without constructing or sending anything."""
 
-    def test_wecom_channel_name(self):
-        with patch(f"{WECHAT_MODULE}.load_config", return_value={}), \
-             patch(f"{WECHAT_MODULE}._get_global_notifier", return_value=MagicMock()):
-            ch = WeComChannel(webhook="https://qyapi.weixin.qq.com/test")
-        assert ch.name == "wechat"
+    @pytest.mark.parametrize("webhook", [None, "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test"])
+    def test_disabled_with_or_without_legacy_webhook(self, webhook):
+        with patch(f"{MODULE}.load_config", side_effect=AssertionError("Must not read config")), \
+             patch("wecom_notifier.WeComNotifier", side_effect=AssertionError("Must not construct SDK")):
+            channel = WeComChannel(webhook=webhook)
+            assert channel.name == "wechat"
+            assert channel.is_enabled is False
+            assert channel.send_text("hello", webhook=webhook) is False
+            assert channel.send_rich("## hello", webhook=webhook) is False
+            assert channel.notify_task_status("https://example.com", "done", webhook=webhook) is False
 
-    def test_wecom_channel_delegates_send_text(self):
-        with patch(f"{WECHAT_MODULE}.load_config", return_value={}), \
-             patch(f"{WECHAT_MODULE}._get_global_notifier", return_value=MagicMock()):
-            ch = WeComChannel(webhook="https://qyapi.weixin.qq.com/test")
 
-        with patch.object(ch._notifier, "send_text", return_value=True) as mock_send:
-            result = ch.send_text("hello")
-
-        mock_send.assert_called_once()
-        assert result is True
-
-    def test_wecom_channel_delegates_send_rich(self):
-        with patch(f"{WECHAT_MODULE}.load_config", return_value={}), \
-             patch(f"{WECHAT_MODULE}._get_global_notifier", return_value=MagicMock()):
-            ch = WeComChannel(webhook="https://qyapi.weixin.qq.com/test")
-
-        with patch.object(ch._notifier, "send_markdown_v2", return_value=True) as mock_send:
-            result = ch.send_rich("## content")
-
-        mock_send.assert_called_once()
-        assert result is True
-
-    def test_wecom_channel_enabled_with_webhook(self):
-        with patch(f"{WECHAT_MODULE}.load_config", return_value={}), \
-             patch(f"{WECHAT_MODULE}._get_global_notifier", return_value=MagicMock()):
-            ch = WeComChannel(webhook="https://qyapi.weixin.qq.com/test")
-        assert ch.is_enabled is True
-
-    def test_wecom_channel_disabled_without_webhook(self):
-        with patch(f"{WECHAT_MODULE}.load_config", return_value={}), \
-             patch(f"{WECHAT_MODULE}._get_global_notifier", return_value=MagicMock()):
-            ch = WeComChannel()
-        assert ch.is_enabled is False
+@pytest.mark.parametrize("webhook", [
+    "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=legacy",
+    "https://work.weixin.qq.com/api/webhook/legacy",
+])
+def test_feishu_rejects_legacy_wecom_endpoint(feishu_channel, webhook):
+    assert feishu_channel.send_text("hello", webhook=webhook) is False
+    assert feishu_channel.send_rich("## hello", webhook=webhook) is False
+    feishu_channel.notifier.send_text.assert_not_called()
+    feishu_channel.notifier.send_card.assert_not_called()

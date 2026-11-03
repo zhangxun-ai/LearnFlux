@@ -46,7 +46,7 @@ from ...transcriber.cloud_quote_repository import CloudQuoteConflict
 from ...transcriber.asr_retry_repository import ASRRetryConflict
 from ...transcriber.usage_repository import UsageEventRepository
 from ..context import get_transcription_control_database
-from ...utils.notifications import send_view_link_wechat, get_notification_router
+from ...utils.notifications import get_notification_router
 from ...utils.accounts.user_manager import get_user_manager
 from ...utils.task_status import TERMINAL_STATUSES, TaskStatus, http_code_for_status
 from ...utils.timeutil import datetime_for_api
@@ -172,6 +172,10 @@ async def transcribe_video(
     request: Request,
     user_info: dict = Depends(verify_token),
 ):
+    # Preserve authentication/ownership while dropping a retired secret from
+    # legacy user files before the user snapshot enters the in-memory queue.
+    user_info = dict(user_info)
+    user_info.pop("wechat_webhook", None)
     if request_body.use_speaker_recognition and request_body.transcription_strategy == "cloud":
         raise HTTPException(status_code=422, detail="strategy_conflicts_with_speaker_mode")
     url = request_body.url
@@ -198,7 +202,6 @@ async def transcribe_video(
         f"收到转录API请求 - URL: {url}, 说话人识别: {request_body.use_speaker_recognition}, "
         f"评论洞察: {request_body.include_comments}, 评论上限: {request_body.comment_limit}, "
         f"保存源内容: {request_body.preserve_source_file}, "
-        f"自定义企微webhook: {request_body.wechat_webhook is not None}, "
         f"download_url: {normalized_download_url}, metadata_override: {normalized_metadata_override}"
     )
 
@@ -246,17 +249,12 @@ async def transcribe_video(
             # legacy single-token mode (see user_manager.validate_token),
             # so no additional fallback is needed here.
             notification_webhooks = {}
-            wechat_wh = user_info.get("wechat_webhook")
-            if wechat_wh:
-                notification_webhooks["wechat"] = wechat_wh
             feishu_wh = user_info.get("feishu_webhook")
             if feishu_wh:
                 notification_webhooks["feishu"] = feishu_wh
 
             # Per-request overrides (top-level fields > notification_config)
             effective_channel = None
-            if request_body.wechat_webhook:
-                notification_webhooks["wechat"] = request_body.wechat_webhook
             if request_body.feishu_webhook:
                 notification_webhooks["feishu"] = request_body.feishu_webhook
 
@@ -271,7 +269,6 @@ async def transcribe_video(
                 "id": task_id,
                 "url": url,
                 "use_speaker_recognition": request_body.use_speaker_recognition,
-                "wechat_webhook": notification_webhooks.get("wechat"),
                 "notification_webhooks": notification_webhooks,
                 "notification_channel": effective_channel,
                 "user_info": user_info,
@@ -285,7 +282,7 @@ async def transcribe_video(
                     else request_body.transcription_strategy
                 ),
                 "restore_notifications": not bool(
-                    request_body.wechat_webhook or request_body.feishu_webhook
+                    request_body.feishu_webhook
                     or (notification_config and notification_config.webhook)
                 ),
             }
@@ -360,7 +357,6 @@ async def transcribe_video(
             task_id=task_id,
             user_agent=request.headers.get("User-Agent"),
             remote_ip=request.client.host if request.client else None,
-            wechat_webhook=notification_webhooks.get("wechat"),
         )
 
         return TranscribeResponse(
@@ -985,15 +981,9 @@ async def recalibrate(
 
     # Build per-channel webhooks
     recal_webhooks = {}
-    wechat_wh = (
-        request_body.wechat_webhook
-        or user_info.get("wechat_webhook")
-        or config.get("wechat", {}).get("webhook")
-    )
-    if wechat_wh:
-        recal_webhooks["wechat"] = wechat_wh
     feishu_wh = (
-        user_info.get("feishu_webhook")
+        request_body.feishu_webhook
+        or user_info.get("feishu_webhook")
         or config.get("feishu", {}).get("webhook")
     )
     if feishu_wh:
@@ -1016,7 +1006,6 @@ async def recalibrate(
         "use_speaker_recognition": use_speaker_recognition,
         "transcription_data": transcription_data_for_llm if use_speaker_recognition else None,
         "is_generic": False,
-        "wechat_webhook": recal_webhooks.get("wechat"),
         "notification_webhooks": recal_webhooks,
         "calibrate_only": True,
         "regenerate_summary": request_body.regenerate_summary,
@@ -1041,7 +1030,6 @@ async def recalibrate(
         task_id=task_id,
         user_agent=request.headers.get("User-Agent"),
         remote_ip=request.client.host if request.client else None,
-        wechat_webhook=recal_webhooks.get("wechat"),
     )
 
     return TranscribeResponse(

@@ -10,7 +10,6 @@ const AppTime = typeof module !== 'undefined' && module.exports
 const APP_CONFIG = {
     STORAGE_KEYS: {
         BEARER_TOKEN: 'vta_bearer_token',
-        WECHAT_WEBHOOK: 'vta_wechat_webhook',
         SPEAKER_RECOGNITION: 'vta_speaker_recognition',
         INCLUDE_COMMENTS: 'vta_include_comments',
         COMMENT_LIMIT: 'vta_comment_limit',
@@ -25,7 +24,6 @@ const APP_CONFIG = {
 
 // 全局变量
 let currentTask = null;
-let webhookSaveTimer = null;
 
 /**
  * 通用URL提取正则表达式
@@ -64,9 +62,6 @@ class StorageManager {
                     return window.LearnFluxAuth.login(value);
                 }
                 return null;
-            } else if (key === APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK) {
-                // Webhook 地址直接存储（不是秘密）
-                localStorage.setItem(key, value);
             } else {
                 localStorage.setItem(key, JSON.stringify(value));
             }
@@ -86,10 +81,6 @@ class StorageManager {
             const value = localStorage.getItem(key);
             if (!value) return null;
 
-            if (key === APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK) {
-                // Webhook 地址直接读取
-                return value;
-            }
             return JSON.parse(value);
         } catch (e) {
             console.error('Storage read failed:', e);
@@ -307,7 +298,7 @@ class APIManager {
     /**
      * 提交转录任务
      */
-    static async submitTranscription(url, useSpeakerRecognition, wechatWebhook = null, includeComments = false, commentLimit = 100, preserveSourceFile = false, transcriptionStrategy = 'local') {
+    static async submitTranscription(url, useSpeakerRecognition, includeComments = false, commentLimit = 100, preserveSourceFile = false, transcriptionStrategy = 'local') {
         await requireManagementSession('输入管理口令后，即可提交当前链接；已经填写的内容不会丢失。');
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
 
@@ -319,11 +310,6 @@ class APIManager {
             preserve_source_file: Boolean(preserveSourceFile)
             ,transcription_strategy: transcriptionStrategy
         };
-
-        // 只有当 webhook 不为空时才添加到请求体中
-        if (wechatWebhook && wechatWebhook.trim() !== '') {
-            requestBody.wechat_webhook = wechatWebhook.trim();
-        }
 
         const response = await fetch('/api/transcribe', {
             method: 'POST',
@@ -990,26 +976,7 @@ class UIManager {
         }
     }
 
-    /**
-     * 清除 Webhook 地址
-     */
-    static clearWebhook() {
-        const input = document.getElementById('wechat-webhook');
-        input.value = '';
-        StorageManager.remove(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK);
 
-        // 显示提示
-        UIManager.showStatus('success', 'Webhook 地址已清除', '已删除浏览器本地保存的 Webhook 地址');
-        setTimeout(UIManager.hideStatus, 2000);
-    }
-
-    /**
-     * 显示 Webhook 保存成功提示
-     */
-    static showWebhookSaved() {
-        UIManager.showStatus('success', '✓ Webhook 地址已保存', '已自动保存到浏览器本地');
-        setTimeout(UIManager.hideStatus, 1500);
-    }
 }
 
 /**
@@ -2424,8 +2391,6 @@ async function submitTranscription(event) {
     const commentLimitEl = document.getElementById('comment-limit');
     const commentLimit = commentLimitEl ? (Number.parseInt(commentLimitEl.value, 10) || 100) : 100;
 
-    const wechatWebhookEl = document.getElementById('wechat-webhook');
-    const wechatWebhook = wechatWebhookEl ? wechatWebhookEl.value.trim() : '';
     const originalText = document.getElementById('share-content').value.trim();
 
     if (!selectedURL) {
@@ -2452,7 +2417,6 @@ async function submitTranscription(event) {
         const response = await APIManager.submitTranscription(
             selectedURL,
             useSpeakerRecognition,
-            wechatWebhook,
             includeComments,
             commentLimit,
             preserveSourceFile,
@@ -2501,18 +2465,11 @@ async function submitTranscription(event) {
 async function initializePage() {
     initializeTranscriptionStrategy();
     // 加载不敏感的浏览器偏好；管理口令只存在于共享会话组件中。
-    const savedWebhook = StorageManager.get(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK);
     const savedSpeakerRecognition = StorageManager.get(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION);
     const savedIncludeComments = StorageManager.get(APP_CONFIG.STORAGE_KEYS.INCLUDE_COMMENTS);
     const savedCommentLimit = StorageManager.get(APP_CONFIG.STORAGE_KEYS.COMMENT_LIMIT);
 
     // HttpOnly 会话不能、也不应回填到口令输入框。
-
-    // 加载 webhook 地址
-    if (savedWebhook) {
-        const webhookEl = document.getElementById('wechat-webhook');
-        if (webhookEl) webhookEl.value = savedWebhook;
-    }
 
     const speakerRecEl = document.getElementById('speaker-recognition');
     if (savedSpeakerRecognition !== null && speakerRecEl) {
@@ -2541,33 +2498,6 @@ async function initializePage() {
 
     const form = document.getElementById('transcribe-form');
     form.addEventListener('submit', submitTranscription);
-
-    const clearWebhookBtn = document.getElementById('clear-webhook');
-    if (clearWebhookBtn) {
-        clearWebhookBtn.addEventListener('click', UIManager.clearWebhook);
-    }
-
-    const webhookEl = document.getElementById('wechat-webhook');
-    if (webhookEl) {
-        webhookEl.addEventListener('input', (e) => {
-            const webhookValue = e.target.value;
-
-            // 立即保存到 localStorage
-            StorageManager.set(APP_CONFIG.STORAGE_KEYS.WECHAT_WEBHOOK, webhookValue);
-
-            // 清除之前的定时器
-            if (webhookSaveTimer) {
-                clearTimeout(webhookSaveTimer);
-            }
-
-            // 设置新的定时器：用户停止输入 1 秒后显示保存成功提示
-            if (webhookValue.trim() !== '') {
-                webhookSaveTimer = setTimeout(() => {
-                    UIManager.showWebhookSaved();
-                }, 1000);
-            }
-        });
-    }
 
     if (speakerRecEl) {
         speakerRecEl.addEventListener('change', (e) => {

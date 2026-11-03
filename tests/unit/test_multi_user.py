@@ -154,7 +154,7 @@ class TestMultiUser(unittest.TestCase):
         
         # 测试获取用户webhook
         webhook = user_manager.get_user_webhook("sk-test001-abcdefghij")
-        self.assertEqual(webhook, "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test1")
+        self.assertIsNone(webhook)
         
         # 测试无效令牌
         webhook = user_manager.get_user_webhook("invalid-token")

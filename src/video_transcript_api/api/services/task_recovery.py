@@ -18,10 +18,11 @@ def prepare_task_recovery(cache_manager, user_manager, *, protected_task_ids=())
             continue
         task["notification_webhooks"] = {}
         if task.pop("restore_notifications", False):
-            for channel in ("wechat", "feishu"):
-                if user.get(channel + "_webhook"):
-                    task["notification_webhooks"][channel] = user[channel + "_webhook"]
-        task["wechat_webhook"] = task["notification_webhooks"].get("wechat")
+            if user.get("feishu_webhook"):
+                task["notification_webhooks"]["feishu"] = user["feishu_webhook"]
+        task.pop("wechat_webhook", None)
+        if task.get("notification_channel") not in (None, "feishu"):
+            task["notification_channel"] = None
         task["recovered"] = True
         cache_manager.record_task_recovery(task_id)
         cache_manager.update_task_status(task_id, TaskStatus.QUEUED, force=True)

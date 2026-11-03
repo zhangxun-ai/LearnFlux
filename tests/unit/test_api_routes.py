@@ -126,9 +126,9 @@ def mock_task_queue():
 
 @pytest.fixture()
 def mock_send_notification():
-    """Patch wechat notification sending."""
+    """Keep notification dispatch fully offline."""
     with patch(
-        "video_transcript_api.api.routes.tasks.send_view_link_wechat"
+        "video_transcript_api.api.routes.tasks.get_notification_router"
     ) as mock:
         yield mock
 
@@ -231,6 +231,38 @@ class TestTranscribeEndpoint:
         assert body["data"]["task_id"] == "task-abc-123"
         assert body["data"]["view_token"] == "vt-xyz-789"
         mock_cache_manager.create_task.assert_called_once()
+
+    def test_removed_wechat_input_and_user_secret_never_enter_task(
+        self, client, mock_task_queue, mock_audit_logger, monkeypatch
+    ):
+        monkeypatch.setitem(_FAKE_USER_INFO, "wechat_webhook", "retired-user-secret")
+        response = client.post("/api/transcribe", json={
+            "url": "https://example.com/video",
+            "wechat_webhook": "retired-request-secret",
+        })
+        assert response.status_code == 200
+        assert response.json()["code"] == 202
+        task = mock_task_queue.get_nowait()
+        assert "wechat_webhook" not in task
+        assert "wechat_webhook" not in task["user_info"]
+        assert task["user_info"]["user_id"] == "test-user"
+        assert task["notification_webhooks"] == {}
+        assert task["restore_notifications"] is True
+        assert "retired-user-secret" not in str(task)
+        assert "retired-request-secret" not in str(task)
+        assert all("wechat_webhook" not in call.kwargs
+                   for call in mock_audit_logger.log_api_call.call_args_list)
+
+    def test_feishu_override_is_still_passed_to_task(self, client, mock_task_queue):
+        webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/test-hook"
+        response = client.post("/api/transcribe", json={
+            "url": "https://example.com/video",
+            "feishu_webhook": webhook,
+        })
+        assert response.status_code == 200
+        task = mock_task_queue.get_nowait()
+        assert task["notification_webhooks"] == {"feishu": webhook}
+        assert task["restore_notifications"] is False
 
     def test_transcribe_empty_url_returns_400(self, client):
         resp = client.post("/api/transcribe", json={"url": ""})
@@ -709,7 +741,7 @@ class TestRecalibrateEndpoint:
     """Tests for POST /api/recalibrate."""
 
     def test_recalibrate_can_force_summary_regeneration(
-        self, client, mock_cache_manager
+        self, client, mock_cache_manager, monkeypatch
     ):
         cursor = MagicMock()
         mock_cache_manager._get_cursor.return_value.__enter__.return_value = cursor
@@ -729,6 +761,11 @@ class TestRecalibrateEndpoint:
         llm_queue = MagicMock()
         user_manager = MagicMock()
         user_manager.check_permission.return_value = True
+        monkeypatch.setitem(_FAKE_USER_INFO, "wechat_webhook", "retired-user-secret")
+        monkeypatch.setattr("video_transcript_api.api.routes.tasks.config", {
+            "wechat": {"webhook": "retired-global-secret"},
+        })
+        feishu_webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/test-hook"
 
         with patch(
             "video_transcript_api.api.routes.tasks.get_user_manager",
@@ -739,7 +776,11 @@ class TestRecalibrateEndpoint:
         ):
             resp = client.post(
                 "/api/recalibrate",
-                json={"view_token": "vt-1", "regenerate_summary": True},
+                json={
+                    "view_token": "vt-1", "regenerate_summary": True,
+                    "wechat_webhook": "retired-request-secret",
+                    "feishu_webhook": feishu_webhook,
+                },
             )
 
         assert resp.status_code == 200
@@ -749,6 +790,11 @@ class TestRecalibrateEndpoint:
         assert queued_task["task_id"] == "task-recal-1"
         assert queued_task["calibrate_only"] is True
         assert queued_task["regenerate_summary"] is True
+        assert "wechat_webhook" not in queued_task
+        assert queued_task["notification_webhooks"] == {"feishu": feishu_webhook}
+        assert all(value not in str(queued_task) for value in (
+            "retired-user-secret", "retired-global-secret", "retired-request-secret",
+        ))
 
 
 class TestViewProgressEndpoint:

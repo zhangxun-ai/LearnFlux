@@ -6,7 +6,7 @@
   - 标题生成（通用下载器场景）
   - LLM 协调器调用（校对+总结）
   - 结果缓存保存
-  - 企微通知发送
+  - 已配置的飞书通知发送
 """
 
 import time
@@ -28,8 +28,6 @@ from ...comments import CommentInsightAnalyzer, generate_comment_insight
 from ...llm import call_llm_api
 from ...llm.summary_quality import summary_incompleteness_reason
 from ...utils.notifications import (
-    WechatNotifier,
-    send_long_text_wechat,
     format_llm_config_markdown,
     get_notification_router,
 )
@@ -418,7 +416,6 @@ def _handle_llm_task(llm_task: dict):
             video_title = llm_task["video_title"]
             transcript = llm_task["transcript"]
             use_speaker_recognition = llm_task.get("use_speaker_recognition", False)
-            wechat_webhook = llm_task.get("wechat_webhook")
             notification_channel = llm_task.get("notification_channel")
             notification_webhooks = llm_task.get("notification_webhooks", {})
             calibrate_only = llm_task.get("calibrate_only", False)

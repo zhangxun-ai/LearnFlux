@@ -14,7 +14,7 @@ LearnFlux 是一个可以部署在自己电脑或服务器上的 AI 学习工具
 
 **许可：** [MIT + Commons Clause](LICENSE)，包含商业使用限制；使用前请阅读完整条款。
 
-以下为真实界面截图，案例来自公开资料、公版作品及原创演示内容。[截图说明](docs/images/readme-20261103-cases/README.md)
+以下包含本地实际使用截图和公开资料演示，展示真实页面与操作。[截图说明](docs/images/readme-20261103-real/README.md)
 
 ## 快速开始
 
@@ -79,14 +79,14 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 支持 PDF、EPUB、DOCX、TXT 和 Markdown，导入后统一放在书架中。阅读器支持单页 / 双页、目录、字号和主题切换，并自动保存阅读进度。扫描版 PDF 需要另外安装 OCR（文字识别工具）。
 
 <p align="center">
-  <img src="docs/images/readme-20261103-cases/04-reading-library.webp" alt="心流书架：《背影》《朝花夕拾》等公版作品与阅读进度" width="1040" />
+  <img src="docs/images/readme-20261103-real/04-reading-library.webp" alt="本地实际书架：已导入的 PDF、阅读进度与 OCR 状态" width="1040" />
 </p>
 
 <details>
 <summary>查看双页阅读界面</summary>
 
 <p align="center">
-  <img src="docs/images/readme-20261103-cases/05-reading.webp" alt="朱自清《背影》原文的双页阅读界面" width="1040" />
+  <img src="docs/images/readme-20261103-real/05-reading.webp" alt="本地文档的实际双页阅读界面" width="1040" />
 </p>
 
 </details>
@@ -96,16 +96,34 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 用来写日记、学习笔记或草稿。可以选择雨景或雪景，调整字体与背景音，使用专注计时。文字自动保存，支持导出 TXT 或 Markdown。
 
 <p align="center">
-  <img src="docs/images/readme-20261103-cases/06-writing.webp" alt="心流写作：下班游泳的演示日记、雨景、背景音与专注计时" width="1040" />
+  <img src="docs/images/readme-20261103-real/06-writing-rain.webp" alt="心流写作：雨景中的实际工作记录、背景音与专注计时" width="1040" />
 </p>
+
+<details>
+<summary>查看雪景写作界面</summary>
+
+<p align="center">
+  <img src="docs/images/readme-20261103-real/06-writing-snow.webp" alt="心流写作：雪景中的实际工作记录" width="1040" />
+</p>
+
+</details>
 
 ### 历史记录：搜索和回看学过的内容
 
 按标题、作者或正文搜索，也可以按来源、时间和处理状态筛选，重新打开原文和 AI 总结。选中多份资料后，可以向 AI 提问、比较其中的观点，回答会附上引用出处。
 
 <p align="center">
-  <img src="docs/images/readme-20261103-cases/07-history.webp" alt="历史记录：公开演讲、读书笔记与公版散文的卡片和搜索列表" width="1040" />
+  <img src="docs/images/readme-20261103-real/07-history.webp" alt="历史记录：多平台真实学习记录、最近学习卡片和筛选列表" width="1040" />
 </p>
+
+<details>
+<summary>查看按平台筛选记录</summary>
+
+<p align="center">
+  <img src="docs/images/readme-20261103-real/07-history-filtered.webp" alt="历史记录：筛选视频号后的实际学习记录" width="1040" />
+</p>
+
+</details>
 
 ### 日报：集中阅读 AI 资讯和微信日报
 

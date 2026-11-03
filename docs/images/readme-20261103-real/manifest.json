@@ -1,0 +1,109 @@
+{
+  "date": "2026-11-03",
+  "source": "User-provided screenshots of their local LearnFlux installation, explicitly selected for the public README",
+  "quality": 90,
+  "screenshots": [
+    {
+      "file": "07-history-filtered.webp",
+      "description": "历史记录：按视频号筛选",
+      "source_sha256": "eb6aedd5ba6f6a99a19187b1ec444494f74fbb0a0203cec0e500c2a9b4fa1b08",
+      "sha256": "a5e139eedbc889c570e2ec8827fd6693f695d0d9f24c5b110575b36d278d3a7f",
+      "source_dimensions": {
+        "width": 2806,
+        "height": 1688
+      },
+      "dimensions": {
+        "width": 2806,
+        "height": 1592
+      },
+      "crop_bottom_pixels": 96,
+      "reason": "Remove browser status-link overlay containing a local result access token",
+      "bytes": 396176
+    },
+    {
+      "file": "07-history.webp",
+      "description": "历史记录：多平台真实学习记录",
+      "source_sha256": "64a60e05312d610a31db6af3c67dbd01be8b287bb3600a9b40f3e8588f3cf552",
+      "sha256": "46a3cbd08598a5c532f7fee821778e1ac64b9403d8d983471108a7a47d7a7a4f",
+      "source_dimensions": {
+        "width": 2912,
+        "height": 1680
+      },
+      "dimensions": {
+        "width": 2912,
+        "height": 1584
+      },
+      "crop_bottom_pixels": 96,
+      "reason": "Remove browser status-link overlay containing a local result access token",
+      "bytes": 404968
+    },
+    {
+      "file": "04-reading-library.webp",
+      "description": "心流阅读：本地 PDF 书架",
+      "source_sha256": "0600b9f639d0fc1c1d917795e03aa9e6357f09c77bcb60af923c9733dc025613",
+      "sha256": "38937c785954787a9e5abc6607551dac402a69a6068411c82d049f402a43d3ec",
+      "source_dimensions": {
+        "width": 2786,
+        "height": 1658
+      },
+      "dimensions": {
+        "width": 2786,
+        "height": 1658
+      },
+      "crop_bottom_pixels": 0,
+      "reason": "No cropping or content changes",
+      "bytes": 245772
+    },
+    {
+      "file": "05-reading.webp",
+      "description": "心流阅读：已导入文档的双页阅读",
+      "source_sha256": "2c91a1b3a5a1d9b4109773c9ceee1d05a91f2dc08266ac457cc32a3f52380fd0",
+      "sha256": "0d4915e1c89e8338520b00342a4434e564c921728200c5b717d0821586f7df79",
+      "source_dimensions": {
+        "width": 2764,
+        "height": 1560
+      },
+      "dimensions": {
+        "width": 2764,
+        "height": 1560
+      },
+      "crop_bottom_pixels": 0,
+      "reason": "No cropping or content changes",
+      "bytes": 267746
+    },
+    {
+      "file": "06-writing-snow.webp",
+      "description": "心流写作：雪景中的实际工作记录",
+      "source_sha256": "78c6894f566854d6ddc1294a53519f53d83e4379c24ce8e4b4a2909db34f6043",
+      "sha256": "4a1fa7526e1324e220777b79bf2a27199b068dc6862707a0cdd14e715d87cda8",
+      "source_dimensions": {
+        "width": 2878,
+        "height": 1610
+      },
+      "dimensions": {
+        "width": 2878,
+        "height": 1610
+      },
+      "crop_bottom_pixels": 0,
+      "reason": "No cropping or content changes",
+      "bytes": 366358
+    },
+    {
+      "file": "06-writing-rain.webp",
+      "description": "心流写作：雨景中的实际工作记录",
+      "source_sha256": "a2c4f209c7ebda11f4df29df9d55162111e5a455d1ad1b7d57673559e11caacd",
+      "sha256": "5f306e3a41962c45dfb4e41ab3ca898ee71975c0028acadf2aafc3d45699c5b4",
+      "source_dimensions": {
+        "width": 2896,
+        "height": 1638
+      },
+      "dimensions": {
+        "width": 2896,
+        "height": 1638
+      },
+      "crop_bottom_pixels": 0,
+      "reason": "No cropping or content changes",
+      "bytes": 390236
+    }
+  ]
+}

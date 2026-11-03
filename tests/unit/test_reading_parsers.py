@@ -4,8 +4,16 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 from video_transcript_api.reading import parsers
 from video_transcript_api.reading.parsers import ParsedChapter
+
+
+def test_missing_optional_ocr_explains_installation_before_scheduling(monkeypatch):
+    monkeypatch.setattr(parsers.importlib.util, "find_spec", lambda name: None)
+    with pytest.raises(parsers.LocalOcrUnavailable, match="uv sync --extra ocr"):
+        parsers._ensure_local_ocr_runner_available()
 
 
 def _render(source: str) -> str:

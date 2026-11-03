@@ -22,8 +22,6 @@ dependencies = [
     "pyclip>=0.7.0",
     "pydantic>=2.1.1",
     "pydub==0.25.1",
-    "paddleocr==3.7.0",
-    "paddlepaddle==3.2.0",
     "pymdown-extensions>=10.0.0",
     "pymupdf4llm>=1.28.0",
     "pypdf[crypto]>=6.13.1",
@@ -43,9 +41,14 @@ dependencies = [
     "wecom-notifier>=0.3.1",
     "youtube-transcript-api>=1.2.3",
     "yt-dlp[default]>=2025.12.8",
+    "openai>=2.0,<3",
 ]
 
 [project.optional-dependencies]
+ocr = [
+    "paddleocr==3.7.0",
+    "paddlepaddle==3.2.0",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",

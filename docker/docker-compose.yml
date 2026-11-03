@@ -3,8 +3,10 @@
 services:
   video-transcript-api:
     # Keep the service/container identifiers stable for existing deployments.
-    image: ghcr.io/zhangxun-ai/learnflux:latest
+    image: learnflux:local
     pull_policy: build
+    # The bundled Linux BBDown binary is amd64; Apple Silicon uses emulation.
+    platform: linux/amd64
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -12,9 +14,8 @@ services:
     environment:
       - TZ=Asia/Shanghai
     ports:
-      # 宿主端口 8200（n305 上 portainer 已占 8000）；外部入口
-      # https://sum.lexgogo.site 经 Cloudflare Tunnel 落到 :8200。
-      - "8200:8000"
+      # Local host access only. The container config must listen on 0.0.0.0:8000.
+      - "127.0.0.1:8200:8000"
     volumes:
       # Configuration files (user must prepare before starting)
       - ../config:/app/config

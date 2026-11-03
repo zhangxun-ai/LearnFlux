@@ -7,26 +7,32 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_TEMPLATE="$ROOT_DIR/config/config.example.jsonc"
 CONFIG_PATH="${LEARNFLUX_CONFIG_PATH:-$ROOT_DIR/config/config.jsonc}"
 INSTALL_LOCAL_WHISPER=false
+INSTALL_MEDIA=false
+INSTALL_DEV=false
 
 info() { printf '[LearnFlux] %s\n' "$*"; }
 fail() { printf '[LearnFlux] Error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
     cat <<'EOF'
-Usage: bash scripts/bootstrap.sh [--with-local-whisper]
+Usage: bash scripts/bootstrap.sh [--with-media] [--with-local-whisper] [--dev]
 
-Installs the LearnFlux Python dependencies, ensures FFmpeg is available, and
-creates config/config.jsonc from the example only when it does not exist.
+Installs the LearnFlux Python dependencies and creates a private local
+configuration only when it does not exist. Text learning needs no ASR setup.
 
 Options:
+  --with-media          Ensure FFmpeg is available for audio/video processing.
   --with-local-whisper  Install mlx-whisper for Apple Silicon macOS.
+  --dev                 Also install the test dependencies.
   -h, --help            Show this help text.
 EOF
 }
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --with-local-whisper) INSTALL_LOCAL_WHISPER=true ;;
+        --with-local-whisper) INSTALL_LOCAL_WHISPER=true; INSTALL_MEDIA=true ;;
+        --with-media) INSTALL_MEDIA=true ;;
+        --dev) INSTALL_DEV=true ;;
         -h|--help) usage; exit 0 ;;
         *) fail "Unknown option: $1" ;;
     esac
@@ -96,21 +102,26 @@ EOF
 }
 
 ensure_uv
-ensure_ffmpeg
-
-if [ ! -f "$CONFIG_PATH" ]; then
-    mkdir -p "$(dirname "$CONFIG_PATH")"
-    cp "$CONFIG_TEMPLATE" "$CONFIG_PATH"
-    info "Created $CONFIG_PATH from the example; add your API keys before starting the service."
-else
-    info "Keeping existing configuration: $CONFIG_PATH"
+if [ -z "${LEARNFLUX_CONFIG_PATH:-}" ] && [ ! -e "$CONFIG_PATH" ] && [ -e "$ROOT_DIR/config/config.json" ]; then
+    fail "Found legacy config/config.json. Preserve it and migrate it to config/config.jsonc before running bootstrap."
 fi
 
 info "Installing LearnFlux dependencies..."
-(cd "$ROOT_DIR" && "$UV_BIN" sync --extra dev)
+if [ "$INSTALL_DEV" = true ]; then
+    (cd "$ROOT_DIR" && "$UV_BIN" sync --frozen --python 3.11 --extra dev)
+else
+    (cd "$ROOT_DIR" && "$UV_BIN" sync --frozen --python 3.11)
+fi
+
+(cd "$ROOT_DIR" && "$UV_BIN" run --no-sync python scripts/init_config.py --output "$CONFIG_PATH" --template "$CONFIG_TEMPLATE")
+
+if [ "$INSTALL_MEDIA" = true ]; then
+    ensure_ffmpeg
+fi
 
 if [ "$INSTALL_LOCAL_WHISPER" = true ]; then
     install_local_whisper
 fi
 
-info "Bootstrap complete. Configure config/config.jsonc, then run: ./server.sh start"
+info "Bootstrap complete. Start the service: uv run python main.py --start"
+info "Open http://127.0.0.1:8000/settings, configure an LLM, then try a short text."

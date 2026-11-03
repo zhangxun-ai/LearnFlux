@@ -818,7 +818,10 @@ def _parse_pdf(path: Path) -> ParsedDocument:
 def _ensure_local_ocr_runner_available() -> None:
     """Fail clearly before scheduling pages when the local OCR package is absent."""
     if importlib.util.find_spec("paddleocr") is None:
-        raise LocalOcrUnavailable("local_ocr_not_installed")
+        raise LocalOcrUnavailable(
+            "Local OCR is not installed. Run uv sync --extra ocr in the project "
+            "directory, then restart LearnFlux."
+        )
 
 
 def run_local_ocr_runner(

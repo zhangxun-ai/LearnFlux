@@ -267,6 +267,7 @@ def test_app_shell_reconciles_the_canonical_navigation():
         "单篇深度学习",
         "系列深度学习",
         "边播边学",
+        "日报",
         "复盘",
         "心流空间",
         "心流阅读",
@@ -339,3 +340,10 @@ for (const [pathname, expectedHref] of [
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_unavailable_optional_ocr_has_a_concrete_install_instruction():
+    script = (STATIC_ROOT / "js/reading.js").read_text(encoding="utf-8")
+    assert "uv sync --extra ocr" in script
+    assert "item.parse_error === 'local_ocr_unavailable'" in script
+    assert "setStatus(needsOcrSetup ? LOCAL_OCR_SETUP_MESSAGE : '', needsOcrSetup)" in script

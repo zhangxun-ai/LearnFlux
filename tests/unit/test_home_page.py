@@ -253,21 +253,43 @@ def test_workbench_exposes_pasted_text_study_entry():
     assert 'id="study-text-submit"' in html
 
 
-def test_home_page_loads_scoped_linear_theme_once_and_versions_it():
+def test_home_page_loads_scoped_linear_theme_once_and_versions_it(tmp_path, monkeypatch):
     from pathlib import Path
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from video_transcript_api.api.assets import get_static_asset_version
+    from video_transcript_api.api.routes import views
 
     project_root = Path(__file__).resolve().parents[2]
     html = (project_root / "src/web/static/index.html").read_text(encoding="utf-8")
-    views = (
-        project_root / "src/video_transcript_api/api/routes/views.py"
-    ).read_text(encoding="utf-8")
-
     stylesheet = '/static/css/home-linear.css?v=__ASSET_VERSION__'
     assert html.count(stylesheet) == 1
     assert '<body class="app-shell has-app-shell product-linear page-home home-linear workbench-meadow">' in html
     assert html.count('/static/css/product-linear.css?v=__ASSET_VERSION__') == 1
-    assert 'static_dir / "css" / "product-linear.css"' in views
-    assert 'static_dir / "css" / "home-linear.css"' in views
+
+    (tmp_path / "index.html").write_text(html, encoding="utf-8")
+    styles = tmp_path / "css"
+    styles.mkdir()
+    theme = styles / "home-linear.css"
+    theme.write_text("body { color: green; }", encoding="utf-8")
+    (styles / "product-linear.css").write_text("body { margin: 0; }", encoding="utf-8")
+    monkeypatch.setattr(views, "static_dir", tmp_path)
+    app = FastAPI()
+    app.include_router(views.router)
+    client = TestClient(app)
+    before = get_static_asset_version(tmp_path)
+    for version in (before, None):
+        if version is None:
+            theme.write_text("body { color: darkgreen; }", encoding="utf-8")
+            version = get_static_asset_version(tmp_path)
+            assert version != before
+        response = client.get("/add_task_by_web")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-cache"
+        assert "__ASSET_VERSION__" not in response.text
+        for filename in ("home-linear.css", "product-linear.css"):
+            assert response.text.count(f"/static/css/{filename}?v={version}") == 1
+        assert response.text.count(f"/static/js/app.js?v={version}") == 1
 
     assert html.count('/static/js/app.js?v=__ASSET_VERSION__') == 1
     for element_id in (

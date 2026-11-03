@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from .collections import get_collection_service
+from ..assets import get_static_asset_version
 from ..context import (
     get_cache_manager,
     get_config,
@@ -119,23 +120,7 @@ async def visual_learning_page():
     if not page.exists():
         raise HTTPException(status_code=404, detail="图解生成页面不存在")
     static_dir = get_static_dir()
-    version_files = [
-        page,
-        static_dir / "css" / "editorial.css",
-        static_dir / "css" / "app-shell.css",
-        static_dir / "css" / "visual-learning.css",
-        static_dir / "css" / "product-linear.css",
-        static_dir / "css" / "product-linear-core.css",
-        static_dir / "js" / "visual-learning.js",
-        static_dir / "js" / "visual-learning-workbench.js",
-        static_dir / "js" / "ui-features.js",
-        static_dir / "js" / "app-shell.js",
-        static_dir / "js" / "pwa-register.js",
-    ]
-    version = str(max(
-        (path.stat().st_mtime_ns for path in version_files if path.exists()),
-        default=0,
-    ))
+    version = get_static_asset_version(static_dir)
     html = page.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version)
     return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 

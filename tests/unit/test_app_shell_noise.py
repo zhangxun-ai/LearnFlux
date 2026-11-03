@@ -1,6 +1,8 @@
 """Regression tests for the content-first application shell."""
 
 import re
+import subprocess
+from html.parser import HTMLParser
 from pathlib import Path
 
 from video_transcript_api.api.routes.views import _HOME_HTML
@@ -42,12 +44,74 @@ def test_production_shells_remove_static_status_and_duplicate_actions():
         assert "工作区就绪" not in topbar
 
 
-def test_production_shells_have_one_content_heading():
+class _VisibleHeadingParser(HTMLParser):
+    """Count document headings outside hidden panels, including ancestors."""
+
+    def __init__(self):
+        super().__init__()
+        self.stack = []
+        self.visible_h1 = 0
+
+    def handle_starttag(self, tag, attributes):
+        attrs = dict(attributes)
+        hidden = (self.stack and self.stack[-1][1]) or "hidden" in attrs
+        if tag == "h1" and not hidden:
+            self.visible_h1 += 1
+        if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+            self.stack.append((tag, bool(hidden)))
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                break
+
+
+def test_production_shells_have_one_visible_content_heading():
     sources = [path.read_text(encoding="utf-8") for path in SHELL_SOURCES]
     sources.append(_HOME_HTML)
-
     for html in sources:
-        assert len(re.findall(r"<h1(?:\s|>)", html)) == 1
+        parser = _VisibleHeadingParser()
+        parser.feed(html)
+        assert parser.visible_h1 == 1
+
+
+def test_collection_views_have_mutually_exclusive_page_headings():
+    html = (PROJECT_ROOT / "src/web/static/collections.html").read_text(encoding="utf-8")
+    script = (PROJECT_ROOT / "src/web/static/js/collections.js").read_text(encoding="utf-8")
+    for mode, section_id in (("catalog", "collection-catalog-page"), ("create", "collection-import-panel"), ("topic", "collection-workspace")):
+        panel = re.search(rf'<section[^>]*id="{section_id}"[^>]*>.*?</section>', html, re.DOTALL)
+        assert panel, section_id
+        assert len(re.findall(r"<h1(?:\s|>)", panel.group(0))) == 1
+    assert "els.catalogPage.hidden = pageMode !== 'catalog'" in script
+    assert "els.createPage.hidden = pageMode !== 'create'" in script
+    assert "els.collectionWorkspace.hidden = pageMode !== 'topic'" in script
+
+    behavior = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const start = source.indexOf('    function applyCollectionPageMode() {');
+const end = source.indexOf('    function setCollectionPageMode(', start);
+const panels = {catalogPage: {}, createPage: {}, collectionWorkspace: {}};
+const context = {els: panels, document: {body: {classList: {toggle() {}}}}};
+vm.createContext(context);
+vm.runInContext(source.slice(start, end), context);
+for (const mode of ['catalog', 'create', 'topic']) {
+    context.pageMode = mode;
+    context.applyCollectionPageMode();
+    assert.equal(Object.values(panels).filter(panel => !panel.hidden).length, 1);
+    assert.equal(panels.catalogPage.hidden, mode !== 'catalog');
+    assert.equal(panels.createPage.hidden, mode !== 'create');
+    assert.equal(panels.collectionWorkspace.hidden, mode !== 'topic');
+}
+"""
+    result = subprocess.run(
+        ["node", "-e", behavior, str(PROJECT_ROOT / "src/web/static/js/collections.js")],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_shared_shell_uses_consistent_desktop_and_compact_mobile_bars():

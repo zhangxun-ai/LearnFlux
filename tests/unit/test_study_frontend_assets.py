@@ -54,7 +54,9 @@ def test_study_page_uses_note_and_manuscript_panels():
     assert "startChatThinking" in js
     assert "chatErrorMessage" in js
     assert "正在思考" in js
-    assert "阅读视频全文" in js
+    assert "查找原文依据" in js
+    assert "AI 会先读视频全文" not in js
+    assert "renderChatEvidence" in js
     assert "time_seconds" not in js
     assert "chatUseTime" not in js
     assert "chatTimeLabel" not in js

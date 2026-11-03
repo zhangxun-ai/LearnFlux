@@ -11,6 +11,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 
+CLOUD_SUBMISSION_UNKNOWN_MESSAGE = (
+    "云端提交结果无法确认，尚未获得可查询的任务编号。"
+    "已暂停自动重试以避免重复计费，请先核对服务商的任务或用量记录。"
+)
+
+
 STAGE_RANGES = {
     "queued": (0, 0),
     "url_parsing": (2, 6),
@@ -32,6 +38,7 @@ DEFAULT_STAGE_LABELS = {
     "metadata": "正在获取视频信息",
     "downloading": "正在下载音视频",
     "transcribing": "正在转录音视频",
+    "cloud_submission_unknown": "云端提交结果待核实",
     "calibrating": "正在校对和总结",
     "comment_insight": "正在生成评论洞察",
     "notifying": "正在发送通知",

@@ -45,6 +45,7 @@
     <link rel="apple-touch-icon" href="/static/icon/learnflux-leaf-180.png">
     <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
     <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/output-reading.css?v=__ASSET_VERSION__">
 </head>
 <body class="app-shell has-app-shell product-linear page-collections workbench-meadow">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -75,6 +76,10 @@
                     <a class="nav-item" href="/study" data-feature="study_player" hidden>
                         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
                         <span class="nav-label">边播边学</span>
+                    </a>
+                    <a class="nav-item" href="/briefings">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span>
+                        <span class="nav-label">日报</span>
                     </a>
                     <div class="nav-branch">
                         <div class="nav-branch-row">
@@ -280,7 +285,7 @@
                         <span>专题库</span>
                     </button>
                     <div class="lc-workspace-title-row">
-                        <h2 id="workspace-title">尚未选择专题</h2>
+                        <h1 id="workspace-title">尚未选择专题</h1>
                         <span class="lc-topic-creator" id="topic-creator-label"></span>
                         <span class="lc-status-pill" id="workspace-status-pill" hidden>未选择</span>
                     </div>
@@ -486,6 +491,7 @@
                         <div class="lc-source-actions">
                             <button class="lc-btn primary" id="open-source-file" type="button">打开源内容</button>
                             <a class="lc-btn" id="open-source" href="#" target="_blank" rel="noopener">查看解读页</a>
+                            <a class="lc-btn hidden" id="open-study-player" href="/study" data-feature="study_player" hidden>边播边学</a>
                             <button class="lc-btn danger hidden" id="retry-source" type="button">重新解析</button>
                             <button class="lc-btn compact hidden" id="regenerate-source-summary" type="button">重新生成 AI 解读</button>
                         </div>

@@ -105,11 +105,12 @@ assert.equal(shell.isFeatureEnabled({}, 'reading'), false);
 assert.equal(shell.isFeatureEnabled(null, 'reading'), false);
 
 assert.deepEqual(shell.normalizeShellState('expanded'), {mode: 'expanded', groups: {}});
-assert.deepEqual(shell.normalizeShellState('collapsed'), {mode: 'rail', groups: {}});
+assert.deepEqual(shell.normalizeShellState('collapsed'), {mode: 'floating', groups: {}});
 assert.deepEqual(
   shell.normalizeShellState({mode: 'rail', groups: {core: false, flow: true}}),
-  {mode: 'rail', groups: {core: false, flow: true}},
+  {mode: 'floating', groups: {core: false, flow: true}},
 );
+assert.deepEqual(shell.normalizeShellState({mode: 'floating', groups: {core: false}}), {mode: 'floating', groups: {core: false}});
 assert.deepEqual(shell.normalizeShellState({mode: 'broken', groups: []}), {
   mode: 'expanded', groups: {},
 });
@@ -338,7 +339,8 @@ class TestNavigationMarkup:
         assert "PRODUCT_NAV_START" not in _HOME_HTML
         assert "sidebar-nav" not in _HOME_HTML
         assert "marketing-home" in _HOME_HTML
-        assert 'href="#features"' in _HOME_HTML
+        assert 'class="lf-workbench-preview"' in _HOME_HTML
+        assert 'aria-label="开始学习，进入 LearnFlux 工作台"' in _HOME_HTML
         assert 'href="/add_task_by_web"' in _HOME_HTML
 
     def test_navigation_generator_reports_no_drift(self):
@@ -368,7 +370,7 @@ class TestAssetVersions:
 
         for path in route_files:
             source = path.read_text(encoding="utf-8")
-            assert '"ui-features.js"' in source, path.name
+            assert 'get_static_asset_version(' in source, path.name
 
         if reading_route.exists():
             reading = reading_route.read_text(encoding="utf-8")
@@ -396,12 +398,37 @@ class TestAssetVersions:
         source = (STATIC_ROOT / "service-worker.js").read_text(encoding="utf-8")
 
         assert "/static/js/ui-features.js" in source
-        assert "learnflux-pwa-20261022-beijing-time" in source
+        cache_name = re.search(r"const CACHE_NAME = '(learnflux-pwa-(\d{8})[^']*)';", source)
+        assert cache_name, "Service worker must declare a versioned cache"
+        assert cache_name.group(2) >= "20261030", "Image diagrams must invalidate earlier shell caches"
+        assert "/static/js/image-diagrams.js" in source
+        assert "/static/css/image-diagrams.css" in source
         assert "/static/js/auth-session.js" in source
         assert "/static/js/time.js" in source
 
 
 class TestProductDesignSystem:
+    def test_all_product_shells_include_the_shared_theme(self):
+        for filename in STATIC_SHELLS:
+            source = (STATIC_ROOT / filename).read_text(encoding="utf-8")
+            assert 'workbench-meadow' in re.search(r'<body\b[^>]*>', source).group(0), filename
+            assert source.count('/static/css/workbench-wildwood.css?') == 1, filename
+
+        base = (TEMPLATE_ROOT / "base.html").read_text(encoding="utf-8")
+        assert 'product-linear workbench-meadow' in base
+        assert base.count('/static/css/workbench-wildwood.css?') == 1
+        for filename in ("briefings.html", "processing.html", "error.html", "transcript.html"):
+            source = (TEMPLATE_ROOT / filename).read_text(encoding="utf-8")
+            assert 'workbench-wildwood.css' not in source, filename
+
+    def test_history_content_styles_do_not_override_shared_navigation(self):
+        shell_selector = re.compile(r'\.(?:sidebar(?:\b|-)|nav-(?:group|item|subitem|icon)\b|brand-(?:link|mark|text)\b)')
+        for name in ("history-improvements.css", "learning-history-meadow.css", "history-evidence.css", "briefings.css"):
+            source = (STATIC_ROOT / "css" / name).read_text(encoding="utf-8")
+            assert not shell_selector.search(source), name
+            assert '--shell-sidebar:' not in source, name
+            assert '--shell-current-sidebar:' not in source, name
+
     def test_brand_cool_tokens_have_one_light_and_dark_source(self):
         source = PRODUCT_CSS.read_text(encoding="utf-8")
 
@@ -517,26 +544,28 @@ class TestProductDesignSystem:
 
 
 class TestFeatureEntryCoverage:
-    def test_home_marketing_cards_link_core_product_surfaces(self):
+    def test_home_preview_opens_the_real_product_entry(self):
         from video_transcript_api.api.routes.views import _HOME_HTML
 
-        # Marketing cards are public discovery links, not fail-closed shell nav.
-        for href in (
-            "/add_task_by_web",
-            "/add_task_by_web#local-video-study",
-            "/collections",
-            "/visual-learning",
-            "/reading",
-            "/study",
-        ):
-            assert f'href="{href}"' in _HOME_HTML, href
+        # The approved landing is a single entry, with an explicitly illustrative preview.
+        preview = re.search(
+            r'<a\b[^>]*class="lf-workbench-preview"[^>]*>.*?</a>',
+            _HOME_HTML, re.DOTALL,
+        )
+        assert preview
+        assert 'href="/add_task_by_web"' in preview.group(0)
+        assert 'aria-label="开始学习，进入 LearnFlux 工作台"' in preview.group(0)
+        assert 'aria-hidden="true"' in preview.group(0)
+        assert '示例内容' in preview.group(0)
 
     def test_root_home_is_self_contained_marketing_page(self):
         from video_transcript_api.api.routes.views import _HOME_HTML
 
         assert 'class="page-home marketing-home"' in _HOME_HTML
-        assert "/static/images/landing/01-single-study.png" in _HOME_HTML
-        assert "/static/icon/learnflux-icon-256.png" in _HOME_HTML
+        assert "/static/images/landing/learnflux-meadow-hero-v2.png" in _HOME_HTML
+        assert "/static/images/landing/learnflux-meadow-hero-panorama.png" in _HOME_HTML
+        assert "/static/icon/learnflux-leaf.svg" in _HOME_HTML
+        assert "/static/css/landing-wildwood.css" in _HOME_HTML
         assert "app-shell.js" not in _HOME_HTML
         assert "product-linear.css" not in _HOME_HTML
 

@@ -9,6 +9,7 @@ from ...reading.repository import ReadingDataError
 from ...reading.assets import ReadingAssetError
 from ...reading.service import ReadingService
 from ...reading.source_files import ReadingSourceError
+from ..assets import get_static_asset_version
 from ..context import (
     get_cache_manager,
     get_config,
@@ -93,23 +94,7 @@ async def reading_page():
     page = static_dir / "reading.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="心流阅读页面不存在")
-    version_files = [
-        page,
-        static_dir / "css" / "reading.css",
-        static_dir / "css" / "editorial.css",
-        static_dir / "css" / "app-shell.css",
-        static_dir / "css" / "product-linear.css",
-        static_dir / "css" / "product-linear-core.css",
-        static_dir / "js" / "reading.js",
-        static_dir / "js" / "reading-flow.js",
-        static_dir / "js" / "ui-features.js",
-        static_dir / "js" / "app-shell.js",
-        static_dir / "js" / "pwa-register.js",
-    ]
-    version = str(max(
-        (path.stat().st_mtime_ns for path in version_files if path.exists()),
-        default=0,
-    ))
+    version = get_static_asset_version(static_dir)
     return HTMLResponse(
         page.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version),
         headers={"Cache-Control": "no-cache"},

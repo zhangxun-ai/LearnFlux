@@ -4,8 +4,8 @@
     // ============================================================
     "api": {
         "port": 8000,                    // 服务监听端口
-        "host": "0.0.0.0",               // 服务监听地址，0.0.0.0 表示所有网卡
-        "auth_token": "your-auth-token-here", // API 访问令牌；浏览器只用它换取短期 HttpOnly 会话
+        "host": "127.0.0.1",             // 默认仅本机访问；局域网/容器部署时显式调整
+        "auth_token": "",               // 初始化脚本自动生成随机管理口令；不要使用模板空值直接启动
         "browser_local_auto_login": true, // 本机直连浏览器自动连接；远程、代理和多用户模式仍需口令
         "browser_local_management_access": false, // 个人工作台可开启：配置手机等 API 令牌后，本机仍自动使用管理身份；不开放远程免登录
         "browser_session_ttl_seconds": 28800, // 浏览器会话有效期，允许 300-86400 秒；服务重启后失效
@@ -15,10 +15,20 @@
     },
 
     // ============================================================
+    // 飞书文档读取（复用本机已登录 lark-cli，仅开放给指定资料库身份）
+    // ============================================================
+    "feishu_documents": {
+        "enabled": false,
+        "cli_path": "lark-cli",
+        "owner_user_id": "legacy_user",
+        "timeout_seconds": 60
+    },
+
+    // ============================================================
     // TikHub API 配置（用于抖音/小红书视频下载）
     // ============================================================
     "tikhub": {
-        "api_key": "your-tikhub-api-key-here",  // TikHub API 密钥
+        "api_key": "",                   // 仅使用对应社媒来源时填写 TikHub API 密钥
         "base_url": "https://api.tikhub.io",    // TikHub API 基础地址
         "cache_enabled": true,           // 是否缓存成功的 TikHub JSON 响应，降低重复请求成本
         "cache_ttl_seconds": 21600,      // TikHub 响应缓存时长（秒），默认 6 小时
@@ -188,7 +198,7 @@
     //
     // ============================================================
     "llm": {
-        "api_key": "your-llm-api-key-here",     // LLM API 密钥
+        "api_key": "",                       // 启动后在系统设置填写，不把占位值当成已配置密钥
         "base_url": "https://your-api.com/v1",   // LLM API 基础 URL，只到 /v1（不含 /chat/completions）
 
         // ------------------------------------------------------
@@ -236,8 +246,9 @@
         "collection_summary_reserved_output_tokens": 100000,  // 为最终长文和思考预留 token
         "collection_summary_context_safety_ratio": 0.85, // 超过可用上下文才进入分层处理
         "collection_summary_chars_per_token": 1.2,       // 中文源内容的保守字符/token 估算
-        "study_chat_model": "deepseek-v4-pro",  // 本地视频学习页“问 AI”使用的模型
-        "study_chat_reasoning_effort": "high",  // “问 AI”推理强度
+        "study_chat_model": null,  // “问 AI”未单独配置时沿用 summary_model；可显式指定其他模型
+        "study_chat_reasoning_effort": "medium",  // 交互问答默认 medium，兼顾延迟与推理；显式配置优先
+        "study_chat_max_tokens": 8192, // 问答输出与思考总上限；截断结果不会作为完整答案交付
 
         // ------------------------------------------------------
         // 通用配置
@@ -434,6 +445,21 @@
     // YouTube API Server 配置
     // 用于解决本地 IP 风控问题的远程下载服务
     // ============================================================
+    "image_diagrams": {
+        "enabled": true,                  // 有 OPENAI_API_KEY 时可手动生成；页面加载不会调用
+        "image_model": "gpt-image-2",
+        "text_model": "gpt-6-luna",        // 内容规划，独立于文字解读的供应商
+        "quality": "high",
+        "size": "1536x2048",
+        "timeout": 240,
+        "max_source_chars": 200000,        // 超过上限明确拒绝，不静默截断
+        "chunk_chars": 12000,
+        "planning_workers": 3,            // 长文规划并行窗口1~4；出错后不再提交后续分段
+        "single_pass_chars": 200000,      // 含段号的原文在此预算内时，一次全文提炼；超过才分段
+        "max_daily_generations": 20,       // 每位用户，北京时间自然日；保守计入所有新尝试
+        "data_dir": "./data/image_diagrams" // 持久化私有图片、原文快照和提示词，不放入 temp
+    },
+
     "youtube_api_server": {
         "enabled": false,                // 是否启用
         "base_url": "http://your-youtube-api-server:8000",  // 服务地址

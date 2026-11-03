@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}日报 · LearnFlux{% endblock %}
+{% block shell_title %}日报{% endblock %}
+{% block body_class %}page-briefings{% endblock %}
+{% block page_styles %}
+<link rel="stylesheet" href="/static/css/briefings.css?v={{ asset_ver }}">
+{% endblock %}
+{% block page_header %}
+<header class="briefings-heading">
+    <div class="briefings-heading-main">
+        <h1>日报</h1>
+        <div class="briefings-tabs" role="group" aria-label="日报类型">
+            <button type="button" data-briefing-kind="ai" aria-pressed="true">AI 导游</button>
+            <button type="button" data-briefing-kind="wechat" aria-pressed="false">微信日报</button>
+        </div>
+    </div>
+    <div class="briefings-tools">
+        <label class="briefings-date">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18M8 15h2"/></svg>
+            <select id="briefings-date" aria-label="选择日报日期" disabled><option value="">暂无日报</option></select>
+        </label>
+        <button type="button" id="briefings-refresh" class="briefings-button briefings-icon-button" aria-label="刷新日报" title="刷新日报">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2.4 5.7M20 7l-3-3"/></svg>
+        </button>
+        <div id="briefings-report-tools" hidden>
+            <details id="briefings-save-menu" class="briefings-save-menu">
+                <summary class="briefings-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 15v5h16v-5"/></svg>保存<svg class="briefings-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></summary>
+                <div class="briefings-save-options">
+                    <a id="briefings-download" download>下载 Markdown</a>
+                    <button type="button" id="briefings-obsidian" disabled>保存到 Obsidian</button>
+                    <button type="button" id="briefings-feishu" disabled>同步到飞书</button>
+                </div>
+            </details>
+        </div>
+    </div>
+</header>
+{% endblock %}
+{% block content %}
+<div id="briefings-auth"></div>
+<section id="briefings-workspace" hidden aria-label="日报阅读区">
+    <p id="briefings-warning" class="briefings-warning" hidden></p>
+    <p id="briefings-empty" class="briefings-empty" hidden>这类日报还没有可读取的内容。</p>
+    <iframe id="briefings-frame" title="日报正文" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" hidden></iframe>
+</section>
+<p id="briefings-status" class="briefings-status" role="status" aria-live="polite">正在连接工作台…</p>
+<dialog id="briefings-preview" aria-labelledby="briefings-preview-title">
+    <div class="briefings-dialog-heading"><div><h2 id="briefings-preview-title">预览同步内容</h2><p id="briefings-destination"></p></div><button type="button" id="briefings-preview-close" class="briefings-button" aria-label="关闭同步预览">关闭</button></div>
+    <p id="briefings-private-notice" class="briefings-warning" hidden></p>
+    <pre id="briefings-preview-body" tabindex="0" aria-label="将要同步的完整 Markdown"></pre>
+    <p id="briefings-preview-status" class="briefings-status" role="status" aria-live="polite"></p>
+    <div class="briefings-dialog-actions"><button type="button" id="briefings-preview-cancel" class="briefings-button">取消</button><button type="button" id="briefings-preview-confirm" class="briefings-button briefings-primary" disabled>确认同步</button></div>
+</dialog>
+{% endblock %}
+{% block extra_js %}<script src="/static/js/briefings.js?v={{ asset_ver }}" defer></script>{% endblock %}

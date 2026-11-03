@@ -251,7 +251,7 @@
         }
         const target = attempt || record;
         if (payload && payload.phase === 'ready_for_generation' && !target && state.viewToken) {
-            generateDiagram(state.viewToken, false).catch(handleError);
+            setStatus('内容已就绪，可手动生成图解。', '');
             return;
         }
         if (target && ['pending', 'generating'].includes(target.status)) {
@@ -515,6 +515,27 @@
         setStatus('', '');
     }
 
+    function mountImageDiagrams() {
+        const workbench = document.querySelector('.vl-workbench');
+        if (workbench) { workbench.classList.add('has-image-source'); workbench.classList.remove('show-source'); }
+        const changeSource = document.getElementById('visual-change-source');
+        if (changeSource) {
+            changeSource.hidden = false;
+            changeSource.onclick = () => {
+                if (workbench) workbench.classList.toggle('show-source');
+                const open = workbench && workbench.classList.contains('show-source');
+                changeSource.textContent = open ? '返回图解' : '更换内容';
+                if (open) els.content.focus();
+            };
+        }
+        window.clearTimeout(state.pollTimer);
+        if (state.imageReader) state.imageReader.destroy();
+        if (els.outputTitle) els.outputTitle.textContent = '内容图解';
+        state.imageReader = window.ImageDiagrams.mount(els.canvas, { viewToken: state.viewToken });
+        if (els.pageNavigation) els.pageNavigation.hidden = true;
+        if (els.recommendations) els.recommendations.hidden = true;
+    }
+
     function handleError(error) {
         setStatus(error.message || '操作失败，请重试', 'error');
         els.generate.disabled = false;
@@ -522,6 +543,23 @@
     }
 
     async function startGeneration() {
+        if (window.ImageDiagrams) {
+            if (els.generate.disabled) return;
+            els.generate.disabled = true;
+            els.generate.textContent = '正在导入…';
+            try {
+                setStatus(state.mode === 'text' ? '正在保存文字…' : '正在上传文档…', 'working');
+                const source = await ingestSource();
+                state.viewToken = source.view_token;
+                const url = new URL(window.location.href);
+                url.searchParams.set('view_token', state.viewToken);
+                history.replaceState({}, '', url.pathname + url.search);
+                mountImageDiagrams();
+                setStatus('内容已导入，请在右侧手动生成图解。', 'success');
+            } catch (error) { handleError(error); }
+            finally { els.generate.textContent = '导入内容'; updateGenerateState(); }
+            return;
+        }
         if (els.generate.disabled) return;
         els.generate.disabled = true;
         els.generate.textContent = '生成中…';
@@ -585,6 +623,12 @@
     }
 
     async function loadAuthenticatedVisualWorkspace() {
+        if (window.ImageDiagrams) {
+            if (els.authGate) els.authGate.hidden = true;
+            const token = new URLSearchParams(window.location.search).get('view_token');
+            if (token) { state.viewToken = token; mountImageDiagrams(); }
+            return;
+        }
         if (els.authGate) els.authGate.hidden = true;
         await loadHistory();
         const documentId = new URLSearchParams(window.location.search).get('document_id');

@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 
@@ -27,11 +28,21 @@ def test_production_study_routes_cover_library_single_and_collection_modes():
     assert '"__SOURCE_ID__"' in source
 
 
-def test_study_asset_version_tracks_player_runtime_changes():
-    source = VIEWS_PY.read_text(encoding="utf-8")
+def test_study_asset_version_tracks_player_runtime_changes(tmp_path, monkeypatch):
+    from video_transcript_api.api.routes import views
 
-    assert 'static_dir / "js" / "study-player-runtime.js"' in source
-    assert "f.stat().st_mtime_ns for f in asset_files" in source
+    (tmp_path / "study.html").write_text(
+        '<script src="/static/js/study-player-runtime.js?v=__ASSET_VERSION__"></script>'
+    )
+    runtime = tmp_path / "js/study-player-runtime.js"
+    runtime.parent.mkdir()
+    runtime.write_text("const version = 1;")
+    monkeypatch.setattr(views, "static_dir", tmp_path)
+    before = views._render_study_page(page_mode="library").body
+    runtime.write_text("const version = 2;")
+    after = views._render_study_page(page_mode="library").body
+    assert before != after
+    assert b"__ASSET_VERSION__" not in before + after
 
 
 def test_production_navigation_targets_real_study_picker():
@@ -114,3 +125,32 @@ def test_completed_collection_media_sources_expose_a_contextual_player_entry():
     assert "openStudyPlayer: document.getElementById('open-study-player')" in script
     assert "source.study_available" in script
     assert "source.study_url" in script
+
+
+def test_collection_player_action_follows_source_availability():
+    script = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const start = source.indexOf('    function renderStudyPlayerAction(source) {');
+const end = source.indexOf('    function renderSourceSummaryAction(', start);
+const classes = new Set();
+const link = {href: '', classList: {toggle(name, on) {if (on) classes.add(name); else classes.delete(name);}}};
+const context = {els: {openStudyPlayer: link}};
+vm.createContext(context);
+vm.runInContext(source.slice(start, end), context);
+for (const item of [null, {study_available: false, study_url: '/study/not-ready'}]) {
+    context.renderStudyPlayerAction(item);
+    assert.equal(link.href, '/study');
+    assert.equal(classes.has('hidden'), true);
+}
+context.renderStudyPlayerAction({study_available: true, study_url: '/study/collections/demo/sources/lesson-1'});
+assert.equal(link.href, '/study/collections/demo/sources/lesson-1');
+assert.equal(classes.has('hidden'), false);
+"""
+    result = subprocess.run(
+        ["node", "-e", script, str(COLLECTIONS_JS)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

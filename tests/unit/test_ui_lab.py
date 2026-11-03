@@ -213,7 +213,10 @@ def test_review_ui_lab_assets_are_isolated_and_mock_only():
     assert '.review-lab-workspace[data-variant="a"]' in css
     assert '.review-lab-workspace[data-variant="b"]' in css
     assert '.review-lab-workspace[data-variant="c"]' in css
-    assert "/static/icon/learnflux-icon-256.png" in html
+    assert "/static/icon/learnflux-leaf-256.png" in html
+    assert "/static/icon/learnflux-leaf.svg" in html
+    for filename in ("learnflux-leaf-256.png", "learnflux-leaf.svg"):
+        assert (STATIC_ROOT / "icon" / filename).is_file(), filename
     assert 'data-inspect="false"' in html
     assert '.review-ui-lab[data-inspect="true"] .review-lab-toolbar' in css
     assert "--mock-bg: #f6f8fb" in css

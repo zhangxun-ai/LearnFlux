@@ -159,6 +159,14 @@ class CacheManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_view_token ON task_status(view_token)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_task_status ON task_status(status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_task_platform_media ON task_status(platform, media_id)')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS task_requests (
+                    task_id TEXT PRIMARY KEY,
+                    payload_json TEXT NOT NULL,
+                    recovery_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
 
         # 执行数据库迁移
         self._migrate_database()
@@ -1878,6 +1886,22 @@ class CacheManager:
         cutoff = current_time - datetime.timedelta(minutes=timeout_minutes)
         cutoff_sql = self._sql_timestamp(cutoff)
         now_sql = self._sql_timestamp(current_time)
+        stale_predicate = "COALESCE(last_heartbeat_at, created_at) < ?"
+        if self._task_status_repository is not None:
+            # The control store advances updated_at on every status/progress write.
+            # Its legacy last_heartbeat_at column may still hold the creation time.
+            if self._is_postgres:
+                stale_predicate = (
+                    "COALESCE(CAST(NULLIF(updated_at, '') AS TIMESTAMPTZ), "
+                    "last_heartbeat_at AT TIME ZONE 'UTC', "
+                    "created_at AT TIME ZONE 'UTC') < CAST(? AS TIMESTAMPTZ)"
+                )
+                cutoff_sql = cutoff.replace(tzinfo=datetime.timezone.utc).isoformat()
+            else:
+                stale_predicate = (
+                    "julianday(COALESCE(NULLIF(updated_at, ''), "
+                    "last_heartbeat_at, created_at)) < julianday(?)"
+                )
         error_message = f"任务超过 {timeout_minutes} 分钟没有进度心跳，已自动标记失败"
         progress = build_progress(
             stage="failed",
@@ -1906,7 +1930,7 @@ class CacheManager:
                         error_message = ?,
                         progress_json = ?
                     WHERE status IN (?, ?, ?)
-                      AND COALESCE(last_heartbeat_at, created_at) < ?
+                      AND {stale_predicate}
                       {exclusion_sql}
                     """,
                     (
@@ -1930,6 +1954,60 @@ class CacheManager:
         except Exception as e:
             logger.error(f"运行期卡死任务回收失败: {e}")
             return 0
+
+    def save_task_request(self, task: dict) -> None:
+        """Persist non-secret execution options before accepting a URL task."""
+        keys = (
+            "url", "use_speaker_recognition", "download_url", "include_comments",
+            "comment_limit", "preserve_source_file", "transcription_strategy",
+        )
+        payload = {key: task.get(key) for key in keys}
+        metadata = task.get("metadata_override") or {}
+        payload["metadata_override"] = {
+            key: metadata[key] for key in
+            ("title", "video_title", "author", "description", "platform", "video_id")
+            if key in metadata
+        }
+        # Tokens and webhook overrides stay in memory. Recovery can use the
+        # owner's current notification configuration, or suppress notifications.
+        payload["restore_notifications"] = bool(task.get("restore_notifications", True))
+        payload["notification_channel"] = task.get("notification_channel")
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO task_requests(task_id,payload_json) VALUES (?,?) "
+                "ON CONFLICT(task_id) DO NOTHING",
+                (task["id"], json.dumps(payload, ensure_ascii=False)),
+            )
+
+    def get_recoverable_task_requests(self) -> list[dict]:
+        """Find new-style local tasks; terminal and paid work is never replayed."""
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                "SELECT r.task_id,r.payload_json,t.owner_user_id,t.status "
+                "FROM task_requests r JOIN task_status t ON t.task_id=r.task_id "
+                "WHERE t.status IN ('queued','processing','calibrating') "
+                "AND r.recovery_count < 3 ORDER BY r.created_at,r.task_id"
+            )
+            rows = cursor.fetchall()
+        tasks = []
+        for row in rows:
+            try:
+                payload = json.loads(row["payload_json"])
+                if payload.get("transcription_strategy") not in {"local", None}:
+                    continue
+                tasks.append({**payload, "id": row["task_id"],
+                              "owner_user_id": row["owner_user_id"]})
+            except (TypeError, ValueError):
+                logger.warning("Invalid task recovery payload; manual retry required")
+        return tasks
+
+    def record_task_recovery(self, task_id: str) -> None:
+        """Bound automatic startup retries so repeated failures remain visible."""
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                "UPDATE task_requests SET recovery_count=recovery_count+1 WHERE task_id=?",
+                (task_id,),
+            )
 
     def recover_orphaned_tasks(self, *, protected_task_ids=()) -> int:
         """启动恢复:将中断的非终态任务标记为 failed.

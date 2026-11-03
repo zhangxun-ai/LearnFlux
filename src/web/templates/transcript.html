@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block body_class %}page-result transcript-result-page page-transcript workbench-meadow{% endblock %}
+{% block body_class %}page-result transcript-result-page page-transcript{% endblock %}
 
 {% block title %}{{ title or "视频转录" }} - LearnFlux{% endblock %}
 {% block meta_description %}{{ title or "视频转录" }} - {{ platform or "" }} 视频转录校对结果{% endblock %}
@@ -10,6 +10,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/floating-toc.css">
 <link rel="stylesheet" href="/static/css/visual-learning.css?v={{ asset_ver }}">
+<link rel="stylesheet" href="/static/css/image-diagrams.css?v={{ asset_ver }}-images-no-review">
 <link rel="stylesheet" href="/static/css/obsidian-knowledge.css?v={{ asset_ver }}">
 <style>
 /* Section header with inline action */
@@ -46,7 +47,9 @@
     outline: 2px solid var(--accent, #D6412D);
     outline-offset: 2px;
 }
-.summary-view-panel[hidden] { display: none; }
+/* Hidden reading panels must win over content and mobile display rules. */
+body.transcript-result-page .summary-view-panel[hidden],
+body.transcript-result-page .transcript-secondary-section[hidden] { display: none !important; }
 .summary-view-panel:not([hidden]) {
     animation: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -816,10 +819,16 @@ body.export-document-mode .export-print-nav {
     }
 }
 </style>
-<link rel="stylesheet" href="/static/css/workbench-wildwood.css?v={{ asset_ver }}">
+{% endblock %}
+
+{% block page_styles %}
+<link rel="stylesheet" href="/static/css/output-reading.css?v={{ asset_ver }}">
 {% endblock %}
 
 {% block content %}
+    {% if platform == 'feishu' and description %}
+    <aside class="section" aria-label="飞书文档读取范围">{{ description }}。AI 解读仅依据可读取的文字，图片和画板请对照原文。</aside>
+    {% endif %}
     <style id="immersive-styles">
     /* --- Result reading layout --- */
     
@@ -1467,6 +1476,13 @@ body.export-document-mode .export-print-nav {
         {% endif %}
     </div>
 
+    {% if task_id %}
+    <div class="feishu-delivery" id="feishuDelivery" data-task-id="{{ task_id }}" aria-live="polite" hidden>
+        <div><span id="feishuDeliveryLabel"></span><span class="feishu-delivery-detail" id="feishuDeliveryDetail"></span></div>
+        <div class="feishu-delivery-actions"><a id="feishuDeliveryOpen" target="_blank" rel="noopener" hidden>在飞书中打开 ↗</a><button type="button" id="feishuDeliveryRetry" hidden>重试同步</button></div>
+    </div>
+    {% endif %}
+
     <!-- Collection chapter navigation -->
     {% if collection_navigation %}
     <nav class="minimal-nav" aria-label="合集章节导航">
@@ -1660,9 +1676,11 @@ body.export-document-mode .export-print-nav {
 
 {% block extra_js %}
 <script src="/static/js/floating-toc.js?v={{ asset_ver }}"></script>
+{% if task_id %}<script src="/static/js/feishu-delivery.js?v={{ asset_ver }}" defer></script>{% endif %}
 {% if view_token %}
 <script src="/static/js/focus-handoff.js?v=20260617-1"></script>
 <script src="/static/js/visual-learning.js?v={{ asset_ver }}"></script>
+<script src="/static/js/image-diagrams.js?v={{ asset_ver }}-images-no-review"></script>
 <script src="/static/js/transcript-visual-reader.js?v={{ asset_ver }}-reader-20260718"></script>
 <script>
 function getContentMarkToken() {

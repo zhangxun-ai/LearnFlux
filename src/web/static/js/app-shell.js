@@ -25,14 +25,13 @@
 
     function normalizeShellState(value) {
         if (value === 'expanded') return {mode: 'expanded', groups: {}};
-        if (value === 'collapsed') return {mode: 'rail', groups: {}};
+        if (value === 'collapsed' || value === 'rail') return {mode: 'floating', groups: {}};
         if (!value || typeof value !== 'object' || Array.isArray(value)) {
             return {mode: DEFAULT_STATE.mode, groups: {}};
         }
 
-        const mode = value.mode === 'rail' || value.mode === 'expanded'
-            ? value.mode
-            : DEFAULT_STATE.mode;
+        const mode = ['floating', 'rail', 'collapsed'].includes(value.mode)
+            ? 'floating' : DEFAULT_STATE.mode;
         const groups = {};
         if (value.groups && typeof value.groups === 'object' && !Array.isArray(value.groups)) {
             Object.entries(value.groups).forEach(([groupId, expanded]) => {
@@ -282,24 +281,27 @@
     }
 
     function applyGroupStates() {
-        const rail = shellState.mode === 'rail' && !window.matchMedia(MOBILE_QUERY).matches;
         groupControls.forEach((control) => {
             const groupId = groupIdFor(control);
             const contentId = control.getAttribute('aria-controls');
             const content = contentId ? document.getElementById(contentId) : null;
             if (!content) return;
-            const expanded = rail || shellState.groups[groupId] !== false;
+            const expanded = shellState.groups[groupId] !== false;
             content.hidden = !expanded;
             control.setAttribute('aria-expanded', String(expanded));
         });
     }
 
     function applyDesktopMode() {
-        const rail = shellState.mode === 'rail';
-        body.classList.toggle('sidebar-rail', rail);
-        body.classList.toggle('sidebar-collapsed', rail);
-        collapseButton.setAttribute('aria-expanded', String(!rail));
-        collapseButton.setAttribute('aria-label', rail ? '展开侧边栏' : '收起为图标栏');
+        const floating = !media.matches && shellState.mode === 'floating';
+        body.classList.remove('sidebar-rail', 'sidebar-collapsed', 'drawer-hover-open');
+        body.classList.toggle('sidebar-floating', floating);
+        sidebar.inert = media.matches || floating;
+        collapseButton.setAttribute('aria-pressed', String(!floating));
+        collapseButton.setAttribute('aria-label', floating ? '固定侧边栏' : '自动隐藏侧边栏');
+        collapseButton.innerHTML = icon(floating
+            ? '<path d="M12 17v5M9 10.5V9a3 3 0 0 1 6 0v1.5a4 4 0 0 0 1.25 2.91 1.48 1.48 0 0 1-.48 2.59H8.23a1.48 1.48 0 0 1-.48-2.59A4 4 0 0 0 9 10.5Z"/>'
+            : '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>');
         applyGroupStates();
     }
 
@@ -309,7 +311,6 @@
             group.classList.add('has-active-item');
         }
         control.addEventListener('click', () => {
-            if (shellState.mode === 'rail' && !media.matches) return;
             const groupId = groupIdFor(control);
             shellState.groups[groupId] = control.getAttribute('aria-expanded') !== 'true';
             saveState();
@@ -325,11 +326,12 @@
             'a[href]:not([hidden]), button:not([disabled]):not([hidden]), '
             + 'input:not([disabled]):not([hidden]), select:not([disabled]):not([hidden]), '
             + 'textarea:not([disabled]):not([hidden]), [tabindex]:not([tabindex="-1"]):not([hidden])'
-        )].filter((node) => !node.closest('[hidden]'));
+        )].filter((node) => !node.closest('[hidden]') && node.getClientRects().length > 0);
     }
 
     function closeDrawer(options) {
         body.classList.remove('sidebar-drawer-open');
+        sidebar.inert = media.matches || shellState.mode === 'floating';
         mobileButton.setAttribute('aria-expanded', 'false');
         if (options?.restoreFocus !== false && lastFocus && typeof lastFocus.focus === 'function') {
             lastFocus.focus({preventScroll: true});
@@ -338,6 +340,7 @@
 
     function openDrawer() {
         lastFocus = document.activeElement;
+        sidebar.inert = false;
         body.classList.add('sidebar-drawer-open');
         mobileButton.setAttribute('aria-expanded', 'true');
         const active = sidebar.querySelector('.nav-subitem.is-active:not([hidden])')
@@ -347,20 +350,15 @@
     }
 
     function syncMode() {
-        if (media.matches) {
-            body.classList.remove('sidebar-rail', 'sidebar-collapsed');
-            closeDrawer({restoreFocus: false});
-            applyGroupStates();
-            return;
-        }
         closeDrawer({restoreFocus: false});
         applyDesktopMode();
     }
 
     collapseButton.addEventListener('click', () => {
-        shellState.mode = shellState.mode === 'rail' ? 'expanded' : 'rail';
+        shellState.mode = shellState.mode === 'floating' ? 'expanded' : 'floating';
         saveState();
         applyDesktopMode();
+        if (shellState.mode === 'floating') floatingToggleBtn.focus({preventScroll: true});
     });
     mobileButton.addEventListener('click', () => {
         if (body.classList.contains('sidebar-drawer-open')) closeDrawer();
@@ -370,6 +368,11 @@
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && body.classList.contains('sidebar-drawer-open')) {
             closeDrawer();
+            return;
+        }
+        if (event.key === 'Escape' && body.classList.contains('drawer-hover-open')) {
+            closeFloating();
+            floatingToggleBtn.focus({preventScroll: true});
             return;
         }
         if (event.key === 'Tab' && media.matches
@@ -396,101 +399,96 @@
 
     syncMode();
 
-    // --- Injected Sidebar Resize & Floating Logic ---
-    
-    // 1. Sidebar Resizer
+    // Width and visibility are owned by this shell, across every product page.
     const resizer = document.createElement('div');
     resizer.className = 'sidebar-resizer';
+    resizer.setAttribute('role', 'separator');
+    resizer.setAttribute('aria-label', '调整侧边栏宽度');
+    resizer.setAttribute('aria-orientation', 'vertical');
+    resizer.setAttribute('aria-valuemin', '240');
+    resizer.setAttribute('aria-valuemax', '600');
+    resizer.tabIndex = 0;
     sidebar.appendChild(resizer);
 
     let isResizing = false;
-    let currentWidth = parseInt(localStorage.getItem('vta_sidebar_width')) || 280;
-    
-    // Apply initial width
-    document.documentElement.style.setProperty('--shell-sidebar', currentWidth + 'px');
-
-    resizer.addEventListener('mousedown', (e) => {
-        isResizing = true;
-        document.body.classList.add('is-resizing');
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
-        let newWidth = e.clientX;
-        if (newWidth < 240) newWidth = 240; // 限制最小宽度
-        if (newWidth > 600) newWidth = 600; // 限制最大宽度
-        currentWidth = newWidth;
-        document.documentElement.style.setProperty('--shell-sidebar', currentWidth + 'px');
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (isResizing) {
-            isResizing = false;
-            document.body.classList.remove('is-resizing');
-            localStorage.setItem('vta_sidebar_width', currentWidth);
-        }
-    });
-
-    // 2. Floating / Pin Logic (Codex Style)
-    const hoverTrigger = document.createElement('div');
-    hoverTrigger.className = 'sidebar-hover-trigger';
-    document.body.appendChild(hoverTrigger);
-
-    const floatingToggleBtn = document.createElement('button');
-    floatingToggleBtn.className = 'floating-toggle-btn';
-    floatingToggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>';
-    document.body.appendChild(floatingToggleBtn);
-
-    let hoverTimeout;
-    
-    hoverTrigger.addEventListener('mouseenter', () => {
-        clearTimeout(hoverTimeout);
-        document.body.classList.add('drawer-hover-open');
-    });
-
-    sidebar.addEventListener('mouseleave', () => {
-        if (shellState.mode === 'floating') {
-            hoverTimeout = setTimeout(() => {
-                document.body.classList.remove('drawer-hover-open');
-            }, 300); // 稍微延迟，防止误触收起
-        }
-    });
-    
-    sidebar.addEventListener('mouseenter', () => {
-        clearTimeout(hoverTimeout);
-    });
-
-    floatingToggleBtn.addEventListener('click', () => {
-        document.body.classList.add('drawer-hover-open');
-    });
-
-    // Override the old toggle event
-    const newToggle = collapseButton.cloneNode(true);
-    collapseButton.parentNode.replaceChild(newToggle, collapseButton);
-    
-    // Critical fix: re-assign collapseButton so the rest of the code works!
-    // But since collapseButton is const, we just update newToggle in our custom function
-    
-    function customApplyDesktopMode() {
-        const isFloating = shellState.mode === 'floating';
-        document.body.classList.toggle('sidebar-floating', isFloating);
-        document.body.classList.remove('drawer-hover-open');
-        
-        // Update Pin Button Icon on newToggle!
-        newToggle.innerHTML = isFloating 
-            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.5V9a3 3 0 0 1 6 0v1.5a4 4 0 0 0 1.25 2.91 1.48 1.48 0 0 1-.48 2.59H8.23a1.48 1.48 0 0 1-.48-2.59A4 4 0 0 0 9 10.5Z"/></svg>' // Pin icon
-            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>'; // Sidebar icon
+    let savedWidth = 280;
+    try {
+        savedWidth = Number(localStorage.getItem('vta_sidebar_width')) || 280;
+    } catch (error) {
+        // Navigation remains usable when browser storage is unavailable.
     }
 
-    newToggle.addEventListener('click', () => {
-        shellState.mode = shellState.mode === 'floating' ? 'expanded' : 'floating';
-        saveState();
-        customApplyDesktopMode();
+    function setSidebarWidth(width, persist = false) {
+        const nextWidth = Math.round(Math.max(240, Math.min(600, width)));
+        body.style.setProperty('--shell-sidebar', `${nextWidth}px`);
+        resizer.setAttribute('aria-valuenow', String(nextWidth));
+        if (persist) {
+            try {
+                localStorage.setItem('vta_sidebar_width', String(nextWidth));
+            } catch (error) {
+                // Width persistence is optional.
+            }
+        }
+    }
+    setSidebarWidth(savedWidth);
+
+    resizer.addEventListener('mousedown', (event) => {
+        if (media.matches || event.button !== 0) return;
+        event.preventDefault();
+        isResizing = true;
+        body.classList.add('is-resizing');
+    });
+    document.addEventListener('mousemove', (event) => {
+        if (isResizing) setSidebarWidth(event.clientX);
+    });
+    document.addEventListener('mouseup', () => {
+        if (!isResizing) return;
+        isResizing = false;
+        body.classList.remove('is-resizing');
+        setSidebarWidth(Number(resizer.getAttribute('aria-valuenow')), true);
+    });
+    resizer.addEventListener('keydown', (event) => {
+        const current = Number(resizer.getAttribute('aria-valuenow'));
+        const widths = {ArrowLeft: current - 10, ArrowRight: current + 10, Home: 240, End: 600};
+        if (!(event.key in widths)) return;
+        event.preventDefault();
+        setSidebarWidth(widths[event.key], true);
     });
 
-    // Run on startup
-    if (shellState.mode === 'rail' || shellState.mode === 'collapsed') shellState.mode = 'floating';
-    customApplyDesktopMode();
+    const hoverTrigger = document.createElement('div');
+    hoverTrigger.className = 'sidebar-hover-trigger';
+    hoverTrigger.setAttribute('aria-hidden', 'true');
+    body.appendChild(hoverTrigger);
+    const floatingToggleBtn = createButton('floating-toggle-btn', '打开侧边栏',
+        '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>');
+    body.appendChild(floatingToggleBtn);
 
-}())
-;
+    let hoverTimeout;
+    function openFloating() {
+        if (media.matches || shellState.mode !== 'floating') return;
+        clearTimeout(hoverTimeout);
+        sidebar.inert = false;
+        body.classList.add('drawer-hover-open');
+    }
+    function closeFloating() {
+        clearTimeout(hoverTimeout);
+        body.classList.remove('drawer-hover-open');
+        sidebar.inert = !media.matches && shellState.mode === 'floating';
+    }
+    hoverTrigger.addEventListener('mouseenter', openFloating);
+    sidebar.addEventListener('mouseenter', () => clearTimeout(hoverTimeout));
+    sidebar.addEventListener('mouseleave', () => {
+        if (media.matches || shellState.mode !== 'floating') return;
+        hoverTimeout = setTimeout(() => {
+            if (!sidebar.contains(document.activeElement)) closeFloating();
+        }, 300);
+    });
+    sidebar.addEventListener('focusout', (event) => {
+        if (!sidebar.contains(event.relatedTarget)) closeFloating();
+    });
+    floatingToggleBtn.addEventListener('click', () => {
+        openFloating();
+        const active = sidebar.querySelector('.nav-item.is-active, a:not([hidden])');
+        active?.focus({preventScroll: true});
+    });
+}());

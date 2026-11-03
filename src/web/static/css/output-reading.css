@@ -1,0 +1,263 @@
+/* Shared reading roles: quiet body ink, leaf headings, and visible source links. */
+body.workbench-meadow {
+    --reading-body: #35433c;
+    --reading-heading: #184c3a;
+    --reading-strong: #202e27;
+    --reading-secondary: #5b6c60;
+    --reading-link: #23634f;
+    --reading-quote: #f3f7f1;
+    --reading-code: #f4f5f1;
+}
+
+html[data-theme="dark"] body.workbench-meadow {
+    --reading-body: #d4dfd5;
+    --reading-heading: #a7d5b5;
+    --reading-strong: #f0f6ef;
+    --reading-secondary: #b0c2b3;
+    --reading-link: #9bcead;
+    --reading-quote: #283b2e;
+    --reading-code: #1c2b23;
+}
+
+body.workbench-meadow.page-transcript.app-shell .page-stage > .container {
+    max-width: 1060px;
+    padding: clamp(24px, 4vw, 52px) clamp(24px, 4.2vw, 64px);
+}
+
+body.workbench-meadow.page-transcript.app-shell .header h1 {
+    max-width: 32em;
+    color: var(--reading-strong);
+    font-size: clamp(1.55rem, 2.15vw, 2.1rem);
+    line-height: 1.45;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-wrap: pretty;
+}
+
+body.workbench-meadow.page-transcript.app-shell .header .meta {
+    font-size: 0.875rem;
+    color: var(--reading-secondary);
+}
+
+body.workbench-meadow.page-transcript.app-shell .section-header h2,
+body.workbench-meadow.page-transcript.app-shell .section > h2 {
+    font-size: 1.125rem !important;
+    font-family: inherit;
+    line-height: 1.5;
+    color: var(--reading-heading) !important;
+}
+
+body.workbench-meadow.page-transcript.app-shell .content,
+body.workbench-meadow.page-collections .lc-markdown-preview,
+body.workbench-meadow.page-study .markdown-content,
+body.workbench-meadow.page-history .history-evidence-answer {
+    display: block;
+    min-width: 0;
+    max-width: 72ch;
+    color: var(--reading-body);
+    font-size: 1rem;
+    line-height: 1.9;
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+}
+
+body.workbench-meadow.page-transcript.app-shell .content {
+    margin-inline: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+html[data-theme="dark"] body.workbench-meadow.page-transcript.app-shell .content {
+    color: var(--reading-body);
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) :is(h1, h2, h3, h4, h5, h6) {
+    color: var(--reading-heading);
+    font-family: inherit;
+    font-weight: 700;
+    line-height: 1.55;
+    letter-spacing: -0.015em;
+    border: 0;
+    padding: 0;
+    margin: 1.9em 0 0.7em;
+    scroll-margin-top: 32px;
+    text-wrap: pretty;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) :is(h1, h2) {
+    font-size: 1.35rem;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) h3 {
+    font-size: 1.125rem;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) :is(h4, h5, h6) {
+    font-size: 1rem;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) > :first-child {
+    margin-top: 0;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) :is(p, ul, ol) {
+    margin: 0 0 1.15em;
+    color: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) :is(ul, ol) {
+    padding-inline-start: 1.6em;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) li {
+    margin-block: 0.4em;
+    padding-inline-start: 0.15em;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) li::marker {
+    color: var(--reading-link);
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) :is(strong, b) {
+    color: var(--reading-strong);
+    font-weight: 700;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) a {
+    color: var(--reading-link);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) a:focus-visible {
+    outline: 2px solid var(--reading-link);
+    outline-offset: 3px;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) blockquote {
+    margin: 1.35em 0;
+    padding: 1em 1.25em;
+    border: 0;
+    border-radius: 8px;
+    background: var(--reading-quote);
+    color: var(--reading-secondary);
+    font-style: normal;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) blockquote > :last-child {
+    margin-bottom: 0;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) :is(pre, code) {
+    background: var(--reading-code);
+    color: var(--reading-strong);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.875em;
+    line-height: 1.7;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) pre {
+    max-width: 100%;
+    margin: 1.25em 0;
+    padding: 1em;
+    border: 1px solid var(--product-line);
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre;
+    overflow-wrap: normal;
+    overscroll-behavior-inline: contain;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) pre code {
+    padding: 0;
+    border: 0;
+    font-size: inherit;
+    background: transparent;
+    white-space: inherit;
+    overflow-wrap: normal;
+}
+
+/* Plain transcripts are prose, rather than horizontally scrolling code. */
+body.workbench-meadow.page-transcript.app-shell .bilingual-source > pre,
+body.workbench-meadow.page-transcript.app-shell .bilingual-translation > pre,
+body.workbench-meadow.page-transcript.app-shell .bilingual-both .content > pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) table {
+    display: block;
+    max-width: 100%;
+    width: 100%;
+    margin: 1.25em 0;
+    border-collapse: collapse;
+    overflow-x: auto;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    overscroll-behavior-inline: contain;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) :is(th, td) {
+    min-width: 6em;
+    padding: 0.75em 0.9em;
+    border: 1px solid var(--product-line);
+    text-align: start;
+    vertical-align: top;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) th {
+    background: var(--reading-quote);
+    color: var(--reading-strong);
+    font-weight: 650;
+}
+
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer)::selection,
+body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page-history) :is(.content, .lc-markdown-preview, .markdown-content, .history-evidence-answer) ::selection {
+    background: #dcecdf;
+    color: #123d32;
+}
+
+.study-answer-evidence { margin-top: 14px; border-top: 1px solid var(--line, #e3eae4); padding-top: 10px; }
+.study-answer-evidence summary { min-height: 44px; color: var(--reading-link); cursor: pointer; font-size: 0.875rem; line-height: 1.8; }
+.study-answer-evidence ol { padding-left: 20px; }
+.study-answer-evidence p { color: var(--reading-secondary); line-height: 1.8; font-size: 0.875rem; }
+.study-evidence-location { min-height: 44px; border: 0; padding: 6px 0; background: none; color: var(--reading-link); font: inherit; font-size: 0.875rem; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.feishu-delivery[hidden] { display: none; }
+.feishu-delivery { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding-block: 12px; margin-bottom: 24px; border-block: 1px solid var(--product-line); color: var(--reading-body); font-size: 0.875rem; line-height: 1.6; }
+.feishu-delivery-detail { display: block; color: var(--reading-secondary); }
+.feishu-delivery-actions { display: flex; align-items: center; gap: 16px; }
+.feishu-delivery-actions a, .feishu-delivery-actions button { color: var(--reading-link); text-decoration: underline; text-underline-offset: 3px; }
+.feishu-delivery-actions button { min-height: 44px; padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.feishu-delivery-actions button:disabled { cursor: wait; opacity: 0.65; }
+.feishu-delivery :is(button, a):focus-visible, .study-evidence-location:focus-visible { outline: 2px solid var(--reading-link); outline-offset: 3px; }
+
+@media (max-width: 720px) {
+    body.workbench-meadow.page-transcript.app-shell .page-stage > .container {
+        padding-inline: max(20px, env(safe-area-inset-left));
+    }
+
+    body.workbench-meadow.page-transcript.app-shell .header h1 {
+        font-size: 1.55rem;
+        line-height: 1.5;
+    }
+
+    body.workbench-meadow.page-transcript.app-shell .content {
+        padding: 0;
+    }
+}
+
+@media print {
+    body.workbench-meadow.page-transcript.app-shell .content {
+        max-width: none;
+        color: #202e27;
+        font-size: 11pt;
+    }
+}

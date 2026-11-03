@@ -63,6 +63,7 @@ from ...utils.notifications.channel import _clean_url
 from ...utils.rendering import get_base_url
 from ...utils.perf_tracker import PerfTracker
 from ...utils.task_status import TaskStatus
+from ...utils.task_progress import CLOUD_SUBMISSION_UNKNOWN_MESSAGE
 from ...utils.task_progress import estimate_eta_seconds
 from ...study.document_quality import assess_document_text
 from .source_preservation import (
@@ -602,6 +603,10 @@ def resume_confirmed_cloud_quote(
     if quote.status != "confirming" or quote.lease_owner != claim_owner:
         return {"status": "processing", "message": "cloud_confirmation_in_progress"}
     cache_manager.update_task_status(task_id, TaskStatus.PROCESSING, force=True)
+    _safe_update_progress(
+        task_id, stage="transcribing", stage_label="正在提交云端转录",
+        basis="cloud_confirmation_accepted", confidence="high",
+    )
     try:
         prepared_media = _load_quote_prepared_media(quote)
     except ValueError as exc:
@@ -663,7 +668,19 @@ def resume_confirmed_cloud_quote(
                     task_id, status, error_message=message, force=True
                 )
             return {"status": str(status), "message": message}
-        if exc.code not in _CLOUD_RECOVERY_PENDING_CODES:
+        if exc.code == "submission_unknown":
+            _safe_update_progress(
+                task_id, stage="cloud_submission_unknown",
+                basis="submission_unknown", confidence="high",
+                message=CLOUD_SUBMISSION_UNKNOWN_MESSAGE,
+            )
+        elif exc.code in _CLOUD_RECOVERY_PENDING_CODES:
+            _safe_update_progress(
+                task_id, stage="transcribing", stage_label="云端任务状态待恢复",
+                basis=exc.code, confidence="high",
+                message="正在保留原任务状态，恢复时只查询原任务，不重新提交转录。",
+            )
+        else:
             _record_asr_failure(task_id, exc)
         raise
     except Exception as exc:
@@ -1016,6 +1033,64 @@ def _persist_downloaded_source_if_requested(
         return None
 
 
+def _queue_feishu_document_deep_learning(
+    *, task_id: str, url: str, display_url: str, tracker: PerfTracker,
+    wechat_webhook: Optional[str], notification_channel: Optional[str],
+    notification_webhooks: Dict[str, Any], preserve_source_file: bool = False,
+) -> Dict[str, Any]:
+    """Acquire a document as text; never invoke media download or speech ASR."""
+    from ...document_sources.feishu import fetch_feishu_document, require_feishu_access
+
+    settings = get_config().get("feishu_documents") or {}
+    require_feishu_access(settings, cache_manager.get_task_by_id(task_id) or {})
+    storage = get_config().get("storage") or {}
+    snapshot_dir = Path(storage.get("source_files_dir") or "./data/source_files") / "feishu"
+    _safe_update_progress(
+        task_id, stage="metadata", stage_label="正在读取飞书文档正文",
+        basis="document_source", confidence="medium",
+    )
+    document = fetch_feishu_document(url, settings=settings, snapshot_dir=snapshot_dir)
+    description = "飞书文档正文"
+    if document.warnings:
+        description += "；" + "；".join(document.warnings)
+    saved = cache_manager.save_cache(
+        platform="feishu", url=document.url, media_id=document.media_id,
+        use_speaker_recognition=False, transcript_data=document.text,
+        transcript_type="capswriter", title=document.title, author="", description=description,
+    )
+    if not saved:
+        raise ValueError("保存飞书文档正文失败，未提交 AI 解读")
+    source_path = None
+    if preserve_source_file:
+        source_path = _preserve_source_file(
+            platform="feishu", media_id=document.media_id, title=document.title,
+            source_kind="document", source_text=document.text,
+        )
+    cache_manager.update_task_status(
+        task_id, TaskStatus.CALIBRATING, platform="feishu", media_id=document.media_id,
+        title=document.title, source_file_path=source_path, error_message="",
+    )
+    _safe_update_progress(
+        task_id, stage="calibrating", stage_label="已读取文档正文，正在生成 AI 解读",
+        basis="feishu_document_text", confidence="high",
+        evidence={"transcript_chars": len(document.text), "source_warning_count": len(document.warnings)},
+    )
+    llm_task_queue.put({
+        "task_id": task_id, "url": document.url, "display_url": display_url,
+        "platform": "feishu", "media_id": document.media_id, "video_title": document.title,
+        "author": "", "description": description, "transcript": document.text,
+        "use_speaker_recognition": False, "is_generic": False,
+        "wechat_webhook": wechat_webhook, "notification_channel": notification_channel,
+        "notification_webhooks": notification_webhooks, "include_comments": False,
+        "perf_tracker": tracker,
+    })
+    tracker.count("feishu_document_text")
+    return {"status": "success", "message": "已读取飞书文档，正在生成 AI 解读", "data": {
+        "video_title": document.title, "transcript": document.text, "media_type": "document",
+        "source_warnings": list(document.warnings),
+    }}
+
+
 def _queue_xiaohongshu_article_deep_learning(
     *,
     task_id: str,
@@ -1170,8 +1245,8 @@ def _queue_twitter_post_deep_learning(
 ) -> Optional[Dict[str, Any]]:
     """Queue X/Twitter posts as text deep-learning tasks via TikHub.
 
-    Download factory has no Twitter media adapter, so status URLs must not go
-    through GenericDownloader. Reuse TwitterPostFetcher (same as post insight).
+    The caller resolves embedded videos before entering this text-only path.
+    Reuse TwitterPostFetcher (same as post insight) for ordinary post content.
     """
     from ...comments.twitter_post import TwitterPostFetcher
     from ...utils.url_parser import URLParser
@@ -2194,104 +2269,82 @@ async def verify_token(authorization: str = Header(None), request: Request = Non
     return user_info
 
 
-async def process_task_queue():
-    """处理任务队列的后台任务"""
-    logger.info("启动任务队列处理器")
-
-    while True:
+def _execute_queued_task(task: dict):
+    """Execute one bound request, marking processing only when a thread starts."""
+    task_id = task["id"]
+    if _is_task_canceled(task_id):
+        return {"status": "canceled"}
+    cache_manager.update_task_status(
+        task_id, TaskStatus.PROCESSING, download_url=task.get("download_url")
+    )
+    if _is_task_canceled(task_id):
+        return {"status": "canceled"}
+    _safe_update_progress(
+        task_id, stage="url_parsing", stage_label="任务已开始，正在解析链接",
+        basis="task_started", confidence="high",
+    )
+    # Retained, verified media can resume local ASR without downloading again.
+    if task.get("recovered") and not task.get("use_speaker_recognition"):
         try:
+            record = _retry_repository().get(task_id)
+            _verified_retained_media(record.media_ref, record.media_sha256)
+        except (ASRRetryConflict, ValueError):
+            pass
+        else:
+            if record.state == "claimed":
+                _retry_repository().release(task_id)
+            claim_asr_retry(task_id)
+            return resume_asr_retry(task_id, strategy="local")
+    return process_transcription(
+        task_id, task["url"],
+        task.get("use_speaker_recognition", False), task.get("wechat_webhook"),
+        task.get("download_url"), task.get("metadata_override"),
+        notification_channel=task.get("notification_channel"),
+        notification_webhooks=task.get("notification_webhooks", {}),
+        include_comments=task.get("include_comments", False),
+        comment_limit=task.get("comment_limit", 100),
+        preserve_source_file=task.get("preserve_source_file", False),
+        transcription_strategy=task.get("transcription_strategy"),
+        cloud_confirmation_required=True,
+    )
+
+
+async def process_task_queue():
+    """Bound consumers to working slots; never spill into an unbounded backlog."""
+    async def consume():
+        loop = asyncio.get_running_loop()
+        while True:
             task = await task_queue.get()
             task_id = task["id"]
-            url = task["url"]
-            use_speaker_recognition = task.get("use_speaker_recognition", False)
-            wechat_webhook = task.get("wechat_webhook")
-            notification_channel = task.get("notification_channel")
-            notification_webhooks = task.get("notification_webhooks", {})
-            download_url = task.get("download_url")
-            metadata_override = task.get("metadata_override")
-            include_comments = task.get("include_comments", False)
-            comment_limit = task.get("comment_limit", 100)
-            preserve_source_file = task.get("preserve_source_file", False)
-            transcription_strategy = task.get("transcription_strategy")
-
             try:
-                if _is_task_canceled(task_id):
-                    logger.info(f"任务已取消，跳过处理: {task_id}")
-                    continue
-                cache_manager.update_task_status(task_id, TaskStatus.PROCESSING, download_url=download_url)
-                if _is_task_canceled(task_id):
-                    logger.info(f"任务已取消，跳过线程池提交: {task_id}")
-                    continue
-                _safe_update_progress(
-                    task_id,
-                    stage="url_parsing",
-                    stage_label="任务已开始，正在解析链接",
-                    basis="task_started",
-                    confidence="high",
-                )
-
-                future = executor.submit(
-                    process_transcription,
-                    task_id,
-                    url,
-                    use_speaker_recognition,
-                    wechat_webhook,
-                    download_url,
-                    metadata_override,
-                    notification_channel=notification_channel,
-                    notification_webhooks=notification_webhooks,
-                    include_comments=include_comments,
-                    comment_limit=comment_limit,
-                    preserve_source_file=preserve_source_file,
-                    transcription_strategy=transcription_strategy,
-                    cloud_confirmation_required=True,
-                )
-
-                def task_completed(future_result):
-                    # 各阶段（process_transcription / LLM）会在内部把状态写入 DB；
-                    # 但「下载失败」等早退路径只是正常 return 一个 {"status":"failed"} 字典、
-                    # 并不抛异常，若不在此兜底写回终态，任务会永远停留在 processing。
-                    try:
-                        result = future_result.result()
-                        if isinstance(result, dict) and result.get("status") == "failed":
-                            # 早退失败路径：写回终态，避免页面一直显示"处理中"
-                            error_message = result.get("message", "任务失败")
-                            logger.warning(f"任务失败: {task_id}, 原因: {error_message}")
-                            cache_manager.update_task_status(
-                                task_id, TaskStatus.FAILED,
-                                error_message=error_message,
-                            )
-                        else:
-                            logger.info(f"任务完成: {task_id}")
-                    except Exception as exc:
-                        logger.exception(
-                            f"任务处理失败: {task_id}, URL: {url}, 错误: {exc}"
-                        )
-                        cache_manager.update_task_status(
-                            task_id, TaskStatus.FAILED,
-                            error_message=f"转录任务失败: {exc}",
-                        )
-                        display_url = url
-                        get_notification_router().notify_task_status(
-                            url=display_url, status="转录失败", error=str(exc),
-                            channel_name=notification_channel, webhooks=notification_webhooks,
-                        )
-
-                future.add_done_callback(task_completed)
-                logger.info(f"任务已提交到线程池: {task_id}, URL: {url}")
+                # Each coroutine owns its task context until the Future finishes.
+                result = await loop.run_in_executor(executor, _execute_queued_task, task)
+                if isinstance(result, dict) and result.get("status") == "failed":
+                    cache_manager.update_task_status(
+                        task_id, TaskStatus.FAILED,
+                        error_message=result.get("message", "任务失败"),
+                    )
+            except asyncio.CancelledError:
+                # The durable request remains recoverable after process exit.
+                raise
             except Exception as exc:
-                logger.exception(
-                    f"提交任务到线程池失败: {task_id}, URL: {url}, 错误: {exc}"
-                )
+                logger.exception("Queued transcription failed: task=%s", task_id)
                 cache_manager.update_task_status(
-                    task_id, TaskStatus.FAILED,
-                    error_message=f"提交任务失败: {exc}",
+                    task_id, TaskStatus.FAILED, error_message=f"转录任务失败: {exc}",
                 )
+                try:
+                    get_notification_router().notify_task_status(
+                        url=task["url"], status="转录失败", error=str(exc),
+                        channel_name=task.get("notification_channel"),
+                        webhooks=task.get("notification_webhooks", {}),
+                    )
+                except Exception:
+                    logger.warning("Task failure notification was not delivered")
             finally:
                 task_queue.task_done()
-        except Exception as exc:
-            logger.exception(f"任务队列处理器异常: {exc}")
-            await asyncio.sleep(1)
+
+    workers = max(1, int(config.get("concurrent", {}).get("max_workers", 3)))
+    await asyncio.gather(*(consume() for _ in range(workers)))
 
 
 def process_transcription(
@@ -2406,7 +2459,30 @@ def process_transcription(
                 video_id = generate_media_id_from_url(url)
                 logger.info(f"[URL解析] 回退到通用标识: platform={platform}, video_id={video_id}")
 
-        # ==================== 阶段2: 缓存检测（在创建下载器之前）====================
+        if platform == "feishu":
+            from ...document_sources.feishu import require_feishu_access, FeishuDocumentError
+            require_feishu_access(
+                get_config().get("feishu_documents") or {},
+                cache_manager.get_task_by_id(task_id) or {},
+            )
+            if use_speaker_recognition or download_url:
+                raise FeishuDocumentError("飞书文档请直接提交文档链接，无需说话人识别或音视频下载地址")
+
+        # X status URLs can represent either text or video. Resolve media before
+        # cache lookup so historical post text cannot masquerade as an ASR result.
+        twitter_downloader = None
+        twitter_has_video = False
+        if platform == "twitter" and not download_url:
+            twitter_downloader = create_downloader(parsed_normalized_url)
+            twitter_metadata = twitter_downloader.get_metadata(parsed_normalized_url)
+            twitter_has_video = twitter_metadata.extra.get("media_type") == "video"
+            if twitter_has_video:
+                video_id = twitter_metadata.video_id
+                cache_manager.update_task_status(
+                    task_id, TaskStatus.PROCESSING, platform=platform, media_id=video_id,
+                )
+
+        # ==================== 阶段2: 缓存检测 ====================
         cache_data = None
         is_generic_downloader = platform == 'generic'
         _safe_update_progress(
@@ -2668,6 +2744,14 @@ def process_transcription(
         else:
             logger.info("[缓存检测] ❌ 缓存未命中，准备下载和转录")
 
+            if platform == "feishu":
+                return _queue_feishu_document_deep_learning(
+                    task_id=task_id, url=parsed_normalized_url, display_url=display_url,
+                    tracker=tracker, wechat_webhook=wechat_webhook,
+                    notification_channel=notification_channel, notification_webhooks=notification_webhooks,
+                    preserve_source_file=preserve_source_file,
+                )
+
             if platform == "xiaohongshu" and not download_url:
                 article_result = _queue_xiaohongshu_article_deep_learning(
                     task_id=task_id,
@@ -2686,7 +2770,7 @@ def process_transcription(
                 if article_result is not None:
                     return article_result
 
-            if platform == "twitter" and not download_url:
+            if platform == "twitter" and not download_url and not twitter_has_video:
                 twitter_result = _queue_twitter_post_deep_learning(
                     task_id=task_id,
                     url=parsed_normalized_url or url,
@@ -2722,7 +2806,7 @@ def process_transcription(
             with tracker.track("metadata"):
                 try:
                     logger.info(f"[元数据获取] 创建下载器实例: {parse_url}")
-                    metadata_downloader = create_downloader(parse_url)
+                    metadata_downloader = twitter_downloader or create_downloader(parse_url)
                     logger.info(
                         f"[元数据获取] 下载器类型: {metadata_downloader.__class__.__name__}"
                     )

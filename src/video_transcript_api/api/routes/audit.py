@@ -15,9 +15,10 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
-from ..context import get_audit_logger, get_cache_manager, get_logger
+from ..context import get_audit_logger, get_cache_manager, get_config, get_logger
 from ..services.transcription import TranscribeResponse, verify_token
 from ...study.source_files import media_type_for_filename
+from ...study.body_search import authorized_body_texts, matching_excerpt
 from ...utils.timeutil import format_datetime_with_timezone, get_configured_timezone
 
 logger = get_logger()
@@ -32,6 +33,8 @@ router = APIRouter(prefix="/api/audit", tags=["audit"])
 
 def _history_content_type(platform: str | None, title: str, source_file_path: str | None, video_url: str | None) -> str:
     """Group history inputs for the UI without adding a persisted schema field."""
+    if str(platform or "").lower() == "feishu":
+        return "file"
     is_local_source = bool(source_file_path) or str(video_url or "").lower().startswith("local://")
     if is_local_source:
         filenames = [title or "", Path(source_file_path).name if source_file_path else ""]
@@ -157,7 +160,8 @@ def _history_records_cte(
                 COALESCE(NULLIF(t.platform, ''), 'generic') AS platform,
                 t.status, t.source_file_path, t.error_message,
                 {marked_sql} AS is_marked,
-                COALESCE(NULLIF(t.view_token, ''), t.task_id) AS dedupe_key
+                COALESCE(NULLIF(t.view_token, ''), t.task_id) AS dedupe_key,
+                t.cache_id, t.owner_user_id
             FROM {prefix}task_status t
             LEFT JOIN linked_audits a ON a.matched_task_id = t.task_id
             {marks_join}
@@ -168,7 +172,7 @@ def _history_records_cte(
                 a.id, a.task_id, a.video_url, a.wechat_webhook,
                 a.request_time, a.request_time, a.video_url,
                 NULL, NULL, NULL, 'generic', 'unknown', NULL, NULL,
-                0, a.task_id
+                0, a.task_id, NULL, NULL
             FROM owned_audits a
             WHERE a.task_id IS NOT NULL
                 AND NOT EXISTS (
@@ -215,7 +219,7 @@ async def get_history(
     platform: Optional[str] = Query(None, description="来源平台"),
     content_type: Optional[str] = Query(None, description="内容类型: video/post/file"),
     author: Optional[str] = Query(None, description="频道/作者，逗号分隔多选"),
-    q: Optional[str] = Query(None, description="搜索标题、作者和来源链接"),
+    q: Optional[str] = Query(None, max_length=200, description="搜索标题、作者、来源链接和已解析正文"),
     status: Optional[str] = Query(None, description="解析状态，默认 success"),
     marked: bool = Query(False, description="仅精华"),
     limit: int = Query(20, ge=1, le=10000, description="每页条数"),
@@ -257,7 +261,8 @@ async def get_history(
             for column in ("title", "source_file_path") for extension in media_extensions
         )
         type_sql = (
-            "CASE WHEN (COALESCE(source_file_path, '') != '' OR "
+            "CASE WHEN LOWER(platform) = 'feishu' THEN 'file' "
+            "WHEN (COALESCE(source_file_path, '') != '' OR "
             "LOWER(COALESCE(video_url, '')) LIKE 'local://%') "
             f"AND NOT ({suffixes}) THEN 'file' "
             "WHEN LOWER(platform) IN ('xiaohongshu', 'twitter', 'x', 'weixin') THEN 'post' "
@@ -276,12 +281,6 @@ async def get_history(
     elif effective_status != "all":
         conditions.append("status = ?")
         parameters.append(effective_status)
-    if q and q.strip():
-        conditions.append(
-            "(COALESCE(title, '') LIKE ? OR COALESCE(author, '') LIKE ? "
-            "OR COALESCE(video_url, '') LIKE ?)"
-        )
-        parameters.extend([f"%{q.strip()}%"] * 3)
     if marked:
         conditions.append("is_marked = 1")
     where_sql = " AND ".join(conditions) or "1 = 1"
@@ -292,6 +291,41 @@ async def get_history(
                 user_info, api_key_masked, prefix, has_marks
             )
             query_parameters = scope_parameters + parameters
+            excerpts = {}
+            if q and q.strip():
+                # Scope and other filters are applied before reading any body.
+                # Paginate after matching, so body-only hits and total agree.
+                candidates = conn.execute(cte + f"""
+                    SELECT task_id, video_url, wechat_webhook, request_time,
+                        view_token, title, author, platform, status,
+                        source_file_path, is_marked, error_message, cache_id, owner_user_id
+                    FROM history_records WHERE {where_sql}
+                    ORDER BY request_time DESC, audit_id DESC, task_id DESC
+                """, query_parameters).fetchall()
+                metadata_matches, body_candidates = set(), []
+                for candidate in candidates:
+                    if matching_excerpt([str(candidate[index] or "") for index in (1, 5, 6)], q) is not None:
+                        metadata_matches.add(candidate[0])
+                    elif candidate[12] is not None:
+                        if str(candidate[7] or "").lower() == "feishu":
+                            from ...document_sources.feishu import FeishuDocumentError, require_feishu_access
+                            try:
+                                require_feishu_access(get_config().get("feishu_documents") or {},
+                                                      {"owner_user_id": candidate[13]})
+                            except FeishuDocumentError:
+                                continue
+                        body_candidates.append(candidate)
+                bodies = authorized_body_texts(conn, prefix, cache_manager,
+                                               [row[12] for row in body_candidates])
+                for candidate in body_candidates:
+                    excerpt = matching_excerpt(bodies.get(str(candidate[12]), []), q)
+                    if excerpt is not None:
+                        excerpts[candidate[0]] = excerpt
+                matched = [row for row in candidates if row[0] in metadata_matches or row[0] in excerpts]
+                total = len(matched)
+                rows = matched[offset:offset + limit]
+            else:
+                rows = None
             # A single aggregate row also preserves the total for an empty page.
             sql = cte + f"""
                 , matches AS (SELECT * FROM history_records WHERE {where_sql}),
@@ -308,8 +342,9 @@ async def get_history(
                 LEFT JOIN page ON 1 = 1
                 ORDER BY page.request_time DESC, page.audit_id DESC, page.task_id DESC
             """
-            rows = conn.execute(sql, query_parameters + [limit, offset]).fetchall()
-            total = int(rows[0][12]) if rows else 0
+            if rows is None:
+                rows = conn.execute(sql, query_parameters + [limit, offset]).fetchall()
+                total = int(rows[0][12]) if rows else 0
             items = []
             for row in rows:
                 if row[0] is None:
@@ -332,6 +367,8 @@ async def get_history(
                     "is_marked": bool(row[10]), "error": row[11] or "",
                     "study_available": study_available,
                     "study_url": f"/study/{row[4]}" if study_available else "",
+                    "search_in_body": row[0] in excerpts,
+                    "search_excerpt": excerpts.get(row[0], ""),
                 })
             return total, items
 

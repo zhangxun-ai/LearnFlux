@@ -19,6 +19,10 @@
                 <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
                 <span class="nav-label">边播边学</span>
             </a>
+            <a class="nav-item {% if shell_path.startswith('/briefings') %}is-active{% endif %}" href="/briefings" {% if shell_path.startswith('/briefings') %}aria-current="page"{% endif %}>
+                <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span>
+                <span class="nav-label">日报</span>
+            </a>
             <div class="nav-branch {% if shell_path.startswith('/review') %}is-expanded{% endif %}">
                 <div class="nav-branch-row">
                     <a class="nav-item {% if shell_path.startswith('/review') %}is-active{% endif %}" href="/review" data-nav-parent="true">

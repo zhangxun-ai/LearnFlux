@@ -10,6 +10,8 @@ from typing import Any, Dict
 
 from fastapi.templating import Jinja2Templates
 
+from .assets import get_static_asset_version
+
 from ..utils.accounts import get_user_manager as _get_user_manager_impl
 from ..cache import CacheManager
 from ..llm import LLMCoordinator
@@ -300,31 +302,12 @@ def get_template_dir() -> Path:
 def get_templates() -> Jinja2Templates:
     global _templates
     if _templates is None:
-        _templates = Jinja2Templates(directory=str(get_template_dir()))
-        # 模板页资源版本号：用共享静态资源的 mtime 破坏 CSS/JS 浏览器缓存，
-        # 部署/改样式后回访用户即可拿到新版（模板里用 ?v={{ asset_ver }}）。
-        try:
-            static_dir = get_static_dir()
-            version_files = [
-                static_dir / "css" / "editorial.css",
-                static_dir / "css" / "visual-learning.css",
-                static_dir / "css" / "obsidian-knowledge.css",
-                static_dir / "css" / "product-linear.css",
-                static_dir / "css" / "product-linear-core.css",
-                static_dir / "css" / "product-linear-insights.css",
-                static_dir / "css" / "product-linear-system.css",
-                static_dir / "js" / "pwa-register.js",
-                static_dir / "js" / "ui-features.js",
-                static_dir / "js" / "app-shell.js",
-                static_dir / "js" / "floating-toc.js",
-                static_dir / "js" / "visual-learning.js",
-                static_dir / "js" / "transcript-visual-reader.js",
-                static_dir / "js" / "obsidian-knowledge.js",
-            ]
-            version = max((f.stat().st_mtime for f in version_files if f.exists()), default=0)
-            _templates.env.globals["asset_ver"] = str(int(version))
-        except OSError:
-            _templates.env.globals["asset_ver"] = "1"
+        _templates = Jinja2Templates(
+            directory=str(get_template_dir()),
+            context_processors=[
+                lambda request: {"asset_ver": get_static_asset_version(get_static_dir())}
+            ],
+        )
     return _templates
 
 

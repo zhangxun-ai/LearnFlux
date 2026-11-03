@@ -66,6 +66,19 @@ class StudyChatRequest(BaseModel):
     history: list[StudyChatMessage] = Field(default_factory=list, max_length=12)
 
 
+class StudyCompareRequest(StudyChatRequest):
+    view_tokens: list[str] = Field(..., min_length=2, max_length=5)
+
+    @field_validator("view_tokens")
+    @classmethod
+    def validate_sources(cls, values):
+        if any(not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value) for value in values):
+            raise ValueError("Invalid source identity")
+        if len(set(values)) != len(values):
+            raise ValueError("请选择不同的资料")
+        return values
+
+
 class StudyTextRequest(BaseModel):
     title: str = Field(default="", max_length=160)
     content: str = Field(..., min_length=1, max_length=200000)
@@ -160,6 +173,51 @@ def _require_owned_single(view_token: str, user_info: dict) -> None:
     }
     if not task_id or task_id not in owned_task_ids:
         raise HTTPException(status_code=404, detail="学习内容不存在")
+
+
+def _require_comparison_sources(view_tokens: list[str], user_info: dict) -> None:
+    """Authorize every selected source before loading any transcript or cache."""
+    from ...document_sources.feishu import FeishuDocumentError, require_feishu_access
+
+    legacy_ids = None
+    for token in view_tokens:
+        task = cache_manager.get_task_by_view_token(token) or {}
+        if not isinstance(task, dict) or not task.get("task_id"):
+            raise HTTPException(status_code=404, detail="学习内容不存在")
+        owner = task.get("owner_user_id")
+        if owner is not None:
+            if owner != user_info.get("user_id"):
+                raise HTTPException(status_code=404, detail="学习内容不存在")
+        elif not (user_info.get("is_legacy") or user_info.get("user_id") == "legacy_user"):
+            if legacy_ids is None:
+                legacy_ids = {row.get("task_id") for row in audit_logger.get_recent_calls(
+                    user_id=user_info.get("user_id") or "", limit=10000,
+                )}
+            if task["task_id"] not in legacy_ids:
+                raise HTTPException(status_code=404, detail="学习内容不存在")
+        if str(task.get("platform") or "").lower() == "feishu":
+            try:
+                require_feishu_access(config.get("feishu_documents") or {}, task)
+            except FeishuDocumentError:
+                raise HTTPException(status_code=403, detail="当前身份未获准读取这份飞书资料") from None
+
+
+@router.post("/compare", response_model=TranscribeResponse)
+async def compare_study_sources(
+    request: StudyCompareRequest, user_info: dict = Depends(verify_token),
+):
+    await run_in_threadpool(_require_comparison_sources, request.view_tokens, user_info)
+    try:
+        result = await run_in_threadpool(
+            get_study_service().compare_sources, request.view_tokens, request.question,
+            [item.model_dump() for item in request.history],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except Exception:
+        logger.exception("Source comparison failed")
+        raise HTTPException(status_code=502, detail="对照回答生成失败，请稍后重试") from None
+    return TranscribeResponse(code=200, message="对照回答已生成", data=result)
 
 
 def _single_obsidian_context(view_token: str, user_info: dict) -> StudySyncContext:

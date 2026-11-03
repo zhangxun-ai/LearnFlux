@@ -8,10 +8,14 @@ import hashlib
 import html
 import json
 import re
+import sys
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+from video_transcript_api.api.assets import get_static_asset_version
+
 WEB_ROOT = PROJECT_ROOT / "src" / "web"
 STATIC_ROOT = WEB_ROOT / "static"
 TEMPLATE_ROOT = WEB_ROOT / "templates"
@@ -63,14 +67,7 @@ def _feature_digest() -> str:
 
 
 def _static_asset_digest() -> str:
-    digest = hashlib.sha256()
-    for path in sorted((STATIC_ROOT / "css").rglob("*.css")):
-        digest.update(path.relative_to(STATIC_ROOT).as_posix().encode())
-        digest.update(path.read_bytes())
-    for path in sorted((STATIC_ROOT / "js").rglob("*.js")):
-        digest.update(path.relative_to(STATIC_ROOT).as_posix().encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()[:12]
+    return get_static_asset_version(STATIC_ROOT)
 
 
 def _active_expression(item: dict) -> str:

@@ -1023,13 +1023,29 @@
 
     function ensureVisualOverview(session) {
         if (!visualSourceReady(session)) {
-            setVisualStatus('原文就绪后会自动生成视觉速览。', false);
+            setVisualStatus('原文就绪后可手动生成图解。', false);
             return;
         }
-        loadVisualState('overview', true);
+        loadVisualState('overview', false);
     }
 
     function activateVisualLearning() {
+        if (window.ImageDiagrams) {
+            const toolbar = els.visualTheme && els.visualTheme.closest('.study-visual-toolbar');
+            if (toolbar) toolbar.hidden = true;
+            els.visualStatus.hidden = true;
+            els.visualFullNoteStatus.hidden = true;
+            if (!viewToken) {
+                els.visualOverview.textContent = '这份内容仍在准备中，原文可用后请重新打开图解。';
+                return;
+            }
+            if (state.imageDiagramToken !== viewToken) {
+                if (state.imageDiagramReader) state.imageDiagramReader.destroy();
+                state.imageDiagramToken = viewToken;
+                state.imageDiagramReader = window.ImageDiagrams.mount(els.visualOverview, { viewToken });
+            }
+            return;
+        }
         if (state.visualActivated) return;
         if (!visualSourceReady(state.session || {})) {
             state.visualActivated = false;
@@ -1038,8 +1054,8 @@
         }
         state.visualActivated = true;
         setFullNoteStatus('正在加载完整笔记…', false);
-        loadVisualState('overview', true);
-        loadVisualState('full_note', true);
+        loadVisualState('overview', false);
+        loadVisualState('full_note', false);
     }
 
     function openVisualDialog(documentType) {
@@ -1075,8 +1091,9 @@
         if (!line && Number.isInteger(sourceRef.paragraph_index)) {
             line = lines[sourceRef.paragraph_index];
         }
-        if (Number.isFinite(Number(sourceRef.start_seconds)) && els.video.src) {
-            seekTo(Number(sourceRef.start_seconds));
+        if (sourceRef.start_seconds !== null && sourceRef.start_seconds !== undefined && Number.isFinite(Number(sourceRef.start_seconds)) && els.video.src) {
+            if (sourceRef.autoplay === false) els.video.currentTime = Math.max(0, Number(sourceRef.start_seconds));
+            else seekTo(Number(sourceRef.start_seconds));
         }
         if (!line) return;
         state.currentLineId = line.id;
@@ -1105,6 +1122,8 @@
         const paragraphValue = params.get('visual_paragraph');
         const startValue = params.get('visual_start');
         if (!sourceKind && !lineId && paragraphValue === null && startValue === null) return;
+        const availableLines = (((state.session || {}).transcript || {}).lines || []);
+        if (sourceKind !== 'summary' && !availableLines.length) return;
         state.requestedVisualSourceApplied = true;
         handleVisualSourceRef(
             sourceKind === 'summary' ? `study:${viewToken}:summary` : 'requested-source',
@@ -1112,13 +1131,14 @@
                 line_id: lineId || null,
                 paragraph_index: paragraphValue === null ? null : Number(paragraphValue),
                 start_seconds: startValue === null ? null : Number(startValue),
+                autoplay: false,
             }
         );
     }
 
     function renderChat() {
         if (!state.chatMessages.length) {
-            els.chatList.innerHTML = '<div class="chat-empty"><strong>问任何看不懂的地方</strong><span>AI 会先读视频全文和总结，再结合专业知识回答。</span></div>';
+            els.chatList.innerHTML = '<div class="chat-empty"><strong>问任何看不懂的地方</strong><span>依据原文与总结回答；长内容会按问题查找相关段落，并附原文依据。</span></div>';
             return;
         }
         els.chatList.innerHTML = state.chatMessages.map((message) => {
@@ -1134,13 +1154,14 @@
             return `<article class="chat-message is-${escapeHTML(message.role)}${stateClass}">
                 <strong>${meta}</strong>
                 ${content}
+                ${message.role === 'assistant' && !message.pending ? renderChatEvidence(message.evidence) : ''}
             </article>`;
         }).join('');
         els.chatList.scrollTop = els.chatList.scrollHeight;
     }
 
     function renderThinking(stepIndex) {
-        const steps = ['阅读视频全文', '定位相关上下文', '组织回答'];
+        const steps = ['查找原文依据', '核对相关上下文', '组织回答'];
         const items = steps.map((step, index) => {
             const stateClass = index < stepIndex ? ' is-done' : (index === stepIndex ? ' is-active' : '');
             return `<li class="${stateClass}">${escapeHTML(step)}</li>`;
@@ -1149,6 +1170,16 @@
             <div class="chat-thinking" aria-label="AI 正在思考"><span></span><span></span><span></span></div>
             <ol class="chat-thinking-steps">${items}</ol>
         </div>`;
+    }
+
+    function renderChatEvidence(evidence) {
+        const passages = Array.isArray(evidence?.passages) ? evidence.passages : [];
+        if (!passages.length) return '';
+        return `<details class="study-answer-evidence"><summary>原文依据 · ${passages.length} 段</summary><ol>${passages.map((passage) => {
+            const line = escapeHTML(passage.line_id || '');
+            const start = Number.isFinite(passage.start_seconds) ? passage.start_seconds : '';
+            return `<li><button type="button" class="study-evidence-location" data-evidence-line="${line}" data-evidence-start="${start}">${escapeHTML(passage.id || '')} · ${escapeHTML(passage.label || '查看原文')}</button><p>${escapeHTML(passage.text || '')}</p></li>`;
+        }).join('')}</ol></details>`;
     }
 
     function escapeHTML(value) {
@@ -1415,6 +1446,14 @@
     }
 
     function bindChat() {
+        els.chatList.addEventListener('click', (event) => {
+            const target = event.target.closest('[data-evidence-line]');
+            if (!target) return;
+            handleVisualSourceRef('answer-evidence', {
+                line_id: target.dataset.evidenceLine || null,
+                start_seconds: target.dataset.evidenceStart === '' ? null : Number(target.dataset.evidenceStart),
+            });
+        });
         els.askAiEntry.addEventListener('click', () => {
             activateTab('chat');
             els.chatQuestion.focus();
@@ -1474,6 +1513,7 @@
     }
 
     function bindVisualLearning() {
+        if (window.ImageDiagrams) return;
         els.visualTheme.addEventListener('change', applyVisualTheme);
         els.visualExpand.addEventListener('click', () => openVisualDialog('overview'));
         els.visualFullNote.addEventListener('click', async () => {
@@ -1560,6 +1600,7 @@
                 role: 'assistant',
                 content: result.answer || '暂无回答。',
                 model: result.model || 'deepseek-v4-pro',
+                evidence: result.evidence || null,
             });
             renderChat();
         } catch (error) {

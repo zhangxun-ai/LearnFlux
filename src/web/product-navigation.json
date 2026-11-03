@@ -1,10 +1,16 @@
 {
   "groups": [
-    {"id": "core", "label": "核心工具", "items": ["single_study", "collections", "study_player", "review"]},
+    {"id": "core", "label": "核心工具", "items": ["single_study", "collections", "study_player", "briefings", "review"]},
     {"id": "flow", "label": "心流空间", "items": ["reading", "focus_studio"]},
     {"id": "system", "label": "系统", "bottom": true, "items": ["history", "settings"]}
   ],
   "items": {
+    "briefings": {
+      "label": "日报",
+      "href": "/briefings",
+      "matches": ["/briefings"],
+      "svg": "<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"M8 7h8M8 11h8M8 15h5\"/>"
+    },
     "single_study": {
       "label": "单篇深度学习",
       "href": "/add_task_by_web",

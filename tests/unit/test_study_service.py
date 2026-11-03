@@ -342,10 +342,10 @@ def test_study_service_ai_chat_uses_deepseek_v4_and_video_context(tmp_path):
     )
 
     assert result["model"] == "deepseek-v4-pro"
-    assert result["reasoning_effort"] == "high"
+    assert result["reasoning_effort"] == "medium"
     assert result["answer"].startswith("稳定系统")
     assert calls["model"] == "deepseek-v4-pro"
-    assert calls["reasoning_effort"] == "high"
+    assert calls["reasoning_effort"] == "medium"
     assert calls["task_type"] == "study_chat"
     assert "稳定系统是什么意思？" in calls["prompt"]
     assert "我没理解前面的比喻" in calls["prompt"]

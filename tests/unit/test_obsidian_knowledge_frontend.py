@@ -11,9 +11,6 @@ def test_single_result_syncs_without_a_preview_step_and_closes_on_success():
     script = (ROOT / "src/web/static/js/obsidian-knowledge.js").read_text(
         encoding="utf-8"
     )
-    context = (ROOT / "src/video_transcript_api/api/context.py").read_text(
-        encoding="utf-8"
-    )
 
     assert 'id="obsidian-knowledge-open"' in template
     button_at = template.index('id="obsidian-knowledge-open"')
@@ -21,8 +18,6 @@ def test_single_result_syncs_without_a_preview_step_and_closes_on_success():
     assert "study_available" not in nearby
     assert "/static/css/obsidian-knowledge.css" in template
     assert "/static/js/obsidian-knowledge.js" in template
-    assert 'static_dir / "css" / "obsidian-knowledge.css"' in context
-    assert 'static_dir / "js" / "obsidian-knowledge.js"' in context
     for element_id in (
         "obsidian-knowledge-notice",
         "obsidian-knowledge-notice-title",
@@ -55,6 +50,49 @@ def test_single_result_syncs_without_a_preview_step_and_closes_on_success():
     assert "preconditions" in script
     assert "expected_binding_revision" in script
     assert "stale_preview" in script
+
+
+def test_obsidian_assets_receive_live_shared_template_versions(tmp_path, monkeypatch):
+    from fastapi import FastAPI, Request
+    from fastapi.testclient import TestClient
+    from video_transcript_api.api import context
+    from video_transcript_api.api.assets import get_static_asset_version
+
+    template = tmp_path / "asset_probe.html"
+    template.write_text(
+        '<link href="/static/css/obsidian-knowledge.css?v={{ asset_ver }}">'
+        '<script src="/static/js/obsidian-knowledge.js?v={{ asset_ver }}"></script>',
+        encoding="utf-8",
+    )
+    static = tmp_path / "static"
+    (static / "css").mkdir(parents=True)
+    (static / "js").mkdir()
+    stylesheet = static / "css" / "obsidian-knowledge.css"
+    javascript = static / "js" / "obsidian-knowledge.js"
+    stylesheet.write_text("dialog { color: green; }", encoding="utf-8")
+    javascript.write_text("const syncReady = false;", encoding="utf-8")
+    monkeypatch.setattr(context, "get_template_dir", lambda: tmp_path)
+    monkeypatch.setattr(context, "get_static_dir", lambda: static)
+    monkeypatch.setattr(context, "_templates", None)
+    templates = context.get_templates()
+    app = FastAPI()
+
+    @app.get("/asset-probe")
+    async def asset_probe(request: Request):
+        return templates.TemplateResponse(request=request, name=template.name, context={})
+
+    client = TestClient(app)
+    versions = set()
+    for changed in (None, stylesheet, javascript):
+        if changed is not None:
+            changed.write_text(changed.read_text(encoding="utf-8") + "\n/* updated */", encoding="utf-8")
+        version = get_static_asset_version(static)
+        assert version not in versions
+        versions.add(version)
+        response = client.get("/asset-probe")
+        assert response.status_code == 200
+        assert response.text.count(f"?v={version}") == 2
+        assert "{{ asset_ver }}" not in response.text
 
 
 def test_collection_has_selection_incremental_force_and_result_ui():

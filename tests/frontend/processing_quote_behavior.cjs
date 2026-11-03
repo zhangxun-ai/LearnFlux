@@ -9,7 +9,7 @@ class Element {
     set textContent(value) { this._text = value; this.children = []; }
     get textContent() { return this._text; }
     appendChild(node) { this.children.push(node); }
-    replaceChildren(...nodes) { this.children = nodes; this.textContent = ''; }
+    replaceChildren(...nodes) { this.children = nodes; this._text = ''; }
     setAttribute() {}
     querySelectorAll() { return this.children.filter(node => node.dataset.action); }
     querySelector() { return this.children.find(node => node.dataset.action === 'cloud-confirm'); }
@@ -62,11 +62,76 @@ async function scenario(code, cost = '0.30', refreshFails = false) {
     assert.equal(JSON.parse(requests.at(-1).options.body).quote_token, 'new');
     assert.equal(JSON.parse(requests.at(-1).options.body).accepted_max_cost_cny, cost);
 }
+
+async function pollingScenario({ staleQuote = false, delayed = false, quoteFailure = false } = {}) {
+    const actions = new Element('div');
+    actions.dataset.taskId = 'task/id';
+    actions.hidden = true;
+    const ids = ['progress-heading', 'progress-subtitle', 'progress-stage',
+        'progress-percent', 'progress-fill', 'progress-elapsed', 'progress-message'];
+    const nodes = Object.fromEntries(ids.map(id => [id, new Element('div')]));
+    nodes['cloud-quote-actions'] = actions;
+    const track = new Element('div');
+    track.removeAttribute = () => {};
+    const requests = [];
+    let release;
+    let interval;
+    const progress = {
+        status: quoteFailure ? 'awaiting_cloud_confirmation' : 'processing',
+        elapsed_display: '9 hours',
+        progress: { stage: staleQuote || quoteFailure ? 'awaiting_cloud_confirmation' : 'cloud_submission_unknown',
+            stage_label: 'Pending', percent: null, message: 'No automatic resubmission' }
+    };
+    const sandbox = {
+        console, progressUrl: '/view/demo/progress',
+        setInterval: fn => { interval = fn; },
+        window: { LearnFluxAuth: { getTokenPlaceholder: () => 'session', ready: Promise.resolve() },
+            location: { reload: () => assert.fail('Pending work must not reload the page') } },
+        document: { getElementById: id => nodes[id] || null,
+            createElement: tag => new Element(tag), querySelector: () => track },
+        fetch: async url => {
+            requests.push(url);
+            assert.ok(requests.length < 12, 'Polling must not form a recursive request loop');
+            if (url.startsWith('/api/task/')) return response({ detail: 'access_denied' }, false);
+            if (delayed && requests.length === 1) await new Promise(resolve => { release = resolve; });
+            return response(progress);
+        }
+    };
+    vm.createContext(sandbox);
+    const start = template.indexOf('    function readApiToken()');
+    const script = template.slice(start, template.indexOf('</script>', start));
+    vm.runInContext(script + '\nglobalThis.poll = pollProgress;', sandbox);
+    if (delayed) {
+        await sandbox.poll();
+        await sandbox.poll();
+        assert.equal(requests.length, 1, 'Only one in-flight progress request is allowed');
+        release();
+    }
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    await interval();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    if (quoteFailure) {
+        await interval();
+        assert.equal(requests.filter(url => url.startsWith('/api/task/')).length, 1,
+            'A quote error must remain stable until explicit retry');
+    } else {
+        assert.ok(requests.length <= 2, 'No requests should be triggered by quote/status disagreement');
+        assert.equal(actions.hidden, true);
+        if (!staleQuote) {
+            assert.equal(nodes['progress-percent'].textContent, '—');
+            assert.match(nodes['progress-heading'].textContent, /需要核对/);
+        }
+    }
+}
 (async () => {
     await scenario('quote_expired', '0.25');
     await scenario('quote_token_mismatch');
     await scenario('quote_not_confirmable');
     await scenario('network_failure');
     await scenario('quote_expired', '0.25', true);
+    await pollingScenario({ staleQuote: true });
+    await pollingScenario();
+    await pollingScenario({ delayed: true });
+    await pollingScenario({ quoteFailure: true });
     console.log('Processing quote behavior checks passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

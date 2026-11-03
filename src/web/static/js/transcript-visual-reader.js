@@ -91,6 +91,39 @@
     if (!textButton || !visualButton || !textPanel || !visualPanel || !window.VisualLearning) return;
     const secondarySections = Array.from(document.querySelectorAll('.transcript-secondary-section'));
 
+    // Opening a reading view only loads saved results; paid image jobs require a button click.
+    if (window.ImageDiagrams) {
+        let imageReader = null;
+        function switchImageMode(mode) {
+            const visual = mode === 'visual';
+            textPanel.hidden = visual;
+            visualPanel.hidden = !visual;
+            textPanel.classList.toggle('is-active', !visual);
+            visualPanel.classList.toggle('is-active', visual);
+            secondarySections.forEach((section) => { section.hidden = visual; });
+            textButton.setAttribute('aria-selected', visual ? 'false' : 'true');
+            visualButton.setAttribute('aria-selected', visual ? 'true' : 'false');
+            textButton.tabIndex = visual ? -1 : 0;
+            visualButton.tabIndex = visual ? 0 : -1;
+            if (visual && !imageReader) {
+                imageReader = window.ImageDiagrams.mount(visualPanel, { viewToken: visualPanel.dataset.viewToken });
+            }
+        }
+        textButton.addEventListener('click', () => switchImageMode('text'));
+        visualButton.addEventListener('click', () => switchImageMode('visual'));
+        [textButton, visualButton].forEach((button) => button.addEventListener('keydown', (event) => {
+            let next;
+            if (['ArrowRight', 'ArrowDown', 'End'].includes(event.key)) next = visualButton;
+            else if (['ArrowLeft', 'ArrowUp', 'Home'].includes(event.key)) next = textButton;
+            else return;
+            event.preventDefault(); next.focus();
+            switchImageMode(next === visualButton ? 'visual' : 'text');
+        }));
+        if (window.location.hash === '#summary-visual') switchImageMode('visual');
+        window.addEventListener('pagehide', () => { if (imageReader) imageReader.destroy(); });
+        return;
+    }
+
     const viewToken = String(visualPanel.dataset.viewToken || '');
     const title = String(visualPanel.dataset.readerTitle || '内容总结');
     const reader = window.VisualLearning.createReaderState(viewToken, 'text');
@@ -217,7 +250,7 @@
             empty.appendChild(node('strong', '', failed ? '图解生成遇到问题' : '正在准备图解生成'));
             empty.appendChild(node('p', '', failed
                 ? '系统已完成自动尝试，当前仍未生成可用图解。你可以手动重新生成，已有文字解读不会受影响。'
-                : '图解会自动开始生成，不需要额外点击。'));
+                : '点击生成按钮后开始生成。'));
             if (failed) {
                 empty.appendChild(createAction('重新生成', 'primary', () => requestGeneration(true)));
             }
@@ -292,20 +325,8 @@
             schedulePoll(generation, generateIfMissing);
             return;
         }
-        const attempt = state.latest_attempt || {};
-        const missing = !state.document;
-        if (!missing) return;
-        if (state.phase === 'ready_for_generation' || !attempt.status) {
-            await requestGeneration(false);
-            return;
-        }
-        if (isFailedState(state)) {
-            const key = failureKey(state);
-            if (!autoRetriedFailures.has(key)) {
-                autoRetriedFailures.add(key);
-                await requestGeneration(true);
-            }
-        }
+        // Missing/failed legacy documents are never generated or retried by a read.
+
     }
 
     function schedulePoll(generation, generateIfMissing) {
@@ -374,8 +395,7 @@
         } catch (error) {
             if (!reader.accepts(viewToken, generation)) return;
             checkingState = false;
-            if (generateIfMissing) await requestGeneration(false);
-            else storeState({ uiError: error.message });
+            storeState({ uiError: error.message });
         } finally {
             if (reader.accepts(viewToken, generation)) {
                 checkingState = false;
@@ -390,7 +410,7 @@
     }
 
     textButton.addEventListener('click', () => setActiveMode('text', false));
-    visualButton.addEventListener('click', () => setActiveMode('visual', true));
+    visualButton.addEventListener('click', () => setActiveMode('visual', false));
     [textButton, visualButton].forEach((button) => {
         button.addEventListener('keydown', (event) => {
             let nextButton = null;
@@ -414,11 +434,11 @@
             }
             event.preventDefault();
             nextButton.focus();
-            setActiveMode(nextButton === visualButton ? 'visual' : 'text', nextButton === visualButton);
+            setActiveMode(nextButton === visualButton ? 'visual' : 'text', false);
         });
     });
 
     if (window.location.hash === '#summary-visual') {
-        setActiveMode('visual', true);
+        setActiveMode('visual', false);
     }
 })();

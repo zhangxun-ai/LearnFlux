@@ -1,13 +1,8 @@
 {% extends "base.html" %}
 
-{% block body_class %}page-result page-processing workbench-meadow{% endblock %}
+{% block body_class %}page-result page-processing{% endblock %}
 
 {% block title %}{{ page_title or title or "处理中" }}{% endblock %}
-
-{% block product_linear_adapter %}
-<link rel="stylesheet" href="/static/css/product-linear-system.css?v={{ asset_ver }}">
-<link rel="stylesheet" href="/static/css/workbench-wildwood.css?v={{ asset_ver }}">
-{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -268,9 +263,9 @@
         <div class="status-processing" role="status" aria-labelledby="progress-title">
             <div class="processing-shell">
                 <h2 id="progress-title" class="processing-title">
-                    <span class="processing-pulse" aria-hidden="true"></span>{{ processing_heading or "处理中" }}
+                    <span class="processing-pulse" aria-hidden="true"></span><span id="progress-heading" data-default-heading="{{ '文档解析处理中' if processing_heading == '文档解析处理中' else '转录处理中' }}">{{ processing_heading or "处理中" }}</span>
                 </h2>
-                <p class="processing-subtitle">{{ processing_subtitle or "完成后会自动打开结果页，无需手动刷新。" }}</p>
+                <p id="progress-subtitle" class="processing-subtitle">{{ processing_subtitle or "完成后会自动打开结果页，无需手动刷新。" }}</p>
 
                 <div class="progress-panel">
                     <div class="progress-header">
@@ -278,14 +273,14 @@
                             {{ progress.stage_label if progress else "任务排队中" }}
                         </div>
                         <div id="progress-percent" class="progress-percent">
-                            {{ progress.percent if progress and progress.percent is not none else 0 }}%
+                            {% if progress and progress.stage == "cloud_submission_unknown" %}—{% else %}{{ progress.percent if progress and progress.percent is not none else 0 }}%{% endif %}
                         </div>
                     </div>
                     <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress.percent if progress and progress.percent is not none else 0 }}" aria-valuetext="{{ progress.stage_label if progress else '任务排队中' }}，{{ progress.percent if progress and progress.percent is not none else 0 }}%">
                         <div id="progress-fill" class="progress-fill"></div>
                     </div>
                     <div class="progress-meta">
-                        <span class="progress-meta-label">已处理</span>
+                        <span class="progress-meta-label">距任务创建</span>
                         <span id="progress-elapsed" class="progress-meta-value">{{ elapsed_display or "-" }}</span>
                     </div>
                     <div id="progress-message" class="progress-message" {% if not progress or not progress.message %}style="display: none;"{% endif %}>
@@ -371,13 +366,16 @@
 
     function showQuoteActionError(error) {
         quoteActionPending = false;
-        quoteActionsLoaded = false;
+        // Keep the error stable until an explicit retry; polling must not
+        // repeatedly replace it with the loading placeholder.
+        quoteActionsLoaded = true;
         showQuoteActionFeedback(`操作未成功：${readableQuoteActionError(error.message)}`);
         const retry = document.createElement("button");
         retry.type = "button";
         retry.textContent = "重试";
         retry.style.margin = "12px 6px 0 0";
         retry.onclick = () => {
+            quoteActionsLoaded = false;
             quoteActions.textContent = "";
             loadCloudQuoteActions();
         };
@@ -425,8 +423,11 @@
         quoteActions.hidden = false;
         quoteActions.textContent = "正在从认证任务接口读取云端报价…";
         const taskId = quoteActions.dataset.taskId;
-        const token = readApiToken();
         try {
+            if (window.LearnFluxAuth && window.LearnFluxAuth.ready) {
+                await window.LearnFluxAuth.ready;
+            }
+            const token = readApiToken();
             const response = await fetch(`/api/task/${encodeURIComponent(taskId)}`, {
                 headers: {"Authorization": `Bearer ${token}`},
             });
@@ -435,7 +436,7 @@
             const raw = data.data || data;
             if (raw.status && raw.status !== "awaiting_cloud_confirmation") {
                 quoteActions.hidden = true;
-                pollProgress();
+                quoteActionsLoaded = true;
                 return;
             }
             const quote = raw.progress && raw.progress.evidence && raw.progress.evidence.cloud_quote;
@@ -549,7 +550,10 @@
     function updateProgress(progress, data) {
         if (!progress) return;
         if (quoteActionPending && progress.stage === "awaiting_cloud_confirmation") return;
-        if (progress.stage === "awaiting_cloud_confirmation") {
+        const awaitingConfirmation = data && data.status
+            ? data.status === "awaiting_cloud_confirmation"
+            : progress.stage === "awaiting_cloud_confirmation";
+        if (awaitingConfirmation) {
             loadCloudQuoteActions();
         } else if (progress.stage !== "awaiting_cloud_confirmation" && quoteActions) {
             quoteActions.hidden = true;
@@ -557,13 +561,28 @@
             quoteActionPending = false;
             quoteActionsLoaded = false;
         }
+        const needsAttention = progress.stage === "cloud_submission_unknown";
+        const heading = document.getElementById("progress-heading");
+        const subtitle = document.getElementById("progress-subtitle");
+        if (needsAttention) {
+            heading.textContent = "需要核对云端提交结果";
+            subtitle.textContent = "任务已暂停自动重试，请先核对原提交结果。";
+        } else if (awaitingConfirmation) {
+            heading.textContent = "等待确认云端费用";
+            subtitle.textContent = "确认预计费用后才会开始云端转录。";
+        } else {
+            heading.textContent = heading.dataset.defaultHeading || "处理中";
+            subtitle.textContent = "完成后会自动打开结果页，无需手动刷新。";
+        }
         const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
         document.getElementById("progress-stage").textContent = progress.stage_label || progress.stage || "处理中";
-        document.getElementById("progress-percent").textContent = `${percent}%`;
+        document.getElementById("progress-percent").textContent = needsAttention ? "—" : `${percent}%`;
         document.getElementById("progress-fill").style.width = `${percent}%`;
         const progressTrack = document.querySelector(".progress-track");
-        progressTrack.setAttribute("aria-valuenow", String(percent));
-        progressTrack.setAttribute("aria-valuetext", `${progress.stage_label || progress.stage || "处理中"}，${percent}%`);
+        if (needsAttention) progressTrack.removeAttribute("aria-valuenow");
+        else progressTrack.setAttribute("aria-valuenow", String(percent));
+        progressTrack.setAttribute("aria-valuetext", needsAttention
+            ? progress.stage_label : `${progress.stage_label || progress.stage || "处理中"}，${percent}%`);
         document.getElementById("progress-elapsed").textContent = data && data.elapsed_display ? data.elapsed_display : "-";
         const messageNode = document.getElementById("progress-message");
         if (progress.message) {
@@ -575,19 +594,25 @@
         }
     }
 
+    let progressPolling = false;
+    let resultNavigationPending = false;
     async function pollProgress() {
-        if (cancellationPending) return;
+        if (cancellationPending || progressPolling || resultNavigationPending) return;
+        progressPolling = true;
         try {
             const response = await fetch(progressUrl, { headers: { Accept: "application/json" } });
             if (!response.ok) return;
             const data = await response.json();
             if (cancellationPending) return;
             updateProgress(data.progress, data);
-            if (["success", "failed", "file_cleaned", "canceled"].includes(data.status)) {
+            if (["success", "failed", "file_cleaned", "canceled", "no_transcript"].includes(data.status)) {
+                resultNavigationPending = true;
                 window.location.reload();
             }
         } catch (error) {
             console.debug("progress polling failed", error);
+        } finally {
+            progressPolling = false;
         }
     }
 

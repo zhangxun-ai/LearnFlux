@@ -14,8 +14,10 @@ def _source() -> str:
 def test_transcript_uses_a_page_specific_body_scope():
     source = _source()
 
-    assert "{% block body_class %}page-result transcript-result-page page-transcript workbench-meadow{% endblock %}" in source
-    assert '/static/css/workbench-wildwood.css?v={{ asset_ver }}' in source
+    assert "{% block body_class %}page-result transcript-result-page page-transcript{% endblock %}" in source
+    base = (PROJECT_ROOT / 'src/web/templates/base.html').read_text(encoding='utf-8')
+    assert 'product-linear workbench-meadow' in base
+    assert '/static/css/workbench-wildwood.css?v={{ asset_ver }}' in base
 
 
 def test_mobile_gutters_override_the_late_desktop_paper_padding():

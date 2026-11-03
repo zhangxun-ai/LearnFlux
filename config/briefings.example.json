@@ -1,0 +1,5 @@
+{
+  "enabled": false,
+  "source_root": "/absolute/path/to/WeChatLocalVault",
+  "owner_user_id": "existing-workbench-user-id"
+}

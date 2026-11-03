@@ -112,6 +112,9 @@ def history_client(db_pair):
 
     mock_cache = MagicMock()
     mock_cache.db_path = Path(db_pair["cache_db_path"])
+    mock_cache.cache_dir = Path(db_pair["cache_db_path"]).parent / "result-cache"
+    mock_cache.cache_dir.mkdir()
+    db_pair["cache_dir"] = mock_cache.cache_dir
 
     async def _fake_verify_token():
         return {"user_id": "test-user", "api_key": _API_KEY, "wechat_webhook": None}
@@ -144,6 +147,73 @@ def _log(al, task_id, webhook=_WEBHOOK_A, status_code=202,
         task_id=task_id,
         wechat_webhook=webhook,
     )
+
+
+def _store_body(setup, task_id, cache_id, content):
+    """Attach a real result artifact to a task in the isolated fixture."""
+    directory = setup["cache_dir"] / str(cache_id)
+    directory.mkdir(exist_ok=True)
+    (directory / "llm_calibrated.txt").write_text(content, encoding="utf-8")
+    with sqlite3.connect(setup["cache_db_path"]) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS video_cache (id INTEGER PRIMARY KEY, files_loc TEXT)")
+        conn.execute("INSERT OR REPLACE INTO video_cache VALUES (?,?)", (cache_id, str(cache_id)))
+        conn.execute("UPDATE task_status SET cache_id=? WHERE task_id=?", (cache_id, task_id))
+
+
+def test_body_only_search_paginates_after_matching_and_preserves_total(history_client):
+    client, setup = history_client
+    for index in range(3):
+        task_id = f"body-{index}"
+        setup["insert_task"](task_id, f"body-view-{index}", title="Unrelated title", owner_user_id="test-user")
+        _store_body(setup, task_id, index + 1, "开头内容。混合检索采用多路召回。尾部内容。")
+    result = client.get("/api/audit/history", params={"q": "混合检索", "limit": 1, "offset": 1}).json()["data"]
+    assert result["total"] == 3
+    assert len(result["items"]) == 1
+    assert result["items"][0]["search_in_body"] is True
+    assert "混合检索" in result["items"][0]["search_excerpt"]
+    empty = client.get("/api/audit/history", params={"q": "混合检索", "offset": 9}).json()["data"]
+    assert empty["total"] == 3 and empty["items"] == []
+
+
+def test_body_search_never_reads_foreign_owner_artifact(history_client, monkeypatch):
+    from video_transcript_api.api.routes import audit
+
+    client, setup = history_client
+    setup["insert_task"]("foreign", "foreign-view", owner_user_id="someone-else")
+    _store_body(setup, "foreign", 1, "PRIVATE_NEEDLE")
+    _log(setup["audit_logger"], "foreign")  # Old audit link cannot override owner.
+    observed_ids = []
+    original = audit.authorized_body_texts
+
+    def observe(conn, prefix, manager, ids):
+        observed_ids.extend(ids)
+        return original(conn, prefix, manager, ids)
+
+    monkeypatch.setattr(audit, "authorized_body_texts", observe)
+    result = client.get("/api/audit/history", params={"q": "PRIVATE_NEEDLE"}).json()["data"]
+    assert result["total"] == 0 and result["items"] == []
+    assert observed_ids == []
+
+
+def test_body_search_refreshes_changed_artifact_and_treats_percent_literally(history_client):
+    client, setup = history_client
+    setup["insert_task"]("body", "body-view", owner_user_id="test-user")
+    _store_body(setup, "body", 1, "Before: completion 50%.")
+    assert client.get("/api/audit/history", params={"q": "50%"}).json()["data"]["total"] == 1
+    _store_body(setup, "body", 1, "After: completion 100%.")
+    assert client.get("/api/audit/history", params={"q": "50%"}).json()["data"]["total"] == 0
+    assert client.get("/api/audit/history", params={"q": "100%"}).json()["data"]["total"] == 1
+
+
+def test_body_search_does_not_read_private_feishu_cache_without_configured_identity(history_client, monkeypatch):
+    from video_transcript_api.api.routes import audit
+
+    client, setup = history_client
+    setup["insert_task"]("private", "private-view", platform="feishu", owner_user_id="test-user")
+    _store_body(setup, "private", 1, "PRIVATE_FEISHU_NEEDLE")
+    monkeypatch.setattr(audit, "get_config", lambda: {"feishu_documents": {"enabled": True, "owner_user_id": "other"}})
+    result = client.get("/api/audit/history", params={"q": "PRIVATE_FEISHU_NEEDLE"}).json()["data"]
+    assert result["total"] == 0
 
 
 # ===========================================================================
@@ -190,6 +260,19 @@ class TestHistoryEndpoint:
     def test_rejects_unknown_content_type(self, history_client):
         client, _ = history_client
         assert client.get("/api/audit/history?content_type=unknown").status_code == 422
+
+    def test_feishu_documents_are_in_file_filter(self, history_client):
+        client, setup = history_client
+        url = "https://example.feishu.cn/wiki/DocumentToken123"
+        _log(setup["audit_logger"], "feishu-task", video_url=url)
+        setup["insert_task"]("feishu-task", "feishu-vt", platform="feishu", url=url)
+
+        files = client.get("/api/audit/history?content_type=file").json()["data"]
+        videos = client.get("/api/audit/history?content_type=video").json()["data"]
+
+        assert [item["task_id"] for item in files["items"]] == ["feishu-task"]
+        assert files["items"][0]["content_type"] == "file"
+        assert videos["items"] == []
 
     def test_returns_completed_by_default(self, history_client):
         """Default status filter returns only completed tasks (LEFT JOIN match)."""

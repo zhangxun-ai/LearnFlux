@@ -20,6 +20,7 @@ from ..services.longcut import (
     ensure_longcut_ready,
     get_longcut_settings,
 )
+from ..assets import get_static_asset_version
 from ..context import (
     get_cache_manager,
     get_config,
@@ -36,6 +37,8 @@ from ...utils.rendering import (
     render_transcript_content,
 )
 from ...utils.timeutil import format_datetime_for_display, get_configured_timezone
+from ...utils.task_progress import build_progress, CLOUD_SUBMISSION_UNKNOWN_MESSAGE
+from ...document_sources.feishu import parse_feishu_url
 from ...collections.titles import source_display_title
 
 logger = get_logger()
@@ -200,7 +203,7 @@ def _decorate_source_link(view_data: Dict[str, Any]) -> None:
         return
     if _is_browser_source_url(url):
         view_data["source_link_url"] = url
-        view_data["source_link_label"] = "查看原视频"
+        view_data["source_link_label"] = "查看原文" if parse_feishu_url(url) else "查看原视频"
         return
     if not url.startswith("local://"):
         return
@@ -288,6 +291,34 @@ def _decorate_title_and_tags(view_data: Dict[str, Any]):
         view_data["title"] = clean_title
         existing_tags = view_data.get("tags") or []
         view_data["tags"] = list(dict.fromkeys(existing_tags + tags))
+
+def _decorate_cloud_progress(view_data: Dict[str, Any]):
+    """Project durable cloud state without modifying or resubmitting a task."""
+    status = view_data.get("task_status") or view_data.get("status")
+    if status != "processing" or not view_data.get("task_id"):
+        return
+    try:
+        event = get_usage_repository().find_latest_event_by_task_id(view_data["task_id"])
+    except Exception as exc:
+        logger.warning("Unable to read cloud progress: %s", type(exc).__name__)
+        return
+    if event and event.remote_status == "submission_unknown":
+        progress = build_progress(
+            stage="cloud_submission_unknown", basis="submission_unknown",
+            confidence="high", message=CLOUD_SUBMISSION_UNKNOWN_MESSAGE,
+            now=_parse_task_datetime(event.updated_at),
+        )
+        progress["percent"] = None
+        view_data["progress"] = progress
+    elif (view_data.get("progress") or {}).get("stage") == "awaiting_cloud_confirmation":
+        # Confirmation has already moved the task to processing. Older workers
+        # did not clear the quote stage, even while submitting or polling ASR.
+        view_data["progress"] = build_progress(
+            stage="transcribing", stage_label="云端转录已确认，等待处理结果",
+            basis="cloud_confirmation_accepted", confidence="high",
+            now=_parse_task_datetime(getattr(event, "updated_at", None)),
+        )
+
 
 def _decorate_view_timing(view_data: Dict[str, Any], now: Optional[datetime] = None):
     """Add user-facing elapsed/duration/progress time fields in-place."""
@@ -484,25 +515,7 @@ _HOME_HTML = """\
 async def home():
     """Local product introduction page for first-time orientation."""
     static_dir = get_static_dir()
-    version_files = [
-        static_dir / "icon" / "learnflux-leaf-256.png",
-        static_dir / "icon" / "learnflux-leaf.svg",
-        static_dir / "images" / "landing" / "01-single-study.png",
-        static_dir / "images" / "landing" / "02-collections.png",
-        static_dir / "images" / "landing" / "03-study-player.png",
-        static_dir / "images" / "landing" / "04-visual-learning.png",
-        static_dir / "images" / "landing" / "learnflux-reading-nook-cover.webp",
-        static_dir / "images" / "landing" / "learnflux-meadow-hero-v2.png",
-        static_dir / "images" / "landing" / "learnflux-meadow-hero-panorama.png",
-        static_dir / "css" / "landing-wildwood.css",
-        # Keep ui-features.js in the version set so shell-route asset contracts
-        # that scan views.py still observe the shared feature-config digest.
-        static_dir / "js" / "ui-features.js",
-    ]
-    version = str(max(
-        (path.stat().st_mtime_ns for path in version_files if path.exists()),
-        default=0,
-    ))
+    version = get_static_asset_version(static_dir)
     return HTMLResponse(
         content=_HOME_HTML.replace("__ASSET_VERSION__", version),
         headers={"Cache-Control": "no-cache"},
@@ -1082,28 +1095,7 @@ async def add_task_by_web(request: Request):
         index_file = static_dir / "index.html"
         if index_file.exists():
             content = index_file.read_text(encoding="utf-8")
-            # 资源版本号：取关键静态文件的最新修改时间。文件一变版本即变，
-            # 浏览器据此强制拉取新的 app.js / css，避免缓存旧前端导致的 UI 错乱。
-            asset_files = [
-                index_file,
-                static_dir / "js" / "app.js",
-                static_dir / "css" / "styles.css",
-                static_dir / "css" / "workbench.css",
-                static_dir / "css" / "app-shell.css",
-                static_dir / "css" / "product-linear.css",
-                static_dir / "css" / "home-linear.css",
-                static_dir / "css" / "learning-history-meadow.css",
-                static_dir / "css" / "workbench-wildwood.css",
-                static_dir / "css" / "single-study-improvements.css",
-                static_dir / "css" / "editorial.css",
-                static_dir / "js" / "app-shell.js",
-                static_dir / "js" / "ui-features.js",
-                static_dir / "js" / "pwa-register.js",
-            ]
-            version = str(int(max(
-                (f.stat().st_mtime for f in asset_files if f.exists()),
-                default=0,
-            )))
+            version = get_static_asset_version(static_dir)
             content = content.replace("__ASSET_VERSION__", version)
             # HTML 本身不缓存，确保每次都拿到最新的资源版本号
             return HTMLResponse(content=content, headers={"Cache-Control": "no-cache"})
@@ -1129,25 +1121,7 @@ def _render_study_page(
     if not page.exists():
         raise HTTPException(status_code=404, detail="study page not found")
 
-    asset_files = [
-        page,
-        static_dir / "css" / "study.css",
-        static_dir / "css" / "visual-learning.css",
-        static_dir / "js" / "study.js",
-        static_dir / "js" / "study-player-runtime.js",
-        static_dir / "js" / "visual-learning.js",
-        static_dir / "css" / "editorial.css",
-        static_dir / "css" / "app-shell.css",
-        static_dir / "css" / "product-linear.css",
-        static_dir / "css" / "product-linear-core.css",
-        static_dir / "js" / "app-shell.js",
-        static_dir / "js" / "ui-features.js",
-        static_dir / "js" / "pwa-register.js",
-    ]
-    version = str(max(
-        (f.stat().st_mtime_ns for f in asset_files if f.exists()),
-        default=0,
-    ))
+    version = get_static_asset_version(static_dir)
     content = (
         page.read_text(encoding="utf-8")
         .replace("__VIEW_TOKEN__", view_token)
@@ -1429,13 +1403,14 @@ async def view_transcript(
         if page:
             return handle_page_export(view_data, page)
 
+        _decorate_cloud_progress(view_data)
         _decorate_view_timing(view_data)
         _decorate_source_link(view_data)
         _decorate_collection_display_title(view_data)
         _decorate_title_and_tags(view_data)
 
         if view_data["status"] == "processing":
-            is_document = _is_local_document_view(view_data)
+            is_document = _is_local_document_view(view_data) or bool(parse_feishu_url(view_data.get("url") or ""))
             if is_document and not view_data.get("title"):
                 view_data["title"] = _local_url_filename(view_data) or "本地文档"
             return _no_store(
@@ -1448,10 +1423,18 @@ async def view_transcript(
                             "文档解析处理中" if is_document else "转录处理中"
                         ),
                         "processing_heading": (
-                            "文档解析处理中" if is_document else "转录处理中"
+                            "需要核对云端提交结果"
+                            if (view_data.get("progress") or {}).get("stage") == "cloud_submission_unknown"
+                            else "等待确认云端费用"
+                            if view_data.get("task_status") == "awaiting_cloud_confirmation"
+                            else "文档解析处理中" if is_document else "转录处理中"
                         ),
                         "processing_subtitle": (
-                            "完成后会自动打开文档解读结果页，无需手动刷新。"
+                            "任务已暂停自动重试，请先核对原提交结果。"
+                            if (view_data.get("progress") or {}).get("stage") == "cloud_submission_unknown"
+                            else "确认预计费用后才会开始云端转录。"
+                            if view_data.get("task_status") == "awaiting_cloud_confirmation"
+                            else "完成后会自动打开文档解读结果页，无需手动刷新。"
                             if is_document
                             else "完成后会自动打开结果页，无需手动刷新。"
                         ),
@@ -1715,6 +1698,7 @@ async def view_progress(view_token: str):
     view_data = cache_manager.get_view_data_by_token(view_token)
     if not view_data:
         raise HTTPException(status_code=404, detail="view_token 无效或已过期")
+    _decorate_cloud_progress(view_data)
     _decorate_view_timing(view_data)
 
     progress = view_data.get("progress")
@@ -1730,7 +1714,7 @@ async def view_progress(view_token: str):
                 evidence["cloud_quote"] = quote
             progress["evidence"] = evidence
     payload = {
-        "status": view_data.get("status"),
+        "status": view_data.get("task_status") or view_data.get("status"),
         "task_id": view_data.get("task_id"),
         "view_token": view_token,
         "title": view_data.get("title"),

@@ -5,7 +5,10 @@
   if (!isSecureContext) return;
 
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(function (error) {
+    navigator.serviceWorker.register('/service-worker.js', {
+      scope: '/',
+      updateViaCache: 'none'
+    }).catch(function (error) {
       console.warn('PWA service worker registration failed:', error);
     });
   });

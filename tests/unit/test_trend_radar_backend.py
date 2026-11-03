@@ -560,8 +560,21 @@ def test_trend_radar_run_route_requires_budget_under_five(monkeypatch):
     assert "5" in response.json()["detail"]
 
 
-def test_trend_radar_page_route_returns_static_shell():
+def test_trend_radar_page_route_returns_static_shell(tmp_path, monkeypatch):
     from src.video_transcript_api.api.routes import trend_radar
+    from src.video_transcript_api.api.assets import get_static_asset_version
+
+    page = tmp_path / "trend-radar.html"
+    page.write_text(
+        '<!doctype html><html><head><link rel="stylesheet" '
+        'href="css/trend-radar.css?v=__ASSET_VERSION__"></head>'
+        '<body><h1>Trend radar fixture</h1></body></html>',
+        encoding="utf-8",
+    )
+    stylesheet = tmp_path / "css" / "trend-radar.css"
+    stylesheet.parent.mkdir()
+    stylesheet.write_text("body { color: green; }", encoding="utf-8")
+    monkeypatch.setattr(trend_radar, "get_static_dir", lambda: tmp_path)
 
     app = FastAPI()
     app.include_router(trend_radar.router)
@@ -570,8 +583,23 @@ def test_trend_radar_page_route_returns_static_shell():
     response = client.get("/trend-radar")
 
     assert response.status_code == 200
-    assert "趋势机会雷达" in response.text
-    assert "重新生成报告" in response.text
+    assert "Trend radar fixture" in response.text
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.text.count('<base href="/static/">') == 1
+    assert f'?v={get_static_asset_version(tmp_path)}' in response.text
+    assert "__ASSET_VERSION__" not in response.text
+
+
+def test_trend_radar_page_returns_404_without_the_optional_static_shell(tmp_path, monkeypatch):
+    from src.video_transcript_api.api.routes import trend_radar
+
+    monkeypatch.setattr(trend_radar, "get_static_dir", lambda: tmp_path)
+    app = FastAPI()
+    app.include_router(trend_radar.router)
+    response = TestClient(app).get("/trend-radar")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "趋势雷达页面不存在"
 
 
 def test_trend_radar_run_route_starts_background_job(monkeypatch):

@@ -7,6 +7,7 @@ management secrets, view tokens, or local file paths are written to Feishu.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import html
 import json
 import os
@@ -27,14 +28,73 @@ class FeishuRejected(RuntimeError):
     """A confirmed authorization rejection that did not create a document."""
 
 
+_EXPORT_HEADER = re.compile(
+    r"\A---\r?\nTitle: [\s\S]*?\r?\nPlatform: [^\n]*\r?\nType: [^\n]*\r?\n"
+    r"(?:Source: [^\n]*\r?\n)?Export-Date: \d{4}-\d{2}-\d{2}\r?\n---\r?\n"
+)
+_EXPORT_FIELDS = re.compile(
+    r"\ATitle: [\s\S]*?\nPlatform: [^\n]*\nType: [^\n]*\n"
+    r"(?:Source: [^\n]*\n)?Export-Date: \d{4}-\d{2}-\d{2}\s*\Z"
+)
+
+
+def _without_export_header(source: str) -> str:
+    """Remove only the API-generated transport header, retaining source dates."""
+    return _EXPORT_HEADER.sub("", source, count=1)
+
+
+def _version_text(xml: str) -> str:
+    """Ignore old transport headers for revision detection, never readback checks.
+
+    Previous archives included the raw-export header twice. Its Export-Date is
+    today's date, not a content revision. Do not mark unchanged old documents
+    as conflicts merely because the calendar day or export layout changed.
+    """
+    soup = BeautifulSoup(xml, "html.parser")
+    for node in list(soup.find_all(["p", "h2", "h3", "h4", "h5", "h6"])):
+        raw = node.get_text("\n")
+        if _EXPORT_FIELDS.fullmatch(raw):
+            node.decompose()
+        elif _EXPORT_HEADER.match(raw):
+            node.clear()
+            node.append(_without_export_header(raw))
+    text = normalized_text(str(soup))
+    # Old long titles can split the generated header across several Markdown
+    # blocks. Restrict this legacy comparison to the complete generated field
+    # sequence; the full readback comparator above remains unchanged.
+    return re.sub(r"Title:.*?Platform:.*?Type:.*?Export-Date:\d{4}-\d{2}-\d{2}", "", text)
+
+
 def normalized_text(xml: str) -> str:
-    """Compare all document text while ignoring layout whitespace."""
-    return re.sub(r"\s+", "", BeautifulSoup(xml, "html.parser").get_text())
+    """Compare complete text and link targets across native link conversion.
+
+    Feishu converts literal ``[label](url)`` in transcript paragraphs into
+    native anchors. Retain the target when comparing those representations;
+    otherwise valid links look like missing text, or a changed target is missed.
+    """
+    soup = BeautifulSoup(xml, "html.parser")
+    for anchor in soup.find_all("a"):
+        href = anchor.get("href") or ""
+        if href and anchor.get_text() != href:
+            anchor.append("(" + href + ")")
+    text = re.sub(r"\[([^\[\]\n]+)\]\((https?://[^\s)]+)\)", r"\1(\2)", soup.get_text())
+    return re.sub(r"\s+", "", text)
+
+
+def remote_digest(xml: str) -> str:
+    """Remember remote rich content, including manual formatting and resources."""
+    soup = BeautifulSoup(xml, "html.parser")
+    for node in soup.find_all():
+        for attribute in ("id", "block-id", "block_id"):
+            node.attrs.pop(attribute, None)
+    return hashlib.sha256(str(soup).encode("utf-8")).hexdigest()
 
 
 def summary_xml(source: str) -> str:
     """Convert stored Markdown without allowing uploads or arbitrary XML."""
     soup = BeautifulSoup(markdown.markdown(source, extensions=["tables", "fenced_code"]), "html.parser")
+
+    heading_stack: list[int] = []
 
     def render(node) -> str:
         if isinstance(node, NavigableString):
@@ -52,7 +112,18 @@ def summary_xml(source: str) -> str:
                 return f'<a href="{html.escape(href, quote=True)}">{inner}</a>'
             return inner
         if re.fullmatch(r"h[1-6]", name or ""):
-            return f"<h2>{inner}</h2>"
+            source_level = int(name[1])
+            while heading_stack and heading_stack[-1] >= source_level:
+                heading_stack.pop()
+            heading_level = min(2 + len(heading_stack), 6)
+            heading_stack.append(source_level)
+            return f"<h{heading_level}>{inner}</h{heading_level}>"
+        if name == "pre":
+            code = node.find("code")
+            language = next((value[9:] for value in (code.get("class", []) if code else [])
+                             if value.startswith("language-")), "text")
+            language = language if re.fullmatch(r"[\w+-]{1,30}", language) else "text"
+            return f'<pre lang="{language}"><code>{html.escape(node.get_text())}</code></pre>'
         name = {"strong": "b", "code": "span"}.get(name, name)
         if name in {"br", "hr"}:
             return f"<{name}/>"
@@ -61,8 +132,6 @@ def summary_xml(source: str) -> str:
         if name in {"p", "b", "em", "span", "blockquote", "ul", "ol", "li",
                     "table", "thead", "tbody", "tr"}:
             return f"<{name}>{inner}</{name}>"
-        if name == "pre":
-            return f"<p>{inner}</p>"
         return inner
 
     return "".join(render(node) for node in soup.children)
@@ -159,7 +228,8 @@ class LocalResults:
         except ValueError:
             calibrated = False
             transcript = self.read(f"/view/{view}?raw=transcript")
-        return build_document(task, analysis, transcript, calibrated=calibrated)
+        return build_document(task, _without_export_header(analysis),
+                              _without_export_header(transcript), calibrated=calibrated)
 
 
 class FeishuCLI:
@@ -195,7 +265,16 @@ class FeishuCLI:
                          "--doc-format", "xml", "--content", "-", content=xml)
 
     def fetch(self, document_id: str) -> str:
-        return self.call("docs", "+fetch", "--doc", document_id)["document"]["content"]
+        return self.fetch_document(document_id)["content"]
+
+    def fetch_document(self, document_id: str) -> dict:
+        return self.call("docs", "+fetch", "--doc", document_id)["document"]
+
+    def update(self, document_id: str, xml: str, revision_id: int) -> dict:
+        """Replace only a verified, unchanged generated document revision."""
+        return self.call("docs", "+update", "--doc", document_id, "--command", "overwrite",
+                         "--revision-id", str(revision_id), "--doc-format", "xml",
+                         "--content", "-", content=xml)
 
 
 class ArchiveWorker:
@@ -215,7 +294,56 @@ class ArchiveWorker:
             status TEXT NOT NULL, document_id TEXT, document_url TEXT,
             attempts INTEGER NOT NULL DEFAULT 0, next_retry REAL NOT NULL DEFAULT 0,
             last_error TEXT, updated_at REAL NOT NULL)""")
+        columns = {row[1] for row in self.db.execute("PRAGMA table_info(exports)")}
+        for column in ("source_revision", "remote_digest", "pending_content", "pending_revision"):
+            if column not in columns:
+                self.db.execute(f"ALTER TABLE exports ADD COLUMN {column} TEXT")
+        if "written_revision" not in columns:
+            self.db.execute("ALTER TABLE exports ADD COLUMN written_revision INTEGER")
         self.db.commit()
+
+    def _row(self, key: str):
+        return self.db.execute("SELECT * FROM exports WHERE source_key=?", (key,)).fetchone()
+
+    def _fetch_document(self, document_id: str) -> dict:
+        if hasattr(self.cli, "fetch_document"):
+            return self.cli.fetch_document(document_id)
+        return {"content": self.cli.fetch(document_id), "revision_id": None}
+
+    def _finish(self, key: str, content: str, revision: str, remote: str, *, trusted: bool):
+        self.save(key, status="done", content=content, source_revision=revision,
+                  remote_digest=remote_digest(remote) if trusted else None, pending_content=None,
+                  pending_revision=None, last_error=None, next_retry=0)
+
+    def _update_document(self, key: str, row) -> bool:
+        """Reconcile interrupted updates and protect remote edits with a revision."""
+        document = self._fetch_document(row["document_id"])
+        remote, desired = document["content"], row["pending_content"]
+        if normalized_text(remote) == normalized_text(desired):
+            # A timed-out write may have succeeded, followed by human edits.
+            # Text proves delivery, not ownership of the current rich revision.
+            trusted = (row["written_revision"] is not None
+                       and row["written_revision"] == document.get("revision_id"))
+            self._finish(key, desired, row["pending_revision"], remote, trusted=trusted)
+            return True
+        revision_id = document.get("revision_id")
+        unchanged = (row["remote_digest"] and remote_digest(remote) == row["remote_digest"]
+                     and normalized_text(remote) == normalized_text(row["content"]))
+        if not unchanged or not isinstance(revision_id, int) or revision_id < 0:
+            self.save(key, status="conflict", last_error="Remote edits or unverified revision; preserved",
+                      next_retry=0)
+            return False
+        self.save(key, status="updating", written_revision=None)
+        result = self.cli.update(row["document_id"], desired, revision_id) or {}
+        written_revision = (result.get("document") or {}).get("revision_id")
+        self.save(key, written_revision=written_revision)
+        document = self._fetch_document(row["document_id"])
+        remote = document["content"]
+        if normalized_text(remote) != normalized_text(desired):
+            raise ValueError("Document readback differs from complete source content")
+        trusted = written_revision is not None and written_revision == document.get("revision_id")
+        self._finish(key, desired, row["pending_revision"], remote, trusted=trusted)
+        return True
 
     def save(self, key: str, **values):
         values["updated_at"] = time.time()
@@ -246,20 +374,42 @@ class ArchiveWorker:
 
     def run_once(self) -> dict:
         exported = 0
+        seen = set()
         for task in self.source.tasks():
             # Stable view identity also deduplicates re-submissions using the cache.
             key = self.config["parent_node_token"] + ":" + task["view_token"]
+            if key in seen:
+                continue
+            seen.add(key)
+            revision = json.dumps([task.get("task_id"), task.get("updated_at"),
+                                   task.get("completed_at")], separators=(",", ":"))
             self.db.execute("INSERT OR IGNORE INTO exports(source_key,task_id,status,updated_at) VALUES(?,?,?,?)",
                             (key, task["task_id"], "pending", time.time()))
             self.db.commit()
-            row = self.db.execute("SELECT * FROM exports WHERE source_key=?", (key,)).fetchone()
-            if row["status"] == "done" or row["next_retry"] > time.time():
+            row = self._row(key)
+            if row["status"] == "conflict" or row["next_retry"] > time.time():
                 continue
             try:
+                if row["status"] == "done":
+                    if row["source_revision"] == revision:
+                        continue
+                    _, content = self.source.document(task)
+                    if _version_text(content) == _version_text(row["content"]):
+                        # Do not adopt legacy rich content as a machine baseline:
+                        # matching text cannot rule out earlier manual formatting
+                        # or images. A later content change needs manual review.
+                        self.save(key, source_revision=revision)
+                        continue
+                    self.save(key, status="update_pending", pending_content=content,
+                              pending_revision=revision, written_revision=None)
+                    row = self._row(key)
+                if row["status"] in {"update_pending", "updating"}:
+                    exported += int(self._update_document(key, row))
+                    continue
                 if not row["content"]:
                     title, content = self.source.document(task)
-                    self.save(key, title=title, content=content)
-                    row = self.db.execute("SELECT * FROM exports WHERE source_key=?", (key,)).fetchone()
+                    self.save(key, title=title, content=content, source_revision=revision)
+                    row = self._row(key)
                 doc_id, url = row["document_id"], row["document_url"]
                 if not doc_id:
                     if row["status"] in {"creating", "uncertain"}:
@@ -281,10 +431,15 @@ class ArchiveWorker:
                             self.save(key, status="uncertain")
                             raise
                     doc_id, url = document["document_id"], document["url"]
-                    self.save(key, document_id=doc_id, document_url=url, status="verifying")
-                if normalized_text(self.cli.fetch(doc_id)) != normalized_text(row["content"]):
+                    self.save(key, document_id=doc_id, document_url=url, status="verifying",
+                              written_revision=document.get("revision_id"))
+                document = self._fetch_document(doc_id)
+                remote = document["content"]
+                if normalized_text(remote) != normalized_text(row["content"]):
                     raise ValueError("Document readback differs from complete source content")
-                self.save(key, status="done", last_error=None, next_retry=0)
+                written_revision = self._row(key)["written_revision"]
+                trusted = written_revision is not None and written_revision == document.get("revision_id")
+                self._finish(key, row["content"], row["source_revision"] or revision, remote, trusted=trusted)
                 exported += 1
             except Exception as error:
                 current = self.db.execute("SELECT * FROM exports WHERE source_key=?", (key,)).fetchone()

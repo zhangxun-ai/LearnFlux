@@ -284,12 +284,22 @@ async def transcribe_video(
                     None if request_body.use_speaker_recognition
                     else request_body.transcription_strategy
                 ),
+                "restore_notifications": not bool(
+                    request_body.wechat_webhook or request_body.feishu_webhook
+                    or (notification_config and notification_config.webhook)
+                ),
             }
 
             try:
-                await task_queue.put(task)
+                if task_queue.full():
+                    raise asyncio.QueueFull
+                cache_manager.save_task_request(task)
+                task_queue.put_nowait(task)
                 logger.info(f"任务已加入队列: {task_id}, URL: {url}")
             except asyncio.QueueFull:
+                cache_manager.update_task_status(
+                    task_id, TaskStatus.FAILED, error_message="任务队列已满，请稍后重试"
+                )
                 logger.warning("任务队列已满，拒绝任务: %s", url)
                 raise HTTPException(status_code=503, detail="任务队列已满，请稍后重试")
 
@@ -328,7 +338,12 @@ async def transcribe_video(
                 logger.info(f"已发送任务创建通知: {task_id}，使用URL: {display_url}")
             except Exception as exc:
                 logger.exception("发送任务创建通知失败: %s, 错误: %s", task_id, exc)
+        except HTTPException:
+            raise
         except Exception as queue_exc:
+            cache_manager.update_task_status(
+                task_id, TaskStatus.FAILED, error_message="任务提交未完成，请稍后重试"
+            )
             logger.exception("任务加入队列失败: %s, 错误: %s", task_id, queue_exc)
             raise HTTPException(status_code=500, detail=f"任务加入队列失败: {queue_exc}")
 

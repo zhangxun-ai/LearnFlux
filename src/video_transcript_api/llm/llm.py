@@ -416,12 +416,16 @@ def _call_with_text_output(
         extra["max_tokens"] = (_default_config or {}).get("llm", {}).get(
             "summary_max_tokens", 32768
         )
+    elif task_type == "study_chat":
+        extra["max_tokens"] = (_default_config or {}).get("llm", {}).get(
+            "study_chat_max_tokens", 8192
+        )
     result = client.chat(
         model, messages, reasoning_effort=reasoning_effort, stream=False, **extra
     )
     finish_reason = getattr(result, "finish_reason", None)
-    if task_type == "summary" and finish_reason not in (None, "stop", "end_turn"):
-        raise LLMCallError(f"Incomplete summary response: finish_reason={finish_reason}")
+    if task_type in {"summary", "study_chat"} and finish_reason not in (None, "stop", "end_turn"):
+        raise LLMCallError(f"Incomplete {task_type} response: finish_reason={finish_reason}")
     content = str(result)
     duration = time.time() - start_time
 

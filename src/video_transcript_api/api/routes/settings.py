@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 
+from ..assets import get_static_asset_version
 from ..context import (
     get_logger,
     get_static_dir,
@@ -32,21 +33,11 @@ router = APIRouter(tags=["settings"])
 
 @router.get("/settings", response_class=HTMLResponse, include_in_schema=False)
 async def settings_page():
-    """提供配置页面。资源 URL 注入 mtime 版本号以破坏浏览器缓存。"""
+    """Serve settings with the shared frontend content version."""
     page = static_dir / "settings.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="settings page not found")
-    version_files = [
-        page,
-        static_dir / "css" / "editorial.css",
-        static_dir / "css" / "app-shell.css",
-        static_dir / "css" / "product-linear.css",
-        static_dir / "css" / "product-linear-system.css",
-        static_dir / "js" / "app-shell.js",
-        static_dir / "js" / "ui-features.js",
-        static_dir / "js" / "pwa-register.js",
-    ]
-    version = str(int(max((f.stat().st_mtime for f in version_files if f.exists()), default=0)))
+    version = get_static_asset_version(static_dir)
     content = page.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version)
     return HTMLResponse(content=content, headers={"Cache-Control": "no-cache"})
 

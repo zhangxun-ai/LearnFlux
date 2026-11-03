@@ -609,7 +609,7 @@ class TaskHistoryManager {
         const source = cached || {};
         const url = task.url || source.url || '';
         const type = (
-            url.startsWith('local://') && !isLocalMediaHistoryItem({ url, title: task.title })
+            task.platform === 'feishu' || (url.startsWith('local://') && !isLocalMediaHistoryItem({ url, title: task.title }))
                 ? 'file'
                 : 'video'
         );
@@ -1127,6 +1127,11 @@ function classifyContent(url) {
         return { type: 'unknown', platform: 'unknown', label: '未识别', action: '深度学习解析', soon: false };
     }
 
+    if ((host === 'feishu.cn' || host.endsWith('.feishu.cn')
+        || host === 'larksuite.com' || host.endsWith('.larksuite.com'))
+        && /^\/(wiki|docx)\//.test(path)) {
+        return { type: 'file', platform: 'feishu', label: '飞书文档', action: '读取文档并解读', soon: false };
+    }
     // X / Twitter 帖子：在深度学习入口仍按深度学习处理，不跳转帖子洞察。
     if ((host === 'x.com' || host === 'twitter.com' || host === 'mobile.twitter.com')
         && /\/status\/\d+/.test(path)) {
@@ -1309,7 +1314,7 @@ function buildHistoryCard(task) {
     const platformLabels = {
         youtube: 'YouTube', bilibili: '哔哩哔哩', douyin: '抖音',
         xiaohongshu: '小红书', xiaoyuzhou: '小宇宙', twitter: '𝕏',
-        x: '𝕏', weixin: '公众号', tiktok: 'TikTok', local: '本地文件'
+        x: '𝕏', weixin: '公众号', tiktok: 'TikTok', feishu: '飞书文档', local: '本地文件'
     };
     const platformLabel = platformLabels[platformId] || (isLocalSource ? '本地文件' : platformId || host);
 

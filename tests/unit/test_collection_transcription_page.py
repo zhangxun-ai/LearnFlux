@@ -102,7 +102,8 @@ def test_reparse_and_progress_copy_match_real_collection_behavior():
     assert "if (!['failed', 'canceled'].includes(source.task_status))" not in JAVASCRIPT
     assert "重新解析这条内容" in JAVASCRIPT
     assert "已复用历史解析结果" in JAVASCRIPT
-    assert "从提交到完成" in JAVASCRIPT
+    assert "els.sourceTiming.textContent = source.elapsed_seconds" in JAVASCRIPT
+    assert "formatDuration(source.elapsed_seconds)" in JAVASCRIPT
     assert "逐字稿已完成，AI 解读生成中" in JAVASCRIPT
     assert "function sourceDetailNeedsRefresh(source, detail)" in JAVASCRIPT
     assert "detail.task_status !== source.task_status" in JAVASCRIPT

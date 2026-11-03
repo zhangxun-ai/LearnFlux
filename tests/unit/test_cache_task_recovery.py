@@ -10,9 +10,31 @@ All console output must be in English only (no emoji, no Chinese).
 """
 
 import pytest
+from datetime import datetime, timedelta, timezone
 
 from src.video_transcript_api.cache.cache_manager import CacheManager
 from src.video_transcript_api.utils.task_status import TaskStatus
+
+
+@pytest.mark.parametrize('stale_authority', [False, True])
+def test_control_store_updates_are_the_authoritative_progress_heartbeat(tmp_path, stale_authority):
+    from src.video_transcript_api.transcriber.control_store import SQLiteTranscriptionControlStore
+
+    store = SQLiteTranscriptionControlStore(tmp_path / 'shared.db')
+    manager = CacheManager(cache_dir=str(tmp_path / 'cache'), database=store.database)
+    manager.set_task_status_repository(store)
+    task = manager.create_task(url='https://example.com/document')
+    manager.update_task_status(task['task_id'], TaskStatus.CALIBRATING)
+    now = datetime(2026, 10, 22, 3, 15, tzinfo=timezone.utc)
+    old = (now - timedelta(days=1)).isoformat()
+    recent = (now - timedelta(seconds=20)).astimezone(timezone(timedelta(hours=8))).isoformat()
+    # Legacy heartbeats and canonical control-store updates deliberately disagree.
+    with manager._get_cursor() as cursor:
+        cursor.execute('UPDATE task_status SET updated_at=?, last_heartbeat_at=? WHERE task_id=?',
+                       (old if stale_authority else recent, recent if stale_authority else old, task['task_id']))
+    recovered = manager.recover_stale_tasks(120, now=now)
+    assert recovered == int(stale_authority)
+    assert manager.get_task_by_id(task['task_id'])['status'] == ('failed' if stale_authority else 'calibrating')
 
 
 @pytest.fixture

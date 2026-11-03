@@ -17,7 +17,6 @@ except ImportError:  # pragma: no cover - POSIX only
     msvcrt = None
 
 from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
 
 from ..collections.summary_worker import CollectionSummaryWorker
 from ..utils.notifications import init_all_notifiers, shutdown_all_notifiers
@@ -32,6 +31,7 @@ from .context import (
     get_cloud_pricing_service,
     get_logger,
     get_llm_queue,
+    get_task_queue,
     get_static_dir,
     get_temp_manager,
     get_repository_database,
@@ -53,13 +53,18 @@ from ..transcriber.cloud_runtime import (
 from ..reading.service import ReadingService
 from .services.post_asr import dispatch_pending_post_asr, dispatch_post_asr
 from .services.progress_notifications import process_progress_reminders
+from .services.task_recovery import prepare_task_recovery, enqueue_recovered_tasks
 from .browser_auth import BrowserSessionStore, browser_session_ttl_seconds
 from .security import configure_web_security
+from .static_files import RevalidatingStaticFiles
 from .routes import (
     audit,
     auth,
+    briefings,
     collections,
+    delivery,
     health,
+    image_diagrams,
     journal,
     marks,
     obsidian,
@@ -214,7 +219,7 @@ def create_app() -> FastAPI:
 
     static_dir = get_static_dir()
     if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        app.mount("/static", RevalidatingStaticFiles(directory=str(static_dir)), name="static")
 
     # 调试中间件：记录 /view/ 请求的详细信息，用于排查外部 AI 工具的访问问题
     @app.middleware("http")
@@ -246,12 +251,15 @@ def create_app() -> FastAPI:
     app.include_router(audit.router)
     app.include_router(users.router)
     app.include_router(views.router)
+    app.include_router(briefings.router)
     app.include_router(obsidian.router)
     app.include_router(study.router)
     app.include_router(visual_learning.router)
+    app.include_router(image_diagrams.router)
     app.include_router(journal.router)
     app.include_router(marks.router)
     app.include_router(collections.router)
+    app.include_router(delivery.router)
     app.include_router(reading.router)
     app.include_router(reviews.router)
     app.include_router(settings.router)
@@ -260,12 +268,22 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup_event():
+        recovered_task_requests = []
         temp_manager = get_temp_manager()
         # 只有持有运行锁的主实例可以执行恢复。测试进程或重复启动的短生命周期实例
         # 不得把仍由在线服务处理的任务误判为孤儿任务。
         cache_manager = get_cache_manager()
         runtime_lock_file = _acquire_runtime_lock(cache_manager.cache_dir)
         app.state.runtime_lock_file = runtime_lock_file
+        # Only persisted manual requests may be resumed by this independent queue.
+        app.state.image_diagram_service = None
+        if runtime_lock_file is not None:
+            try:
+                diagram_service = image_diagrams.get_image_diagram_service()
+                diagram_service.start()
+                app.state.image_diagram_service = diagram_service
+            except Exception:
+                logger.warning("Image diagram queue unavailable; check local feature settings")
         if runtime_lock_file is None:
             logger.warning(
                 "Skipping orphan task recovery: another API instance owns the runtime lock"
@@ -329,8 +347,13 @@ def create_app() -> FastAPI:
             if old_files_count > 0:
                 logger.info(f"启动时清理了 {old_files_count} 个旧临时文件")
             try:
+                recovered_task_requests = prepare_task_recovery(
+                    cache_manager, get_user_manager(), protected_task_ids=protected_task_ids
+                )
                 recovered = cache_manager.recover_orphaned_tasks(
-                    protected_task_ids=protected_task_ids
+                    protected_task_ids=set(protected_task_ids) | {
+                        task["id"] for task in recovered_task_requests
+                    }
                 )
                 from ..transcriber.asr_retry_repository import ASRRetryRepository
 
@@ -553,7 +576,10 @@ def create_app() -> FastAPI:
         app.state.ytdlp_builder = ytdlp_builder
 
         logger.info("启动任务队列处理器")
-        asyncio.create_task(process_task_queue())
+        app.state.task_queue_processor = asyncio.create_task(process_task_queue())
+        app.state.task_recovery_feeder = asyncio.create_task(
+            enqueue_recovered_tasks(recovered_task_requests, get_task_queue())
+        )
 
         if runtime_lock_file is not None:
             logger.info("启动任务进度提醒处理器")
@@ -594,6 +620,15 @@ def create_app() -> FastAPI:
 
     @app.on_event("shutdown")
     async def shutdown_event():
+        diagram_service = getattr(app.state, "image_diagram_service", None)
+        if diagram_service is not None:
+            diagram_service.stop(timeout=2.0)
+        for name in ("task_recovery_feeder", "task_queue_processor"):
+            background_task = getattr(app.state, name, None)
+            if background_task is not None:
+                background_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await background_task
         pricing = getattr(app.state, "cloud_pricing_service", None)
         if pricing is not None:
             pricing.stop()

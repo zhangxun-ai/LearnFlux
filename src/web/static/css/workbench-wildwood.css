@@ -42,7 +42,7 @@ body.workbench-meadow {
     background:
         radial-gradient(ellipse at 92% 6%, rgba(226, 238, 224, 0.34), transparent 34rem),
         #FDFCF8;
-    color: #123D32;
+    color: var(--product-ink);
     color-scheme: light;
 }
 
@@ -118,31 +118,14 @@ body.workbench-meadow .sidebar-resizer {
 
 body.workbench-meadow .sidebar-brand {
     position: relative;
-    min-height: 88px;
-    padding: 13px 14px 29px;
+    min-height: 72px;
+    padding: 13px 14px;
     border-bottom-color: rgba(190, 208, 193, 0.56);
     background: transparent;
 }
 
-body.workbench-meadow .sidebar-brand::after {
-    content: "更专注的 AI 学习工作台";
-    position: absolute;
-    left: 57px;
-    bottom: 8px;
-    color: #6D8575;
-    font-size: 10px;
-    letter-spacing: 0.13em;
-    line-height: 1;
-    white-space: nowrap;
-}
-
-body.workbench-meadow.sidebar-rail .sidebar-brand::after,
-body.workbench-meadow.sidebar-collapsed .sidebar-brand::after {
-    display: none;
-}
-
 body.workbench-meadow .brand-link {
-    color: #123D32;
+    color: var(--product-ink);
     gap: 7px;
     font-family: Georgia, "Songti SC", "STSong", serif;
     font-size: 16px;
@@ -181,7 +164,7 @@ body.workbench-meadow .mobile-menu-btn {
 
 body.workbench-meadow .shell-icon-button:hover,
 body.workbench-meadow .mobile-menu-btn:hover {
-    background: #FFFFFF;
+    background: var(--product-surface);
     color: #23634F;
 }
 
@@ -235,7 +218,7 @@ body.workbench-meadow .nav-item {
 body.workbench-meadow .nav-item:hover:not(.is-active) {
     border-color: rgba(210, 225, 211, 0.85);
     background: rgba(255, 255, 255, 0.6);
-    color: #123D32;
+    color: var(--product-ink);
 }
 
 body.workbench-meadow .nav-item.is-active,
@@ -365,8 +348,8 @@ body.workbench-meadow :where(.status-completed, .status-success, .is-complete, .
 }
 
 body.workbench-meadow ::selection {
-    background: #CFE4D4;
-    color: #123D32;
+    background: var(--product-accent-soft);
+    color: var(--product-ink);
 }
 
 /* Single-item learning */
@@ -385,7 +368,7 @@ body.workbench-meadow.page-home .workbench-hero {
 
 body.workbench-meadow.page-home .workbench-hero h1 {
     margin: 0;
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
     font-size: clamp(2rem, 3.1vw, 2.8rem);
     font-weight: 700;
@@ -395,7 +378,7 @@ body.workbench-meadow.page-home .workbench-hero h1 {
 
 body.workbench-meadow.page-home .workbench-hero p {
     margin: 8px 0 0;
-    color: #64756D;
+    color: var(--product-subtle);
     font-size: 1rem;
 }
 
@@ -429,13 +412,13 @@ body.workbench-meadow.page-home .input-tab {
     border: 1px solid transparent;
     border-radius: 9px;
     background: transparent;
-    color: #64756D;
+    color: var(--product-subtle);
     font-weight: 650;
 }
 
 body.workbench-meadow.page-home .input-tab.active {
     border-color: #DCE9DE;
-    background: #FFFFFF;
+    background: var(--product-surface);
     color: #174A37;
     box-shadow: 0 2px 5px rgba(40, 71, 51, 0.07);
 }
@@ -445,7 +428,7 @@ body.workbench-meadow.page-home .form-textarea {
     padding: 17px 18px;
     border: 1px solid #DCE6DE;
     border-radius: 11px;
-    background: #FFFFFF;
+    background: var(--product-surface);
     color: #243D31;
     font-size: 15px;
     line-height: 1.65;
@@ -466,7 +449,7 @@ body.workbench-meadow.page-home .compact-strategy-toggle {
 body.workbench-meadow.page-home .strategy-card {
     border-color: #DCE7DE;
     border-radius: 12px;
-    background: #FFFFFF;
+    background: var(--product-surface);
 }
 
 body.workbench-meadow.page-home .strategy-card input:checked + .strategy-card-content {
@@ -490,7 +473,7 @@ body.workbench-meadow.page-home .history-header {
 }
 
 body.workbench-meadow.page-home .history-header h3 {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
     font-size: 1.7rem;
 }
@@ -529,7 +512,7 @@ body.workbench-meadow.page-collections .lc-intro-strip {
 }
 
 body.workbench-meadow.page-collections .lc-intro-strip h1 {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
     font-size: clamp(1.9rem, 2.7vw, 2.55rem);
     letter-spacing: -0.04em;
@@ -570,14 +553,14 @@ body.workbench-meadow.page-collections .lc-visual-root {
 }
 
 body.workbench-meadow.page-collections .lc-markdown-preview :where(h1, h2, h3) {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
 }
 
 body.workbench-meadow.page-collections .lc-meta-chip {
     border-color: #E0E9E1;
     background: #F3F7F3;
-    color: #53675D;
+    color: var(--product-muted);
 }
 
 /* Study library and synchronized video player */
@@ -593,13 +576,13 @@ body.workbench-meadow.page-study .study-library-head {
     padding: 21px 24px;
     border-color: #E1EAE2;
     border-radius: 16px 16px 0 0;
-    background: #FFFFFF;
+    background: var(--product-surface);
 }
 
 body.workbench-meadow.page-study .study-library-head h2,
 body.workbench-meadow.page-study .study-library-section-head h2,
 body.workbench-meadow.page-study .study-head h1 {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
 }
 
@@ -617,13 +600,13 @@ body.workbench-meadow.page-study .study-library-tabs button.is-active {
 body.workbench-meadow.page-study .study-library-tools,
 body.workbench-meadow.page-study .study-library-list {
     border-color: #E1EAE2;
-    background: #FFFFFF;
+    background: var(--product-surface);
 }
 
 body.workbench-meadow.page-study .study-library-card {
     border-color: #E1EAE2;
     border-radius: 12px;
-    background: #FFFFFF;
+    background: var(--product-surface);
 }
 
 body.workbench-meadow.page-study .study-library-card:hover,
@@ -651,7 +634,7 @@ body.workbench-meadow.page-study .study-shell {
     padding: clamp(14px, 1.5vw, 22px);
     border: 1px solid #E1EAE2;
     border-radius: 16px;
-    background: #FFFFFF;
+    background: var(--product-surface);
     box-shadow: 0 5px 18px rgba(47, 76, 53, 0.045);
 }
 
@@ -689,7 +672,7 @@ body.workbench-meadow.page-review .review-page-header {
 }
 
 body.workbench-meadow.page-review .review-page-heading h1 {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
     font-size: clamp(2rem, 2.8vw, 2.7rem);
 }
@@ -759,7 +742,7 @@ body.workbench-meadow.page-reading .reading-library-header {
 }
 
 body.workbench-meadow.page-reading .reading-library-header h1 {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
     font-size: clamp(2.1rem, 3.3vw, 3rem);
 }
@@ -778,7 +761,7 @@ body.workbench-meadow.page-reading .reading-search {
 body.workbench-meadow.page-reading :where(.reading-continue-card, .reading-book-card) {
     border-color: #E0E9E1;
     border-radius: 15px;
-    background: #FFFFFF;
+    background: var(--product-surface);
     box-shadow: 0 5px 18px rgba(47, 76, 53, 0.05);
 }
 
@@ -833,7 +816,7 @@ body.workbench-meadow.page-reading .reading-reader-pages {
 body.workbench-meadow.page-reading .reading-panel {
     border-color: #DDE7DD;
     border-radius: 15px;
-    background: #FFFFFF;
+    background: var(--product-surface);
     color: #183F32;
     box-shadow: 0 14px 36px rgba(41, 66, 46, 0.12);
 }
@@ -934,7 +917,7 @@ body.workbench-meadow.page-focus .type-zone:hover .type-orb,
 body.workbench-meadow.page-focus .type-orb:focus,
 body.workbench-meadow.page-focus .mixer-zone:hover .mixer-orb,
 body.workbench-meadow.page-focus .mixer-orb:focus {
-    background: #FFFFFF;
+    background: var(--product-surface);
     color: #174A37;
 }
 
@@ -1093,7 +1076,7 @@ body.workbench-meadow.page-focus .timer-readout {
     border: 1px solid #DFE9E0;
     border-radius: 14px 14px 0 0;
     background: rgba(255, 255, 255, 0.96);
-    color: #123D32;
+    color: var(--product-ink);
 }
 
 body.workbench-meadow.page-focus .timer-time {
@@ -1200,7 +1183,7 @@ body.workbench-meadow.page-focus .journal-tabs {
 
 body.workbench-meadow.page-focus .journal-tab {
     border-radius: 8px;
-    color: #64756D;
+    color: var(--product-subtle);
 }
 
 body.workbench-meadow.page-focus .journal-tab.active,
@@ -1210,7 +1193,7 @@ body.workbench-meadow.page-focus .journal-tab:hover {
 }
 
 body.workbench-meadow.page-focus :where(.journal-panel h2, .journal-history-card strong) {
-    color: #123D32;
+    color: var(--product-ink);
 }
 
 body.workbench-meadow.page-focus :where(.journal-panel p, .journal-empty, .journal-history-card span, .journal-history-card small, .journal-question-label) {
@@ -1258,7 +1241,7 @@ body.workbench-meadow.page-history .header {
 }
 
 body.workbench-meadow.page-history .header :where(h1, h2) {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
     font-size: clamp(2rem, 2.8vw, 2.65rem);
 }
@@ -1300,7 +1283,7 @@ body.workbench-meadow.page-settings .st-head {
 }
 
 body.workbench-meadow.page-settings .st-head h1 {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
     font-size: clamp(2rem, 2.8vw, 2.65rem);
 }
@@ -1308,12 +1291,12 @@ body.workbench-meadow.page-settings .st-head h1 {
 body.workbench-meadow.page-settings .st-page .card {
     border: 1px solid #E1EAE2;
     border-radius: 15px;
-    background: #FFFFFF;
+    background: var(--product-surface);
     box-shadow: 0 4px 15px rgba(47, 76, 53, 0.045);
 }
 
 body.workbench-meadow.page-settings .st-page .card > summary {
-    color: #123D32;
+    color: var(--product-ink);
     font-family: Georgia, "Songti SC", "STSong", serif;
 }
 
@@ -1324,7 +1307,7 @@ body.workbench-meadow.page-settings .st-page :where(.card h2, .card h3, .field-l
 body.workbench-meadow.page-settings .st-page :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea, .combo-input) {
     border-color: #D8E4DA;
     border-radius: 9px;
-    background: #FFFFFF;
+    background: var(--product-surface);
     color: #24483A;
 }
 
@@ -1764,13 +1747,13 @@ body.workbench-meadow.page-transcript .transcript-visual-kicker {
 }
 
 body.workbench-meadow.page-transcript .transcript-visual-toolbar strong {
-    color: #123D32;
+    color: var(--product-ink);
 }
 
 body.workbench-meadow.page-transcript .transcript-visual-action {
     border-color: #C7D5CB;
     border-radius: 10px;
-    background: #FFFFFF;
+    background: var(--product-surface);
     color: #24483A;
 }
 
@@ -1836,7 +1819,7 @@ body.workbench-meadow.page-transcript .floating-toc-mobile-btn {
 
 /* Flow writing: restore the rainy and snowy storybook workspace. */
 body.workbench-meadow .shell-theme-toggle {
-    display: none !important;
+    display: inline-grid;
 }
 
 body.workbench-meadow.page-focus {
@@ -3047,4 +3030,70 @@ body.workbench-meadow.page-processing :where(button, a):focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
     body.workbench-meadow.page-processing .processing-pulse { animation: none; }
+}
+
+/* The shared palette also owns dark navigation; page adapters stay content-only. */
+html[data-theme="dark"] body.workbench-meadow .sidebar {
+    background: var(--product-sidebar);
+    border-color: var(--product-line);
+}
+html[data-theme="dark"] body.workbench-meadow .sidebar::after { opacity: .12; }
+html[data-theme="dark"] body.workbench-meadow :is(.brand-link, .nav-item, .nav-icon, .nav-subitem) {
+    color: var(--product-ink);
+}
+html[data-theme="dark"] body.workbench-meadow :is(.nav-group-toggle, .nav-group-chevron, .nav-branch-toggle) {
+    color: var(--product-muted);
+}
+html[data-theme="dark"] body.workbench-meadow :is(.sidebar-brand, .nav-group + .nav-group) {
+    border-color: var(--product-line);
+}
+html[data-theme="dark"] body.workbench-meadow :is(.nav-item.is-active, .nav-item[aria-current="page"], .nav-subitem.is-active) {
+    background: var(--product-accent-soft);
+    border-color: var(--product-line-strong);
+    color: var(--product-ink);
+}
+html[data-theme="dark"] body.workbench-meadow .nav-item:hover:not(.is-active) {
+    background: var(--product-surface);
+    border-color: var(--product-line-strong);
+    color: var(--product-ink);
+}
+html[data-theme="dark"] body.workbench-meadow :is(.shell-icon-button, .mobile-menu-btn) {
+    background: var(--product-surface);
+    border-color: var(--product-line-strong);
+    color: var(--product-ink);
+}
+html[data-theme="dark"] body.workbench-meadow.page-reading {
+    --flow-bg: var(--product-page);
+    --flow-paper: var(--product-surface);
+    --flow-ink: var(--product-ink);
+    --flow-muted: var(--product-muted);
+    --flow-line: var(--product-line);
+    --flow-soft: var(--product-surface-muted);
+    --flow-accent: var(--product-accent);
+}
+html[data-theme="dark"] body.workbench-meadow.page-reading :is(.reading-library-header, .reading-continue-card, .reading-book-card, .reading-panel, .reading-search) {
+    background-color: var(--product-surface);
+    background-image: none;
+    border-color: var(--product-line);
+    color: var(--product-ink);
+}
+html[data-theme="dark"] body.workbench-meadow.page-reading :is(.reading-library-header h1, .reading-eyebrow, .reading-book-meta strong, .reading-continue-label) {
+    color: var(--product-ink);
+}
+
+html[data-theme="dark"] body.workbench-meadow .page-stage::before { opacity: .06; }
+html[data-theme="dark"] body.workbench-meadow :is(.input-card, .workbench-hero, .workbench-flow-step, .settings-section, .lc-card, .lc-import-card, .lc-sources, .lc-history-panel, .study-library-card, .study-source-panel) {
+    background-color: var(--product-surface);
+    border-color: var(--product-line);
+    color: var(--product-ink);
+}
+html[data-theme="dark"] body.workbench-meadow.app-shell :is(input, textarea, select) {
+    background-color: var(--product-surface);
+    border-color: var(--product-line-strong);
+    color: var(--product-ink);
+}
+html[data-theme="dark"] body.workbench-meadow.app-shell :is(input, textarea)::placeholder { color: var(--product-subtle); }
+
+html[data-theme="dark"] body.workbench-meadow.app-shell :is(h1, h2, h3, h4):not(.reading-reader *) {
+    color: var(--product-ink);
 }

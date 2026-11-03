@@ -1,0 +1,27 @@
+.history-evidence[hidden] { display: none; }
+.history-evidence {
+    padding: 24px 0;
+    margin-block: 12px 24px;
+    border-block: 1px solid var(--product-line);
+}
+.history-evidence-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.history-evidence-head h2 { margin: 0; color: var(--product-ink); font-size: 1.25rem; }
+.history-evidence-head p { margin: 8px 0 20px; color: var(--product-muted); font-size: 0.875rem; overflow-wrap: anywhere; }
+.history-evidence label { display: block; margin-bottom: 8px; color: var(--product-ink); font-weight: 600; }
+.history-evidence-composer { display: flex; align-items: flex-end; gap: 12px; }
+.history-evidence-composer textarea { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--product-line-strong); border-radius: 8px; background: var(--product-surface); color: var(--product-ink); font: inherit; line-height: 1.6; resize: vertical; }
+.history-evidence-composer .btn { min-height: 44px; flex-shrink: 0; }
+#historyEvidenceStatus { color: var(--product-muted); font-size: 0.875rem; line-height: 1.6; }
+.history-evidence-answer p { white-space: pre-wrap; }
+.history-evidence-sources { max-width: 72ch; }
+.history-evidence-sources h3 { margin-top: 28px; color: var(--product-ink); font-size: 1rem; }
+.history-evidence-sources details { padding-block: 12px; border-top: 1px solid var(--product-line); }
+.history-evidence-sources summary { min-height: 44px; color: var(--reading-link); cursor: pointer; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
+.history-evidence-sources p { margin: 14px 0 0; color: var(--reading-body); font-size: 0.9375rem; line-height: 1.8; }
+.history-evidence-sources p > a { display: block; color: var(--reading-link); margin-bottom: 4px; text-underline-offset: 3px; }
+.history-evidence :is(button, textarea, summary, a):focus-visible { outline: 2px solid var(--product-focus); outline-offset: 3px; }
+.history-evidence button:disabled { opacity: 0.65; cursor: wait; }
+@media (max-width: 720px) {
+    .history-evidence-composer { align-items: stretch; flex-direction: column; }
+    .history-evidence-head { gap: 12px; }
+}

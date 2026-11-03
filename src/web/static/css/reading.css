@@ -151,6 +151,9 @@ body.page-reading {
 .reading-continue-cover {
     display: flex;
     height: 172px;
+    min-width: 0;
+    overflow: hidden;
+    gap: 8px;
     flex-direction: column;
     justify-content: space-between;
     padding: 20px 14px;
@@ -163,11 +166,21 @@ body.page-reading {
 
 .reading-continue-cover small,
 .reading-continue-cover span {
+    flex: 0 0 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 10px;
     letter-spacing: 0.15em;
 }
 
 .reading-continue-cover strong {
+    display: -webkit-box;
+    min-height: 0;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
     font-family: var(--flow-serif);
     font-size: 22px;
     line-height: 1.35;
@@ -354,6 +367,11 @@ body.page-reading {
 }
 
 .reading-book-cover strong {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
     font-family: var(--flow-serif);
     font-size: 19px;
     line-height: 1.45;
@@ -1311,6 +1329,7 @@ body.page-reading {
     }
 
     .reading-continue-cover strong {
+        -webkit-line-clamp: 2;
         font-size: 17px;
     }
 

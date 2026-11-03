@@ -14,6 +14,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, StrictInt
 
+from ..assets import get_static_asset_version
 from ..context import (
     get_cache_manager,
     get_cloud_asr_dispatcher,
@@ -177,19 +178,7 @@ async def collections_page():
     page = static_dir / "collections.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="collections page not found")
-    version_files = [
-        page,
-        static_dir / "css" / "collections.css",
-        static_dir / "css" / "product-linear.css",
-        static_dir / "css" / "product-linear-core.css",
-        static_dir / "js" / "collections.js",
-        static_dir / "css" / "app-shell.css",
-        static_dir / "js" / "app-shell.js",
-        static_dir / "js" / "ui-features.js",
-        static_dir / "js" / "pwa-register.js",
-        static_dir / "css" / "editorial.css",
-    ]
-    version = str(int(max((f.stat().st_mtime for f in version_files if f.exists()), default=0)))
+    version = get_static_asset_version(static_dir)
     content = page.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version)
     return HTMLResponse(content=content, headers={"Cache-Control": "no-cache"})
 

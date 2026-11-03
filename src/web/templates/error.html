@@ -1,13 +1,8 @@
 {% extends "base.html" %}
 
-{% block body_class %}page-result page-error workbench-meadow{% endblock %}
+{% block body_class %}page-result page-error{% endblock %}
 
 {% block title %}{{ title or "出现错误" }} - LearnFlux{% endblock %}
-
-{% block product_linear_adapter %}
-<link rel="stylesheet" href="/static/css/product-linear-system.css?v={{ asset_ver }}">
-<link rel="stylesheet" href="/static/css/workbench-wildwood.css?v={{ asset_ver }}">
-{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -79,9 +74,9 @@
             <div style="margin-top: 20px;">
                 <h3>您可以：</h3>
                 <ul class="action-list">
-                    <li><a href="{{ url }}" target="_blank" rel="noopener">查看原始视频链接</a></li>
-                    <li>刷新页面重试</li>
-                    <li><a href="/add_task_by_web">重新提交转录任务</a></li>
+                    <li><a href="{{ url }}" target="_blank" rel="noopener">查看原始内容</a></li>
+                    <li>核对上方错误原因，修复后重新提交解析</li>
+                    <li><a href="/add_task_by_web">重新提交解析任务</a></li>
                 </ul>
             </div>
             {% endif %}
@@ -92,7 +87,7 @@
             <div class="content">
             <ul>
                 <li><strong>404 - 页面不存在</strong>：检查链接是否正确，或者任务可能已被删除</li>
-                <li><strong>转录失败</strong>：视频可能无法访问或格式不支持，请尝试重新提交</li>
+                <li><strong>解析失败</strong>：检查原始内容的访问权限及格式，修复后重新提交解析</li>
                 <li><strong>服务异常</strong>：系统临时故障，请稍后重试</li>
             </ul>
             

@@ -7,6 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from ..assets import get_static_asset_version
 from ..context import get_logger, get_static_dir
 from ..services.transcription import verify_token
 from ...trend_radar import service as svc
@@ -26,22 +27,7 @@ async def trend_radar_page():
     path = static_dir / "trend-radar.html"
     if not path.exists():
         raise HTTPException(status_code=404, detail="趋势雷达页面不存在")
-    version_files = [
-        path,
-        static_dir / "css" / "editorial.css",
-        static_dir / "css" / "app-shell.css",
-        static_dir / "css" / "trend-radar.css",
-        static_dir / "css" / "product-linear.css",
-        static_dir / "css" / "product-linear-insights.css",
-        static_dir / "js" / "trend-radar.js",
-        static_dir / "js" / "ui-features.js",
-        static_dir / "js" / "app-shell.js",
-        static_dir / "js" / "pwa-register.js",
-    ]
-    version = str(max(
-        (asset.stat().st_mtime_ns for asset in version_files if asset.exists()),
-        default=0,
-    ))
+    version = get_static_asset_version(static_dir)
     html = path.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version)
     if "<base " not in html:
         html = html.replace("<head>", '<head>\n    <base href="/static/">', 1)

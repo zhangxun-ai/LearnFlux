@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
-    <script src="/static/js/time.js?v=__ASSET_VERSION__"></script>
+    <script src="/static/js/time.js?v=ce8122b3ec17"></script>
         <script>
         (function() {
             try {
@@ -29,13 +29,13 @@
     <meta name="apple-mobile-web-app-title" content="LearnFlux">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.webmanifest">
-            <link rel="stylesheet" href="/static/css/editorial.css?v=e805773679f4">
-    <link rel="stylesheet" href="/static/css/app-shell.css?v=sidebar-reopen-fix-20261016">
-    <link rel="stylesheet" href="/static/css/styles.css?v=e805773679f4">
-    <script src="/static/js/auth-session.js?v=e805773679f4"></script>
-    <script src="/static/js/pwa-register.js?v=e805773679f4" defer></script>
+            <link rel="stylesheet" href="/static/css/editorial.css?v=ce8122b3ec17">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=ce8122b3ec17">
+    <link rel="stylesheet" href="/static/css/styles.css?v=ce8122b3ec17">
+    <script src="/static/js/auth-session.js?v=ce8122b3ec17"></script>
+    <script src="/static/js/pwa-register.js?v=ce8122b3ec17" defer></script>
     <script src="/static/js/ui-features.js?v=f35b18a5e3ce" defer></script>
-    <script src="/static/js/app-shell.js?v=e805773679f4" defer></script>
+    <script src="/static/js/app-shell.js?v=ce8122b3ec17" defer></script>
     <style>
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -495,16 +495,19 @@
         }
 
     </style>
-    <link rel="stylesheet" href="/static/css/product-linear.css?v=e805773679f4">
-    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=e805773679f4">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=ce8122b3ec17">
+    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=ce8122b3ec17">
 
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-leaf-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-leaf-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-leaf-180.png">
     <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
-    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=e805773679f4">
-    <link rel="stylesheet" href="/static/css/learning-history-meadow.css?v=__ASSET_VERSION__">
-    <link rel="stylesheet" href="/static/css/history-improvements.css?v=20261018-reference">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=ce8122b3ec17">
+    <link rel="stylesheet" href="/static/css/learning-history-meadow.css?v=ce8122b3ec17">
+    <link rel="stylesheet" href="/static/css/history-improvements.css?v=ce8122b3ec17">
+    <link rel="stylesheet" href="/static/css/output-reading.css?v=ce8122b3ec17">
+    <link rel="stylesheet" href="/static/css/history-evidence.css?v=ce8122b3ec17">
+    <script src="/static/js/history-evidence.js?v=ce8122b3ec17" defer></script>
 </head>
 <body class="app-shell has-app-shell product-linear page-history workbench-meadow">
 <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -535,6 +538,10 @@
                     <a class="nav-item" href="/study" data-feature="study_player" hidden>
                         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
                         <span class="nav-label">边播边学</span>
+                    </a>
+                    <a class="nav-item" href="/briefings">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span>
+                        <span class="nav-label">日报</span>
                     </a>
                     <div class="nav-branch">
                         <div class="nav-branch-row">
@@ -612,7 +619,6 @@
     <div class="header">
         <div>
             <h1>历史记录</h1>
-            <p class="history-intro">每一次输入，都在慢慢变成自己的知识。</p>
         </div>
     </div>
 
@@ -622,7 +628,7 @@
     <div class="history-search-row">
         <label class="sr-only" for="filterQ">搜索历史记录</label>
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
-        <input type="search" id="filterQ" placeholder="搜索标题、作者或关键词" autocomplete="off">
+        <input type="search" id="filterQ" placeholder="搜索标题、作者或正文" autocomplete="off">
         <button class="btn btn-primary" type="button" onclick="applyFilter()">搜索</button>
     </div>
 
@@ -687,7 +693,6 @@
         <div class="tendedero-heading">
             <div class="tendedero-heading-copy">
                 <h2 id="tendederoTitle">最近学习</h2>
-                <p>左右滑动，继续回到那段内容</p>
             </div>
             <div class="tendedero-controls">
                 <span class="tendedero-position" id="tendederoPosition" aria-live="polite">…</span>
@@ -713,6 +718,7 @@
                 </label>
                 <span id="selectedCount" style="display:none"></span>
                 <button class="btn btn-ghost" id="markSelectedBtn" onclick="markSelectedRead()" style="display:none">标为已打开</button>
+                <button class="btn btn-ghost" id="compareSelectedBtn" type="button" onclick="window.LearnFluxEvidence.open([...selectedSet], displayedItems)" hidden>对照提问</button>
                 <button class="btn btn-ghost" id="clearSelectionBtn" onclick="clearSelection()" hidden>取消选择</button>
             </div>
         </div>
@@ -779,6 +785,19 @@
 
 
 
+    <section class="history-evidence" id="historyEvidence" aria-labelledby="historyEvidenceTitle" hidden>
+        <div class="history-evidence-head">
+            <div><h2 id="historyEvidenceTitle">对照提问</h2><p id="historyEvidenceScope"></p></div>
+            <button type="button" class="btn btn-ghost" id="historyEvidenceClose">收起</button>
+        </div>
+        <form id="historyEvidenceForm">
+            <label for="historyEvidenceQuestion">想从这些资料中了解什么？</label>
+            <div class="history-evidence-composer"><textarea id="historyEvidenceQuestion" rows="2" maxlength="2000" required placeholder="例如：这几位作者的方法有什么区别，各适合什么场景？"></textarea><button type="submit" class="btn btn-primary" id="historyEvidenceSubmit">依据原文回答</button></div>
+        </form>
+        <p id="historyEvidenceStatus" role="status" aria-live="polite"></p>
+        <div class="history-evidence-answer" id="historyEvidenceAnswer"></div>
+        <div class="history-evidence-sources" id="historyEvidenceSources"></div>
+    </section>
     <div class="history-table-head history-task-filters" id="historyTableHead" role="row" hidden>
         <span role="columnheader">内容</span>
         <span role="columnheader">来源平台</span>
@@ -919,6 +938,10 @@ function updateSelectionUI() {
     countEl.textContent = `已选 ${count} 条（仅本页）`;
     action.style.display = count ? '' : 'none';
     action.textContent = `标为已打开 (${count})`;
+    const compare = document.getElementById('compareSelectedBtn');
+    compare.hidden = count < 2;
+    compare.disabled = count > 5;
+    compare.title = count > 5 ? '每次选择 2–5 篇资料，便于准确对照' : '根据所选资料的原文回答';
     document.getElementById('clearSelectionBtn').hidden = !count;
     document.querySelector('.history-bulk-actions')?.classList.toggle('has-selection', count > 0);
     const rows = document.querySelectorAll('.task-row[data-vt]');
@@ -1061,7 +1084,7 @@ function updateRecordTypeFilterUI(normalizeStatus = true) {
     }
     if (statusLabel) statusLabel.textContent = isReview ? '记录状态' : '学习状态：';
     const search = document.getElementById('filterQ');
-    if (search) search.placeholder = isReview ? '搜索复盘内容…' : '搜索标题、作者或关键词';
+    if (search) search.placeholder = isReview ? '搜索复盘内容…' : '搜索标题、作者或正文';
     const listTitle = document.getElementById('historyListTitle');
     if (listTitle) listTitle.textContent = isReview ? '复盘记录' : '全部记录';
     const tableHead = document.getElementById('historyTableHead');
@@ -1148,6 +1171,7 @@ function shortWebhook(url) {
 }
 
 const PLATFORM_META = {
+    feishu: { label: '飞书文档', kind: 'local', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5zM14 3v6h5M8 13h8M8 17h8" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>' },
     douyin: { label: '抖音', kind: 'douyin', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9" fill="none" stroke="#25F4EE" stroke-width="4" stroke-linecap="round"/><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9" fill="none" stroke="#FE2C55" stroke-width="2.3" stroke-linecap="round" transform="translate(1 0)"/><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9M14 3c.4 2.5 2.1 4.1 4.5 4.6" fill="none" stroke="#171717" stroke-width="2.3" stroke-linecap="round"/></svg>' },
     tiktok: { label: 'TikTok', kind: 'douyin', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9" fill="none" stroke="#25F4EE" stroke-width="4" stroke-linecap="round"/><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9" fill="none" stroke="#FE2C55" stroke-width="2.3" stroke-linecap="round" transform="translate(1 0)"/><path d="M14 3v11.2a4 4 0 1 1-3.2-3.9M14 3c.4 2.5 2.1 4.1 4.5 4.6" fill="none" stroke="#171717" stroke-width="2.3" stroke-linecap="round"/></svg>' },
     xiaohongshu: { label: '小红书', kind: 'xiaohongshu', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="5" fill="#F04452"/><text x="12" y="10.5" text-anchor="middle" fill="#fff" font-size="5.4" font-weight="700" font-family="Arial,sans-serif">小红</text><text x="12" y="17" text-anchor="middle" fill="#fff" font-size="5.4" font-weight="700" font-family="Arial,sans-serif">书</text></svg>' },
@@ -1327,7 +1351,7 @@ function platformCountMap() {
 function renderPlatformChips() {
     const container = document.getElementById('platformChips');
     if (!container) return;
-    const order = ['douyin', 'bilibili', 'youtube', 'twitter', 'x', 'xiaohongshu', 'wechat_channels', 'weixin', 'xiaoyuzhou', 'local', 'generic'];
+    const order = ['douyin', 'bilibili', 'youtube', 'twitter', 'x', 'xiaohongshu', 'wechat_channels', 'weixin', 'xiaoyuzhou', 'feishu', 'local', 'generic'];
     const platforms = [...(filterOptions.platforms || [])].sort((a, b) => {
         const rank = value => { const index = order.indexOf(String(value).toLowerCase()); return index < 0 ? order.length : index; };
         return rank(a) - rank(b);
@@ -1905,7 +1929,7 @@ function buildRow(item, readSet, index) {
         : `<button type="button" class="history-preview-button" data-record-details aria-expanded="false" aria-controls="history-summary-${index}">查看记录</button>`;
     const preview = isCompleted && canOpen
         ? `<button type="button" class="history-preview-button" data-preview-view="${esc(item.view_token)}" aria-expanded="false" aria-controls="history-summary-${index}">摘要</button>` : '';
-    const excerpt = summaryPlainText(item.excerpt || item.description || item.summary || item.author || item.video_url || '');
+    const excerpt = summaryPlainText(item.search_excerpt || item.excerpt || item.description || item.summary || item.author || item.video_url || '');
     return `<div class="task-row task-card history-record-row ${isCompleted ? isRead ? 'read' : 'unread' : ''} ${selected ? 'selected' : ''}" ${isCompleted && canOpen ? `data-vt="${esc(item.view_token)}"` : ''}>
         <div class="history-row-content">${check}<span class="history-row-cover" aria-hidden="true" style="background-image:url('${historyCoverURL(item)}')"></span><div class="history-row-copy"><div class="history-row-title-line">${titleMarkup}${item.is_marked ? '<span class="mark-badge">精华</span>' : ''}</div>${excerpt ? `<div class="history-row-author">${esc(excerpt)}</div>` : ''}</div></div>
         <div class="history-row-platform">${platformBadgeHTML(item.platform)}</div>

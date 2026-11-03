@@ -1,4 +1,4 @@
-const CACHE_NAME = 'learnflux-pwa-20261022-beijing-time';
+const CACHE_NAME = 'learnflux-pwa-20261103-revalidated-shell';
 
 const PRECACHE_URLS = [
   '/',
@@ -19,6 +19,7 @@ const PRECACHE_URLS = [
   '/static/css/floating-toc.css',
   '/static/css/study.css',
   '/static/css/visual-learning.css',
+  '/static/css/image-diagrams.css',
   '/static/css/product-linear.css',
   '/static/css/product-linear-core.css',
   '/static/css/product-linear-system.css',
@@ -35,6 +36,7 @@ const PRECACHE_URLS = [
   '/static/js/pwa-register.js',
   '/static/js/study.js',
   '/static/js/visual-learning.js',
+  '/static/js/image-diagrams.js',
   '/static/js/visual-learning-workbench.js',
   '/static/audio/rain.mp3',
   '/static/audio/snow.mp3',
@@ -57,8 +59,24 @@ const CACHEABLE_PATHS = [
   '/add_task_by_web',
   '/collections',
   '/settings',
-  '/static/'
+  '/visual-learning',
+  '/reading',
+  '/study',
+  '/review',
+  '/manifest.webmanifest'
 ];
+
+const STATIC_SHELL_PATHS = new Set([
+  '/static/index.html',
+  '/static/collections.html',
+  '/static/settings.html',
+  '/static/visual-learning.html',
+  '/static/reading.html',
+  '/static/study.html',
+  '/static/review.html',
+  '/static/history.html',
+  '/static/focus-studio.html'
+]);
 
 function shouldHandle(request) {
   if (request.method !== 'GET') return false;
@@ -69,46 +87,49 @@ function shouldHandle(request) {
   if (url.pathname.startsWith('/view/')) return false;
   if (url.pathname.startsWith('/export/')) return false;
 
-  if (url.pathname.startsWith('/static/')) return true;
+  if (url.pathname.startsWith('/static/')) {
+    return STATIC_SHELL_PATHS.has(url.pathname)
+      || /\.(?:css|js|mjs|png|jpe?g|webp|svg|ico|woff2?|mp3)$/i.test(url.pathname);
+  }
   if (url.search) return false;
-
-  return CACHEABLE_PATHS.some((path) => (
-    path === '/' ? url.pathname === '/' : url.pathname.startsWith(path)
-  ));
+  return CACHEABLE_PATHS.includes(url.pathname);
 }
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then((cache) => cache.addAll(
+        PRECACHE_URLS.map((url) => new Request(url, { cache: 'no-store' }))
+      ))
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('fetch', (event) => {
   if (!shouldHandle(event.request)) return;
 
   event.respondWith(
-    fetch(event.request)
+    // A network-first strategy must also bypass the browser's HTTP cache.
+    // Otherwise a successful fetch can still return an obsolete HTML/CSS file.
+    fetch(event.request, { cache: 'no-store' })
       .then((response) => {
-        if (response && response.ok) {
+        const cacheControl = response.headers.get('Cache-Control') || '';
+        if (response.ok && !/\b(?:no-store|private)\b/i.test(cacheControl)) {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          event.waitUntil(
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy))
+          );
         }
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(async () => {
+        const cache = await caches.open(CACHE_NAME);
+        return await cache.match(event.request) || await caches.match(event.request)
+          || Response.error();
+      })
   );
 });

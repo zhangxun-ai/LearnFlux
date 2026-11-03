@@ -9,6 +9,16 @@ async def _fake_verify_token():
     return {"user_id": "test-user", "api_key": "sk-test"}
 
 
+@pytest.fixture(autouse=True)
+def _isolated_user_mode(monkeypatch):
+    """Route fixtures must not inherit a developer's configured local account."""
+    from video_transcript_api.api.routes import study
+
+    manager = MagicMock()
+    manager.is_multi_user_mode.return_value = False
+    monkeypatch.setattr(study, "user_manager", manager)
+
+
 def _build_app():
     from video_transcript_api.api.routes import study
     from video_transcript_api.api.services.transcription import verify_token
@@ -709,3 +719,64 @@ def test_export_study_markdown(monkeypatch):
     assert response.headers["content-type"].startswith("text/markdown")
     assert "# lesson" in response.text
     service.export_markdown.assert_called_once_with("view-123")
+
+
+def test_comparison_checks_all_owners_before_loading_any_content(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    manager = MagicMock()
+    manager.get_task_by_view_token.side_effect = [
+        {"task_id": "a", "owner_user_id": "test-user"},
+        {"task_id": "b", "owner_user_id": "other-user"},
+    ]
+    service = MagicMock()
+    monkeypatch.setattr(study, "cache_manager", manager)
+    monkeypatch.setattr(study, "get_study_service", lambda: service)
+    result = TestClient(_build_app()).post("/api/study/compare", json={
+        "view_tokens": ["owned", "foreign"], "question": "What differs?",
+    })
+    assert result.status_code == 404
+    service.compare_sources.assert_not_called()
+    manager.get_view_data_by_token.assert_not_called()
+
+
+def test_comparison_uses_durable_owner_without_requiring_audit_link(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    manager = MagicMock()
+    manager.get_task_by_view_token.side_effect = lambda token: {"task_id": token, "owner_user_id": "test-user"}
+    service = MagicMock()
+    service.compare_sources.return_value = {"answer": "A differs from B [S1:P1] [S2:P1]", "sources": []}
+    monkeypatch.setattr(study, "cache_manager", manager)
+    monkeypatch.setattr(study, "get_study_service", lambda: service)
+    result = TestClient(_build_app()).post("/api/study/compare", json={
+        "view_tokens": ["first", "second"], "question": "What differs?",
+    })
+    assert result.status_code == 200
+    service.compare_sources.assert_called_once_with(["first", "second"], "What differs?", [])
+
+
+def test_comparison_rejects_duplicate_or_excessive_sources(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    manager = MagicMock()
+    monkeypatch.setattr(study, "cache_manager", manager)
+    client = TestClient(_build_app())
+    for tokens in (["same", "same"], [str(index) for index in range(6)]):
+        result = client.post("/api/study/compare", json={"view_tokens": tokens, "question": "Compare"})
+        assert result.status_code == 422
+    manager.get_task_by_view_token.assert_not_called()
+
+
+def test_comparison_gates_cached_feishu_content_before_loading(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    manager = MagicMock()
+    manager.get_task_by_view_token.return_value = {"task_id": "private", "owner_user_id": "test-user", "platform": "feishu"}
+    service = MagicMock()
+    monkeypatch.setattr(study, "cache_manager", manager)
+    monkeypatch.setattr(study, "get_study_service", lambda: service)
+    monkeypatch.setattr(study, "config", {"feishu_documents": {"enabled": True, "owner_user_id": "other"}})
+    result = TestClient(_build_app()).post("/api/study/compare", json={"view_tokens": ["first", "second"], "question": "Compare"})
+    assert result.status_code == 403
+    service.compare_sources.assert_not_called()

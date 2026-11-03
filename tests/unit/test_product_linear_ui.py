@@ -122,35 +122,31 @@ def test_visual_css_is_scoped_and_includes_accessibility_states():
                     assert selector.startswith(prefix), f"{filename}: unscoped selector {selector}"
 
 
-def test_versioned_routes_include_the_new_visual_assets():
-    views = _source(PROJECT_ROOT / "src/video_transcript_api/api/routes/views.py")
-    collections = _source(PROJECT_ROOT / "src/video_transcript_api/api/routes/collections.py")
-    visual_learning = _source(PROJECT_ROOT / "src/video_transcript_api/api/routes/visual_learning.py")
-    trend = _source(PROJECT_ROOT / "src/video_transcript_api/api/routes/trend_radar.py")
-    settings = _source(PROJECT_ROOT / "src/video_transcript_api/api/routes/settings.py")
-    context = _source(PROJECT_ROOT / "src/video_transcript_api/api/context.py")
+def test_versioned_routes_include_the_new_visual_assets(tmp_path):
+    from video_transcript_api.api.assets import get_static_asset_version
 
-    assert views.count('static_dir / "css" / "product-linear.css"') >= 2
-    assert 'static_dir / "css" / "product-linear-core.css"' in views
-    for source in (collections, visual_learning):
-        assert '"product-linear.css"' in source
-        assert '"product-linear-core.css"' in source
-    assert '"product-linear.css"' in trend
-    assert '"product-linear-insights.css"' in trend
-    assert '"product-linear.css"' in settings
-    assert '"product-linear-system.css"' in settings
+    css = tmp_path / "css"
+    css.mkdir()
+    version = get_static_asset_version(tmp_path)
     for filename in (
-        "product-linear.css",
-        "product-linear-core.css",
-        "product-linear-system.css",
+        "product-linear.css", "product-linear-core.css",
+        "product-linear-insights.css", "product-linear-system.css",
+        "workbench-wildwood.css",
     ):
-        assert f'"{filename}"' in context
+        (css / filename).write_text("body { color: green; }", encoding="utf-8")
+        changed = get_static_asset_version(tmp_path)
+        assert changed != version, filename
+        version = changed
 
 
 def test_service_worker_refreshes_and_precaches_the_visual_system():
     service_worker = _source(STATIC_DIR / "service-worker.js")
 
-    assert "learnflux-pwa-20261022-beijing-time" in service_worker
+    cache_name = re.search(r"const CACHE_NAME = '(learnflux-pwa-(\d{8})[^']*)';", service_worker)
+    assert cache_name, "Service worker must declare a versioned cache"
+    assert cache_name.group(2) >= "20261030", "New image bundles require a fresh cache version"
+    assert "/static/js/image-diagrams.js" in service_worker
+    assert "/static/css/image-diagrams.css" in service_worker
     assert "/static/js/auth-session.js" in service_worker
     assert "/static/js/time.js" in service_worker
     assert "/static/js/ui-features.js" in service_worker
@@ -173,7 +169,7 @@ def test_visual_learning_skips_removed_optional_toolbar_actions():
     assert "els.printButton?.addEventListener" in javascript
 
 
-def test_result_toc_declares_container_before_pin_state_branches():
+def test_result_toc_declares_container_before_pin_state_branches(tmp_path):
     javascript = _source(STATIC_DIR / "js" / "floating-toc.js")
     template = _source(TEMPLATE_DIR / "transcript.html")
     context = _source(PROJECT_ROOT / "src/video_transcript_api/api/context.py")
@@ -183,4 +179,11 @@ def test_result_toc_declares_container_before_pin_state_branches():
     assert init_source.count(declaration) == 1
     assert init_source.index(declaration) < init_source.index("if (isPinned && !isMobile)")
     assert '/static/js/floating-toc.js?v={{ asset_ver }}' in template
-    assert 'static_dir / "js" / "floating-toc.js"' in context
+    assert "get_static_asset_version(get_static_dir())" in context
+    from video_transcript_api.api.assets import get_static_asset_version
+    script = tmp_path / "js" / "floating-toc.js"
+    script.parent.mkdir()
+    script.write_text("const pinned = false;", encoding="utf-8")
+    before = get_static_asset_version(tmp_path)
+    script.write_text("const pinned = true;", encoding="utf-8")
+    assert get_static_asset_version(tmp_path) != before

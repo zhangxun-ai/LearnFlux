@@ -28,6 +28,7 @@
         <link rel="stylesheet" href="/static/css/editorial.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/visual-learning.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/image-diagrams.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/study.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/product-linear.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/product-linear-core.css?v=__ASSET_VERSION__">
@@ -41,6 +42,7 @@
     <link rel="apple-touch-icon" href="/static/icon/learnflux-leaf-180.png">
     <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
     <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=__ASSET_VERSION__">
+    <link rel="stylesheet" href="/static/css/output-reading.css?v=__ASSET_VERSION__">
 </head>
 <body class="app-shell has-app-shell product-linear page-study workbench-meadow">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -71,6 +73,10 @@
                     <a class="nav-item is-active" href="/study" data-feature="study_player" hidden aria-current="page">
                         <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
                         <span class="nav-label">边播边学</span>
+                    </a>
+                    <a class="nav-item" href="/briefings">
+                        <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></span>
+                        <span class="nav-label">日报</span>
                     </a>
                     <div class="nav-branch">
                         <div class="nav-branch-row">
@@ -151,7 +157,7 @@
         <header class="study-library-head">
             <div>
                 <p class="study-kicker">边播边学</p>
-                <h2 id="study-library-title">选择要学习的音视频</h2>
+                <h1 id="study-library-title">选择要学习的音视频</h1>
                 <p>已解析内容可以直接开始；本地音视频选中后立即播放，解析在后台继续。</p>
             </div>
             <div class="study-library-tabs" role="tablist" aria-label="内容类型" aria-orientation="horizontal">
@@ -342,7 +348,7 @@
                             <button type="button" id="visual-full-note-retry" hidden>重试完整笔记</button>
                         </div>
                         <div class="study-visual-preview study-visual-continuous study-visual-two-layer" id="visual-learning-overview">
-                            <div class="empty-panel"><strong>正在准备视觉速览</strong><span>原文就绪后会自动生成。</span></div>
+                            <div class="empty-panel"><strong>AI 图解</strong><span>打开后查看已有图片，生成由你手动触发。</span></div>
                         </div>
                     </div>
 
@@ -483,6 +489,7 @@
 
     <div class="toast" id="study-toast" role="status" aria-live="polite"></div>
     <script src="/static/js/visual-learning.js?v=__ASSET_VERSION__"></script>
+    <script src="/static/js/image-diagrams.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/study-player-runtime.js?v=__ASSET_VERSION__"></script>
     <script src="/static/js/study.js?v=__ASSET_VERSION__"></script>
 </body>

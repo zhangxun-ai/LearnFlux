@@ -37,6 +37,7 @@ html {
 
 body.app-shell,
 body.app-shell.has-app-shell {
+    --shell-current-sidebar: var(--shell-sidebar);
     min-height: 100vh;
     margin: 0;
     padding: 0 !important;
@@ -853,6 +854,10 @@ body.sidebar-drawer-open .sidebar-overlay {
 body.is-resizing .sidebar-resizer {
     background: var(--shell-accent);
     opacity: 0.5;
+}
+
+@media (max-width: 900px) {
+    .sidebar-resizer { display: none; }
 }
 
 body.is-resizing {

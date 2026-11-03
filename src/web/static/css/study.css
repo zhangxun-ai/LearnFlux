@@ -52,7 +52,7 @@ button {
     background: var(--card);
 }
 
-.study-library-head h2 {
+.study-library-head :is(h1, h2) {
     margin: 0 0 6px;
     font-size: clamp(24px, 3vw, 36px);
     line-height: 1.16;

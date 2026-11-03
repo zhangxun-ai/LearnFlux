@@ -13,6 +13,7 @@ from typing import Optional
 from urllib.parse import urlsplit
 from .logging import setup_logger
 from .xiaohongshu_url import normalize_xiaohongshu_url, xiaohongshu_note_id, url_without_query
+from ..document_sources.feishu import parse_feishu_url
 
 # 创建日志记录器
 logger = setup_logger("url_parser")
@@ -127,7 +128,8 @@ class URLParser:
         logger.info(f"开始解析 URL: {url_without_query(original_url)}")
 
         # 步骤1: 检测并解析短链接
-        is_short_url = self._is_short_url(original_url)
+        document_source = parse_feishu_url(original_url)
+        is_short_url = not document_source and self._is_short_url(original_url)
         if is_short_url:
             logger.info(f"检测到短链接，尝试解析: {original_url}")
             normalized_url = self._resolve_short_url(original_url, timeout)
@@ -139,6 +141,9 @@ class URLParser:
             normalized_url = original_url
 
         normalized_url = normalize_xiaohongshu_url(normalized_url)
+        document = parse_feishu_url(normalized_url)
+        if document:
+            normalized_url = document.url
 
         # 步骤2: 正则匹配提取 platform 和 video_id
         platform, video_id = self._extract_platform_and_id(normalized_url)
@@ -234,6 +239,9 @@ class URLParser:
         Returns:
             tuple: (platform, video_id)，无法识别时返回 ('generic', '')
         """
+        document = parse_feishu_url(url)
+        if document:
+            return "feishu", document.media_id
         for platform, patterns in self.PATTERNS.items():
             if platform == "xiaohongshu":
                 note_id = xiaohongshu_note_id(url)

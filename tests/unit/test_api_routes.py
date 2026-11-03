@@ -308,6 +308,18 @@ class TestTranscribeEndpoint:
         body = resp.json()
         assert body["code"] == 202
 
+    def test_full_queue_returns_prompt_503_without_accepting_or_persisting_work(
+        self, client, mock_cache_manager, mock_task_queue
+    ):
+        for index in range(mock_task_queue.maxsize):
+            mock_task_queue.put_nowait({"id": str(index)})
+        response = client.post(
+            "/api/transcribe", json={"url": "https://www.youtube.com/watch?v=abc123"}
+        )
+        assert response.status_code == 503
+        mock_cache_manager.save_task_request.assert_not_called()
+        assert mock_cache_manager.update_task_status.call_args.args[:2] == ("task-abc-123", "failed")
+
     def test_transcribe_empty_download_url_normalized_to_none(
         self, client, mock_cache_manager
     ):
@@ -791,7 +803,7 @@ class TestViewProgressEndpoint:
         assert "progress-panel" in resp.text
         assert "/view/vt-1/progress" in resp.text
         assert "正在下载音视频" in resp.text
-        assert "已处理" in resp.text
+        assert "距任务创建" in resp.text
         assert "完成后会自动打开结果页" in resp.text
         assert "技术细节" not in resp.text
         assert "置信度" not in resp.text

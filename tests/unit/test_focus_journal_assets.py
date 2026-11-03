@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import subprocess
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -118,3 +119,37 @@ def test_focus_studio_hides_secondary_draft_actions():
         r"body\.product-linear\.page-focus \.deck-actions\s*\{[^}]*display: none;",
         css,
     )
+
+
+def test_focus_actions_use_accurate_chinese_labels_and_clear_only_the_local_draft():
+    html = (PROJECT_ROOT / "src/web/static/focus-studio.html").read_text(encoding="utf-8")
+    assert 'id="focus-clear">清空草稿</button>' in html
+    assert 'aria-expanded="false">导出</button>' in html
+    behavior = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const start = source.indexOf('    function clearText() {');
+const end = source.indexOf('    function setExportMenuOpen(', start);
+const removed = [];
+const context = {
+    editor: {value: 'Demo draft', focus() {}},
+    STORAGE: {text: 'draft', savedAt: 'savedAt'},
+    localStorage: {removeItem(key) {removed.push(key);}},
+    updateSaveStatus(label) {context.status = label;},
+};
+vm.createContext(context);
+vm.runInContext(source.slice(start, end), context);
+context.clearText();
+assert.equal(context.editor.value, '');
+assert.deepEqual(removed, ['draft', 'savedAt']);
+assert.equal(context.status, '草稿已清空');
+context.clearText();
+assert.deepEqual(removed, ['draft', 'savedAt']);
+"""
+    result = subprocess.run(
+        ["node", "-e", behavior, str(PROJECT_ROOT / "src/web/static/js/focus-studio.js")],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

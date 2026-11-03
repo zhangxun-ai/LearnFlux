@@ -1,0 +1,13 @@
+{
+  "purpose": "User-approved visual references only, never factual content for new images.",
+  "references": {
+    "warm-guide.png": {
+      "origin": "User-provided image attachment, Jev learning guide, 2026-10-30",
+      "role": "warm illustrated learning-guide art direction"
+    },
+    "handdrawn.png": {
+      "origin": "User-provided image attachment, AI Agent design patterns, 2026-10-30",
+      "role": "knowledge handdrawing art direction"
+    }
+  }
+}

@@ -2,8 +2,22 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pathlib import Path
 import asyncio
+from types import SimpleNamespace
+
+import pytest
 
 from video_transcript_api.cache.cache_manager import CacheManager
+
+
+@pytest.fixture(autouse=True)
+def isolated_collection_api_identity(monkeypatch):
+    """Keep route ownership checks strict without reading the developer's user mode."""
+    from video_transcript_api.api.routes import collections
+
+    monkeypatch.setattr(
+        collections, "user_manager",
+        SimpleNamespace(is_multi_user_mode=lambda: True),
+    )
 
 
 def test_collection_repository_persists_sources_and_markdown(tmp_path):
@@ -645,7 +659,10 @@ def test_collection_source_retry_requeues_failed_local_source(tmp_path, monkeypa
         cache_manager=cache_manager,
         source_file_dir=str(source_dir),
     )
-    collection = service.create_collection("千里挑一之生涯规划课", "屠龙胭脂井", "video_course")
+    collection = service.create_collection(
+        "千里挑一之生涯规划课", "屠龙胭脂井", "video_course",
+        owner_user_id="u1",
+    )
     source = service.add_existing_source(
         collection_id=collection["id"],
         task_id=failed_task["task_id"],
@@ -826,7 +843,10 @@ def test_collection_source_reveal_opens_preserved_local_file(tmp_path, monkeypat
         cache_manager=cache_manager,
         source_file_dir=str(source_dir),
     )
-    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    collection = service.create_collection(
+        "如何走出人生困局", "屠龙胭脂", "video_course",
+        owner_user_id="u1",
+    )
     source = service.add_existing_source(
         collection_id=collection["id"],
         task_id=task_info["task_id"],
@@ -1205,7 +1225,10 @@ def test_collection_api_generates_and_reads_knowledge_map(tmp_path, monkeypatch)
         cache_manager=cache_manager,
         knowledge_map_generator=fake_map_generator,
     )
-    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    collection = service.create_collection(
+        "如何走出人生困局", "屠龙胭脂", "video_course",
+        owner_user_id="u1",
+    )
     source = service.add_existing_source(
         collection_id=collection["id"],
         task_id=task_info["task_id"],
@@ -1469,7 +1492,10 @@ def test_collection_upload_reuses_cached_local_file(tmp_path, monkeypatch):
 
     repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
     service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
-    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    collection = service.create_collection(
+        "如何走出人生困局", "屠龙胭脂", "video_course",
+        owner_user_id="u1",
+    )
 
     monkeypatch.setattr(collections, "cache_manager", cache_manager)
     monkeypatch.setattr(collections, "get_collection_service", lambda: service)
@@ -1510,7 +1536,10 @@ def test_collection_upload_appends_after_existing_sources(tmp_path, monkeypatch)
     cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
     repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
     service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
-    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    collection = service.create_collection(
+        "如何走出人生困局", "屠龙胭脂", "video_course",
+        owner_user_id="u1",
+    )
     existing = cache_manager.create_task(
         url="local://collection-source/existing/01.mp4",
         use_speaker_recognition=False,
@@ -1563,7 +1592,10 @@ def test_collection_upload_inserts_numbered_source_by_filename_prefix(tmp_path, 
     cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
     repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
     service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
-    collection = service.create_collection("创业中的 100 件事", "屠龙胭脂井", "video_course")
+    collection = service.create_collection(
+        "创业中的 100 件事", "屠龙胭脂井", "video_course",
+        owner_user_id="u1",
+    )
     for position, title in [
         (35, "35-黑子与流量游戏.mp4"),
         (36, "37-重新建立新型组织.mp4"),
@@ -1631,7 +1663,10 @@ def test_cancel_collection_processing_only_cancels_unfinished_sources(tmp_path, 
     cache_manager = CacheManager(cache_dir=str(tmp_path / "cache"))
     repo = LearningCollectionRepository(db_path=str(tmp_path / "collections.db"))
     service = LearningCollectionService(repository=repo, cache_manager=cache_manager)
-    collection = service.create_collection("如何走出人生困局", "屠龙胭脂", "video_course")
+    collection = service.create_collection(
+        "如何走出人生困局", "屠龙胭脂", "video_course",
+        owner_user_id="u1",
+    )
     task_ids = []
     for index, status in enumerate(
         [TaskStatus.SUCCESS, TaskStatus.PROCESSING, TaskStatus.QUEUED],
@@ -1893,7 +1928,8 @@ def test_collections_page_restores_existing_collections():
     assert 'id="obsidian-collection-open"' in html
     assert 'fill="#7C3AED"' in html
     assert 'id="obsidian-collection-preview-list"' in html
-    assert 'id="open-study-player"' not in html
+    assert 'id="open-study-player" href="/study" data-feature="study_player" hidden' in html
+    assert "source.study_available && source.study_url" in js
     assert "cancel-collection" in html
     assert "lc-history-delete" in js
     assert "deleteCollectionById" in js
@@ -2259,11 +2295,13 @@ def test_collection_api_filters_and_options(tmp_path, monkeypatch):
         creator_name="屠龙胭脂",
         collection_type="video_course",
         description="提炼破局判断标准",
+        owner_user_id="u1",
     )
     service.create_collection(
         title="富贵的一人 IP 课程",
         creator_name="富贵",
         collection_type="document_topic",
+        owner_user_id="u1",
     )
 
     monkeypatch.setattr(collections, "get_collection_service", lambda: service)

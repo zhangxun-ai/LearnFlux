@@ -138,6 +138,22 @@ def test_provider_without_finish_reason_remains_compatible(monkeypatch, install_
     assert _call_text() == CONTENT
 
 
+@pytest.mark.parametrize("finish_reason", ["stop", "length", "aborted"])
+def test_study_answers_use_an_independent_ceiling_and_reject_truncation(
+    monkeypatch, install_http_stub, finish_reason
+):
+    client = _client()
+    payloads = install_http_stub(client, _response(finish_reason=finish_reason))
+    monkeypatch.setattr(llm_mod, "get_sync_client", lambda: client)
+    monkeypatch.setattr(llm_mod, "_default_config", {"llm": {"study_chat_max_tokens": 6144}})
+    if finish_reason == "stop":
+        assert llm_mod.call_llm_api(model=PRIMARY_MODEL, prompt="Explain the evidence.", task_type="study_chat") == CONTENT
+    else:
+        with pytest.raises(llm_mod.LLMCallError, match="Incomplete study_chat"):
+            llm_mod.call_llm_api(model=PRIMARY_MODEL, prompt="Explain the evidence.", task_type="study_chat")
+    assert payloads[0]["max_tokens"] == 6144
+
+
 @pytest.mark.parametrize("finish_reason", ["length", "aborted"])
 def test_non_summary_text_calls_keep_existing_behavior(
     monkeypatch, install_http_stub, finish_reason

@@ -871,7 +871,7 @@
     function updateSaveStatus(label) {
         const savedAt = localStorage.getItem(STORAGE.savedAt);
         const clock = formatClock(savedAt);
-        saveStatus.textContent = label || (clock ? 'Saved ' + clock : 'Saved');
+        saveStatus.textContent = label || (clock ? '已保存 ' + clock : '已保存');
         saveStatus.classList.add('is-fresh');
         window.setTimeout(() => saveStatus.classList.remove('is-fresh'), 900);
     }
@@ -892,7 +892,7 @@
         const type = format === 'md' ? 'md' : 'txt';
         const content = editor.value;
         if (!content.trim()) {
-            updateSaveStatus('Empty');
+            updateSaveStatus('暂无内容');
             return;
         }
         const mime = type === 'md' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8';
@@ -913,7 +913,7 @@
         editor.value = '';
         localStorage.removeItem(STORAGE.text);
         localStorage.removeItem(STORAGE.savedAt);
-        updateSaveStatus('Released');
+        updateSaveStatus('草稿已清空');
         editor.focus();
     }
 
@@ -1035,7 +1035,7 @@
         updateIntensity(state.intensity);
         updateVolume(state.volume);
         updateSound(state.sound);
-        updateSaveStatus(editor.value.trim() ? undefined : 'Ready');
+        updateSaveStatus(editor.value.trim() ? undefined : '空白草稿');
         pomodoro.paint();
         renderer.init();
         setTimeout(() => editor.focus(), 120);

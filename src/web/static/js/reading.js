@@ -2,6 +2,7 @@
     'use strict';
 
     const PANEL_CLOSE_DELAY_MS = 300;
+    const LOCAL_OCR_SETUP_MESSAGE = '扫描件需要本地 OCR。请在项目目录运行 uv sync --extra ocr 后重启，再打开文档重试。';
     const initialMatch = window.location.pathname.match(/^\/reading(?:\/([^/]+))?\/?$/);
     const state = {
         documentId: initialMatch && initialMatch[1] ? decodeURIComponent(initialMatch[1]) : null,
@@ -266,7 +267,8 @@
             const data = await api('/api/reading/documents');
             state.libraryItems = await enrichLibraryItems(data.items || []);
             renderLibrary();
-            setStatus('');
+            const needsOcrSetup = state.libraryItems.some((item) => item.parse_error === 'local_ocr_unavailable');
+            setStatus(needsOcrSetup ? LOCAL_OCR_SETUP_MESSAGE : '', needsOcrSetup);
             clearTimeout(state.ocrPollTimer);
             if (state.libraryItems.some((item) => item.status === 'processing')) {
                 state.ocrPollTimer = setTimeout(loadLibrary, 3000);
@@ -293,7 +295,7 @@
                     await loadLibrary();
                     return;
                 }
-                throw new Error('本地 OCR 尚未就绪，请按服务端说明安装后重试。');
+                throw new Error(LOCAL_OCR_SETUP_MESSAGE);
             }
             if (!detail.chapters || !detail.chapters.length) throw new Error('文档没有可阅读的文字内容');
             state.documentId = documentId;

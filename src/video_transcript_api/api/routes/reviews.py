@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from ...reviews import ReviewRepository, ReviewService
 from ...reviews.repository import ReviewDataError
+from ..assets import get_static_asset_version
 from ..context import get_cache_manager, get_config, get_repository_database, get_static_dir
 from ..services.transcription import verify_token
 
@@ -227,17 +228,7 @@ async def review_page(section: str | None = None):
     page = static_dir / "review.html"
     if not page.exists():
         raise HTTPException(status_code=404, detail="复盘页面不存在")
-    version_files = [
-        page,
-        static_dir / "css" / "review.css",
-        static_dir / "css" / "app-shell.css",
-        static_dir / "css" / "product-linear.css",
-        static_dir / "css" / "product-linear-core.css",
-        static_dir / "js" / "review.js",
-        static_dir / "js" / "app-shell.js",
-        static_dir / "js" / "ui-features.js",
-    ]
-    version = str(max((path.stat().st_mtime_ns for path in version_files if path.exists()), default=0))
+    version = get_static_asset_version(static_dir)
     return HTMLResponse(
         page.read_text(encoding="utf-8").replace("__ASSET_VERSION__", version),
         headers={"Cache-Control": "no-cache"},

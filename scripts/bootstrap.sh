@@ -123,5 +123,6 @@ if [ "$INSTALL_LOCAL_WHISPER" = true ]; then
     install_local_whisper
 fi
 
-info "Bootstrap complete. Start the service: uv run python main.py --start"
-info "Open http://127.0.0.1:8000/settings, configure an LLM, then try a short text."
+info "Bootstrap complete. Start the service: bash server.sh start"
+info "Configure LEARNFLUX_LLM_* in your private .env, restart, then try a short text."
+info "Default settings URL: http://127.0.0.1:8000/settings (adjust for your configured port)."

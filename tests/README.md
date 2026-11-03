@@ -12,6 +12,14 @@
 
 ## 默认验证
 
+配置环境变量与私密文件保护的隔离回归（不加载根 `tests/conftest.py` 的通知初始化）：
+
+```bash
+PYTHONPATH=src uv run --extra dev pytest --noconftest tests/unit/test_config_env.py tests/unit/test_config_overrides.py tests/unit/test_public_configuration.py tests/unit/test_settings_service.py tests/unit/test_server_script.py -q
+```
+
+覆盖环境变量优先级、模型统一与单独覆盖、配置不落库、设置页脱敏 / 只读、dotenv 端口一致性、不执行环境文件中的 Shell 文本，以及私密 `.env` 变体 / 配置备份 / Cookie 忽略规则。测试使用临时配置和数据库；`tests/test_view_token_fix.py` 已改为临时缓存测试，不再访问真实缓存。真实飞书 / 企业微信通知测试仅在显式提供 `LEARNFLUX_TEST_FEISHU_WEBHOOK` / `LEARNFLUX_TEST_WECHAT_WEBHOOK` 时运行；变量缺失则跳过。它们不自动加载根 `.env`，不得在默认离线验证中发送消息。
+
 首次安装与开源图文工具的离线检查：
 
 ```bash

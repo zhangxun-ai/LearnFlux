@@ -9,6 +9,8 @@ import subprocess
 import sys
 import time
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,6 +24,11 @@ def test_start_installs_keepalive_launch_agent_on_macos(tmp_path):
     """macOS start must survive the shell or Codex session that invoked it."""
     script = tmp_path / "server.sh"
     shutil.copy2(PROJECT_ROOT / "server.sh", script)
+    package = tmp_path / "src/video_transcript_api"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    shutil.copy2(PROJECT_ROOT / "src/video_transcript_api/config_env.py", package / "config_env.py")
+    (tmp_path / ".env").write_text("LEARNFLUX_API_PORT=65431\n")
     (tmp_path / "config").mkdir()
     (tmp_path / "config" / "config.jsonc").write_text(
         '{"api": {"port": 65432}}\n',
@@ -67,6 +74,8 @@ fi
             "LEARNFLUX_PYTHON_BIN": sys.executable,
             "TEST_LAUNCHCTL_LOG": str(launchctl_log),
             "TEST_LAUNCHD_MARKER": str(marker),
+            "LEARNFLUX_LLM_API_KEY": "test-secret-must-stay-out-of-plist",
+            "LEARNFLUX_API_PORT": "",
         }
     )
 
@@ -89,7 +98,101 @@ fi
     assert service["RunAtLoad"] is True
     assert service["KeepAlive"] is True
     assert service["WorkingDirectory"] == str(tmp_path)
+    assert "LEARNFLUX_LLM_API_KEY" not in service["EnvironmentVariables"]
+    assert service["EnvironmentVariables"]["LEARNFLUX_API_PORT"] == ""
+    assert "http://localhost:65432" in result.stdout
+    assert "test-secret-must-stay-out-of-plist" not in plist_path.read_text()
     assert "bootstrap" in launchctl_log.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("uv_directory", [".local/bin", ".cargo/bin"])
+def test_start_finds_bootstrap_tools_outside_shell_path(tmp_path, uv_directory):
+    """A fresh install can start before reopening the shell or installing Python globally."""
+    script = tmp_path / "server.sh"
+    shutil.copy2(PROJECT_ROOT / "server.sh", script)
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config/config.jsonc").write_text('{"api": {"port": 8000}}\n')
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    project_python = tmp_path / ".venv/bin/python"
+    project_python.parent.mkdir(parents=True)
+    _write_executable(
+        project_python,
+        '#!/usr/bin/env bash\nexec "$TEST_PYTHON" "$@"\n',
+    )
+    # A system Python must not be required after bootstrap prepared .venv.
+    _write_executable(fake_bin / "python3", "#!/usr/bin/env bash\nexit 89\n")
+    private_home = tmp_path / "home"
+    uv = private_home / uv_directory / "uv"
+    uv.parent.mkdir(parents=True)
+    _write_executable(uv, "#!/usr/bin/env bash\nexit 0\n")
+    marker = tmp_path / "started"
+    _write_executable(
+        fake_bin / "launchctl",
+        '''#!/usr/bin/env bash
+if [ "$1" = print ]; then exit 1; fi
+if [ "$1" = bootstrap ]; then : > "$TEST_MARKER"; fi
+''',
+    )
+    _write_executable(
+        fake_bin / "lsof",
+        '#!/usr/bin/env bash\nif [ -f "$TEST_MARKER" ]; then printf "4321\\n"; fi\n',
+    )
+    _write_executable(fake_bin / "sleep", "#!/usr/bin/env bash\nexit 0\n")
+    launch_agent_dir = tmp_path / "LaunchAgents"
+    env = os.environ | {
+        "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin",
+        "HOME": str(private_home),
+        "LEARNFLUX_FORCE_LAUNCHD": "1",
+        "LEARNFLUX_LAUNCH_AGENT_DIR": str(launch_agent_dir),
+        "TEST_PYTHON": sys.executable,
+        "TEST_MARKER": str(marker),
+    }
+    env.pop("LEARNFLUX_PYTHON_BIN", None)
+    env.pop("LEARNFLUX_UV_BIN", None)
+    result = subprocess.run(
+        ["/bin/bash", str(script), "start"],
+        cwd=tmp_path, env=env, text=True, capture_output=True, timeout=5,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    with (launch_agent_dir / "com.learnflux.local.plist").open("rb") as handle:
+        service = plistlib.load(handle)
+    assert service["ProgramArguments"] == [str(uv), "run", "python", "main.py", "--start"]
+    assert "http://localhost:8000" in result.stdout
+
+
+@pytest.mark.parametrize("exported_port,expected_port", [(None, "65431"), ("65432", "65432"), ("", "8000")])
+def test_status_uses_application_dotenv_port_without_executing_it(tmp_path, exported_port, expected_port):
+    shutil.copy2(PROJECT_ROOT / "server.sh", tmp_path / "server.sh")
+    package = tmp_path / "src/video_transcript_api"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    shutil.copy2(PROJECT_ROOT / "src/video_transcript_api/config_env.py", package / "config_env.py")
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config/config.jsonc").write_text('{"api": {"port": 8000}}')
+    marker = tmp_path / "must-not-be-created"
+    (tmp_path / ".env").write_text(
+        f'LEARNFLUX_API_PORT=65431\nUNUSED=$(touch "{marker}")\n'
+        'LEARNFLUX_LLM_API_KEY=test-private-value\n'
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(fake_bin / "lsof", '#!/usr/bin/env bash\nprintf "4321\\n"\n')
+    env = os.environ | {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "LEARNFLUX_PYTHON_BIN": sys.executable,
+    }
+    env.pop("LEARNFLUX_API_PORT", None)
+    if exported_port is not None:
+        env["LEARNFLUX_API_PORT"] = exported_port
+    result = subprocess.run(
+        ["/bin/bash", str(tmp_path / "server.sh"), "status"],
+        cwd=tmp_path, env=env, text=True, capture_output=True, timeout=5,
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"http://localhost:{expected_port}" in result.stdout
+    assert "test-private-value" not in result.stdout + result.stderr
+    assert not marker.exists()
 
 
 def test_stop_unloads_and_removes_launch_agent(tmp_path):

@@ -166,6 +166,27 @@ class _Controller:
         self.updates.append(values)
 
 
+def test_environment_managed_settings_are_masked_and_never_persisted(monkeypatch):
+    monkeypatch.setenv("LEARNFLUX_LLM_API_KEY", "env-only-test-key")
+    monkeypatch.setenv("LEARNFLUX_LLM_MODEL", "test-model")
+    monkeypatch.setattr(svc, "load_config", lambda: {
+        "llm": {"api_key": "env-only-test-key", "summary_model": "test-model"},
+    })
+    monkeypatch.setattr(svc, "load_config_overrides", lambda: {})
+    saved = []
+    monkeypatch.setattr(svc, "save_config_overrides", saved.append)
+    data = svc.write_settings({
+        "llm.api_key": "env-only-test-key",
+        "llm.summary_model": "attempted-browser-override",
+        "log.level": "INFO",
+    }, controller=_Controller())
+    assert saved == [{"log": {"level": "INFO"}}]
+    assert _field(data, "llm.api_key")["read_only"] is True
+    assert _field(data, "llm.summary_model")["managed_by"] == "environment"
+    assert "env-only-test-key" not in json.dumps(data)
+    assert "read_only" not in _field(svc.get_schema(), "llm.api_key")
+
+
 @pytest.mark.unit
 def test_concurrency_write_is_partial_and_updates_runtime_after_persistence(monkeypatch):
     saved = {}

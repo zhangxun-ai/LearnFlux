@@ -27,13 +27,55 @@ LAUNCHD_LABEL="${LEARNFLUX_LAUNCHD_LABEL:-com.learnflux.local}"
 LEGACY_LAUNCHD_LABEL="com.codex.vta.devserver"
 LAUNCH_AGENT_DIR="${LEARNFLUX_LAUNCH_AGENT_DIR:-${HOME}/Library/LaunchAgents}"
 LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/$LAUNCHD_LABEL.plist"
-PYTHON_BIN="${LEARNFLUX_PYTHON_BIN:-$(command -v python3 2>/dev/null || true)}"
+PYTHON_BIN="${LEARNFLUX_PYTHON_BIN:-}"
+if [ -z "$PYTHON_BIN" ]; then
+    if [ -x "$SCRIPT_DIR/.venv/bin/python" ]; then
+        PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
+    else
+        PYTHON_BIN="$(command -v python3 2>/dev/null || true)"
+    fi
+fi
 UV_BIN="${LEARNFLUX_UV_BIN:-$(command -v uv 2>/dev/null || true)}"
+# bootstrap may install uv before the invoking shell has refreshed its PATH.
+if [ -z "$UV_BIN" ]; then
+    for candidate in "${HOME}/.local/bin/uv" "${HOME}/.cargo/bin/uv"; do
+        if [ -x "$candidate" ]; then
+            UV_BIN="$candidate"
+            break
+        fi
+    done
+fi
 STOP_TIMEOUT_SECONDS="${STOP_TIMEOUT_SECONDS:-10}"
 
 # 从配置读取端口（取第一个 "port": NNNN，即 api.port），读取失败回退 8000
 PORT="$(grep -oE '"port"[[:space:]]*:[[:space:]]*[0-9]+' "$CONFIG_FILE" 2>/dev/null | grep -oE '[0-9]+' | head -1)"
 PORT="${PORT:-8000}"
+
+# Read dotenv as data, never as shell code. Reuse application port validation
+# without importing the application, connecting databases, or printing secrets.
+if [ -f "$SCRIPT_DIR/.env" ] || [ "${LEARNFLUX_API_PORT+x}" = x ]; then
+    if [ -z "$PYTHON_BIN" ] || [ ! -x "$PYTHON_BIN" ]; then
+        printf 'Error: run bash scripts/bootstrap.sh before reading .env configuration.\n' >&2
+        exit 1
+    fi
+    PORT="$("$PYTHON_BIN" - "$SCRIPT_DIR" "$PORT" <<'PY'
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root / "src"))
+from video_transcript_api.config_env import apply_environment_overrides
+
+load_dotenv(root / ".env", override=False)
+try:
+    config = apply_environment_overrides({"api": {"port": int(sys.argv[2])}})
+except ValueError:
+    raise SystemExit("Invalid LEARNFLUX_API_PORT; expected an integer from 1 to 65535.") from None
+print(config["api"]["port"])
+PY
+)" || exit 1
+fi
 
 # ---------- 输出着色（非终端时自动关闭）----------
 if [ -t 1 ]; then
@@ -112,6 +154,11 @@ service = {
         "PYTHONUNBUFFERED": "1",
     },
 }
+# Keep explicitly exported listener settings consistent with the port check.
+# Credentials stay in .env; never serialize them into a LaunchAgent plist.
+for name in ("LEARNFLUX_API_HOST", "LEARNFLUX_API_PORT"):
+    if name in os.environ:
+        service["EnvironmentVariables"][name] = os.environ[name]
 temporary_path = f"{plist_path}.tmp"
 with open(temporary_path, "wb") as handle:
     plistlib.dump(service, handle, sort_keys=False)

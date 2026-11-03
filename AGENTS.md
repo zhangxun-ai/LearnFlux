@@ -12,7 +12,14 @@ Use uv for dependency management and command execution.
 # Install project and test dependencies
 uv sync --extra dev
 
-# Start the API
+# Start/manage the API in the background (default port 8000)
+bash server.sh start
+bash server.sh status
+bash server.sh log
+bash server.sh restart
+bash server.sh stop
+
+# Foreground troubleshooting, after stopping the background service
 uv run python main.py --start
 
 # verify-fast: fast unit suite
@@ -58,6 +65,10 @@ Use pytest. `verify-fast` covers unit tests; `verify-full` covers the default of
 Commit messages follow the current log style: concise, imperative Chinese summaries (`修复 API 并发重试`). Group related edits before opening a PR. PR descriptions should outline scope, note config or schema touchpoints, reference issues with `#123`, and attach evidence (pytest output, manual steps, API samples). Flag any follow-up actions such as restarting services or updating `config/config.json`.
 
 ## Security & Configuration Notes
+
+User-specific secrets, endpoints, model IDs and paths belong in private environment/config files, never source code or public fixtures. `main.py` loads root `.env`; `config_env.py` applies nonempty environment overrides after JSONC and saved settings. Environment-managed settings are read-only and must not be persisted by the settings API. `server.sh` shares dotenv port validation without sourcing shell code or importing the app. On macOS, put private values in `.env`; LaunchAgent does not copy terminal credentials into its plist.
+
+New-user Agent setup defaults to PostgreSQL; SQLite remains the safe template default for a minimal manual install. Follow `docs/guides/postgresql.md`: create a dedicated database/role, then startup applies checked-in versioned SQL migrations automatically. Validate the migration ledger and required tables; never run write/delete integration checks against an actual user's database. Explicit webhook tests use `LEARNFLUX_TEST_FEISHU_WEBHOOK` / `LEARNFLUX_TEST_WECHAT_WEBHOOK` and skip without them. See `docs/security/configuration-secrets-review.md` for the credential review and outstanding historical rotation requirements.
 Do not commit live credentials; extend `config.example.json` and document defaults instead. Keep generated artifacts in `data/` and `logs/` out of patches unless troubleshooting. When working with remote transcription servers, load tokens from environment variables and clear `data/temp` via `scripts/cleanup_cache.py` after tests so sensitive media does not linger.
 
 ## Social Data & TikHub Usage

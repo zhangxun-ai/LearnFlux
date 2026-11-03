@@ -3,8 +3,8 @@
 设计要点：
 - SCHEMA 单一来源声明界面可配置项；core=默认展示，advanced=默认折叠（小白看到的首屏只有核心项）。
 - 不含 api.auth_token：它是“管理口令”，只在页面顶部作为加载/保存的钥匙，不重复成一个配置字段。
-- 写入只落到 data/config.db：界面改 → 库里对应变量行更新 → 重启由 load_config 深合并到 config.jsonc 之上。
-  页面填了用页面值，没填用默认值。读取永远脱敏，绝不回显完整密钥。
+- 页面值只写入所选持久化后端的 config_overrides；重启后合并到私有 JSONC。
+  非空环境变量最终优先且不落库，页面对这些字段只读。密钥永远脱敏。
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any
 
 import requests
 
+from ...config_env import environment_managed_paths
 from ...transcriber.concurrency import resolve_transcription_limits
 
 from ...utils.logging import (
@@ -161,6 +162,7 @@ def _schema_groups(
 ) -> list[dict[str, Any]]:
     """生成分组字段；with_values=True 时附带当前生效值（覆盖值或默认值）。"""
     cfg = load_config() if with_values else {}
+    managed_paths = environment_managed_paths(cfg) if with_values else set()
     groups: list[dict[str, Any]] = []
     for g in SCHEMA:
         fields: list[dict[str, Any]] = []
@@ -170,6 +172,9 @@ def _schema_groups(
                 if opt in spec:
                     field[opt] = spec[opt]
             if with_values:
+                if spec["key"] in managed_paths:
+                    field["read_only"] = True
+                    field["managed_by"] = "environment"
                 raw = _get_by_path(cfg, spec["key"])
                 if effective_limits is not None:
                     if spec["key"] == "concurrent.local_asr_workers":
@@ -279,6 +284,10 @@ def write_settings(payload: dict[str, Any], *, controller=None) -> dict[str, Any
     - 与既有 overrides 深合并后整体落盘。
     """
     payload = payload or {}
+    # Environment-owned values must never be copied into the settings database,
+    # including submissions from an older browser that still sends every field.
+    managed_paths = environment_managed_paths({})
+    payload = {key: value for key, value in payload.items() if key not in managed_paths}
     new_override: dict[str, Any] = {}
 
     if controller is not None:

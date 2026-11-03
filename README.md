@@ -20,24 +20,45 @@ LearnFlux 是一个可以部署在自己电脑或服务器上的 AI 学习工具
 
 第一次使用，建议先粘贴一段文字，生成一份 AI 总结。**这一步只需配置模型服务，不需要安装音视频转录或扫描件识别工具。**
 
-准备 Git、Bash 和 curl，在 macOS / Linux 终端运行：
+**不熟悉 Git、终端或数据库？** 复制[新手安装提示词](docs/prompts/macos-local-quick-start.md)交给 WorkBuddy、Codex 等能操作本机的 Agent。它会引导 PostgreSQL 安装、建库与自动建表，配置模型并完成“导入 → AI 解读 → 查看 → 导出”的实际验证。已有环境会保留；也可以明确选择 SQLite 轻量体验。
+
+准备 Git、Bash、curl 和 lsof（macOS 通常已自带 lsof），在 macOS / Linux 终端运行：
 
 ```bash
 git clone https://github.com/zhangxun-ai/LearnFlux.git
 cd LearnFlux
+cp -n .env.example .env
+chmod 600 .env
 bash scripts/bootstrap.sh
-uv run python main.py --start
+bash server.sh start
 ```
 
-脚本会安装 uv、Python 3.11 和应用所需的依赖，并创建本机配置与随机管理口令。已有配置和数据会保留。首次安装需要下载依赖，请等待脚本执行完成。
+`bootstrap.sh` 用于首次安装：准备 uv、Python 3.11 和应用依赖，并创建本机配置与随机管理口令；已有配置和数据会保留。首次安装需要下载依赖，请等待执行完成。以后启动只需在项目根目录运行 `bash server.sh start`，无需重复安装。
 
-1. 打开 [系统设置](http://127.0.0.1:8000/settings)，填写已有模型服务的 API Key、接口地址和可用模型，保存。
+`.env.example` 是可公开的[环境变量模板](.env.example)，`cp -n` 会保留已有 `.env`。**真实 Key、服务地址和模型名只填在自己的 `.env` 中**；非空环境变量优先于系统设置和私有主配置，修改后重启。已有用户也可继续使用设置页配置。真实 `.env`、私有配置及 Cookie 不应上传到 GitHub。
+
+上面的手动命令使用模板默认的 SQLite；项目也支持日常使用的 PostgreSQL。需要 PostgreSQL 时，先按[数据库指南](docs/guides/postgresql.md)安装服务、创建专用库，并在 `.env` 设置 `LEARNFLUX_PERSISTENCE_BACKEND=postgres` 与 `DATABASE_URL` 后再启动。**表结构由仓库内的版本化 SQL 在首次启动时自动创建**，无需自己手工建表。已有 PostgreSQL 用户保留原连接，不要改回 SQLite。S3、云端 ASR 等按[配置指南](docs/guides/configuration.md)启用。
+
+`server.sh` 会在后台启动服务，默认地址为 **<http://127.0.0.1:8000>**。端口优先读取 `LEARNFLUX_API_PORT`，未设置时沿用 `config/config.jsonc` 的 `api.port`；如果改过端口，下面的访问地址也要相应调整。macOS 使用用户级 LaunchAgent 保持运行，并在用户登录时自动启动；执行 `stop` 会卸载该启动项。
+
+1. 在本机 `.env` 中填写 `LEARNFLUX_LLM_API_KEY`、`LEARNFLUX_LLM_BASE_URL`、`LEARNFLUX_LLM_MODEL`，重启后打开[系统设置](http://127.0.0.1:8000/settings)核对生效值；密钥只显示脱敏状态。
 2. 打开 [单篇深度学习](http://127.0.0.1:8000/add_task_by_web)，选择 **粘贴文字**，粘贴[示例文字](examples/first-learning.md)，点击 **开始学习**。
 3. 在近期任务中等待处理完成，打开结果，阅读 AI 总结。需要保存时，点击 **导出**。
 
-AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不需要 API Key；处理音视频或扫描件时，再安装相应工具。在终端按 `Ctrl+C` 可停止服务。
+AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不需要 API Key；处理音视频或扫描件时，再安装相应工具。
 
-遇到问题、需要后台运行，或使用 Windows / Docker：[完整首次使用指南](docs/guides/quickstart.md)。也可以复制[安装提示词](docs/prompts/macos-local-quick-start.md)交给能操作本机终端的 Agent。
+日常管理在项目根目录运行：
+
+```bash
+bash server.sh status   # 查看运行状态
+bash server.sh log      # 查看实时日志，Ctrl+C 仅退出日志查看
+bash server.sh restart  # 修改配置或更新代码后重启
+bash server.sh stop     # 停止后台服务
+```
+
+需要前台排错时，先用 `bash server.sh stop` 停止后台服务，再运行 `uv run python main.py --start`；此时 `Ctrl+C` 才是停止服务。不要同时启动两个实例。
+
+遇到问题，或使用 Windows / Docker：[完整首次使用指南](docs/guides/quickstart.md)。也可以复制[安装提示词](docs/prompts/macos-local-quick-start.md)交给能操作本机终端的 Agent。
 
 ## 功能介绍
 
@@ -142,7 +163,8 @@ AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不�
 | 一段自己的文字 | 单篇学习 → 粘贴文字 | AI 解读需要模型服务；不需要语音转录 |
 | 普通文档、书籍 | 心流阅读 → 导入文档 | 本地解析；扫描件另装 OCR |
 | 本地音视频 | 单篇 / 系列 / 边播边学 | FFmpeg 与合适的转录引擎 |
-| YouTube、Bilibili、播客等 | 粘贴链接 | 可用字幕优先；无字幕时需要转录 |
+| YouTube | 粘贴链接 | 可用字幕优先；无字幕时需要 FFmpeg 与转录引擎 |
+| Bilibili、播客音频等 | 粘贴链接 | 下载音视频后转录，需要 FFmpeg 与转录引擎 |
 | 抖音、小红书等社媒链接 | 粘贴链接 | 通常需要 TikHub；部分来源还受登录、限流或网络影响 |
 | 飞书 Wiki / Docx | 粘贴链接 | 已登录的飞书命令行工具及文档读取权限 |
 | 手机复制的链接 | iPhone 快捷指令 | 已配置快捷指令，运行服务的电脑保持在线 |
@@ -159,7 +181,7 @@ bash scripts/bootstrap.sh --with-local-whisper
 uv sync --extra ocr
 ```
 
-音视频转录可选择本机 Whisper、CapsWriter 或 FunASR，安装后还需按[配置指南](docs/guides/configuration.md)启用。Whisper / OCR 首次使用可能需要下载模型。云端转录、TikHub 和 AI 模型分别由各服务商计费；部分平台还需要登录，并可能受访问频率或网络限制影响。
+普通音视频转录可使用本机 Whisper 或 CapsWriter；需要区分说话人时使用 FunASR。安装后还需按[配置指南](docs/guides/configuration.md)启用。Whisper / OCR 首次使用可能需要下载模型。云端转录、TikHub 和 AI 模型分别由各服务商计费；部分平台还需要登录，并可能受访问频率或网络限制影响。
 
 [配置与 Key](docs/guides/configuration.md) · [按需配置服务的 Agent 提示词](docs/prompts/optional-services.md) · [手机收集](docs/guides/mobile-shortcut.md) · [飞书归档](docs/guides/feishu-archive.md)
 
@@ -167,7 +189,7 @@ uv sync --extra ocr
 
 | 遇到什么 | 先检查什么 |
 | --- | --- |
-| 页面打不开 | 终端是否仍在运行、实际端口、启动日志；避免重复启动两个实例。 |
+| 页面打不开 | 运行 `bash server.sh status` 和 `bash server.sh log`，确认服务状态、实际端口与启动日志；避免重复启动两个实例。 |
 | 有原文，没有 AI 解读 | Key、接口地址、模型名是否配套；查看具体任务错误。 |
 | 音视频无法转录 | 已选择的转录引擎、模型是否下载、FFmpeg 与源文件是否可用。 |
 | 扫描 PDF 等待 OCR | 安装 `ocr` extra 后重启，在书架重试。 |

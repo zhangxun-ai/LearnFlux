@@ -20,20 +20,45 @@ python3 scripts/init_config.py
 
 不要直接复制带空口令的模板启动。模板用于查阅配置项；初始化工具会保留模板注释并填好本机连接所需的值。开发测试依赖使用 `bash scripts/bootstrap.sh --dev` 安装。
 
-只有启用云端 ASR、PostgreSQL 或 S3 等服务时，才需要额外准备环境变量文件：
+仓库中的 `.env.example` 可以公开，真实 `.env` 只留在本机。首次安装在项目根目录复制模板；已有文件时 `cp -n` 会保留原内容：
 
 ```bash
-cp .env.example .env
+cp -n .env.example .env
 chmod 600 .env
 ```
 
 不要把 `config/config.jsonc`、`.env` 或前端保存密钥的 `data/config.db` 提交到 Git。配置项以 `config/config.example.jsonc` 和 `.env.example` 为准。
 
+### 环境变量哪些必须填
+
+**仅启动 SQLite 本机页面没有用户必填的凭据**；PostgreSQL 需要 `DATABASE_URL`，真实 AI 学习需要下面的模型配置。用户的 Key、服务地址和模型名建议只填写在自己的 `.env`，不要改源代码或公开模板。主文字模型和 TikHub 使用模板列出的 `LEARNFLUX_*` 名称，不会自动读取其他项目的 `OPENAI_API_KEY`、`LLM_API_KEY` 或 `TIKHUB_API_KEY`；手动图解的独立 `OPENAI_API_KEY` 见下表。
+
+| 使用场景 | 必填项 / 位置 | 不使用时 |
+| --- | --- | --- |
+| 本机启动、阅读、写作 | 无需填写环境变量 | 保留模板默认值 |
+| AI 解读、校对、问答 | `LEARNFLUX_LLM_API_KEY`、`LEARNFLUX_LLM_BASE_URL`、`LEARNFLUX_LLM_MODEL` | 无法验证依赖模型的学习结果；已有设置页配置可沿用 |
+| 抖音 / 小红书等对应来源 | `LEARNFLUX_TIKHUB_API_KEY`，可选 `LEARNFLUX_TIKHUB_BASE_URL` | 不影响文字学习 |
+| PostgreSQL | `LEARNFLUX_PERSISTENCE_BACKEND=postgres` 和 `DATABASE_URL`，先完成迁移 | 保留 `sqlite`，连接串留空 |
+| S3 | `LEARNFLUX_OBJECT_BACKEND=s3` 和模板中的五个 `LEARNFLUX_S3_*` 连接 / 凭据项 | 保留 `local`，凭据留空 |
+| 百炼云端 ASR | `DASHSCOPE_API_KEY`、`DASHSCOPE_WORKSPACE_ID`、`DASHSCOPE_API_HOST`，另在主配置启用 | 三项留空，云端 ASR 关闭 |
+| 百炼次级模型端点 | `DASHSCOPE_API_KEY`，且端点显式配置 `api_key_env` | 留空；不会自动替代主模型配置 |
+| 手动 AI 图解 | `OPENAI_API_KEY`，使用 OpenAI 官方服务，与主文字模型独立 | 留空时不可生图；显式生成可能计费，见[图解指南](image-diagrams.md) |
+| LongCut / 视频号本地解密服务 | 模板中的地址、路径覆盖项，按对应能力配置 | 留空沿用主配置 |
+| 飞书交付状态 / 日报集成 | 可选私有配置路径 `LEARNFLUX_FEISHU_ARCHIVE_CONFIG` / `LEARNFLUX_BRIEFINGS_CONFIG` | 保持注释，不能设成空值覆盖默认路径 |
+
+`main.py` 启动时自动加载项目根目录 `.env`，已有进程环境变量优先，修改后需重启。文件按 `python-dotenv` 语法读取，不要把未知来源的 `.env` 当 Shell 脚本 `source` 执行。`POSTGRES_*` 是部署 / 迁移辅助项，不会自动拼装 `DATABASE_URL`，也不代替应用连接串。
+
+应用配置优先级为 **非空环境变量 > 已保存的设置覆盖 > 私有 JSONC 配置**。环境变量不会写回数据库；设置页对这些字段显示只读提示，保存其他字段时不会把它们一并存入库中。移除环境变量并重启后恢复已有配置。`LEARNFLUX_LLM_MODEL` 统一覆盖主 LLM 的各任务模型，单独的 `LEARNFLUX_LLM_SUMMARY_MODEL` 等变量优先于通用模型。
+
+监听地址、端口和管理口令也可用 `LEARNFLUX_API_HOST`、`LEARNFLUX_API_PORT`、`LEARNFLUX_AUTH_TOKEN` 配置；留空沿用初始化生成的私有配置。转录服务、YouTube 远程服务、Obsidian 路径与 Collector 的可选覆盖项见模板，配置地址 / Key 不等于启用对应能力。
+
+独立工具有各自的配置入口，不会自动读取这份根目录 `.env`：飞书归档 worker 使用 `--config`；数据库迁移工具使用已导出的环境变量或参数；Agent CLI 使用自己的私有配置，详见各自指南。`server.sh` 的管理参数也应在运行脚本的进程环境设置。Docker 当前不自动注入宿主机 `.env`，需要按容器部署方式单独传入；不要复制真实 `.env` 到镜像中。
+
 ## 2. 本机管理口令
 
 `api.auth_token` 是本实例的管理口令和 API Bearer Token，不是模型服务商的 API Key。初始化时已自动生成，无需另运行生成命令。
 
-默认单用户模式下，直接访问本机地址的浏览器可以自动连接。需要手动验证、使用手机或调用 API 时，在你自己的电脑上查看 `config/config.jsonc` 中的 `api.auth_token`；不要把它复制到聊天、日志、截图或 Issue。静态多用户模式另见[多用户配置指南](multi_user_setup.md)。
+默认单用户模式下，直接访问本机地址的浏览器可以自动连接。需要手动验证、使用手机或调用 API 时，在自己的电脑上使用生效的管理口令：优先为 `.env` 的 `LEARNFLUX_AUTH_TOKEN`，未设置时为私有 `config/config.jsonc` 的 `api.auth_token`；不要把它复制到聊天、日志、截图或 Issue。静态多用户模式另见[多用户配置指南](multi_user_setup.md)。
 
 ## 3. 大模型 API
 
@@ -41,11 +66,11 @@ LLM API 用于转录校对、总结、问答、图解和复盘等 AI 功能。�
 
 | 用户要准备的内容 | 配置位置 | 说明 |
 | --- | --- | --- |
-| 服务商 API Key | `llm.api_key` | 从你选择的模型服务商控制台创建。 |
-| API Base URL | `llm.base_url` | 填服务商提供的 OpenAI 兼容接口地址；不要填到 `/chat/completions`。 |
-| 模型 ID | `llm.calibrate_model`、`llm.summary_model` 等 `llm.*_model` 字段 | 必须是该 Key 和 Base URL 可调用的模型名称。不同任务可以使用不同模型。 |
+| 服务商 API Key | `.env` 的 `LEARNFLUX_LLM_API_KEY` | 从你选择的模型服务商控制台创建。 |
+| API Base URL | `.env` 的 `LEARNFLUX_LLM_BASE_URL` | 填服务商提供的 OpenAI 兼容接口地址；不要填到 `/chat/completions`。 |
+| 模型 ID | `.env` 的 `LEARNFLUX_LLM_MODEL`；按需单独指定各任务模型 | 必须是该 Key 和 Base URL 可调用的模型名称。不同任务可以使用不同模型。 |
 
-在 Web 的 `/settings` 页面可以填写常用 LLM Key、Base URL 和模型；其他任务模型和高级选项可在 `config/config.jsonc` 中设置。配置模板中的模型名只是示例默认值；换服务商后，请按其官方文档改成实际可用的模型 ID，并确认账号已开通对应模型及额度。
+已有用户可继续在 Web 的 `/settings` 页面保存未被环境变量管理的 LLM 配置；其他高级选项仍可在私有 `config/config.jsonc` 中设置。配置模板中的模型名只是示例默认值；换服务商后，请按其官方文档改成实际可用的模型 ID，并确认账号已开通对应模型及额度。
 
 主流程的校对和总结分别使用 `llm.calibrate_model`、`llm.summary_model`。使用对应功能时，还应检查系列解读的 `llm.collection_summary_model`、系列分段处理的 `llm.collection_summary_module_model`、图解提纲 / 渲染的 `llm.visual_learning_outline_model` 与 `llm.visual_learning_render_model`，以及边播边学问答的 `llm.study_chat_model`。所有模型 ID 都必须能通过所配置的服务商 Key 和 Base URL 调用。
 
@@ -81,10 +106,10 @@ TikHub 主要用于抖音、小红书及部分社媒链接解析。只处理不�
 
 | 参数 | 配置位置 | 获取方式 |
 | --- | --- | --- |
-| API Key | `tikhub.api_key` | 在 [TikHub 用户中心](https://user.tikhub.io/dashboard/api) 创建或复制 API Token。 |
-| Base URL | `tikhub.base_url` | 模板默认使用 `https://api.tikhub.io`；仅在服务商文档明确要求时更改。 |
+| API Key | `.env` 的 `LEARNFLUX_TIKHUB_API_KEY` | 在 [TikHub 用户中心](https://user.tikhub.io/dashboard/api) 创建或复制 API Token。 |
+| Base URL | `.env` 的 `LEARNFLUX_TIKHUB_BASE_URL` | 模板默认使用 `https://api.tikhub.io`；仅在服务商文档明确要求时更改。 |
 
-将 Key 填到 `/settings` 页面或 `config/config.jsonc`，不要写入 `.env.example` 或公开截图。
+将真实 Key 填到自己的 `.env`，不要写入 `.env.example` 或公开截图。已有 `/settings` / 私有主配置仍可沿用；环境变量非空时优先。
 
 ## 5. 阿里云百炼云端 ASR
 

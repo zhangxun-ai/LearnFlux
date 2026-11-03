@@ -501,12 +501,12 @@
             var p = providers.find(function (x) { return x.id === sel.value; });
             if (!p) return;
             var baseEl = q('llm.base_url');
-            if (resetToProviderDefaults && baseEl && p.base_url) baseEl.value = p.base_url;
+            if (resetToProviderDefaults && baseEl && !baseEl.disabled && p.base_url) baseEl.value = p.base_url;
             setModelOptions(p.models);
             if (resetToProviderDefaults) {
                 var c = q('llm.calibrate_model'), s = q('llm.summary_model');
-                if (c) c.value = (p.models && p.models[0]) || '';
-                if (s) s.value = (p.models && (p.models[1] || p.models[0])) || '';
+                if (c && !c.disabled) c.value = (p.models && p.models[0]) || '';
+                if (s && !s.disabled) s.value = (p.models && (p.models[1] || p.models[0])) || '';
             }
             var link = $('llm-key-link');
             if (link) {
@@ -521,6 +521,19 @@
             groups.forEach(function (g) {
                 g.fields.forEach(function (f) {
                     var el = q(f.key); if (!el) return;
+                    el.disabled = !!f.read_only;
+                    var fieldBox = el.closest('.field');
+                    if (fieldBox) {
+                        var sourceHint = fieldBox.querySelector('.environment-hint');
+                        if (f.read_only && !sourceHint) {
+                            sourceHint = document.createElement('div');
+                            sourceHint.className = 'hint environment-hint';
+                            sourceHint.textContent = '由本机环境变量管理；修改 .env 后重启服务。';
+                            fieldBox.appendChild(sourceHint);
+                        } else if (!f.read_only && sourceHint) { sourceHint.remove(); }
+                        var comboToggle = fieldBox.querySelector('.combo-toggle');
+                        if (comboToggle) comboToggle.disabled = !!f.read_only;
+                    }
                     if (el.type === 'checkbox') { el.checked = !!f.value; }
                     else if (f.type === 'secret') { el.value = ''; el.placeholder = f.set ? (f.masked + '（已配置，留空不改）') : '未配置'; }
                     else { el.value = (f.value == null ? '' : f.value); if (f.key === 'llm.base_url') baseUrl = el.value; }
@@ -601,6 +614,7 @@
         async function saveSettings() {
             var payload = {};
             document.querySelectorAll('[data-key]').forEach(function (el) {
+                if (el.disabled) return;
                 payload[el.getAttribute('data-key')] = (el.type === 'checkbox') ? el.checked : el.value;
             });
             $('save-btn').disabled = true;

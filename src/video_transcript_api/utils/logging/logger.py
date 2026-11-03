@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from loguru import logger
 
+from ...config_env import apply_environment_overrides
+
 try:
     import commentjson as json  # 支持 JSONC 格式（带注释的 JSON）
 except ImportError:
@@ -203,7 +205,8 @@ def load_config():
     加载配置文件。
 
     读取 config.jsonc（带注释，单一事实来源），再把 data/config.db 里前端写入的
-    覆盖项（密钥、服务地址等）深合并到其上。结果缓存到 _config_cache；改库后重启即生效。
+    覆盖项（密钥、服务地址等）深合并到其上，最后应用环境变量覆盖。
+    结果缓存到 _config_cache；环境变量不会写回配置文件或数据库。
     """
     global _config_cache
 
@@ -219,7 +222,8 @@ def load_config():
 
     # 合并前端写入数据库的覆盖配置（无覆盖时行为与原来完全一致）
     overrides = load_config_overrides()
-    _config_cache = _deep_merge(base_config, overrides) if overrides else base_config
+    merged_config = _deep_merge(base_config, overrides) if overrides else base_config
+    _config_cache = apply_environment_overrides(merged_config)
 
     return _config_cache
 

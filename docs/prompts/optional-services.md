@@ -1,8 +1,8 @@
 # 按需配置服务：给 Agent 的提示词
 
-不必把下列服务全部安装。先跑通一次学习，再按来源和阅读习惯添加。
+先按 README 的主提示词跑通你选择平台的真实链接：模型服务、对应平台解析与所选 ASR 属于这条路径的必要依赖；其余能力再按需添加，不需要全部安装。
 
-这些是可选集成任务。先完成[第一次文字学习](../guides/quickstart.md)，再让 Agent 根据当前代码和你的已有服务配置；涉及账号授权、费用和外部发送时，由你决定范围。
+这些是可选集成任务。先完成[真实链接首次验收](../guides/quickstart.md)，再让 Agent 根据当前代码和你的已有服务配置；涉及账号授权、费用和外部发送时，由你决定范围。
 
 | 组件 | 什么时候需要 | 是否必须 |
 | --- | --- | --- |
@@ -42,7 +42,7 @@
 
 生成手机专用随机 Bearer Token，保留本地资料身份，使 user_id 与网页所有者一致。凭据仅在私人配置和我自己的快捷指令内使用，不在聊天、日志、截图或公开文件里展示。个人机器同时配置手机用户时，按指南保持本机管理会话自动恢复。
 
-在可操作的快捷指令 App 内完成配置：获取剪贴板 → 提取 URL → 取第一项 → POST 到 https://<我的子域名>/api/transcribe；JSON 的 url 使用第一项变量，transcription_strategy 设为 local。通知只表示快捷指令已执行，不误报解析成功。
+在可操作的快捷指令 App 内完成配置：获取剪贴板 → 提取 URL → 取第一项 → POST 到 https://<我的子域名>/api/transcribe；JSON 的 url 使用第一项变量；仅在已实测本机ASR可用时将 transcription_strategy 设为 local。若需要cloud，先说明还需在工作台确认报价，不能把快捷指令请求当作付费任务已获授权。通知只表示快捷指令已执行，不误报解析成功。
 
 配置本地服务和隧道的用户级自启动。先验证无凭据拒绝、有效请求受理、其他公网路径拒绝、本地结果可读，再请我用手机移动网络实测。不要调用付费云端 ASR。说明锁屏与休眠的区别、电脑离线时如何重试，以及如何停用入口。
 ```
@@ -53,11 +53,18 @@
 <summary><strong>我要配置其他转录服务：复制此提示词</strong></summary>
 
 ```text
-请根据我的系统和音视频需求，核对 LearnFlux 当前转录路径，帮我配置最少的必要服务。先阅读 AGENTS.md、scripts/bootstrap.sh、config/config.example.jsonc 和 transcriber/providers 的实际实现。
+请根据我的系统、真实链接平台和本地/云端偏好，配置LearnFlux实际可用的转录链路。先读AGENTS.md、README主提示词、scripts/bootstrap.sh、config/config.example.jsonc、docs/guides/configuration.md和当前provider选择实现。
 
-Apple Silicon 优先复用本机 mlx-whisper；其他系统先确认显式 local 策略的兼容性，不能只填 CapsWriter 地址就声称可用。需要 CapsWriter 或 FunASR 时，查阅对应服务当前官方部署说明，核对硬件、下载量、依赖与 WebSocket 地址；FunASR 仅在我需要说话人识别时安装。
+先确认我有权处理的未缓存口播短视频、所选平台及本次费用范围。保留已有环境，准备FFmpeg；抖音/小红书按需配置TikHub，校对解读配置DeepSeek或已有兼容服务，两者不是ASR Key。
 
-保留已有环境与服务，不自动启用云端 ASR，不开公网端口。若当前代码不支持我的平台或所选策略，先说明缺口和最小解决方案，不擅自改业务代码。配置后用我允许的短音频验证真实转录和可读结果，分别报告服务连通性与实际识别效果。
+本地：普通链接明确local策略时当前固定走MLX Whisper，Apple Silicon Mac用 --with-local-whisper 安装独立环境与模型并按输出配置。Intel Mac/Linux/Windows不能套用，填CapsWriter地址不会改变这条策略。CapsWriter兼容路径或FunASR说话人识别须按实际入口独立确认，不能声称普通链接因此可用。
+
+云端：我选择并接受费用后，配置本机.env的 DASHSCOPE_API_KEY / DASHSCOPE_WORKSPACE_ID / DASHSCOPE_API_HOST，核对同一Workspace北京节点并启用私有主配置cloud_asr.enabled。选择cloud，按页面任务报价由我确认费用上限后再提交；不自动充值，不重发提交状态未知的任务。
+
+如果我的系统不支持所要求的本机路径，明确说明并推荐可用方案，不擅自改业务代码或切收费服务。凭据只留本机，不发到对话或Git。
+
+用项目实际处理选定真实视频，核对provider确实运行、转录非空且与口播相符，再核对AI解读与导出。字幕、图文、缓存命中都不能证明ASR成功；只验证一种模式就只报告该模式。没有Key、授权或兼容条件时保留未完成状态，给出补齐步骤。
+
 ```
 
 </details>

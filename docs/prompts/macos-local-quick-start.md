@@ -1,67 +1,72 @@
-# 新手安装与首次学习：给 Agent 的提示词
+# 新手安装与真实链接验收：给 Agent 的提示词
 
-不需要先学 Git 或终端。复制下面整个代码块，发给 WorkBuddy、Codex、Claude Code 等能操作本机终端和浏览器的 Agent。全新安装默认使用 SQLite，自动初始化数据库；已有 PostgreSQL 配置则复用。选择 PostgreSQL 时也包含安装、建库与表结构步骤。随后跑通文字学习，音视频等按需追加。文件名沿用旧版，内容适用于 macOS / Linux，Windows 先核对 WSL2 能力。
+复制下面整段，发给 WorkBuddy、Codex、Claude Code 等能操作本机终端和浏览器的 Agent。目标是让你常用的平台真实可用：解析真实链接，取得正文或语音转录，生成 AI 解读，导出后仍能从历史记录打开。粘贴示例文字只用于排错，不作为最终验收。
 
-真实密钥只填在你自己的电脑上，不要附在这段提示词或聊天里。没有模型服务时，Agent 应引导你在本机准备凭据，并明确当前尚未完成真实 AI 验证。
+先选择要使用的平台与转录方式。平台可以多选，选中的平台应分别验证；不需要一次安装所有外部集成。全新安装默认 SQLite，已有 PostgreSQL 保留原连接。真实 Key 只在自己的电脑填写。
+
+| 需要什么 | 负责什么 | 什么时候配置 |
+| --- | --- | --- |
+| DeepSeek 或已有兼容模型服务 | 校对、总结、问答 | 真实 AI 解读需要 |
+| TikHub API Key | 抖音、小红书等来源解析与下载信息 | 选择对应来源时；不是模型或 ASR Key |
+| FFmpeg + 本地 ASR | 将音视频语音转为文字 | 选择本地转录，或验证无字幕视频时 |
+| 云端 ASR 凭据 | 将音视频提交到云端识别 | 选择云端转录；有独立费用与报价确认 |
+
+当前普通链接 `local` 策略走 MLX Whisper，项目安装路径只支持 Apple Silicon Mac；Intel Mac、Linux、Windows 不能照搬。YouTube 字幕、小红书图文与已缓存结果都可能不经过 ASR，必须分别说明实际路径。非 Apple Silicon 平台需要按当前实现选择可用的云端方案，或明确报告本地转录兼容缺口。
 
 ```text
-我是第一次使用 LearnFlux，不懂 Git、数据库和终端。请直接操作我的电脑安装并验证项目；遇到需要我参与的登录、密码输入或费用确认，用中文告诉我在哪个窗口做什么、完成后应看到什么。不要只给一串命令后就结束。
+我是第一次使用 LearnFlux，不懂 Git、数据库和终端。请直接操作我的电脑完成安装和真实链接验收；需要我亲自输入凭据、登录或确认费用时，用中文告诉我在哪个窗口操作、成功后应看到什么。不要只给命令后结束，也不要把示例文字或模拟响应当作真实功能已可用。
 
 项目地址：https://github.com/zhangxun-ai/LearnFlux
-目标：完成“安装 → 数据库初始化 → 配置模型 → 导入资料 → AI 解读 → 查看结果 → 导出”，并确认结果能持久保存。我授权安装缺少的项目依赖；需要管理员权限、新建付费服务、付费调用、开放公网、清空或迁移已有数据时，先说明具体动作并取得同意。
+最终目标：我选择的平台真实链接 → 解析/下载 → 可用字幕、正文或真实 ASR → DeepSeek 等模型校对与解读 → 查看/导出 → 历史记录持久保存。
 
-1. 先读当前仓库的 README、AGENTS.md、.env.example、scripts/bootstrap.sh、server.sh、docs/guides/configuration.md 和 docs/guides/postgresql.md。
-   复用已有仓库和正在运行的服务；没有仓库时帮我选择用户可写的目录并克隆。不要覆盖已有文件、强制切分支或替我提交/推送代码。
-   检查系统、CPU、网络、磁盘、Git、Bash、curl、lsof、uv、Python 与默认 8000 端口。缺工具时按当前官方方式安装并验证。
-   macOS / Linux 使用仓库脚本；Windows 优先评估现有 WSL2，不假装已验证 Windows 原生或 MLX 跨平台支持。
+1. 先用一次简短沟通确认：我要用的平台（YouTube / 抖音 / 小红书，可多选）、希望本地还是云端转录、真实样例链接及可接受费用范围。
+   我不了解时解释各服务用途，结合电脑推荐方案。样例优先用我提供且有权处理的短内容；没有样例时帮我寻找公开可访问、确有内容的短链接，不编造视频ID，不使用私密资料或默认读取浏览器Cookie。
+   所有选中平台都要各有实际结果；只验证YouTube不能声称抖音、小红书也已成功。若要验证ASR，至少选择一条未处理过、需要语音识别的口播短视频；小红书须选视频笔记，抖音不要用尚未确认支持的图集代替视频。
 
-2. 在项目根目录准备私有环境文件：不存在 .env 时才从 .env.example 复制，设置仅当前用户可读写的权限；已有 .env 时只补缺项，保留真实值。
-   在运行任何编辑前确认 .env 和私有 config/config.jsonc 被 Git 忽略，.env.example 保持空凭据模板。
-   真实 Key、密码、Webhook、数据库 URL、结果访问令牌不得进入源代码、公开模板、命令行参数、聊天、日志、截图或 Git。不要执行来源不明的 .env 内容。
-   在本机安全读取已有配置，仅告诉我哪些项已配置、哪些缺失，不输出值。
+2. 阅读 README、AGENTS.md、.env.example、scripts/bootstrap.sh、server.sh、docs/guides/configuration.md 和 docs/guides/quickstart.md，核对实际版本与平台能力。
+   复用已有仓库、配置、数据库和服务；没有仓库时选择用户可写目录并克隆。检查系统、CPU、网络、磁盘、Git、Bash、curl、lsof、uv、Python和8000端口；按当前官方说明安装缺少依赖。
+   我授权安装项目所需依赖；管理员权限、付费调用、购买服务、开放公网、清空或迁移既有数据需先取得同意。已经同意的平台、样例和费用范围内继续执行，不对同一事项重复询问。
 
-3. 先识别已有数据库配置，绝不把已有 PostgreSQL 切成 SQLite，也不以空数据库替换已有资料。
-   全新安装默认使用 SQLite：.env 保留 LEARNFLUX_PERSISTENCE_BACKEND=sqlite，DATABASE_URL 留空，表结构由项目初始化，无需另装数据库服务。
-   如果已有 PostgreSQL，直接复用有效连接；只有我选择 PostgreSQL 且尚未安装时，才按 docs/guides/postgresql.md 安装并启动本机服务，创建专用非超级用户与归其所有的独占空库。
-   PostgreSQL 模式在自己的 .env 设置 LEARNFLUX_PERSISTENCE_BACKEND=postgres 和 DATABASE_URL。账号、密码、主机、端口和库名按我的机器配置，不能套用维护者的真实账号或固定密码。
-   正确编码密码中的 URL 特殊字符，远程连接按要求使用 TLS；权限不足时引导我完成管理操作，不改其他项目或购买云数据库。
-   新安装不要执行 SQLite 数据迁移。已有 SQLite 需要迁往 PostgreSQL 时，先说明备份与迁移计划并获得同意，不删除旧数据。
+3. 在项目根目录仅当 .env 不存在时从 .env.example 复制，并设置 chmod 600 .env。已有文件只补缺项，不覆盖真实值。
+   确认 .env、私有config和数据库被Git忽略；真实Key、数据库URL、Cookie、结果访问令牌不得进入源码、模板、命令参数、聊天、日志、截图或Git。不要把.env作为Shell脚本执行。
+   在本机安全核对已有凭据，只报告“已配置/缺少”，不显示值。新安装默认sqlite/local并自动初始化；已有PostgreSQL复用。选择新装PostgreSQL时按 docs/guides/postgresql.md 建专用账号与库，配置DATABASE_URL，启动自动迁移并只读核对表结构；不把用户库当写删测试库。
 
-4. 运行 bash scripts/bootstrap.sh 安装项目依赖并初始化私有主配置。它准备 uv / Python 3.11，默认不装 FFmpeg、ASR 或 OCR，也不替代 PostgreSQL 安装。
-   初始化只应在 config/config.jsonc 不存在时创建，自动生成独立随机管理口令；已有主配置、.env、数据库和用户资料保持原样。
-   服务默认只监听本机 127.0.0.1:8000，端口按本机实际配置；不为首次体验开放公网。
+4. 安装项目基础依赖；需要音视频时运行 bash scripts/bootstrap.sh --with-media，确保 FFmpeg / ffprobe 实际可运行。
+   bootstrap 不会替我开通 TikHub、DeepSeek 或云端 ASR，也不会因为页面能打开就代表转录引擎已经安装。
 
-5. 引导我在自己的编辑器中填写 .env 的 LEARNFLUX_LLM_API_KEY、LEARNFLUX_LLM_BASE_URL、LEARNFLUX_LLM_MODEL。
-   三项必须来自同一可用模型服务，MODEL 会用于校对、总结和问答等任务；按需再设置单独任务模型。
-   不要求我把 Key 发到聊天，也不把其他项目的 OPENAI_API_KEY 当成自动生效的配置。
-   非空环境变量优先于系统设置与私有主配置，保存网页设置不能覆盖它们；已有设置页配置的用户可以保留原方式。
-   不需要的 TikHub、云端 ASR、S3、飞书、Obsidian、隧道等留空或关闭。模型调用可能收费，在执行真实学习前说明并等待我同意；不自动注册、充值或启用付费云端 ASR。
+5. 默认引导我准备DeepSeek API Key；已有可用兼容模型服务时可复用，不强迫换服务。
+   在我自己的.env填写 LEARNFLUX_LLM_API_KEY、LEARNFLUX_LLM_BASE_URL、LEARNFLUX_LLM_MODEL。DeepSeek Key来自官方控制台 https://platform.deepseek.com/api_keys；接口地址按官方OpenAI兼容说明填写，模型用当前账号实际可调用的ID，不照搬旧模型名。
+   注意官方SDK示例中的DEEPSEEK_API_KEY不是本项目的读取名称。通用MODEL用于校对、总结和问答，按需覆盖具体任务模型；非空环境变量优先于设置页。不要把DeepSeek Key当成ASR Key，也不要把“Key不为空”当作已成功调用。
 
-6. 在项目根目录用 bash server.sh start 后台启动，用 status / log 检查状态与错误；实际访问地址以配置和日志为准，默认 http://127.0.0.1:8000。
-   macOS 会注册用户级 LaunchAgent，退出终端后继续运行，并在用户登录时启动；bash server.sh stop 会卸载启动项。
-   bash server.sh restart 用于配置或代码更新后重启；Ctrl+C 只退出日志查看或停止前台运行。
-   端口被占用时先判断是不是已有 LearnFlux，不擅自结束陌生进程，不重复启动第二个实例。
+6. 我要使用抖音或小红书时，引导我在TikHub用户中心 https://user.tikhub.io/dashboard/api 创建或取得自己的API Token，填本机.env的 LEARNFLUX_TIKHUB_API_KEY；接口域名用当前官方推荐地址，LEARNFLUX_TIKHUB_BASE_URL可按需覆盖。
+   确认账号可调用所需平台接口及已接受费用范围，再通过项目实际解析所选链接；不能只检查Token格式，不能默认认为查账号、测Key或重试免费。
+   YouTube可用字幕路径通常不需要TikHub，不为了文字或字幕学习强制购买全部服务。小红书图文提取成功只代表正文链路成功，不代表视频下载/转录已验证。
 
-7. 验证选定数据库已正常初始化，不能只据网页打开就判定数据可用。
-   SQLite 模式确认本机生成了项目数据库，任务、笔记和学习结果能保存；随后按第8步刷新与重启验证。
-   PostgreSQL 模式确认 /health 的 checks.sqlite.backend 为 postgres 且 healthy 为 true；sqlite 键名为兼容命名。
-   PostgreSQL 首次启动自动应用 persistence/migrations/postgres/ 下的版本化迁移，不手工逐份运行 SQL；在本机只读核对 learnflux_schema_migrations 的版本、文件名、checksum 与仓库一致，必要业务表存在。
-   不把维护者的结构截图当验收，不对已有库强制要求精确表总数，不在实际用户库运行会写删记录的集成测试。
-   连接、权限或迁移校验失败时查明并修复，不通过清库重建掩盖错误。
+7. 按我选择的转录方式配置并验证，不自动切换到另一种付费方式：
+   A. 本地：Apple Silicon Mac使用 bash scripts/bootstrap.sh --with-local-whisper，准备FFmpeg、独立mlx-whisper环境和模型，并按脚本输出在私有config/config.jsonc设置local_whisper的binary、model、enabled等。
+      首次模型下载前说明资源需求，核对可执行程序，再用真实无字幕口播视频确认实际执行ASR并得到非空、与语音一致的文字。仅安装Python依赖或连通端口不算成功。
+      普通链接明确local时当前固定走MLX Whisper，不会因enabled=false回退CapsWriter。Intel Mac/Linux/Windows不能套用此安装；若我坚持本地且代码不支持，说明兼容缺口，不只填CapsWriter地址便宣称完成，也不擅自改业务代码。
+   B. 云端：当前项目支持百炼云端ASR。引导我在本机.env填写 DASHSCOPE_API_KEY、DASHSCOPE_WORKSPACE_ID、DASHSCOPE_API_HOST，Host须与同一Workspace北京节点匹配；按配置指南显式启用cloud_asr.enabled。
+      DeepSeek/TikHub Key不能替代这三项。选择cloud策略；音频准备后的页面报价仍需我确认费用上限，未确认不提交付费任务。等待同一任务结果，不盲目重发状态未知的提交，不自动充值。
+   若真实链接使用平台字幕、图文正文或缓存，不会因此证明任一本地/云端ASR已可用。需要验ASR时另外选未缓存且确需转录的短视频，不清空历史或伪造成功。
 
-8. 配置与费用确认后，打开工作台和系统设置，检查模型值已生效且密钥脱敏。
-   使用 examples/first-learning.md 中的公开示例或一段无隐私短文字，完成一次“单篇深度学习 → 粘贴文字 → 开始学习”。
-   等待任务成功，打开结果核对原文和 AI 解读完整，再实际导出一份可打开的 Markdown 或页面支持的格式。
-   刷新后重新打开记录，确认任务和结果持久保存；新建且可安全停止的实例可重启验证，已有工作中的实例不要未经同意中断。
-   任务失败时根据实际错误修复配置并重试，不把任务已提交、页面可打开或模拟响应说成 AI 学习成功。
+8. 用 bash server.sh start 后台启动，实际地址以日志与配置为准，默认 http://127.0.0.1:8000；环境变更后用 restart，status / log检查，stop停止。
+   不重复启动或结束陌生进程。macOS创建用户级登录启动项，stop会卸载；Ctrl+C只退出日志或停止前台进程。先检查页面、选定数据库和必要服务，再验证真实处理。
+   原始媒体可能发给云ASR，转录正文可能发给模型，链接可能发给TikHub；真实调用前说明哪些服务会收到内容与可能费用，取得我对本次范围的同意，不上传无关或私密资料。
 
-9. 再用简单选项了解我是否需要音视频、扫描 PDF、手机收集或飞书归档。
-   需要时阅读 docs/prompts/optional-services.md，只添加我选择的能力并做相应实测。Apple Silicon Mac 可按需使用 --with-local-whisper；其他系统不套用 MLX。
-   飞书机器人“通知”与“把内容归档到飞书知识库”是不同功能，分别配置与验收；不要默认向任何机器人或知识库发送内容。
+9. 在项目“单篇深度学习”粘贴选中的真实链接，选择已配置的转录方式并提交；有云ASR报价时按产品流程确认，等待任务真正完成。
+   分别核对：标题/作者/来源是否正确；实际取得的是字幕、图文正文还是ASR转录；内容是否与原始视频/文章对应并覆盖所选内容；AI校对和解读是否真实生成且与原文一致；导出的原文/解读能否打开且内容完整。
+   标明是否命中已有缓存。YouTube字幕成功只验收字幕链路；若ASR未运行，不能在ASR栏写通过。不能仅凭页面上遗留的“CapsWriter”标签判定实际引擎，要核对任务阶段、运行记录和产物。
+   刷新后从历史记录重新打开结果；可安全停止的新实例再重启检查持久保存。已有工作中的实例不未经同意中断，不为测试删旧数据。
+   示例文字只可辅助定位模型或页面问题，最终仍须回到真实链接，不以示例任务、模型列表响应、已受理状态或mock代替完成。
 
-10. 最后给我可点击的本机入口、日常启停方式，以及“所选数据库与表结构、页面、真实 AI 学习、导出、可选能力”的实际验证结果。
-    如果仍缺密钥、人工授权或兼容条件，逐项说明缺什么和下一步；能继续做的工作继续完成，不声称已经全部跑通。
-    交付前确认这次未把任何真实环境文件、数据库、Cookie、私钥或凭据加入 Git。
+10. 失败就根据真实错误定位：区分链接/登录/限流、TikHub额度或权限、下载/FFmpeg、本地ASR安装/模型、云ASR授权/报价、DeepSeek模型/Key等问题。
+    在授权范围内修复并继续，收费重试受预算约束，提交状态不明时先核对同一任务。不能随意换一条已知能跑的链接来冒充原目标平台通过。
+    缺少凭据、人工授权、预算或平台兼容性时给我明确的本机操作步骤；能独立继续的准备工作继续做，但这条真实链路保留为未完成，不声称已能使用全部功能。
+
+11. 最后按平台、实际内容路径与转录方式给结果表：样例来源、解析/下载、字幕/ASR、真实AI解读、查看/导出、持久化各项分别标注通过、失败或未验证，附可打开的结果与导出位置（不公开带令牌的私密链接）。
+    只有选中平台的真实内容取得、AI解读和查看导出均通过，才称该平台已跑通；承诺支持本地/云ASR时，所选ASR也须真实识别成功。只测一条模式不代表另一条模式通过。
+    给出本机入口、缺少项、日常启停方式和已验证范围。最后确认没有把真实.env、数据库、Cookie或密钥加入Git；不替我提交或推送代码，也不默认开启手机公网、飞书归档、OCR或付费生图。
 ```
 
-按需扩展见[服务配置提示词](optional-services.md)，数据库步骤详见 [PostgreSQL 指南](../guides/postgresql.md)。Agent 是否能自动操作，取决于所用工具和本机权限；需要你亲自输入凭据时，它应引导你完成，不让你公开密钥。
+服务字段与获取入口见[配置指南](../guides/configuration.md)，数据库见 [PostgreSQL 指南](../guides/postgresql.md)。手机收集、飞书归档等附加集成见[按需服务提示词](optional-services.md)。配置事实以当前代码为准；实际平台成功与本地离线测试是两类证据。

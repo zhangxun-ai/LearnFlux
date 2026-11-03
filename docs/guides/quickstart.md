@@ -1,6 +1,14 @@
 # 第一次使用 LearnFlux
 
-先用一小段文字体验“导入 → AI 解读 → 保存结果”。这条路径不需要转录模型、TikHub、飞书或 Obsidian。下面的手动最小安装使用 SQLite；按项目日常方案使用 PostgreSQL 时，先完成[安装、建库与自动建表](postgresql.md)。不熟悉这些操作，可直接复制 README 顶部的[新手安装提示词](../../README.md#不懂代码复制这段提示词给-ai)：新安装默认 SQLite，已有 PostgreSQL 保留原连接，需要时再走建库流程。
+以你常用平台的一条真实链接完成“解析 / 下载 → 字幕、正文或语音识别 → AI 解读 → 导出”的首次验收。示例文字仅用来排查页面与模型，不代表链接或 ASR 可用。新用户可直接复制 [README 顶部提示词](../../README.md#不懂代码复制这段提示词给-ai)，让 Agent 按平台与转录方式引导。
+
+默认数据库仍是 SQLite；已有 PostgreSQL 保留原连接。选择 PostgreSQL 时按[数据库指南](postgresql.md)准备服务、专用账号与库，首次启动自动创建表结构。
+
+先确定下列选择：
+
+- 目标平台：YouTube / 抖音 / 小红书，可多选；每个选中的平台分别验收。
+- 真实样例：有权处理、公开可访问的短内容。需要验证 ASR 时，使用未缓存、确需语音识别的口播视频；小红书图文不能代替视频 ASR，抖音图集暂不作为视频验收样例。
+- 转录方式：Apple Silicon Mac 可用当前 MLX Whisper 本地路径；其他系统先核对能力，或在接受费用后选择云端。YouTube 有字幕时可不转录，但应标明 ASR 未验证。
 
 ## 1. 安装并启动
 
@@ -9,7 +17,7 @@
 ```bash
 cp -n .env.example .env
 chmod 600 .env
-bash scripts/bootstrap.sh
+bash scripts/bootstrap.sh --with-media
 bash server.sh start
 ```
 
@@ -41,21 +49,42 @@ bash server.sh stop     # 停止服务并卸载 macOS 启动项
 
 Windows 用户可先在 WSL2 中使用 Linux 路径；本轮没有验证 Windows 原生安装。Docker 是面向已有容器使用经验的替代路径，见下文。
 
-## 2. 填好一个模型服务
+## 2. 配置模型与目标平台
 
-在本机 `.env` 中填写 `LEARNFLUX_LLM_API_KEY`、`LEARNFLUX_LLM_BASE_URL`、`LEARNFLUX_LLM_MODEL`，然后运行 `bash server.sh restart`。三项应来自同一可用服务；通用模型会用于校对、总结、问答等任务。打开“系统设置”核对生效状态，环境变量管理的字段显示为只读、密钥脱敏。已有用户没有设置这些环境变量时，仍可沿用网页保存的配置。
+默认引导使用 DeepSeek，也可复用已有可用的 OpenAI 兼容服务。在自己的 `.env` 填 `LEARNFLUX_LLM_API_KEY`、`LEARNFLUX_LLM_BASE_URL`、`LEARNFLUX_LLM_MODEL`；模型 ID 以当前账号可调用的列表为准。不要把官方 SDK 示例的 `DEEPSEEK_API_KEY` 当成项目读取名。
 
-AI 请求按你选择的服务商规则计费。本地安装不会替你申请密钥或开通服务。字段解释及更多集成见[配置与 API Key](configuration.md)。
+要解析抖音或小红书，再填写 `.env` 的 `LEARNFLUX_TIKHUB_API_KEY`，按需覆盖 `LEARNFLUX_TIKHUB_BASE_URL`。TikHub 负责平台内容解析，不替代模型或 ASR。只有 YouTube 字幕 / 文字学习时通常不需要它。
 
-## 3. 完成第一份学习笔记
+Key 的官方入口与完整字段见[配置指南](configuration.md)。模型和 TikHub 的额度、接口权限与本次费用范围都需要确认；填好了字段不等于真实调用已成功。修改后 `bash server.sh restart`，在系统设置核对生效状态，环境变量字段只读、密钥脱敏。已有设置页配置仍可沿用。
 
-打开“单篇深度学习”，选择“粘贴文字”，输入一段你愿意测试的内容。例如：
+## 3. 配好实际要用的 ASR
 
-> 每周留出两个晚上学习一个小主题。每次先写下一个问题，再阅读两份资料；结束时用自己的话记下三个要点，并把没弄懂的问题留到下一次。
+### 本地转录
 
-点击“开始学习”，等待近期任务显示完成，再打开结果页。能看到原文和 AI 解读，就完成了第一次使用。你可以直接阅读、导出；需要同步到外部知识库时再配置对应服务。
+音视频处理需 FFmpeg / ffprobe。Apple Silicon Mac 运行：
 
-若页面能打开但任务失败，先核对设置中的 Key、接口地址和模型是否配套；“页面启动”和“真实 AI 调用成功”是两项不同的验证。
+```bash
+bash scripts/bootstrap.sh --with-local-whisper
+```
+
+按脚本输出设置私有 `config/config.jsonc` 的 `local_whisper.binary`、`model`、`enabled` 等，检查程序可执行；首次使用会下载模型。准备好后在页面选择本地转录。
+
+**当前普通链接的 `local` 策略固定走 MLX Whisper，不会自动回退 CapsWriter。** Intel Mac、Linux、Windows 不能照搬 MLX 安装；只填 CapsWriter WebSocket 地址不能说明这个入口已可用。CapsWriter 仍供其他兼容调用路径使用，不能混作普通链接本地策略的验收。当前平台若缺少可用本机路径，应明确记录，并由用户选择已支持的云端方案，或另行解决本地兼容，不擅自切到收费服务。
+
+### 云端转录
+
+项目当前使用百炼云端 ASR。在自己的 `.env` 填 `DASHSCOPE_API_KEY`、`DASHSCOPE_WORKSPACE_ID`、`DASHSCOPE_API_HOST`，Host 与同一 Workspace 的北京节点匹配；在私有主配置显式启用 `cloud_asr.enabled`，选择 `cloud`。
+
+提交后先准备音频并展示任务报价，用户确认费用上限后才提交云端识别。DeepSeek / TikHub 的 Key 不能替代这些 ASR 凭据；不要重发提交状态未知的付费请求。完整配置见[云端 ASR](configuration.md#5-阿里云百炼云端-asr)。本地转录不产生云端 ASR 费用，但模型、TikHub 等调用仍可能收费。
+
+## 4. 用真实链接验收
+
+1. 明确本次内容会发送给哪些服务及费用范围后，在“单篇深度学习”粘贴选中的真实链接，选择已配置的本地 / 云端转录并提交。
+2. 等待任务完成，核对来源、标题及内容；分别标明取得的是平台字幕、图文正文还是实际 ASR 转录。要验 ASR，必须有真实语音识别结果，缓存命中或字幕可用不算 ASR 通过。
+3. 核对原文覆盖和真实 AI 解读与来源相符，实际导出原文 / 解读并打开检查完整性。
+4. 刷新后从历史记录重新打开；可安全停止的新实例再重启验证持久保存。已有服务不未经同意中断。
+
+只测 YouTube 不能宣称抖音、小红书均通过；只测本地也不能宣称云端 ASR 已通过。缺 Key、额度、授权或兼容条件时，明确列出未完成项和本机补齐步骤。示例文字、页面可打开、模型列表、已受理状态或模拟结果都不能替代真实链接验收。
 
 ## 按需要扩展
 

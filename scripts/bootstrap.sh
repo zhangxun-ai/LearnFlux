@@ -124,5 +124,5 @@ if [ "$INSTALL_LOCAL_WHISPER" = true ]; then
 fi
 
 info "Bootstrap complete. Start the service: bash server.sh start"
-info "Configure LEARNFLUX_LLM_* in your private .env, restart, then try a short text."
+info "Configure private model/platform credentials and your selected ASR; follow the README real-link acceptance steps."
 info "Default settings URL: http://127.0.0.1:8000/settings (adjust for your configured port)."

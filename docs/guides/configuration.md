@@ -1,6 +1,22 @@
 # 配置与 API Key 指南
 
-先完成一次文字学习，再配置需要的音视频或集成服务。首次使用步骤见[本地快速开始](quickstart.md)。真实密钥保存在被 Git 忽略的本地配置或受保护的环境变量中。
+先按目标平台和转录方式配置必要服务，再用真实链接验收；文字示例只用于排查基础模型问题。首次使用步骤见[本地快速开始](quickstart.md)。真实密钥保存在被 Git 忽略的本地配置或受保护的环境变量中。
+
+## 先选真实使用路径
+
+DeepSeek 等模型服务负责校对和解读，TikHub 负责相应平台的内容解析，ASR 负责语音识别；三者的 Key 不能互换。可先选一个常用平台，选中多个平台时分别验收。
+
+| 目标 | 要准备什么 | 验收时要区分 |
+| --- | --- | --- |
+| YouTube 可用字幕 | 模型服务及可访问字幕 / 网络 | 字幕取得成功不代表 ASR 已运行 |
+| 抖音视频 / 小红书视频 | 通常需要 TikHub、模型服务，语音内容需要可用 ASR；音视频处理准备 FFmpeg | 真正下载和识别语音，不能以图文或缓存替代 |
+| 小红书图文 | TikHub、模型服务 | 只证明图文正文链路，不证明视频 / ASR |
+| 本地 ASR | 当前普通链接 `local` 为 MLX Whisper，安装脚本仅支持 Apple Silicon Mac | 程序与模型安装后仍须真实识别验证 |
+| 云端 ASR | 百炼三项 `DASHSCOPE_*`、启用 `cloud_asr.enabled`、选择 `cloud`、确认任务报价 | 单独的付费语音服务，不是 LLM Key 的附带能力 |
+
+Intel Mac / Linux / Windows 不能套用 `--with-local-whisper`。当前普通链接的 `local` 不会回退 CapsWriter；只填写 CapsWriter 地址并不能使这个入口可用。已有其他兼容 ASR 调用路径须独立核对和验证，不把遗留页面标签当成引擎执行证据。当前平台缺少所需路径时，要说明兼容缺口，由用户选择可用方案，不能自动切换收费服务。
+
+处理前确认本次链接、内容发送对象及费用范围：TikHub 可能收到链接，云端 ASR 接收媒体，模型服务接收正文 / 转录。只有真实内容取得、实际所需 ASR、真实 AI 解读及查看 / 导出都成功，才称该目标已可用；页面、Key 格式检查或离线 mock 都不是这项验收。
 
 ## 1. 创建本地配置
 
@@ -70,6 +86,8 @@ LLM API 用于转录校对、总结、问答、图解和复盘等 AI 功能。�
 | API Base URL | `.env` 的 `LEARNFLUX_LLM_BASE_URL` | 填服务商提供的 OpenAI 兼容接口地址；不要填到 `/chat/completions`。 |
 | 模型 ID | `.env` 的 `LEARNFLUX_LLM_MODEL`；按需单独指定各任务模型 | 必须是该 Key 和 Base URL 可调用的模型名称。不同任务可以使用不同模型。 |
 
+默认可引导 DeepSeek 用户在[官方控制台](https://platform.deepseek.com/api_keys)创建 Key，Base URL 按[官方首次调用说明](https://api-docs.deepseek.com/quick_start/your_first_api_call.md)填写。模型 ID 从账号当前可用列表选择，参考[官方模型查询接口](https://api-docs.deepseek.com/api/list-models/)；不要把旧截图中的模型名当作长期固定值。官方 SDK 示例使用的 `DEEPSEEK_API_KEY` 不会自动替代本项目的 `LEARNFLUX_LLM_API_KEY`。
+
 已有用户可继续在 Web 的 `/settings` 页面保存未被环境变量管理的 LLM 配置；其他高级选项仍可在私有 `config/config.jsonc` 中设置。配置模板中的模型名只是示例默认值；换服务商后，请按其官方文档改成实际可用的模型 ID，并确认账号已开通对应模型及额度。
 
 主流程的校对和总结分别使用 `llm.calibrate_model`、`llm.summary_model`。使用对应功能时，还应检查系列解读的 `llm.collection_summary_model`、系列分段处理的 `llm.collection_summary_module_model`、图解提纲 / 渲染的 `llm.visual_learning_outline_model` 与 `llm.visual_learning_render_model`，以及边播边学问答的 `llm.study_chat_model`。所有模型 ID 都必须能通过所配置的服务商 Key 和 Base URL 调用。
@@ -108,6 +126,8 @@ TikHub 主要用于抖音、小红书及部分社媒链接解析。只处理不�
 | --- | --- | --- |
 | API Key | `.env` 的 `LEARNFLUX_TIKHUB_API_KEY` | 在 [TikHub 用户中心](https://user.tikhub.io/dashboard/api) 创建或复制 API Token。 |
 | Base URL | `.env` 的 `LEARNFLUX_TIKHUB_BASE_URL` | 模板默认使用 `https://api.tikhub.io`；仅在服务商文档明确要求时更改。 |
+
+TikHub 的 Token 获取与 Bearer 使用方式以[官方文档](https://docs.tikhub.io/186826050e0)为准，主域名以[官方连接说明](https://docs.tikhub.io/)为准。实际解析所选链接前确认权限、额度与费用，不把测试 Key 或账号查询视为必然免费。
 
 将真实 Key 填到自己的 `.env`，不要写入 `.env.example` 或公开截图。已有 `/settings` / 私有主配置仍可沿用；环境变量非空时优先。
 

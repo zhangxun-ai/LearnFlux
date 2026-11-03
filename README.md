@@ -18,29 +18,32 @@ LearnFlux 是一个可以部署在自己电脑或服务器上的 AI 学习工具
 
 ## 不懂代码？复制这段提示词给 AI
 
-把下面整段发给 WorkBuddy、Codex、Claude Code 等能操作本机终端和浏览器的 Agent，让它一步步带你完成。真实 Key 和密码只在自己的电脑填写，不要附在提示词或聊天里。
+把下面整段发给 WorkBuddy、Codex、Claude Code 等能操作本机终端和浏览器的 Agent。验收目标是你要用的平台真实链接能够解析、解读和导出；示例文字只用于排错。真实 Key 和密码只在自己的电脑填写，不要附在聊天里。
 
 ```text
-我是第一次使用 LearnFlux，不懂 Git、终端和数据库。请直接操作我的电脑安装项目，遇到必须由我输入、登录或授权的操作，用中文告诉我在哪里做、完成后应看到什么，不要只给命令后结束。
+我是第一次使用 LearnFlux，不懂 Git、终端和数据库。请直接操作我的电脑，完成真实链接的安装与验收；需要我输入凭据、登录或确认费用时，用中文引导我在本机操作，不要只给命令后结束。
 
 项目：https://github.com/zhangxun-ai/LearnFlux
-目标：安装 → 配置 → 导入文字 → AI 解读 → 查看 → 导出，并验证重启后结果仍在。
+目标：真实链接 → 解析/下载 → 字幕、正文或实际ASR → AI校对解读 → 查看/导出 → 历史持久保存。示例文字和mock不作为最终成功证据。
 
-1. 阅读仓库 README、AGENTS.md、.env.example 和启动脚本。检查我的系统、已有仓库、依赖与8000端口；复用已有环境，不覆盖配置、数据或正在运行的服务。
-2. 没有仓库时帮我克隆。只在 .env 不存在时执行 cp -n .env.example .env，并设置 chmod 600 .env。真实凭据不得写入源码、模板、聊天、日志或 Git；先确认私密文件被 Git 忽略。
-3. 全新安装默认 SQLite，保留 LEARNFLUX_PERSISTENCE_BACKEND=sqlite，数据库自动初始化，无需另装服务。若已有 PostgreSQL，复用原 DATABASE_URL，不切库；若我选择新装 PostgreSQL，按 docs/guides/postgresql.md 完成服务安装、专用账号与建库，再配置 postgres 和 DATABASE_URL，启动时自动应用仓库 SQL 迁移并核对表结构，不清空已有库。
-4. 执行 bash scripts/bootstrap.sh。在本机编辑器引导我填写 .env 的 LEARNFLUX_LLM_API_KEY、LEARNFLUX_LLM_BASE_URL、LEARNFLUX_LLM_MODEL，确保同一服务可调用。环境变量非空时优先于设置页；不要让我把 Key 发到聊天。
-5. 用 bash server.sh start 后台启动，默认访问 http://127.0.0.1:8000；用 status / log 查看状态，用 restart 重启、stop 停止。不要重复启动或擅自结束其他程序。macOS 会创建用户级登录启动项，stop 会卸载。
-6. 模型调用可能收费，真实调用前说明并取得我的同意。用 examples/first-learning.md 的公开文字跑通“单篇深度学习”，等待成功，核对原文与AI解读，实际导出并确认可打开。刷新、重新访问后核对结果仍在；可安全重启的新实例还要验证持久保存。
-7. 不默认安装音视频转录、OCR、TikHub、S3、飞书或公网隧道；我需要时再按 docs/prompts/optional-services.md 配置并实测。缺少模型密钥时引导我在本机准备，不能把页面可打开说成AI学习已成功。
-8. 遇到错误查明并修复后继续。最后给我本机入口、启停方式、实际选用的数据库，以及数据库、页面、AI学习、导出各项验证结果。涉及管理员权限、付费服务、开放公网或迁移既有数据时先取得同意；不替我提交或推送代码。
+1. 先确认我要用的平台（YouTube / 抖音 / 小红书，可多选）、本地或云端转录、愿意处理的短样例链接与费用范围。我不了解时结合电脑推荐。选中多个平台就分别验收；没样例时帮我选公开、可访问的短内容，不编造链接。
+2. 阅读 README、AGENTS.md、.env.example 和完整提示词 docs/prompts/macos-local-quick-start.md。检查系统、CPU、网络、依赖与8000端口，复用已有仓库和服务；没有仓库再克隆。已有配置、数据库和资料不得覆盖。
+3. 仅在.env不存在时执行 cp -n .env.example .env，并设置 chmod 600 .env；先确认私密文件被Git忽略。新安装默认SQLite自动建表，已有PostgreSQL保留原连接；选择新装PostgreSQL时按数据库指南建账号/库并核对自动SQL迁移，不清库。
+4. 安装基础依赖；需要音视频时执行 bash scripts/bootstrap.sh --with-media 并检查FFmpeg。引导我在本机.env填写DeepSeek或已有兼容服务的 LEARNFLUX_LLM_API_KEY、LEARNFLUX_LLM_BASE_URL、LEARNFLUX_LLM_MODEL，核对当前可用模型；官方SDK示例的DEEPSEEK_API_KEY不是项目读取名。
+5. 我要用抖音/小红书时，再引导我在TikHub用户中心取得自己的Key，填 LEARNFLUX_TIKHUB_API_KEY，按需设置 LEARNFLUX_TIKHUB_BASE_URL。TikHub取内容、DeepSeek做解读、ASR识别语音，三者凭据不能混用；YouTube字幕路径通常不要求TikHub。真实Key不发到聊天、不写源码或模板。
+6. 本地ASR：当前普通链接local策略走MLX Whisper。Apple Silicon Mac用 bash scripts/bootstrap.sh --with-local-whisper，按输出设置私有local_whisper配置，确认程序与模型可用；Intel Mac/Linux/Windows不能照搬，也不能只填CapsWriter地址就声称local可用。需要本地但当前不支持时说明缺口，不擅自切云端收费。
+7. 云端ASR：引导我在本机.env填写百炼 DASHSCOPE_API_KEY、DASHSCOPE_WORKSPACE_ID、DASHSCOPE_API_HOST，核对同一Workspace北京节点，在私有主配置启用cloud_asr.enabled，选择cloud；音频准备后的实际报价须由我确认费用上限再提交。DeepSeek/TikHub Key不能替代ASR凭据，不盲目重发未知状态的云任务。
+8. 用 bash server.sh start 启动，默认 http://127.0.0.1:8000；status / log检查，配置变化后restart，stop停止。不要重复启动或结束其他程序；macOS登录启动项由stop卸载。真实调用前说明哪些服务会收到内容、可能的费用并取得授权；已同意范围内继续，不自动购买或充值。
+9. 在单篇深度学习粘贴我选择的真实链接并提交，等待成功。核对来源、原文覆盖、真实AI解读和完整导出，刷新后从历史记录重新打开；新建且可安全停止的实例再重启验证保存。平台字幕、图文和缓存都不证明ASR成功；要验ASR，另用未缓存、需要识别语音的口播短视频，小红书选视频笔记，不能用抖音图集替代。
+10. 失败时区分平台/权限/TikHub、下载/FFmpeg、ASR和模型问题，在授权预算内修复并继续；示例文字仅辅助排错，最终必须回到真实链接。缺Key、授权或兼容条件时引导我补齐，并把对应真实链路标为未完成，不把页面打开、任务受理、缓存或mock说成全部通过。
+11. 最后按平台和实际内容路径列出解析/下载、字幕或ASR、AI解读、查看/导出、持久化的通过/失败/未验证结果，给本机入口和导出位置，不公开私密结果令牌。选中的平台和ASR模式实际跑通才说可用；不默认配置无关OCR、飞书、公网或生图，不替我提交或推送代码。
 ```
 
-需要更细的引导时使用[完整安装提示词](docs/prompts/macos-local-quick-start.md)。下面是手动安装方式。
+[完整安装与真实链接验收提示词](docs/prompts/macos-local-quick-start.md)包含更细的配置、排错和费用边界。下面是手动安装方式。
 
 ## 快速开始
 
-第一次使用，建议先粘贴一段文字，生成一份 AI 总结。**这一步只需配置模型服务，不需要安装音视频转录或扫描件识别工具。**
+**以一条你实际要处理的真实链接完成首次验收。** 先选择平台和转录方式，再准备相应服务。粘贴文字可以排查模型配置，但不代表链接解析、下载或 ASR 已可用。
 
 **数据库默认是 SQLite，无需另外安装数据库服务；PostgreSQL 仍可选。** SQLite 已通过隔离的文字学习、导出、笔记、合集、阅读及重启持久化验证，模型结果使用模拟返回；这不代表已验证所有音视频来源、OCR 或真实模型。已有 PostgreSQL 用户继续使用原连接，不会自动切换或迁移。
 
@@ -51,7 +54,7 @@ git clone https://github.com/zhangxun-ai/LearnFlux.git
 cd LearnFlux
 cp -n .env.example .env
 chmod 600 .env
-bash scripts/bootstrap.sh
+bash scripts/bootstrap.sh --with-media
 bash server.sh start
 ```
 
@@ -63,11 +66,23 @@ bash server.sh start
 
 `server.sh` 会在后台启动服务，默认地址为 **<http://127.0.0.1:8000>**。端口优先读取 `LEARNFLUX_API_PORT`，未设置时沿用 `config/config.jsonc` 的 `api.port`；如果改过端口，下面的访问地址也要相应调整。macOS 使用用户级 LaunchAgent 保持运行，并在用户登录时自动启动；执行 `stop` 会卸载该启动项。
 
-1. 在本机 `.env` 中填写 `LEARNFLUX_LLM_API_KEY`、`LEARNFLUX_LLM_BASE_URL`、`LEARNFLUX_LLM_MODEL`，重启后打开[系统设置](http://127.0.0.1:8000/settings)核对生效值；密钥只显示脱敏状态。
-2. 打开 [单篇深度学习](http://127.0.0.1:8000/add_task_by_web)，选择 **粘贴文字**，粘贴[示例文字](examples/first-learning.md)，点击 **开始学习**。
-3. 在近期任务中等待处理完成，打开结果，阅读 AI 总结。需要保存时，点击 **导出**。
+按你要用的内容准备服务，不能把所有 Key 当成同一种凭据：
 
-AI 调用由你配置的模型服务商计费。单纯阅读文档或写作不需要 API Key；处理音视频或扫描件时，再安装相应工具。
+| 你要跑通什么 | 必须准备 | 怎样算通过 |
+| --- | --- | --- |
+| AI 校对和解读 | DeepSeek 或已有兼容服务的 Key、Base URL、可用模型，填 `.env` 的 `LEARNFLUX_LLM_*` | 真实内容生成完整原文与 AI 解读 |
+| 抖音视频 / 小红书视频笔记 | `.env` 的 `LEARNFLUX_TIKHUB_API_KEY`，以及实际需要的 ASR | 对应平台真实链接能取到内容，不能只验 Key |
+| 本地语音转录 | FFmpeg、可用本机引擎与模型；当前普通链接为 Apple Silicon Mac 的 MLX Whisper | 未缓存且需要语音识别的真实短视频生成可读转录 |
+| 云端语音转录 | 百炼三项 `DASHSCOPE_*` 凭据、启用 `cloud_asr.enabled`、选择 `cloud` 并确认任务报价 | 同一已确认云任务完成识别，并生成真实 AI 解读 |
+| YouTube 可用字幕 / 小红书图文 | 可取得的字幕或正文、模型服务；对应来源按需准备 TikHub | 内容取得并解读成功，单独标明 ASR 未运行 |
+
+配置步骤、官方 Key 入口和平台限制见[服务配置指南](docs/guides/configuration.md)。Apple Silicon Mac 的本机引擎用 `bash scripts/bootstrap.sh --with-local-whisper` 安装；其他系统不能只填 CapsWriter 地址就认为普通链接的 `local` 策略可用，需选择并验证当前支持的转录路径。
+
+1. 在本机填写模型、所选平台和 ASR 凭据，重启后打开[系统设置](http://127.0.0.1:8000/settings)核对生效状态；密钥只显示脱敏值。
+2. 在[单篇深度学习](http://127.0.0.1:8000/add_task_by_web)粘贴你有权处理的真实链接，选择已配置的本地 / 云端方式并提交；云端费用按页面报价确认。
+3. 等待成功，核对标题与来源、原文覆盖和 AI 解读，再导出并打开文件。从历史记录重新访问，确认保存。多个目标平台需分别验证；要验证 ASR，不能仅用字幕、图文或缓存代替。
+
+模型、TikHub、云端 ASR 可能分别计费；原始媒体和正文会按所选路径发给对应服务。真实调用前确认本次内容与费用范围。本地转录不产生云端 ASR 费用，不代表模型和 TikHub 免费。离线测试与真实平台验收分别记录，所选平台是否可用以真实链接结果为准。
 
 日常管理在项目根目录运行：
 
@@ -203,7 +218,7 @@ bash scripts/bootstrap.sh --with-local-whisper
 uv sync --extra ocr
 ```
 
-普通音视频转录可使用本机 Whisper 或 CapsWriter；需要区分说话人时使用 FunASR。安装后还需按[配置指南](docs/guides/configuration.md)启用。Whisper / OCR 首次使用可能需要下载模型。云端转录、TikHub 和 AI 模型分别由各服务商计费；部分平台还需要登录，并可能受访问频率或网络限制影响。
+普通链接的 `local` 策略使用本机 MLX Whisper；CapsWriter 供其他兼容调用路径使用，不能代替这条策略的安装验证。需要区分说话人时再核对独立 FunASR 路径。安装后还需按[配置指南](docs/guides/configuration.md)启用。Whisper / OCR 首次使用可能需要下载模型。云端转录、TikHub 和 AI 模型分别由各服务商计费；部分平台还需要登录，并可能受访问频率或网络限制影响。
 
 [配置与 Key](docs/guides/configuration.md) · [按需配置服务的 Agent 提示词](docs/prompts/optional-services.md) · [手机收集](docs/guides/mobile-shortcut.md) · [飞书归档](docs/guides/feishu-archive.md)
 

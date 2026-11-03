@@ -12,13 +12,21 @@
 
 ## 默认验证
 
+SQLite 新安装的隔离全流程回归：
+
+```bash
+uv run --extra dev pytest --noconftest -p no:cacheprovider tests/integration/test_sqlite_learning_flow.py -q
+```
+
+该测试使用临时源码、私有配置、空数据与随机本机端口，阻止外部网络。仅模拟 LLM 的返回结果，真实验证文字提交、后台任务、SQLite 与文件产物、页面、导出、笔记、合集、纯文本阅读及第二进程重启后的持久化；不使用实际 PostgreSQL、用户资料或付费服务，不代表已验证所有音视频 / OCR / 模型与平台。
+
 配置环境变量与私密文件保护的隔离回归（不加载根 `tests/conftest.py` 的通知初始化）：
 
 ```bash
 PYTHONPATH=src uv run --extra dev pytest --noconftest tests/unit/test_config_env.py tests/unit/test_config_overrides.py tests/unit/test_public_configuration.py tests/unit/test_settings_service.py tests/unit/test_server_script.py -q
 ```
 
-覆盖环境变量优先级、模型统一与单独覆盖、配置不落库、设置页脱敏 / 只读、dotenv 端口一致性、不执行环境文件中的 Shell 文本，以及私密 `.env` 变体 / 配置备份 / Cookie 忽略规则。测试使用临时配置和数据库；`tests/test_view_token_fix.py` 已改为临时缓存测试，不再访问真实缓存。真实飞书 / 企业微信通知测试仅在显式提供 `LEARNFLUX_TEST_FEISHU_WEBHOOK` / `LEARNFLUX_TEST_WECHAT_WEBHOOK` 时运行；变量缺失则跳过。它们不自动加载根 `.env`，不得在默认离线验证中发送消息。
+覆盖环境变量优先级、模型统一与单独覆盖、配置不落库、设置页脱敏 / 只读、dotenv 端口一致性、不执行环境文件中的 Shell 文本，以及私密 `.env` 变体 / 配置备份 / Cookie 忽略规则。测试使用临时配置和数据库；`tests/test_view_token_fix.py` 已改为临时缓存测试，不再访问真实缓存。企业微信通知已移除，旧兼容入口只返回未发送；三个旧手动脚本仅提示已退役。真实飞书通知测试仅在显式提供 `LEARNFLUX_TEST_FEISHU_WEBHOOK` 时运行；不自动加载根 `.env`，未配置时跳过，不能在默认离线验证中发送消息。
 
 首次安装与开源图文工具的离线检查：
 

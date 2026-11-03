@@ -1,6 +1,6 @@
 # 第一次使用 LearnFlux
 
-先用一小段文字体验“导入 → AI 解读 → 保存结果”。这条路径不需要转录模型、TikHub、飞书或 Obsidian。下面的手动最小安装使用 SQLite；按项目日常方案使用 PostgreSQL 时，先完成[安装、建库与自动建表](postgresql.md)。不熟悉这些操作，可直接复制[新手安装提示词](../prompts/macos-local-quick-start.md)，由 Agent 引导 PostgreSQL 全流程。
+先用一小段文字体验“导入 → AI 解读 → 保存结果”。这条路径不需要转录模型、TikHub、飞书或 Obsidian。下面的手动最小安装使用 SQLite；按项目日常方案使用 PostgreSQL 时，先完成[安装、建库与自动建表](postgresql.md)。不熟悉这些操作，可直接复制 README 顶部的[新手安装提示词](../../README.md#不懂代码复制这段提示词给-ai)：新安装默认 SQLite，已有 PostgreSQL 保留原连接，需要时再走建库流程。
 
 ## 1. 安装并启动
 

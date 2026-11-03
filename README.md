@@ -10,17 +10,39 @@
 
 LearnFlux 是一个可以部署在自己电脑或服务器上的 AI 学习工具。导入资料后，可以阅读原文和 AI 总结、围绕内容提问、记录笔记，再导出或保存到 Obsidian、飞书。也可以用它管理课程、阅读电子书和写日记。
 
-[快速开始](#快速开始) · [功能介绍](#功能介绍) · [使用指南](docs/guides/product-tour.md) · [配置服务](docs/guides/configuration.md) · [文档中心](docs/README.md)
+[复制新手提示词](#不懂代码复制这段提示词给-ai) · [快速开始](#快速开始) · [功能介绍](#功能介绍) · [使用指南](docs/guides/product-tour.md) · [配置服务](docs/guides/configuration.md) · [文档中心](docs/README.md)
 
 **许可：** [MIT + Commons Clause](LICENSE)，包含商业使用限制；使用前请阅读完整条款。
 
 以下包含本地实际使用截图和公开资料演示，展示真实页面与操作。[截图说明](docs/images/readme-20261103-real/README.md)
 
+## 不懂代码？复制这段提示词给 AI
+
+把下面整段发给 WorkBuddy、Codex、Claude Code 等能操作本机终端和浏览器的 Agent，让它一步步带你完成。真实 Key 和密码只在自己的电脑填写，不要附在提示词或聊天里。
+
+```text
+我是第一次使用 LearnFlux，不懂 Git、终端和数据库。请直接操作我的电脑安装项目，遇到必须由我输入、登录或授权的操作，用中文告诉我在哪里做、完成后应看到什么，不要只给命令后结束。
+
+项目：https://github.com/zhangxun-ai/LearnFlux
+目标：安装 → 配置 → 导入文字 → AI 解读 → 查看 → 导出，并验证重启后结果仍在。
+
+1. 阅读仓库 README、AGENTS.md、.env.example 和启动脚本。检查我的系统、已有仓库、依赖与8000端口；复用已有环境，不覆盖配置、数据或正在运行的服务。
+2. 没有仓库时帮我克隆。只在 .env 不存在时执行 cp -n .env.example .env，并设置 chmod 600 .env。真实凭据不得写入源码、模板、聊天、日志或 Git；先确认私密文件被 Git 忽略。
+3. 全新安装默认 SQLite，保留 LEARNFLUX_PERSISTENCE_BACKEND=sqlite，数据库自动初始化，无需另装服务。若已有 PostgreSQL，复用原 DATABASE_URL，不切库；若我选择新装 PostgreSQL，按 docs/guides/postgresql.md 完成服务安装、专用账号与建库，再配置 postgres 和 DATABASE_URL，启动时自动应用仓库 SQL 迁移并核对表结构，不清空已有库。
+4. 执行 bash scripts/bootstrap.sh。在本机编辑器引导我填写 .env 的 LEARNFLUX_LLM_API_KEY、LEARNFLUX_LLM_BASE_URL、LEARNFLUX_LLM_MODEL，确保同一服务可调用。环境变量非空时优先于设置页；不要让我把 Key 发到聊天。
+5. 用 bash server.sh start 后台启动，默认访问 http://127.0.0.1:8000；用 status / log 查看状态，用 restart 重启、stop 停止。不要重复启动或擅自结束其他程序。macOS 会创建用户级登录启动项，stop 会卸载。
+6. 模型调用可能收费，真实调用前说明并取得我的同意。用 examples/first-learning.md 的公开文字跑通“单篇深度学习”，等待成功，核对原文与AI解读，实际导出并确认可打开。刷新、重新访问后核对结果仍在；可安全重启的新实例还要验证持久保存。
+7. 不默认安装音视频转录、OCR、TikHub、S3、飞书或公网隧道；我需要时再按 docs/prompts/optional-services.md 配置并实测。缺少模型密钥时引导我在本机准备，不能把页面可打开说成AI学习已成功。
+8. 遇到错误查明并修复后继续。最后给我本机入口、启停方式、实际选用的数据库，以及数据库、页面、AI学习、导出各项验证结果。涉及管理员权限、付费服务、开放公网或迁移既有数据时先取得同意；不替我提交或推送代码。
+```
+
+需要更细的引导时使用[完整安装提示词](docs/prompts/macos-local-quick-start.md)。下面是手动安装方式。
+
 ## 快速开始
 
 第一次使用，建议先粘贴一段文字，生成一份 AI 总结。**这一步只需配置模型服务，不需要安装音视频转录或扫描件识别工具。**
 
-**不熟悉 Git、终端或数据库？** 复制[新手安装提示词](docs/prompts/macos-local-quick-start.md)交给 WorkBuddy、Codex 等能操作本机的 Agent。它会引导 PostgreSQL 安装、建库与自动建表，配置模型并完成“导入 → AI 解读 → 查看 → 导出”的实际验证。已有环境会保留；也可以明确选择 SQLite 轻量体验。
+**数据库默认是 SQLite，无需另外安装数据库服务；PostgreSQL 仍可选。** SQLite 已通过隔离的文字学习、导出、笔记、合集、阅读及重启持久化验证，模型结果使用模拟返回；这不代表已验证所有音视频来源、OCR 或真实模型。已有 PostgreSQL 用户继续使用原连接，不会自动切换或迁移。
 
 准备 Git、Bash、curl 和 lsof（macOS 通常已自带 lsof），在 macOS / Linux 终端运行：
 

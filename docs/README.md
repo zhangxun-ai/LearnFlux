@@ -20,7 +20,7 @@
 | [读取飞书文档](guides/feishu-documents.md) | 将 Wiki/Docx 正文送入深度学习，保留来源及读取范围 |
 | [PostgreSQL 指南](guides/postgresql.md) | SQLite 到 PostgreSQL 的迁移、验收和回滚 |
 
-新用户也可以复制[新手安装提示词](prompts/macos-local-quick-start.md)，交给有本机终端权限的 Agent 安装依赖、准备 PostgreSQL 与表结构、配置私有环境变量，并跑通文字学习与导出。飞书归档、手机快捷入口和其他 ASR 的独立配置提示词见[可选服务配置](prompts/optional-services.md)，无需全部安装。
+新用户也可以复制[新手安装提示词](prompts/macos-local-quick-start.md)，交给有本机终端权限的 Agent 安装依赖、初始化默认 SQLite 或复用已有 PostgreSQL、配置私有环境变量，并跑通文字学习与导出。飞书归档、手机快捷入口和其他 ASR 的独立配置提示词见[可选服务配置](prompts/optional-services.md)，无需全部安装。
 
 ## 功能说明
 

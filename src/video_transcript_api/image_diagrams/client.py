@@ -378,4 +378,3 @@ class OpenAIImageDiagramClient:
         if not raw.startswith(b"\x89PNG\r\n\x1a\n") or len(raw) > 50 * 1024 * 1024:
             raise ImageDiagramAPIError("invalid_image_response", unknown_outcome=True, usage=confirmed_usage)
         return {"image_bytes": raw, "usage": _usage(result), "request_id": _request_id(result)}
-

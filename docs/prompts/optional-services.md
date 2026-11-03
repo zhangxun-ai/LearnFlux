@@ -63,4 +63,3 @@ Apple Silicon 优先复用本机 mlx-whisper；其他系统先确认显式 local
 </details>
 
 LLM / TikHub 通常是填写已有服务凭据，按[配置与 API Key 指南](../guides/configuration.md)操作；本地转录不产生云端 ASR 费用，**不代表 LLM、TikHub 等第三方调用免费**。云端 ASR 默认关闭，启用后仍先估算、确认再提交。
-

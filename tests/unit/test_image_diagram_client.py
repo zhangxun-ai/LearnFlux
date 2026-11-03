@@ -430,9 +430,3 @@ def test_malformed_image_response_keeps_numeric_usage_without_provider_text():
         "model": "gpt-image-2", "usage": {"output_tokens": 900, "details": {"text_tokens": 20}},
         "request_id": "req-image-123",
     }}
-
-
-
-
-
-

@@ -11,6 +11,8 @@ venv/
 env/
 ENV/
 .env
+.env.*
+!.env.example
 .venv
 
 # IDE配置
@@ -78,9 +80,19 @@ tests/llm/validation_scoring_results.json
 # 配置文件（敏感信息）
 config/config.json
 config/config.jsonc
+config/config.json.*
+config/config.jsonc.*
 config/users.json
+config/users.json.*
 config/config.overrides.json
+config/config.overrides.json.*
 .learnflux/
+
+# Browser cookies are credentials, including exported downloader cookies.
+cookies.txt
+cookies.json
+*_cookies.txt
+*_cookies.json
 
 # 第三方工具输出
 third_party/BBDown/output/

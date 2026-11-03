@@ -2,21 +2,25 @@
 Integration tests for Feishu notification with real webhook.
 
 Sends actual messages to a Feishu bot webhook to verify end-to-end delivery.
-These tests require network access and a valid Feishu webhook.
+Set LEARNFLUX_TEST_FEISHU_WEBHOOK explicitly to enable real sends.
+Without it, collection skips before importing notification clients.
 
 Run: uv run pytest tests/integration/test_feishu_real.py -v -s
 """
 
+import os
 import time
 
 import pytest
 
+FEISHU_WEBHOOK = os.environ.get("LEARNFLUX_TEST_FEISHU_WEBHOOK", "").strip()
+if not FEISHU_WEBHOOK:
+    pytest.skip(
+        "Set LEARNFLUX_TEST_FEISHU_WEBHOOK to run real notification tests.",
+        allow_module_level=True,
+    )
+
 from wecom_notifier import FeishuNotifier
-
-
-FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/08c70ae6-4584-497f-b132-704943b7c20d"
-
-
 @pytest.fixture(scope="module")
 def notifier():
     n = FeishuNotifier()

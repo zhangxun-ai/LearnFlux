@@ -13,6 +13,16 @@ Note: Since messages are sent asynchronously, we add delays between tests
 import sys
 import os
 
+# Explicit opt-in: never initialize project resources without a test webhook.
+WEBHOOK_URL = os.environ.get("LEARNFLUX_TEST_WECHAT_WEBHOOK", "").strip()
+if not WEBHOOK_URL:
+    reason = "Set LEARNFLUX_TEST_WECHAT_WEBHOOK to run real notification tests."
+    if __name__ == "__main__":
+        print(f"SKIP: {reason}")
+        raise SystemExit(0)
+    import pytest
+    pytest.skip(reason, allow_module_level=True)
+
 # Add project root to path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(project_root, "src"))
@@ -25,10 +35,6 @@ from video_transcript_api.utils.logging import setup_logger
 
 # Setup logger
 logger = setup_logger("test_wechat_real")
-
-# Real webhook URL
-WEBHOOK_URL = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=01ae2f25-ec29-4256-9fc1-22450f88add7"
-
 
 def test_short_message():
     """Test 1: Short message (basic test)"""

@@ -917,9 +917,11 @@ body.workbench-meadow.page-focus .type-zone:hover .type-orb,
 body.workbench-meadow.page-focus .type-orb:focus,
 body.workbench-meadow.page-focus .mixer-zone:hover .mixer-orb,
 body.workbench-meadow.page-focus .mixer-orb:focus {
-    background: var(--product-surface);
-    color: #174A37;
+    background: var(--focus-control-surface);
+    color: var(--focus-control-ink);
+    box-shadow: none;
 }
+
 
 body.workbench-meadow.page-focus .type-panel,
 body.workbench-meadow.page-focus .mixer-panel,
@@ -1826,6 +1828,12 @@ body.workbench-meadow.page-focus {
     height: 100dvh;
     min-height: 0;
     overflow: hidden;
+    --focus-control-surface: rgba(19, 35, 42, 0.82);
+    --focus-control-border: rgba(232, 244, 239, 0.18);
+    --focus-control-ink: #F4F8F3;
+    --focus-control-muted: #C3D1CC;
+    --focus-control-radius: 10px;
+    --focus-control-size: 0.8125rem;
 }
 
 body.workbench-meadow.page-focus .main-area {
@@ -1849,10 +1857,12 @@ body.workbench-meadow.page-focus .focus-stage {
     width: 100%;
     height: 100%;
     min-height: 0;
+    padding: 0;
     overflow: hidden;
     border: 1px solid rgba(238, 249, 244, 0.52);
     border-radius: 18px;
     background: #203b4d;
+    container: focus-writing / inline-size;
     box-shadow: 0 12px 34px rgba(27, 46, 38, 0.15);
 }
 
@@ -1865,17 +1875,13 @@ body.workbench-meadow.page-focus .focus-vignette {
 /* A clear writing surface: date and text sit directly over the full-bleed scene. */
 body.workbench-meadow.page-focus .deck-wrap {
     position: absolute;
-    inset: 112px clamp(92px, 7.5vw, 144px) 76px clamp(42px, 4.2vw, 76px);
+    inset: 68px clamp(24px, 6cqw, 80px) 24px;
     display: block;
     width: auto;
     height: auto;
     margin: 0;
     padding: 0;
     pointer-events: none;
-}
-
-body.workbench-meadow.page-focus[data-mode="snowy"] .deck-wrap {
-    left: clamp(188px, 16vw, 230px);
 }
 
 body.workbench-meadow.page-focus .focus-deck,
@@ -1909,41 +1915,48 @@ body.workbench-meadow.page-focus .journal-meta {
 
 body.workbench-meadow.page-focus .journal-meta span {
     color: #F4F8F3;
-    font-size: 0.9rem;
-    font-weight: 650;
+    font-size: var(--focus-control-size);
+    font-weight: 400;
     text-shadow: 0 1px 8px rgba(9, 28, 37, 0.62);
 }
 
 body.workbench-meadow.page-focus .journal-meta select {
-    min-height: 38px;
-    padding: 0 34px 0 13px;
-    border: 1px solid rgba(245, 250, 245, 0.34);
-    border-radius: 12px;
-    background: rgba(28, 55, 63, 0.48);
+    min-height: 32px;
+    padding: 0 24px 0 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
     color: #F8FBF6;
-    font-size: 0.92rem;
+    font-size: var(--focus-control-size);
     text-shadow: 0 1px 4px rgba(9, 28, 37, 0.45);
     transform: none;
     pointer-events: auto;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    width: auto;
+    font-weight: 400;
+    appearance: auto;
+    color-scheme: dark;
 }
 
 body.workbench-meadow.page-focus .journal-meta select option {
-    color: #173C32;
+    color: var(--focus-control-ink);
     text-shadow: none;
+    background: #13232A;
 }
 
-body.workbench-meadow.page-focus[data-mode="snowy"] .journal-meta span {
-    color: #183B36;
-    text-shadow: 0 1px 5px rgba(242, 248, 250, 0.72);
-}
-
-body.workbench-meadow.page-focus[data-mode="snowy"] .journal-meta select {
-    border-color: rgba(43, 79, 78, 0.32);
-    background: rgba(230, 241, 243, 0.66);
-    color: #173B36;
-    text-shadow: none;
+/* Feather the snow writing area into the landscape, without a visible card. */
+body.workbench-meadow.page-focus[data-mode="snowy"] .focus-deck::before {
+    content: "";
+    position: absolute;
+    inset: -120px -160px -100px -120px;
+    z-index: 0;
+    background: rgba(9, 24, 43, 0.60);
+    mask-image:
+        linear-gradient(90deg, transparent, #000 120px, #000 calc(100% - 160px), transparent),
+        linear-gradient(180deg, transparent, #000 120px, #000 calc(100% - 100px), transparent);
+    mask-composite: intersect;
+    pointer-events: none;
 }
 
 body.workbench-meadow.page-focus .focus-editor {
@@ -1953,92 +1966,41 @@ body.workbench-meadow.page-focus .focus-editor {
     padding: 0 8px 12px 0;
     border: 0;
     background: transparent;
-    color: #F1F8F2;
+    color: #F5F6EF;
     caret-color: #FFFDF5;
-    font-size: clamp(1.4rem, 2.2vw, 1.85rem);
-    line-height: 1.85;
-    text-shadow: 0 1px 8px rgba(10, 30, 40, 0.68);
+    line-height: 1.8;
+    text-shadow: 0 1px 3px rgba(7, 18, 31, 0.65);
     -webkit-text-stroke: 0;
     scrollbar-color: rgba(246, 252, 247, 0.5) transparent;
-}
-
-body.workbench-meadow.page-focus[data-size="small"] .focus-editor {
-    font-size: clamp(1.4rem, 2.2vw, 1.85rem);
-}
-
-body.workbench-meadow.page-focus[data-size="medium"] .focus-editor {
-    font-size: clamp(1.65rem, 2.6vw, 2.1rem);
-}
-
-body.workbench-meadow.page-focus[data-size="large"] .focus-editor {
-    font-size: clamp(1.9rem, 3vw, 2.45rem);
+    max-width: 76ch;
+    font-weight: 400;
 }
 
 body.workbench-meadow.page-focus .focus-editor::placeholder {
-    color: rgba(242, 249, 244, 0.88);
-    text-shadow: 0 1px 8px rgba(10, 30, 40, 0.72);
-}
-
-body.workbench-meadow.page-focus[data-mode="snowy"] .focus-editor {
-    color: #24483F;
-    caret-color: #174B3A;
-    text-shadow: 0 1px 4px rgba(244, 249, 249, 0.62);
-}
-
-body.workbench-meadow.page-focus[data-mode="snowy"] .focus-editor::placeholder {
-    color: rgba(34, 71, 62, 0.85);
-    text-shadow: 0 1px 4px rgba(244, 249, 249, 0.72);
-}
-
-body.workbench-meadow.page-focus .deck-actions {
-    right: 0;
-    bottom: 2px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    opacity: 0;
-    transition: opacity 180ms ease;
-}
-
-body.workbench-meadow.page-focus .focus-deck:hover .deck-actions,
-body.workbench-meadow.page-focus .focus-deck:focus-within .deck-actions {
-    opacity: 1;
-}
-
-body.workbench-meadow.page-focus .deck-actions button {
-    border-color: rgba(245, 250, 245, 0.36);
-    border-radius: 10px;
-    background: rgba(24, 53, 60, 0.58);
-    color: #F5F8F3;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-}
-
-body.workbench-meadow.page-focus .save-status {
-    color: #F5F8F3;
-    text-shadow: 0 1px 6px rgba(8, 25, 31, 0.56);
+    color: #F5F6EF;
+    text-shadow: 0 1px 3px rgba(7, 18, 31, 0.65);
 }
 
 /* The weather, font, and journal controls share one quiet top toolbar. */
 body.workbench-meadow.page-focus .mode-zone {
     top: 14px;
-    left: calc(50% - 148px);
+    left: calc(50% - 140px);
     right: auto;
     z-index: 18;
     width: max-content;
-    height: 44px;
+    height: 36px;
     padding: 0;
     align-items: flex-start;
     pointer-events: auto;
 }
 
 body.workbench-meadow.page-focus .mode-switch {
-    gap: 5px;
-    padding: 4px;
-    border-color: rgba(237, 248, 246, 0.32);
-    border-radius: 15px;
-    background: rgba(34, 67, 78, 0.64);
-    box-shadow: 0 8px 24px rgba(10, 26, 34, 0.2);
+    gap: 2px;
+    padding: 2px;
+    border-color: var(--focus-control-border);
+    border-radius: var(--focus-control-radius);
+    background: var(--focus-control-surface);
+    box-shadow: none;
     opacity: 1;
     transform: none;
     pointer-events: auto;
@@ -2047,11 +2009,12 @@ body.workbench-meadow.page-focus .mode-switch {
 }
 
 body.workbench-meadow.page-focus .mode-button {
-    min-height: 34px;
-    padding: 0 12px;
-    border-radius: 11px;
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: 7px;
     color: rgba(248, 250, 246, 0.88);
-    font-size: 0.88rem;
+    font-size: var(--focus-control-size);
+    font-weight: 400;
 }
 
 body.workbench-meadow.page-focus .mode-button svg {
@@ -2065,39 +2028,42 @@ body.workbench-meadow.page-focus .mode-button.active {
 }
 
 body.workbench-meadow.page-focus .mode-divider {
-    height: 22px;
+    height: 14px;
     background: rgba(237, 248, 246, 0.3);
 }
 
 body.workbench-meadow.page-focus .type-zone {
     top: 14px;
-    left: calc(50% + 34px);
+    left: calc(50% + 28px);
     right: auto;
     z-index: 20;
     width: max-content;
-    min-width: 104px;
+    min-width: 100px;
     height: auto;
     padding: 0;
 }
 
 body.workbench-meadow.page-focus .type-orb {
-    width: 106px;
-    height: 42px;
+    white-space: nowrap;
+    min-height: 36px;
+    width: 100px;
+    height: 36px;
     display: flex;
     justify-content: center;
-    gap: 8px;
-    padding: 0 12px;
-    border-color: rgba(237, 248, 246, 0.32);
-    border-radius: 14px;
-    background: rgba(34, 67, 78, 0.64);
+    gap: 6px;
+    padding: 0 10px;
+    border-color: var(--focus-control-border);
+    border-radius: var(--focus-control-radius);
+    background: var(--focus-control-surface);
     color: #F6FAF6;
-    font-size: 0.88rem;
-    box-shadow: 0 8px 24px rgba(10, 26, 34, 0.2);
+    font-size: var(--focus-control-size);
+    box-shadow: none;
     opacity: 1;
     transform: none;
     pointer-events: auto;
     backdrop-filter: blur(14px) saturate(1.12);
     -webkit-backdrop-filter: blur(14px) saturate(1.12);
+    font-weight: 400;
 }
 
 body.workbench-meadow.page-focus .type-orb svg {
@@ -2118,9 +2084,9 @@ body.workbench-meadow.page-focus .type-panel {
     z-index: 24;
     width: 184px;
     margin: 0;
-    border-color: rgba(225, 239, 237, 0.35);
+    border-color: var(--focus-control-border);
     border-radius: 13px;
-    background: rgba(31, 58, 67, 0.9);
+    background: var(--focus-control-surface);
     color: #F4F8F3;
     box-shadow: 0 14px 32px rgba(9, 25, 32, 0.26);
     opacity: 0;
@@ -2161,32 +2127,39 @@ body.workbench-meadow.page-focus .panel-line {
 
 body.workbench-meadow.page-focus .journal-shell {
     inset: 0;
+    width: auto;
+    height: auto;
     pointer-events: none;
 }
 
 body.workbench-meadow.page-focus .journal-dock {
-    top: 16px;
+    top: 14px;
     right: 18px;
+    bottom: auto;
+    left: auto;
     display: flex;
-    gap: 8px;
+    gap: 4px;
     transform: none;
     opacity: 1;
     pointer-events: auto;
 }
 
 body.workbench-meadow.page-focus .journal-dock-button {
+    min-height: 36px;
     width: auto;
-    min-width: 62px;
-    height: 40px;
-    padding: 0 12px;
-    border-color: rgba(237, 248, 246, 0.32);
-    border-radius: 13px;
-    background: rgba(34, 67, 78, 0.64);
+    min-width: 48px;
+    height: 36px;
+    padding: 0 10px;
+    border-color: var(--focus-control-border);
+    border-radius: var(--focus-control-radius);
+    background: var(--focus-control-surface);
     color: #F6FAF6;
     writing-mode: horizontal-tb;
-    box-shadow: 0 8px 24px rgba(10, 26, 34, 0.2);
+    box-shadow: none;
     backdrop-filter: blur(14px) saturate(1.12);
     -webkit-backdrop-filter: blur(14px) saturate(1.12);
+    font-size: var(--focus-control-size);
+    font-weight: 400;
 }
 
 body.workbench-meadow.page-focus .journal-dock-button:hover,
@@ -2203,7 +2176,7 @@ body.workbench-meadow.page-focus .journal-sidecar {
     width: min(430px, calc(100vw - 340px));
     height: min(660px, calc(100% - 92px));
     min-height: 280px;
-    border-color: rgba(224, 241, 235, 0.3);
+    border-color: var(--focus-control-border);
     border-radius: 16px;
     background: rgba(29, 54, 61, 0.92);
     color: #F4F8F3;
@@ -2241,7 +2214,7 @@ body.workbench-meadow.page-focus[data-journal-sidecar] .deck-wrap {
     right: min(430px, 42vw);
 }
 
-/* Rain and snowfall strength stays visible in a slim vertical glass control. */
+/* Rain and snowfall strength uses the right edge of the scene. */
 body.workbench-meadow.page-focus .mixer-zone {
     position: absolute;
     inset: 0;
@@ -2259,21 +2232,21 @@ body.workbench-meadow.page-focus .mixer-zone {
 
 body.workbench-meadow.page-focus .weather-control {
     position: absolute;
-    top: 78px;
+    top: 70px;
     right: 18px;
     z-index: 12;
-    width: 76px;
-    height: 232px;
+    width: 56px;
+    height: 184px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 10px;
-    border: 1px solid rgba(229, 243, 240, 0.32);
-    border-radius: 18px;
-    background: rgba(36, 67, 79, 0.53);
+    padding: 12px 8px;
+    border: 1px solid var(--focus-control-border);
+    border-radius: var(--focus-control-radius);
+    background: var(--focus-control-surface);
     color: #F4F8F4;
-    box-shadow: 0 10px 28px rgba(12, 30, 37, 0.18);
+    box-shadow: none;
     pointer-events: auto;
     backdrop-filter: blur(14px) saturate(1.1);
     -webkit-backdrop-filter: blur(14px) saturate(1.1);
@@ -2322,8 +2295,12 @@ body.workbench-meadow.page-focus .weather-value-row {
     justify-content: center;
     min-height: 16px;
     color: rgba(246, 250, 246, 0.9);
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
+}
+
+body.workbench-meadow.page-focus .weather-value-row .mix-value {
+    color: var(--focus-control-muted);
 }
 
 body.workbench-meadow.page-focus .weather-value-row .mix-name {
@@ -2336,9 +2313,9 @@ body.workbench-meadow.page-focus .weather-value-row .mix-name {
 }
 
 body.workbench-meadow.page-focus #weather-slider {
-    width: 18px;
-    height: 132px;
-    min-height: 132px;
+    width: 28px;
+    height: 112px;
+    min-height: 112px;
     margin: 0 auto;
     padding: 0;
     border: 0;
@@ -2386,14 +2363,14 @@ body.workbench-meadow.page-focus #weather-slider::-moz-range-thumb {
     box-shadow: 0 1px 7px rgba(17, 48, 37, 0.34);
 }
 
-/* The sound menu, volume, and timer form one compact, always-visible bottom bar. */
+/* Sound and timer controls share the bottom edge. */
 body.workbench-meadow.page-focus .mixer-panel {
     position: absolute;
-    right: 174px;
+    right: 150px;
     bottom: 18px;
     z-index: 14;
     display: block;
-    width: min(360px, calc(100% - 236px));
+    width: min(280px, calc(100% - 216px));
     min-width: 0;
     margin: 0;
     padding: 0;
@@ -2413,19 +2390,20 @@ body.workbench-meadow.page-focus .sound-group {
     width: 100%;
     min-width: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto 14px;
+    grid-template-columns: auto minmax(48px, 1fr) 30px;
+    grid-template-rows: auto;
     align-items: center;
-    gap: 4px 12px;
-    padding: 9px 13px 8px;
-    border: 1px solid rgba(228, 241, 236, 0.3);
-    border-radius: 15px;
-    background: rgba(29, 57, 66, 0.72);
+    gap: 10px;
+    padding: 5px 12px;
+    border: 1px solid var(--focus-control-border);
+    border-radius: var(--focus-control-radius);
+    background: var(--focus-control-surface);
     color: #F4F8F4;
-    box-shadow: 0 8px 22px rgba(8, 24, 31, 0.18);
+    box-shadow: none;
     pointer-events: auto;
     backdrop-filter: blur(14px) saturate(1.1);
     -webkit-backdrop-filter: blur(14px) saturate(1.1);
+    min-height: 40px;
 }
 
 body.workbench-meadow.page-focus .sound-group .mix-row {
@@ -2441,13 +2419,13 @@ body.workbench-meadow.page-focus .sound-current {
     display: inline-flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
-    padding: 0 4px;
+    gap: 6px;
+    padding: 0;
     border: 0;
     background: transparent;
     color: #F4F8F4;
-    font-size: 0.82rem;
-    font-weight: 600;
+    font-size: var(--focus-control-size);
+    font-weight: 400;
     cursor: pointer;
 }
 
@@ -2476,13 +2454,17 @@ body.workbench-meadow.page-focus .mix-value#volume-value {
     color: rgba(248, 251, 247, 0.82);
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
+    grid-column: 3;
+    grid-row: 1;
+    text-align: right;
 }
 
 body.workbench-meadow.page-focus #volume-slider {
-    grid-column: 1 / -1;
+    grid-column: 2;
+    grid-row: 1;
     width: 100%;
-    height: 14px;
-    min-height: 14px;
+    height: 28px;
+    min-height: 28px;
     margin: 0;
     padding: 0;
     border: 0;
@@ -2536,9 +2518,9 @@ body.workbench-meadow.page-focus .sound-menu {
     z-index: 30;
     width: 176px;
     padding: 7px;
-    border-color: rgba(224, 241, 235, 0.25);
+    border-color: var(--focus-control-border);
     border-radius: 13px;
-    background: rgba(27, 53, 62, 0.91);
+    background: var(--focus-control-surface);
     color: #F4F8F3;
     box-shadow: 0 14px 34px rgba(8, 23, 30, 0.3);
     backdrop-filter: blur(18px);
@@ -2558,22 +2540,22 @@ body.workbench-meadow.page-focus .sound-menu button.active {
 
 body.workbench-meadow.page-focus .timer-readout {
     position: absolute;
-    right: 64px;
+    right: 58px;
     bottom: 18px;
     z-index: 15;
     width: max-content;
-    min-width: 86px;
-    height: 44px;
+    min-width: 80px;
+    height: 40px;
     display: flex;
     flex-direction: row;
     align-items: center;
     justify-content: center;
     margin: 0;
     padding: 0 10px;
-    border: 1px solid rgba(228, 241, 236, 0.3);
+    border: 1px solid var(--focus-control-border);
     border-right: 0;
-    border-radius: 14px 0 0 14px;
-    background: rgba(29, 57, 66, 0.82);
+    border-radius: 10px 0 0 10px;
+    background: var(--focus-control-surface);
     color: #F7FAF6;
     opacity: 1;
     transform: none;
@@ -2594,26 +2576,27 @@ body.workbench-meadow.page-focus .timer-hint {
 
 body.workbench-meadow.page-focus .timer-time {
     color: #F7FAF6;
-    font-family: Georgia, "Songti SC", serif;
-    font-size: 1rem;
-    font-weight: 700;
+    font-family: inherit;
+    font-size: 0.9375rem;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
 }
 
 body.workbench-meadow.page-focus .mixer-orb {
+    min-height: 40px;
     position: absolute;
     right: 18px;
     bottom: 18px;
     z-index: 16;
-    width: 47px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     display: grid;
     place-items: center;
-    border: 1px solid rgba(228, 241, 236, 0.3);
-    border-radius: 0 14px 14px 0;
-    background: rgba(29, 57, 66, 0.82);
+    border: 1px solid var(--focus-control-border);
+    border-radius: 0 10px 10px 0;
+    background: var(--focus-control-surface);
     color: #F7FAF6;
-    box-shadow: 0 8px 22px rgba(8, 24, 31, 0.18);
+    box-shadow: none;
     pointer-events: auto;
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -2657,12 +2640,13 @@ body.workbench-meadow.page-focus :where(.type-orb, .mixer-orb, .journal-dock-but
 }
 
 body.workbench-meadow.page-focus .focus-exit {
+    min-height: 40px;
     left: 16px;
     bottom: 16px;
     width: 40px;
     height: 40px;
-    border-color: rgba(232, 244, 239, 0.34);
-    background: rgba(31, 59, 67, 0.52);
+    border-color: var(--focus-control-border);
+    background: var(--focus-control-surface);
     color: #F4F8F3;
     opacity: 0.82;
     backdrop-filter: blur(10px);
@@ -2680,26 +2664,18 @@ body.workbench-meadow.page-focus .focus-exit span {
     }
 
     body.workbench-meadow.page-focus .deck-wrap {
-        inset: 104px 84px 82px 28px;
-    }
-
-    body.workbench-meadow.page-focus .mode-zone {
-        left: calc(50% - 148px);
-    }
-
-    body.workbench-meadow.page-focus .type-zone {
-        left: calc(50% + 34px);
+        inset: 68px 28px 24px;
     }
 
     body.workbench-meadow.page-focus .weather-control {
         right: 10px;
-        width: 66px;
-        height: 206px;
+        width: 56px;
+        height: 184px;
     }
 
     body.workbench-meadow.page-focus .mixer-panel {
-        right: 166px;
-        width: min(330px, calc(100% - 220px));
+        right: 150px;
+        width: min(280px, calc(100% - 216px));
     }
 
     body.workbench-meadow.page-focus .focus-exit {
@@ -2756,7 +2732,7 @@ body.workbench-meadow.page-focus .focus-exit span {
     }
 
     body.workbench-meadow.page-focus .deck-wrap {
-        inset: 114px 76px 132px 18px;
+        inset: 106px 18px 24px;
     }
 
     body.workbench-meadow.page-focus .journal-meta {
@@ -2771,14 +2747,14 @@ body.workbench-meadow.page-focus .focus-exit span {
     body.workbench-meadow.page-focus .weather-control {
         top: 102px;
         right: 8px;
-        width: 60px;
-        height: 170px;
+        width: 52px;
+        height: 164px;
         padding: 10px 7px;
         border-radius: 14px;
     }
 
     body.workbench-meadow.page-focus .weather-control-title {
-        font-size: 0.63rem;
+        font-size: 0.75rem;
     }
 
     body.workbench-meadow.page-focus #weather-slider {
@@ -2823,9 +2799,173 @@ body.workbench-meadow.page-focus .focus-exit span {
     }
 }
 
+/* Adapt to the space left beside the sidebar, even on a wide browser window. */
+@container focus-writing (max-width: 600px) {
+    body.workbench-meadow.page-focus .deck-wrap,
+    body.workbench-meadow.page-focus[data-journal-sidecar] .deck-wrap {
+        inset: 106px 18px 24px;
+    }
+
+    body.workbench-meadow.page-focus .mode-zone {
+        top: 10px;
+        left: 10px;
+    }
+
+    body.workbench-meadow.page-focus .type-zone {
+        top: 10px;
+        left: auto;
+        right: 10px;
+        min-width: 90px;
+    }
+
+    body.workbench-meadow.page-focus .type-orb {
+        width: 94px;
+        height: 38px;
+    }
+
+    body.workbench-meadow.page-focus .type-panel {
+        left: auto;
+        right: 0;
+    }
+
+    body.workbench-meadow.page-focus .journal-dock {
+        top: 57px;
+        right: 10px;
+        gap: 6px;
+    }
+
+    body.workbench-meadow.page-focus .journal-dock-button {
+        min-width: 52px;
+        height: 34px;
+        padding: 0 8px;
+    }
+
+    body.workbench-meadow.page-focus .weather-control {
+        top: 102px;
+        right: 8px;
+        width: 52px;
+        height: 164px;
+        padding: 10px 7px;
+    }
+
+    body.workbench-meadow.page-focus #weather-slider {
+        height: 92px;
+        min-height: 92px;
+    }
+
+    body.workbench-meadow.page-focus .mixer-panel {
+        left: 12px;
+        right: auto;
+        bottom: 68px;
+        width: calc(100% - 24px);
+    }
+
+    body.workbench-meadow.page-focus .journal-sidecar {
+        inset: 102px 16px 16px;
+        width: auto;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+    }
+}
+
+/* Keep writing in the foreground. Edge proximity, keyboard focus, or the
+   touch toolbar toggle reveals controls without changing the editor bounds. */
+body.workbench-meadow.page-focus .focus-stage :is(.mode-zone, .type-zone, .journal-dock, .weather-control, .mixer-panel, .timer-readout, .mixer-orb, .focus-exit) {
+    --focus-control-events: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+}
+
+body.workbench-meadow.page-focus .focus-stage :is(.mode-switch, .type-orb, .sound-group) {
+    pointer-events: var(--focus-control-events, none);
+}
+
+body.workbench-meadow.page-focus .focus-stage[data-focus-controls~="top"] :is(.mode-zone, .type-zone, .journal-dock),
+body.workbench-meadow.page-focus .focus-stage[data-focus-controls~="right"] .weather-control,
+body.workbench-meadow.page-focus .focus-stage[data-focus-controls~="bottom"] :is(.mixer-panel, .timer-readout, .mixer-orb, .focus-exit),
+body.workbench-meadow.page-focus .focus-stage[data-tools-open] :is(.mode-zone, .type-zone, .journal-dock, .weather-control, .mixer-panel, .timer-readout, .mixer-orb),
+body.workbench-meadow.page-focus .focus-stage .mixer-panel.is-locked,
+body.workbench-meadow.page-focus .focus-stage :is(.mode-zone, .type-zone, .journal-dock, .weather-control, .mixer-panel, .mixer-orb, .focus-exit):focus-within,
+body.workbench-meadow.page-focus .focus-stage:has(.mixer-orb:focus-visible, .mixer-panel:focus-within) .timer-readout {
+    --focus-control-events: auto;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* The open drawer sits above edge controls, including its close button. */
+body.workbench-meadow.page-focus[data-journal-sidecar] .journal-shell {
+    z-index: 21;
+}
+
+body.workbench-meadow.page-focus[data-journal-sidecar] .focus-stage .weather-control {
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.workbench-meadow.page-focus .type-option,
+body.workbench-meadow.page-focus .size-option,
+body.workbench-meadow.page-focus .sound-menu button {
+    font-family: var(--product-font-ui);
+    min-height: 32px;
+    font-size: var(--focus-control-size);
+    font-weight: 400;
+}
+
+body.workbench-meadow.page-focus :is(.journal-meta select, .type-option, .size-option, .journal-tab, .journal-sidecar-close):focus-visible {
+    outline: 2px solid #D7EFDE;
+    outline-offset: 2px;
+}
+
+body.workbench-meadow.page-focus .journal-meta select:hover {
+    background-color: rgba(232, 244, 239, 0.1);
+}
+
+body.workbench-meadow.page-focus .focus-editor::selection {
+    color: #FFFFFF;
+    background: #356555;
+}
+
+/* The journal drawer stays available while open; it does not reveal other tools. */
+body.workbench-meadow.page-focus[data-journal-sidecar] .focus-stage .journal-dock {
+    --focus-control-events: auto;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+body.workbench-meadow.page-focus .focus-tools-toggle {
+    display: none;
+}
+
 @media (hover: none) {
-    body.workbench-meadow.page-focus .deck-actions {
-        opacity: 1;
+    body.workbench-meadow.page-focus .focus-tools-toggle {
+        position: absolute;
+        z-index: 22;
+        left: 12px;
+        bottom: 12px;
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        padding: 0;
+        border: 1px solid var(--focus-control-border);
+        border-radius: 14px;
+        background: var(--focus-control-surface);
+        color: #F6FAF6;
+    }
+
+    body.workbench-meadow.page-focus .focus-tools-toggle svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+    }
+
+    body.workbench-meadow.page-focus .mixer-panel {
+        bottom: 68px;
     }
 }
 

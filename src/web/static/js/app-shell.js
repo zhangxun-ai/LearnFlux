@@ -463,6 +463,22 @@
         '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>');
     body.appendChild(floatingToggleBtn);
 
+    // Reveal near the actual button without putting a hit area over page content.
+    function updateFloatingToggleVisibility(event) {
+        if (event.pointerType === 'touch' || media.matches || shellState.mode !== 'floating') return;
+        const rect = floatingToggleBtn.getBoundingClientRect();
+        const near = event.clientX >= rect.left - 16 && event.clientX <= rect.right + 16
+            && event.clientY >= rect.top - 16 && event.clientY <= rect.bottom + 16;
+        floatingToggleBtn.classList.toggle('is-revealed', near);
+    }
+    function hideFloatingToggle() {
+        floatingToggleBtn.classList.remove('is-revealed');
+    }
+    document.addEventListener('pointermove', updateFloatingToggleVisibility, {passive: true});
+    document.addEventListener('pointerleave', hideFloatingToggle);
+    document.addEventListener('input', hideFloatingToggle);
+    window.addEventListener('blur', hideFloatingToggle);
+
     let hoverTimeout;
     function openFloating() {
         if (media.matches || shellState.mode !== 'floating') return;
@@ -471,6 +487,7 @@
         body.classList.add('drawer-hover-open');
     }
     function closeFloating() {
+        if (isResizing) return;
         clearTimeout(hoverTimeout);
         body.classList.remove('drawer-hover-open');
         sidebar.inert = !media.matches && shellState.mode === 'floating';
@@ -478,7 +495,7 @@
     hoverTrigger.addEventListener('mouseenter', openFloating);
     sidebar.addEventListener('mouseenter', () => clearTimeout(hoverTimeout));
     sidebar.addEventListener('mouseleave', () => {
-        if (media.matches || shellState.mode !== 'floating') return;
+        if (media.matches || shellState.mode !== 'floating' || isResizing) return;
         hoverTimeout = setTimeout(() => {
             if (!sidebar.contains(document.activeElement)) closeFloating();
         }, 300);

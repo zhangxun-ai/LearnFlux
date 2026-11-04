@@ -93,6 +93,58 @@ for (const [key, value] of Object.entries(features)) {
 
 
 class TestShellBehaviorSource:
+    def test_floating_toggle_reveals_near_pointer_and_hides_during_editing(self):
+        node_test = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const start = source.indexOf('    // Reveal near the actual button');
+const end = source.indexOf('    let hoverTimeout;', start);
+assert.ok(start >= 0 && end > start);
+const listeners = {}, windowListeners = {}, classes = new Set();
+const context = {
+    media: {matches: false}, shellState: {mode: 'floating'},
+    floatingToggleBtn: {
+        getBoundingClientRect: () => ({left: 14, top: 14, right: 50, bottom: 50}),
+        classList: {
+            toggle(name, visible) {if (visible) classes.add(name); else classes.delete(name);},
+            remove(name) {classes.delete(name);},
+        },
+    },
+    document: {addEventListener(name, handler) {listeners[name] = handler;}},
+    window: {addEventListener(name, handler) {windowListeners[name] = handler;}},
+};
+vm.runInNewContext(source.slice(start, end), context);
+function move(x, y, pointerType = 'mouse') {
+    listeners.pointermove({clientX: x, clientY: y, pointerType});
+}
+move(60, 32); // Proximity reveals before the button itself can intercept a click.
+assert.equal(classes.has('is-revealed'), true);
+move(300, 32); // Moving along the page header must not reveal the button.
+assert.equal(classes.has('is-revealed'), false);
+for (const hide of [listeners.input, listeners.pointerleave, windowListeners.blur]) {
+    move(36, 36);
+    assert.equal(classes.has('is-revealed'), true);
+    hide();
+    assert.equal(classes.has('is-revealed'), false);
+}
+move(36, 36, 'touch');
+assert.equal(classes.has('is-revealed'), false);
+context.media.matches = true;
+move(36, 36);
+assert.equal(classes.has('is-revealed'), false);
+context.media.matches = false;
+context.shellState.mode = 'expanded';
+move(36, 36);
+assert.equal(classes.has('is-revealed'), false);
+"""
+        result = subprocess.run(
+            ["node", "-e", node_test, str(APP_SHELL)],
+            check=False, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
     def test_shell_exports_strict_feature_and_state_helpers(self):
         node_test = r"""
 const assert = require('node:assert/strict');

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-    <script src="/static/js/time.js?v=1bd14e09c49a"></script>
+    <script src="/static/js/time.js?v=a700f496c4e6"></script>
         <script>
         (function() {
             try {
@@ -31,24 +31,24 @@
     <meta name="apple-mobile-web-app-title" content="心流写作">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/manifest.webmanifest">
-            <link rel="stylesheet" href="/static/css/editorial.css?v=1bd14e09c49a">
-    <link rel="stylesheet" href="/static/css/app-shell.css?v=1bd14e09c49a">
+            <link rel="stylesheet" href="/static/css/editorial.css?v=a700f496c4e6">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=a700f496c4e6">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css">
-    <link rel="stylesheet" href="/static/css/focus-studio.css?v=1bd14e09c49a">
-    <link rel="stylesheet" href="/static/css/product-linear.css?v=1bd14e09c49a">
-    <link rel="stylesheet" href="/static/css/product-linear-core.css?v=1bd14e09c49a">
-    <script src="/static/js/auth-session.js?v=1bd14e09c49a"></script>
-    <script src="/static/js/pwa-register.js?v=1bd14e09c49a" defer></script>
+    <link rel="stylesheet" href="/static/css/focus-studio.css?v=a700f496c4e6">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=a700f496c4e6">
+    <link rel="stylesheet" href="/static/css/product-linear-core.css?v=a700f496c4e6">
+    <script src="/static/js/auth-session.js?v=a700f496c4e6"></script>
+    <script src="/static/js/pwa-register.js?v=a700f496c4e6" defer></script>
     <script src="/static/js/ui-features.js?v=f35b18a5e3ce" defer></script>
-    <script src="/static/js/app-shell.js?v=1bd14e09c49a" defer></script>
+    <script src="/static/js/app-shell.js?v=a700f496c4e6" defer></script>
 
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-leaf-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-leaf-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-leaf-180.png">
     <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
-    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=1bd14e09c49a">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=a700f496c4e6">
 </head>
-<body class="app-shell has-app-shell product-linear page-focus focus-body workbench-meadow" data-mode="rainy" data-font="handwriting" data-size="small">
+<body class="app-shell has-app-shell product-linear page-focus focus-body workbench-meadow" data-mode="rainy" data-font="handwriting" data-size="medium">
     <script>
     (function () {
         if (new URLSearchParams(window.location.search).has('embedded')) {
@@ -166,6 +166,10 @@
         <canvas id="focus-canvas" class="focus-canvas" aria-hidden="true"></canvas>
         <div class="focus-vignette" aria-hidden="true"></div>
 
+        <button type="button" class="focus-tools-toggle" id="focus-tools-toggle" aria-label="显示写作工具" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m4 0h3M4 17h3m4 0h9M13 4v6M7 14v6"/></svg>
+        </button>
+
         <section class="mode-zone" aria-label="天气模式">
             <div class="mode-switch" role="group" aria-label="切换背景模式">
                 <button type="button" class="mode-button active" data-mode="rainy" aria-pressed="true">
@@ -187,17 +191,17 @@
                 <svg class="type-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             <aside class="type-panel" aria-label="字体与字号">
-                <p class="panel-kicker">字体</p>
-                <button type="button" class="type-option" data-font="serif">Serif</button>
-                <button type="button" class="type-option" data-font="sans">Sans</button>
-                <button type="button" class="type-option" data-font="mono">Mono</button>
-                <button type="button" class="type-option active" data-font="handwriting">Klee</button>
+
+                <button type="button" class="type-option" data-font="serif">衬线</button>
+                <button type="button" class="type-option" data-font="sans">无衬线</button>
+                <button type="button" class="type-option" data-font="mono">等宽</button>
+                <button type="button" class="type-option active" data-font="handwriting">手写</button>
                 <div class="panel-line" aria-hidden="true"></div>
-                <p class="panel-kicker">字号</p>
+
                 <div class="size-options" role="group" aria-label="字号">
-                    <button type="button" class="size-option active" data-size="small">小</button>
-                    <button type="button" class="size-option" data-size="medium">中</button>
-                    <button type="button" class="size-option" data-size="large">大</button>
+                    <button type="button" class="size-option" data-size="small" aria-label="小字号，14 像素">小</button>
+                    <button type="button" class="size-option active" data-size="medium" aria-label="中字号，16 像素">中</button>
+                    <button type="button" class="size-option" data-size="large" aria-label="大字号，18 像素">大</button>
                 </div>
             </aside>
         </section>
@@ -216,18 +220,8 @@
                     </select>
                 </div>
                 <label class="sr-only" for="focus-editor">心流写作正文</label>
-                <textarea id="focus-editor" class="focus-editor" spellcheck="false" autocomplete="off" placeholder="开始你的心流写作..."></textarea>
-                <div class="deck-actions">
-                    <span class="save-status" id="save-status" aria-live="polite">已保存</span>
-                    <div class="export-group">
-                        <button type="button" id="focus-export" aria-haspopup="true" aria-expanded="false">导出</button>
-                        <div class="export-menu" id="export-menu" role="menu">
-                            <button type="button" data-export-format="txt">TXT</button>
-                            <button type="button" data-export-format="md">Markdown</button>
-                        </div>
-                    </div>
-                    <button type="button" id="focus-clear">清空草稿</button>
-                </div>
+                <textarea id="focus-editor" class="focus-editor" spellcheck="false" autocomplete="off" placeholder="写点什么…"></textarea>
+                <span class="sr-only" id="save-status" aria-live="polite">已保存</span>
                 <div class="deck-glow" aria-hidden="true"></div>
             </div>
         </section>
@@ -237,8 +231,8 @@
                 <div class="weather-control-title">
                     <svg class="weather-icon weather-icon-rain" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14.6A7 7 0 0 1 16 8h1.4A4.6 4.6 0 0 1 20 16.4M8 15v4M12 16v5M16 15v4"/></svg>
                     <svg class="weather-icon weather-icon-snow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M4.6 5.4l14.8 13.2M19.4 5.4 4.6 18.6M2 12h20M7 3.5l5 8.5 5-8.5M7 20.5l5-8.5 5 8.5"/></svg>
-                    <span class="weather-title-rain">雨滴大小</span>
-                    <span class="weather-title-snow">飘雪强度</span>
+                    <span class="weather-title-rain sr-only">雨滴大小</span>
+                    <span class="weather-title-snow sr-only">飘雪强度</span>
                 </div>
                 <div class="weather-value-row">
                     <span class="mix-name" id="weather-name">Rain</span>
@@ -271,7 +265,7 @@
                     <input id="volume-slider" type="range" min="0" max="100" value="40" aria-label="背景音量">
                     <div class="sound-menu" id="sound-menu" role="menu">
                         <!-- 背景音按钮由 JS 依据 SOUNDS 配置生成 -->
-                        <button type="button" id="audio-import">导入录音</button>
+                        <button type="button" id="audio-import">导入音频</button>
                     </div>
                     <input id="audio-file" type="file" accept="audio/*" hidden>
                 </div>
@@ -325,7 +319,7 @@
         </section>
     </main>
 
-    <script src="/static/js/focus-studio.js?v=1bd14e09c49a"></script>
-    <script src="/static/js/focus-journal.js?v=1bd14e09c49a"></script>
+    <script src="/static/js/focus-studio.js?v=a700f496c4e6"></script>
+    <script src="/static/js/focus-journal.js?v=a700f496c4e6"></script>
 </body>
 </html>

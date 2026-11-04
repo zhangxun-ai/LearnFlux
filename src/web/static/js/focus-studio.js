@@ -8,38 +8,43 @@
         mode: 'vta_focus_studio_mode',
         font: 'vta_focus_studio_font',
         size: 'vta_focus_studio_size',
+        sizeScale: 'vta_focus_studio_size_scale',
         intensity: 'vta_focus_studio_intensity',
         volume: 'vta_focus_studio_volume',
         sound: 'vta_focus_studio_sound'
     };
 
-    // 背景音清单：kind=file 用真实录音（自托管或导入），kind=noise 用合成有色噪声。
-    // 想新增一个背景音：把 mp3 放到 /static/audio/，在此加一行 { id, label, kind:'file', src }，
-    // 菜单与播放会自动对应（选项即对应你上传的文件）。噪声类对标系统背景音（明亮/平衡/低沉）。
+    // Keep the built-in sound menu limited to nature recordings.
     const SOUNDS = [
-        { id: 'rain',     label: '雨声',   kind: 'file',  src: '/static/audio/rain.mp3' },
-        { id: 'snow',     label: '雪夜',   kind: 'file',  src: '/static/audio/snow.mp3' },
-        { id: 'stream',   label: '溪流',   kind: 'file',  src: '/static/audio/stream.mp3' },
-        { id: 'bright',   label: '明亮噪声', kind: 'noise', color: 'white' },
-        { id: 'balanced', label: '平衡噪声', kind: 'noise', color: 'pink' },
-        { id: 'dark',     label: '低沉噪声', kind: 'noise', color: 'brown' }
+        { id: 'rain', label: '雨声', kind: 'file', src: '/static/audio/rain.mp3' },
+        { id: 'snow', label: '雪夜', kind: 'file', src: '/static/audio/snow.mp3' },
+        { id: 'stream', label: '溪流', kind: 'file', src: '/static/audio/stream.mp3' }
     ];
     const SOUND_BY_ID = Object.fromEntries(SOUNDS.map((item) => [item.id, item]));
+
+    const SIZE_SCALE = '14-16-18-v1';
+
+    function initialSize() {
+        const saved = localStorage.getItem(STORAGE.size);
+        // The former scale used oversized defaults. Start the new scale at 16px once.
+        if (localStorage.getItem(STORAGE.sizeScale) !== SIZE_SCALE) return 'medium';
+        return ['small', 'medium', 'large'].includes(saved) ? saved : 'medium';
+    }
 
     const state = {
         mode: localStorage.getItem(STORAGE.mode) || 'rainy',
         font: localStorage.getItem(STORAGE.font) || 'handwriting',
-        size: localStorage.getItem(STORAGE.size) || 'small',
+        size: initialSize(),
         intensity: Number(localStorage.getItem(STORAGE.intensity) || 80) / 100,
         volume: Number(localStorage.getItem(STORAGE.volume) || 40) / 100,
         sound: localStorage.getItem(STORAGE.sound) || 'rain',
-        mouseX: 0.5,
-        mouseY: 0.5,
         running: true
     };
 
     const body = document.body;
     const canvas = document.getElementById('focus-canvas');
+    const stage = document.querySelector('.focus-stage');
+    const toolsToggle = document.getElementById('focus-tools-toggle');
     const editor = document.getElementById('focus-editor');
     const weatherSlider = document.getElementById('weather-slider');
     const volumeSlider = document.getElementById('volume-slider');
@@ -56,15 +61,10 @@
     const timerPhase = document.getElementById('timer-phase');
     const timerRing = document.getElementById('timer-ring-progress');
     const timerZone = document.getElementById('mixer-zone');
-    const exportButton = document.getElementById('focus-export');
-    const exportMenu = document.getElementById('export-menu');
-    const exportFormatButtons = document.querySelectorAll('[data-export-format]');
-    const clearButton = document.getElementById('focus-clear');
     const saveStatus = document.getElementById('save-status');
     const audioImport = document.getElementById('audio-import');
     const audioFile = document.getElementById('audio-file');
     let soundCloseTimer = null;
-    let exportCloseTimer = null;
 
     function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
@@ -104,6 +104,7 @@
     function updateSize(size) {
         state.size = size;
         localStorage.setItem(STORAGE.size, size);
+        localStorage.setItem(STORAGE.sizeScale, SIZE_SCALE);
         setDataset();
         document.querySelectorAll('button[data-size]').forEach((button) => {
             button.classList.toggle('active', button.dataset.size === size);
@@ -320,12 +321,11 @@
 
         // 雪模式："Just snow" by Andrew Baldwin (thndl.com)
         // License: CC BY-NC-SA 3.0 (http://creativecommons.org/licenses/by-nc-sa/3.0/deed.en_US)
-        // 50 层视差雪花 + 景深(DoF) + 鼠标视差，叠加在雪景底图上并做冬季冷色分级
+        // 50 层雪花 + 景深(DoF)，仅随时间飘落，叠加在固定雪景底图上并做冬季冷色分级
         const SNOW_FRAGMENT = `
             precision highp float;
             uniform float uTime;
             uniform vec2 uResolution;
-            uniform vec2 uMouse;
             uniform sampler2D uTexture;
             uniform float uIntensity;
             varying vec2 vUv;
@@ -345,8 +345,8 @@
                 float aspect = uResolution.y > 0.0 ? uResolution.x / uResolution.y : 1.0;
                 centeredUv.x *= aspect;
 
-                // 鼠标视差
-                vec2 snowUv = uMouse.xy / uResolution.xy + vec2(1., uResolution.y / uResolution.x) * vUv;
+                // Keep the snow field anchored while the pointer moves around the editor.
+                vec2 snowUv = vec2(0.5) + vec2(1., uResolution.y / uResolution.x) * vUv;
 
                 vec3 acc = vec3(0.0);
                 float dof = 5. * sin(uTime * .1);
@@ -435,7 +435,6 @@
                 uniforms: {
                     time: gl.getUniformLocation(program, 'uTime'),
                     resolution: gl.getUniformLocation(program, 'uResolution'),
-                    mouse: gl.getUniformLocation(program, 'uMouse'),
                     intensity: gl.getUniformLocation(program, 'uIntensity'),
                     blur: gl.getUniformLocation(program, 'uBlur'),
                     texture: gl.getUniformLocation(program, 'uTexture')
@@ -472,8 +471,8 @@
             let tick = 0;
             const ctx = canvas.getContext('2d');
             function paint() {
-                const width = canvas.width = window.innerWidth;
-                const height = canvas.height = window.innerHeight;
+                const width = canvas.width = Math.max(1, stage.clientWidth);
+                const height = canvas.height = Math.max(1, stage.clientHeight);
                 const gradient = ctx.createRadialGradient(width * 0.55, height * 0.45, 40, width * 0.5, height * 0.5, Math.max(width, height));
                 if (state.mode === 'snowy') {
                     gradient.addColorStop(0, '#33485f');
@@ -507,14 +506,12 @@
 
         function resize() {
             if (!gl) return;
-            const width = window.innerWidth;
-            const height = window.innerHeight;
+            const width = Math.max(1, stage.clientWidth);
+            const height = Math.max(1, stage.clientHeight);
             const maxPixels = 1500000;
             dpr = Math.min(window.devicePixelRatio || 1, 1.5, Math.sqrt(maxPixels / (width * height)));
             canvas.width = Math.max(1, Math.floor(width * dpr));
             canvas.height = Math.max(1, Math.floor(height * dpr));
-            canvas.style.width = width + 'px';
-            canvas.style.height = height + 'px';
             gl.viewport(0, 0, canvas.width, canvas.height);
         }
 
@@ -530,7 +527,6 @@
                 gl.vertexAttribPointer(scene.position, 2, gl.FLOAT, false, 0, 0);
                 if (u.time) gl.uniform1f(u.time, (now - start) / 1000);
                 if (u.resolution) gl.uniform2f(u.resolution, canvas.width, canvas.height);
-                if (u.mouse) gl.uniform2f(u.mouse, state.mouseX * canvas.width, state.mouseY * canvas.height);
                 if (u.intensity) gl.uniform1f(u.intensity, state.intensity);
                 if (u.blur) gl.uniform1f(u.blur, 0.4);
                 if (u.texture) {
@@ -544,6 +540,9 @@
         }
 
         window.addEventListener('resize', resize);
+        const stageObserver = typeof ResizeObserver === 'function'
+            ? new ResizeObserver(resize) : null;
+        if (stageObserver) stageObserver.observe(stage);
         document.addEventListener('visibilitychange', () => {
             state.running = !document.hidden;
         });
@@ -554,6 +553,7 @@
             setIntensity: () => {},
             destroy: () => {
                 if (fallbackTimer) clearInterval(fallbackTimer);
+                if (stageObserver) stageObserver.disconnect();
             }
         };
     })();
@@ -847,7 +847,7 @@
         return { toggle, reset, paint, pressStart, pressEnd };
     })();
 
-    // 依据 SOUNDS 生成背景音菜单（插在"导入录音"之前）；新增背景音只需改 SOUNDS 配置
+    // 依据 SOUNDS 生成背景音菜单（插在"导入音频"之前）；新增背景音只需改 SOUNDS 配置
     function renderSoundMenu() {
         const fragment = document.createDocumentFragment();
         SOUNDS.forEach((item) => {
@@ -882,53 +882,19 @@
         updateSaveStatus();
     }
 
-    function safeFileStamp() {
-        return LearnFluxTime.dateKey() + '-' + LearnFluxTime.format(Date.now(), {
-            hour: '2-digit', minute: '2-digit', hour12: false
-        }).replace(':', '');
-    }
-
-    function exportText(format) {
-        const type = format === 'md' ? 'md' : 'txt';
-        const content = editor.value;
-        if (!content.trim()) {
-            updateSaveStatus('暂无内容');
-            return;
-        }
-        const mime = type === 'md' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8';
-        const blob = new Blob([content], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'focus-studio-' + safeFileStamp() + '.' + type;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        setExportMenuOpen(false);
-    }
-
-    function clearText() {
-        if (!editor.value.trim()) return;
-        editor.value = '';
-        localStorage.removeItem(STORAGE.text);
-        localStorage.removeItem(STORAGE.savedAt);
-        updateSaveStatus('草稿已清空');
-        editor.focus();
-    }
-
-    function setExportMenuOpen(open) {
-        if (exportCloseTimer) {
-            clearTimeout(exportCloseTimer);
-            exportCloseTimer = null;
-        }
-        exportMenu.classList.toggle('is-open', open);
-        exportButton.setAttribute('aria-expanded', open ? 'true' : 'false');
-    }
-
-    function scheduleExportMenuClose() {
-        if (exportCloseTimer) clearTimeout(exportCloseTimer);
-        exportCloseTimer = setTimeout(() => setExportMenuOpen(false), 220);
+    // Edge proximity reveals controls without placing invisible layers over the editor.
+    function revealControls(event) {
+        if (event.pointerType === 'touch') return;
+        const rect = stage.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const target = event.target;
+        const zones = [];
+        if (y < 76 || target.closest('.mode-zone, .type-zone, .journal-dock')) zones.push('top');
+        if (x > rect.width - 112 || target.closest('.weather-control')) zones.push('right');
+        if (y > rect.height - 100 || target.closest('.mixer-panel, .mixer-orb, .focus-exit')) zones.push('bottom');
+        const visible = zones.join(' ');
+        if (stage.dataset.focusControls !== visible) stage.dataset.focusControls = visible;
     }
 
     function loadInitialText() {
@@ -963,10 +929,14 @@
         document.querySelectorAll('button[data-sound]').forEach((button) => {
             button.addEventListener('click', () => updateSound(button.dataset.sound));
         });
-        soundGroup.addEventListener('pointerenter', () => setSoundMenuOpen(true));
-        soundGroup.addEventListener('pointerleave', scheduleSoundMenuClose);
-        soundMenu.addEventListener('pointerenter', () => setSoundMenuOpen(true));
-        soundMenu.addEventListener('pointerleave', scheduleSoundMenuClose);
+        [soundGroup, soundMenu].forEach((element) => {
+            element.addEventListener('pointerenter', (event) => {
+                if (event.pointerType !== 'touch') setSoundMenuOpen(true);
+            });
+            element.addEventListener('pointerleave', (event) => {
+                if (event.pointerType !== 'touch') scheduleSoundMenuClose();
+            });
+        });
         soundCurrent.addEventListener('click', (event) => {
             event.stopPropagation();
             setSoundMenuOpen(!soundMenu.classList.contains('is-open'));
@@ -975,14 +945,10 @@
             if (!event.target.closest('.sound-group')) {
                 setSoundMenuOpen(false);
             }
-            if (!event.target.closest('.export-group')) {
-                setExportMenuOpen(false);
-            }
         });
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 setSoundMenuOpen(false);
-                setExportMenuOpen(false);
             }
         });
         weatherSlider.addEventListener('input', () => updateIntensity(Number(weatherSlider.value) / 100));
@@ -993,18 +959,6 @@
         ['mouseup', 'mouseleave', 'touchend'].forEach((evt) => {
             timerToggle.addEventListener(evt, () => pomodoro.pressEnd());
         });
-        exportButton.addEventListener('click', (event) => {
-            event.stopPropagation();
-            setExportMenuOpen(!exportMenu.classList.contains('is-open'));
-        });
-        exportButton.parentElement.addEventListener('pointerenter', () => setExportMenuOpen(true));
-        exportButton.parentElement.addEventListener('pointerleave', scheduleExportMenuClose);
-        exportMenu.addEventListener('pointerenter', () => setExportMenuOpen(true));
-        exportMenu.addEventListener('pointerleave', scheduleExportMenuClose);
-        exportFormatButtons.forEach((button) => {
-            button.addEventListener('click', () => exportText(button.dataset.exportFormat));
-        });
-        clearButton.addEventListener('click', clearText);
         audioImport.addEventListener('click', () => {
             setSoundMenuOpen(false);
             audioFile.click();
@@ -1013,14 +967,22 @@
             const file = audioFile.files && audioFile.files[0];
             audioEngine.playCustom(file);
         });
+        toolsToggle.addEventListener('click', () => {
+            const open = stage.toggleAttribute('data-tools-open');
+            toolsToggle.setAttribute('aria-expanded', String(open));
+            toolsToggle.setAttribute('aria-label', open ? '隐藏写作工具' : '显示写作工具');
+        });
+        stage.addEventListener('pointermove', revealControls, { passive: true });
+        stage.addEventListener('pointerleave', () => { stage.dataset.focusControls = ''; });
         editor.addEventListener('input', () => {
+            stage.dataset.focusControls = '';
+            setSoundMenuOpen(false);
+            stage.removeAttribute('data-tools-open');
+            toolsToggle.setAttribute('aria-expanded', 'false');
+            toolsToggle.setAttribute('aria-label', '显示写作工具');
             persistDraft();
         });
         window.addEventListener('beforeunload', persistDraft);
-        window.addEventListener('pointermove', (event) => {
-            state.mouseX = event.clientX / Math.max(1, window.innerWidth);
-            state.mouseY = 1 - event.clientY / Math.max(1, window.innerHeight);
-        }, { passive: true });
     }
 
     function init() {

@@ -159,7 +159,7 @@ button {
     color: rgba(255, 255, 255, 0.75);
     background: transparent;
     font-weight: 400;
-    line-height: 2;
+    line-height: 1.8;
     letter-spacing: 0;
     caret-color: rgba(255, 255, 240, 0.82);
     scrollbar-width: thin;
@@ -258,15 +258,15 @@ body.product-linear.page-focus .focus-editor:focus-visible {
 }
 
 [data-size="small"] .focus-editor {
-    font-size: 1.125rem;
+    font-size: 0.875rem;
 }
 
 [data-size="medium"] .focus-editor {
-    font-size: 1.375rem;
+    font-size: 1rem;
 }
 
 [data-size="large"] .focus-editor {
-    font-size: 1.625rem;
+    font-size: 1.125rem;
 }
 
 .deck-glow {

@@ -177,7 +177,7 @@ The landing page has no visible top navigation. Keep its brand lockup, right-sid
 - Do not add a global search, profile, or sample records unless there is real behavior and data behind them.
 - The standalone visual-learning navigation item remains omitted. The in-context “图解” tab in study content remains available.
 - The single-study result detail page uses the same paper, leaf-green, and sage surfaces while preserving its existing transcript, summary, export, Obsidian, and in-context diagram controls.
-- The focus-writing page keeps its original animated rain and snow scenes and ambient audio. Workbench styles recolor its controls and translucent writing card without dimming or replacing the scene canvas.
+- The focus-writing page keeps its animated rain and snow scenes. Snowfall follows time only; the scene and snow field never shift in response to pointer movement. Both scenes share the same responsive layout, date/type selector and editor positions; alignment uses comfortable gutters based on the available scene width and never changes when switching backgrounds. Opening or resizing the desktop sidebar reserves space instead of covering the workspace; the canvas and compact writing controls respond to the remaining container size. Both scenes share the selected font family, a default 16px size (14/16/18px choices), and 1.8 line height. Snow writing uses warm-white text over a softly feathered navy veil; the rain backdrop stays unchanged. Legacy oversized settings reset once to 16px, then the selected size persists across both scenes. Writing uses the scene directly, with controls revealed near the top, right, and bottom edges or through keyboard focus. Touch devices use a compact toolbar toggle. Save status is announced without visible draft actions; audio offers only rain, snow night, stream, and local audio import (2026-11-03).
 
 ## Do's and Don'ts
 
@@ -192,3 +192,11 @@ The landing page has no visible top navigation. Keep its brand lockup, right-sid
 - Don't imply that the illustrative preview is an interactive player.
 - Don't add public launch, pricing, customer, or licensing claims without a confirmed decision.
 - Don't add decorative controls that have no working interaction.
+
+## 写作页控件精修（2026-11-04）
+
+保留雨雪场景及正文的 14/16/18px 选择，正文常规字重，行宽最多 76ch。日期、记录类型、天气与字体等工具统一为约 13px 的系统字体、常规字重与轻边框；音量使用单行控件，计时读数采用系统数字。字体菜单使用中文选项，不重复显示分组标题。桌面自动隐藏导航的入口沿用公共显隐行为，保留与场景匹配的深色外观。
+
+## 公共导航入口（2026-11-04）
+
+所有工作台页面统一：桌面侧栏未固定时，导航按钮默认隐藏且不拦截主区域点击；鼠标进入按钮周围 16px 范围才显示，移开、输入正文或离开窗口后隐藏。键盘聚焦时保持可见，屏幕左边缘仍能直接唤出导航。没有悬停能力的桌面触屏保留可见入口；手机继续使用顶部导航按钮。显隐由共享壳层实现，内容页不另行覆盖。

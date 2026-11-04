@@ -842,7 +842,7 @@ body.sidebar-drawer-open .sidebar-overlay {
 .sidebar-resizer {
     position: absolute;
     top: 0;
-    right: -4px;
+    right: 0;
     width: 8px;
     height: 100%;
     cursor: col-resize;
@@ -901,6 +901,11 @@ body.sidebar-floating .sidebar {
         position: fixed;
         flex: 0 0 var(--shell-sidebar);
     }
+
+    /* An open desktop sidebar reserves space, including while its width changes. */
+    body.app-shell.sidebar-floating.drawer-hover-open:not([data-embedded="true"]) .main-area {
+        margin-inline-start: var(--shell-sidebar);
+    }
 }
 
 body.sidebar-floating .topbar {
@@ -932,7 +937,7 @@ body.sidebar-floating {
     color: var(--shell-muted);
     cursor: pointer;
     box-shadow: var(--shell-shadow-sm);
-    transition: all 0.2s;
+    transition: opacity 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 .floating-toggle-btn:hover {
     color: var(--shell-text);
@@ -940,9 +945,35 @@ body.sidebar-floating {
 }
 body.sidebar-floating .floating-toggle-btn {
     display: flex;
+    opacity: 0;
+    pointer-events: none;
+}
+body.sidebar-floating .floating-toggle-btn:is(.is-revealed, :focus) {
+    opacity: 1;
+    pointer-events: auto;
 }
 body.sidebar-floating.drawer-hover-open .floating-toggle-btn {
     display: none; /* Hide when drawer is open */
+}
+
+/* The writing scene shares reveal behavior, with its own matching surface. */
+body.page-focus.sidebar-floating .floating-toggle-btn {
+    min-height: 36px;
+    top: 22px;
+    left: 24px;
+    width: 36px;
+    height: 36px;
+    border-color: rgba(232, 244, 239, 0.18);
+    background: rgba(19, 35, 42, 0.82);
+    color: #F4F8F3;
+    box-shadow: none;
+}
+
+@media (hover: none) {
+    body.sidebar-floating .floating-toggle-btn {
+        opacity: 1;
+        pointer-events: auto;
+    }
 }
 
 /* Webkit Scrollbar Refinements */

@@ -121,32 +121,133 @@ def test_focus_studio_hides_secondary_draft_actions():
     )
 
 
-def test_focus_actions_use_accurate_chinese_labels_and_clear_only_the_local_draft():
+def test_focus_writing_removes_draft_actions_but_keeps_automatic_saving():
     html = (PROJECT_ROOT / "src/web/static/focus-studio.html").read_text(encoding="utf-8")
-    assert 'id="focus-clear">清空草稿</button>' in html
-    assert 'aria-expanded="false">导出</button>' in html
+    assert 'id="focus-clear"' not in html
+    assert 'id="focus-export"' not in html
+    assert 'class="sr-only" id="save-status" aria-live="polite"' in html
     behavior = r"""
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(process.argv[1], 'utf8');
-const start = source.indexOf('    function clearText() {');
-const end = source.indexOf('    function setExportMenuOpen(', start);
-const removed = [];
+const start = source.indexOf('    function persistDraft() {');
+const end = source.indexOf('    // Edge proximity', start);
+const saved = new Map();
 const context = {
-    editor: {value: 'Demo draft', focus() {}},
+    editor: {value: 'Demo draft'},
     STORAGE: {text: 'draft', savedAt: 'savedAt'},
-    localStorage: {removeItem(key) {removed.push(key);}},
-    updateSaveStatus(label) {context.status = label;},
+    localStorage: {setItem(key, value) {saved.set(key, value);}},
+    updateSaveStatus() {context.updated = true;},
 };
 vm.createContext(context);
 vm.runInContext(source.slice(start, end), context);
-context.clearText();
-assert.equal(context.editor.value, '');
-assert.deepEqual(removed, ['draft', 'savedAt']);
-assert.equal(context.status, '草稿已清空');
-context.clearText();
-assert.deepEqual(removed, ['draft', 'savedAt']);
+context.persistDraft();
+assert.equal(saved.get('draft'), 'Demo draft');
+assert.ok(Number.isFinite(Date.parse(saved.get('savedAt'))));
+assert.equal(context.updated, true);
+"""
+    result = subprocess.run(
+        ["node", "-e", behavior, str(PROJECT_ROOT / "src/web/static/js/focus-studio.js")],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_focus_snow_animation_has_no_pointer_input():
+    js = (PROJECT_ROOT / "src/web/static/js/focus-studio.js").read_text(encoding="utf-8")
+    snow_shader = re.search(r"const SNOW_FRAGMENT = `(.+?)`;", js, re.DOTALL)
+    assert snow_shader is not None
+    assert "uniform float uTime;" in snow_shader.group(1)
+    assert "SPEED * uTime" in snow_shader.group(1)
+    assert "uMouse" not in js
+    assert "state.mouseX" not in js
+    assert "state.mouseY" not in js
+    # Pointer proximity must still reveal the writing controls.
+    assert "stage.addEventListener('pointermove', revealControls" in js
+
+
+def test_focus_font_scale_migrates_once_and_keeps_the_selected_size():
+    behavior = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const start = source.indexOf('    const SIZE_SCALE =');
+const end = source.indexOf('    const state =', start);
+const saved = new Map();
+const context = {
+    STORAGE: {size: 'size', sizeScale: 'scale'},
+    localStorage: {getItem(key) {return saved.get(key) || null;}},
+};
+vm.createContext(context);
+vm.runInContext(source.slice(start, end), context);
+assert.equal(context.initialSize(), 'medium');
+saved.set('size', 'large');
+assert.equal(context.initialSize(), 'medium');
+saved.set('scale', '14-16-18-v1');
+for (const size of ['small', 'medium', 'large']) {
+    saved.set('size', size);
+    assert.equal(context.initialSize(), size);
+}
+saved.set('size', 'invalid');
+assert.equal(context.initialSize(), 'medium');
+"""
+    result = subprocess.run(
+        ["node", "-e", behavior, str(PROJECT_ROOT / "src/web/static/js/focus-studio.js")],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_focus_writing_alignment_is_shared_across_backgrounds():
+    css = (PROJECT_ROOT / "src/web/static/css/workbench-wildwood.css").read_text(encoding="utf-8")
+    # Writing gutters follow the available scene width, shared by both modes.
+    assert "container: focus-writing / inline-size;" in css
+    assert "inset: 68px clamp(24px, 6cqw, 80px) 24px;" in css
+    # Scene-specific background treatments must not move the date or editor.
+    assert not re.search(
+        r"[^{}]*\[data-mode=[^{}]*\.(?:deck-wrap|journal-meta|focus-editor)"
+        r"[^{}]*\{[^}]*\b(?:inset|left|right|top|bottom|margin|padding|width|height|transform)\s*:",
+        css,
+    )
+
+
+def test_focus_canvas_resizes_with_its_scene_without_a_window_resize():
+    behavior = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const resizeStart = source.indexOf('        function resize() {');
+const resizeEnd = source.indexOf('        function render(now)', resizeStart);
+const observerStart = source.indexOf("        window.addEventListener('resize', resize);");
+const observerEnd = source.indexOf("        document.addEventListener('visibilitychange'", observerStart);
+const stage = {clientWidth: 1120, clientHeight: 900};
+const viewport = [];
+let observed, observerCallback;
+const context = {
+    gl: {viewport(...values) {viewport.push(values);}},
+    stage, canvas: {style: {}}, dpr: 1,
+    window: {innerWidth: 1440, innerHeight: 1000, devicePixelRatio: 1, addEventListener() {}},
+    ResizeObserver: class {
+        constructor(callback) {observerCallback = callback;}
+        observe(element) {observed = element;}
+    },
+};
+vm.createContext(context);
+vm.runInContext(source.slice(resizeStart, resizeEnd), context);
+vm.runInContext(source.slice(observerStart, observerEnd), context);
+assert.equal(observed, stage);
+context.resize();
+assert.deepEqual(viewport.at(-1), [0, 0, 1120, 900]);
+stage.clientWidth = 820;
+observerCallback();
+assert.deepEqual(viewport.at(-1), [0, 0, 820, 900]);
+assert.equal(context.canvas.width, 820);
+assert.equal(context.canvas.height, 900);
+assert.equal(context.canvas.style.width, undefined);
+assert.equal(context.canvas.style.height, undefined);
 """
     result = subprocess.run(
         ["node", "-e", behavior, str(PROJECT_ROOT / "src/web/static/js/focus-studio.js")],

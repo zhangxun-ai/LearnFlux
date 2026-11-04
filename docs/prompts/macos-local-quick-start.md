@@ -31,12 +31,13 @@
    确认 .env、私有config和数据库被Git忽略；真实Key、数据库URL、Cookie、结果访问令牌不得进入源码、模板、命令参数、聊天、日志、截图或Git。不要把.env作为Shell脚本执行。
    在本机安全核对已有凭据，只报告“已配置/缺少”，不显示值。新安装默认sqlite/local并自动初始化；已有PostgreSQL复用。选择新装PostgreSQL时按 docs/guides/postgresql.md 建专用账号与库，配置DATABASE_URL，启动自动迁移并只读核对表结构；不把用户库当写删测试库。
 
-4. 安装项目基础依赖；需要音视频时运行 bash scripts/bootstrap.sh --with-media，确保 FFmpeg / ffprobe 实际可运行。
+4. 首次安装或确实缺少依赖时使用 scripts/bootstrap.sh 准备环境；需要音视频时运行 bash scripts/bootstrap.sh --with-media，确保 FFmpeg / ffprobe 实际可运行。该脚本不会启动服务。FFmpeg缺失时macOS需先有Homebrew，Ubuntu/Debian需apt-get及安装权限，其他发行版先自行安装FFmpeg。日常启动使用 bash server.sh start，不重复安装。
    bootstrap 不会替我开通 TikHub、DeepSeek 或云端 ASR，也不会因为页面能打开就代表转录引擎已经安装。
 
 5. 默认引导我准备DeepSeek API Key；已有可用兼容模型服务时可复用，不强迫换服务。
    在我自己的.env填写 LEARNFLUX_LLM_API_KEY、LEARNFLUX_LLM_BASE_URL、LEARNFLUX_LLM_MODEL。DeepSeek Key来自官方控制台 https://platform.deepseek.com/api_keys；接口地址按官方OpenAI兼容说明填写，模型用当前账号实际可调用的ID，不照搬旧模型名。
    注意官方SDK示例中的DEEPSEEK_API_KEY不是本项目的读取名称。通用MODEL用于校对、总结和问答，按需覆盖具体任务模型；非空环境变量优先于设置页。不要把DeepSeek Key当成ASR Key，也不要把“Key不为空”当作已成功调用。
+   复用其他兼容服务时同时核对私有llm.model_endpoints：模板把qwen*路由到仅读DASHSCOPE_API_KEY的百炼次级端点。若希望Qwen走主端点，先调整相应路由；若保留次级端点，配好它的Key，不能只填主LLM三项就声称已可用。
 
 6. 我要使用抖音或小红书时，引导我在TikHub用户中心 https://user.tikhub.io/dashboard/api 创建或取得自己的API Token，填本机.env的 LEARNFLUX_TIKHUB_API_KEY；接口域名用当前官方推荐地址，LEARNFLUX_TIKHUB_BASE_URL可按需覆盖。
    确认账号可调用所需平台接口及已接受费用范围，再通过项目实际解析所选链接；不能只检查Token格式，不能默认认为查账号、测Key或重试免费。

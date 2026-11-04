@@ -54,7 +54,7 @@ chmod 600 .env
 | 本机启动、阅读、写作 | 无需填写环境变量 | 保留模板默认值 |
 | AI 解读、校对、问答 | `LEARNFLUX_LLM_API_KEY`、`LEARNFLUX_LLM_BASE_URL`、`LEARNFLUX_LLM_MODEL` | 无法验证依赖模型的学习结果；已有设置页配置可沿用 |
 | 抖音 / 小红书等对应来源 | `LEARNFLUX_TIKHUB_API_KEY`，可选 `LEARNFLUX_TIKHUB_BASE_URL` | 不影响文字学习 |
-| PostgreSQL | `LEARNFLUX_PERSISTENCE_BACKEND=postgres` 和 `DATABASE_URL`，先完成迁移 | 保留 `sqlite`，连接串留空 |
+| PostgreSQL | `LEARNFLUX_PERSISTENCE_BACKEND=postgres` 和 `DATABASE_URL`，先建专用账号和库；启动自动应用表结构迁移，SQLite 旧数据另行迁移 | 保留 `sqlite`，连接串留空 |
 | S3 | `LEARNFLUX_OBJECT_BACKEND=s3` 和模板中的五个 `LEARNFLUX_S3_*` 连接 / 凭据项 | 保留 `local`，凭据留空 |
 | 百炼云端 ASR | `DASHSCOPE_API_KEY`、`DASHSCOPE_WORKSPACE_ID`、`DASHSCOPE_API_HOST`，另在主配置启用 | 三项留空，云端 ASR 关闭 |
 | 百炼次级模型端点 | `DASHSCOPE_API_KEY`，且端点显式配置 `api_key_env` | 留空；不会自动替代主模型配置 |
@@ -89,6 +89,8 @@ LLM API 用于转录校对、总结、问答、图解和复盘等 AI 功能。�
 默认可引导 DeepSeek 用户在[官方控制台](https://platform.deepseek.com/api_keys)创建 Key，Base URL 按[官方首次调用说明](https://api-docs.deepseek.com/quick_start/your_first_api_call.md)填写。模型 ID 从账号当前可用列表选择，参考[官方模型查询接口](https://api-docs.deepseek.com/api/list-models/)；不要把旧截图中的模型名当作长期固定值。官方 SDK 示例使用的 `DEEPSEEK_API_KEY` 不会自动替代本项目的 `LEARNFLUX_LLM_API_KEY`。
 
 已有用户可继续在 Web 的 `/settings` 页面保存未被环境变量管理的 LLM 配置；其他高级选项仍可在私有 `config/config.jsonc` 中设置。配置模板中的模型名只是示例默认值；换服务商后，请按其官方文档改成实际可用的模型 ID，并确认账号已开通对应模型及额度。
+
+换服务商还需要核对 `llm.model_endpoints` 与 `llm.endpoints`。模板默认将 `qwen*` 路由到名为 `dashscope` 的百炼次级端点，该端点从 `DASHSCOPE_API_KEY` 读取密钥；只填写主模型的三项 `LEARNFLUX_LLM_*`，不能保证 Qwen 请求会使用主端点。如果希望 Qwen 走自己配置的主 Base URL，需在私有配置中移除或调整匹配的 Qwen 路由；若继续使用百炼次级端点，则配置它实际需要的 Key。最后用目标模型的真实调用确认，不以设置页保存成功代替验证。
 
 主流程的校对和总结分别使用 `llm.calibrate_model`、`llm.summary_model`。使用对应功能时，还应检查系列解读的 `llm.collection_summary_model`、系列分段处理的 `llm.collection_summary_module_model`、图解提纲 / 渲染的 `llm.visual_learning_outline_model` 与 `llm.visual_learning_render_model`，以及边播边学问答的 `llm.study_chat_model`。所有模型 ID 都必须能通过所配置的服务商 Key 和 Base URL 调用。
 

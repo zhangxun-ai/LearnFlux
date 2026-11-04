@@ -10,9 +10,19 @@
 - 真实样例：有权处理、公开可访问的短内容。需要验证 ASR 时，使用未缓存、确需语音识别的口播视频；小红书图文不能代替视频 ASR，抖音图集暂不作为视频验收样例。
 - 转录方式：Apple Silicon Mac 可用当前 MLX Whisper 本地路径；其他系统先核对能力，或在接受费用后选择云端。YouTube 有字幕时可不转录，但应标明 ASR 未验证。
 
-## 1. 安装并启动
+## 已安装项目：用 server.sh 启动
 
-准备 Git、Bash、curl、lsof 和可访问依赖源的网络。macOS 通常已自带 lsof；Linux 若缺少它，请先通过系统包管理器安装（例如 Ubuntu / Debian：`sudo apt-get install lsof`）。macOS / Linux 在项目根目录运行：
+已有项目且依赖、配置已准备好时，在项目根目录执行：
+
+```bash
+bash server.sh start
+```
+
+默认打开 <http://127.0.0.1:8000>。查看状态用 `bash server.sh status`，查看日志用 `bash server.sh log`；修改配置后检查当前任务，再用 `bash server.sh restart`。`server.sh` 负责后台启停管理；首次环境安装由下节的 `scripts/bootstrap.sh` 负责。
+
+## 1. 首次安装：准备环境后再启动
+
+准备 Git、Bash、curl、lsof 和可访问依赖源的网络。`--with-media` 在 FFmpeg 缺失时，macOS 需要预先安装 Homebrew；Ubuntu / Debian 需要 `apt-get` 和安装权限，其他 Linux 发行版需自行准备 FFmpeg。macOS 通常已自带 lsof；Linux 若缺少它，请先通过系统包管理器安装（例如 Ubuntu / Debian：`sudo apt-get install lsof`）。macOS / Linux 在项目根目录运行：
 
 ```bash
 cp -n .env.example .env
@@ -21,7 +31,7 @@ bash scripts/bootstrap.sh --with-media
 bash server.sh start
 ```
 
-`bootstrap.sh` 用于首次安装：安装 uv（如尚未安装），由 uv 准备 Python 3.11 和应用依赖，并创建只供本机使用的配置。已有配置和数据保持原样；若仅有旧 `config/config.json`，脚本会保留它并提示迁移到 `config/config.jsonc`。以后启动只需 `bash server.sh start`。
+`bootstrap.sh` 用于首次安装：安装 uv（如尚未安装），由 uv 准备 Python 3.11 和应用依赖，并创建只供本机使用的配置。已有配置和数据保持原样；若仅有旧 `config/config.json`，脚本会保留它并提示迁移到 `config/config.jsonc`。上面的 `--with-media` 命令不会安装 ASR 引擎，所有 bootstrap 安装方式都不会启动服务；安装完成后、日常使用时均通过 `bash server.sh start` 启动。
 
 `.env.example` 是随仓库分发的空凭据模板；`cp -n` 不覆盖已有 `.env`。只启动 SQLite 本机页面无需填写凭据；真实 AI 学习需填写下面的模型环境变量。PostgreSQL、云端 ASR、S3 等启用条件见[配置指南](configuration.md)。不要把真实值写回 `.env.example`，也不要把 `.env` 上传到 GitHub。
 

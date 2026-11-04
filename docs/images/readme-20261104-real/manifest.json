@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-04",
+  "source": "User-provided screenshots of the updated local LearnFlux installation, explicitly selected to replace the README rain and snow views",
+  "quality": 90,
+  "screenshots": [
+    {
+      "file": "06-writing-rain.webp",
+      "description": "心流写作：雨景中的实际工作记录",
+      "source_sha256": "2d084e18c2dd64042fb682232a8126deb225f929f8f6b82e2d9c37798c4bfda6",
+      "sha256": "f183d03ea6e2aebe39e9d397b7d5b1d4a72d2d85966f28bb2eb5db6a061a92fd",
+      "source_dimensions": {
+        "width": 2912,
+        "height": 1640
+      },
+      "dimensions": {
+        "width": 2912,
+        "height": 1640
+      },
+      "crop_bottom_pixels": 0,
+      "reason": "Format-only WebP conversion; no cropping, text changes, content replacement or regeneration",
+      "bytes": 397178
+    },
+    {
+      "file": "06-writing-snow.webp",
+      "description": "心流写作：雪景中的实际工作记录",
+      "source_sha256": "63f97cd8833283928f81195d687eb96b40c923c0848e47e0c07ea4428332fd5f",
+      "sha256": "167b402cda2f1fa572667f1cee6889264d130c7685e51670804bcdf7dd5be940",
+      "source_dimensions": {
+        "width": 2888,
+        "height": 1692
+      },
+      "dimensions": {
+        "width": 2888,
+        "height": 1692
+      },
+      "crop_bottom_pixels": 0,
+      "reason": "Format-only WebP conversion; no cropping, text changes, content replacement or regeneration",
+      "bytes": 265522
+    }
+  ]
+}

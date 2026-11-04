@@ -6,19 +6,43 @@
 
 # LearnFlux
 
-**用 AI 提炼视频、文章和文档的要点，整理学习笔记。**
+**把看到的好内容，变成随时能读、能回看的学习笔记。**
 
-LearnFlux 是一个可以部署在自己电脑或服务器上的 AI 学习工具。导入资料后，可以阅读原文和 AI 总结、围绕内容提问、记录笔记，再导出或保存到 Obsidian、飞书。也可以用它管理课程、阅读电子书和写日记。
+LearnFlux 是运行在自己电脑或服务器上的 AI 学习工作台。把视频、文章或文档交给它，得到原文和 AI 解读；继续提问、记笔记，再导出或保存到 Obsidian、飞书。课程学习、电子书阅读和日常写作也可以在这里完成。
 
-[复制新手提示词](#不懂代码复制这段提示词给-ai) · [快速开始](#快速开始) · [功能介绍](#功能介绍) · [使用指南](docs/guides/product-tour.md) · [配置服务](docs/guides/configuration.md) · [文档中心](docs/README.md)
+[复制安装提示词](#不懂代码复制这段提示词给-ai) · [看实际页面](#功能介绍) · [手动安装](#快速开始) · [使用指南](docs/guides/product-tour.md) · [文档中心](docs/README.md)
 
-**许可：** [MIT + Commons Clause](LICENSE)，包含商业使用限制；使用前请阅读完整条款。
+许可：[MIT + Commons Clause](LICENSE)，包含商业使用限制。
 
-以下包含本地实际使用截图和公开资料演示，展示真实页面与操作。[截图说明](docs/images/readme-20261103-real/README.md)
+## 一张图，看懂能做什么
+
+<p align="center">
+  <img src="assets/product-workflows-20261104.png" alt="LearnFlux 功能总览：复制链接、背部轻点触发快捷指令、后台转录与 AI 解读、自动归档飞书、手机阅读；以及系列学习、边播边学、阅读、写作、历史问答、导出、日报与复盘" width="1280" />
+</p>
+
+比如，在小红书看到值得学习的视频：**复制链接 → 轻点手机背部 3 下 → 工作台解析并生成解读 → 自动归档飞书 → 在手机飞书阅读。** 配置完成后，收集和阅读都可以在手机上完成。
+
+这条闭环需要先绑定 iPhone 快捷指令、配置平台解析与转录、启用飞书归档；处理时电脑需保持运行、联网且不休眠。快捷指令的“已执行”提示只表示已运行，结果以后台任务和飞书文档为准。已归档的飞书文档可以在电脑离线后继续阅读。[手机收集设置](docs/guides/mobile-shortcut.md) · [飞书归档设置](docs/guides/feishu-archive.md)
+
+其他模块也能单独使用；外部归档和日报来源按需配置。先跑通一条真实链接，再添加你需要的功能。
 
 ## 不懂代码？复制这段提示词给 AI
 
-把下面整段发给 WorkBuddy、Codex、Claude Code 等能操作本机终端和浏览器的 Agent。验收目标是你要用的平台真实链接能够解析、解读和导出；示例文字只用于排错。真实 Key 和密码只在自己的电脑填写，不要附在聊天里。
+**推荐新手从这里开始：** 点击下面代码框右上角的复制按钮，把整段发给 WorkBuddy、Codex、Claude Code 等能操作本机终端和浏览器的 Agent。它会根据你的电脑和目标引导安装；需要登录、输入 Key 或确认费用时，你再在本机操作。
+
+```text
+我是第一次使用 LearnFlux，不懂代码。请操作我的电脑，一步步带我安装并跑通真实链接。
+项目：https://github.com/zhangxun-ai/LearnFlux
+没有仓库时先克隆；已有仓库、配置和资料请保留。先读 README 和 docs/prompts/macos-local-quick-start.md，再按完整提示词执行，不只给命令就结束。
+先确认我要用的平台（YouTube / 抖音 / 小红书等）、真实短链接、转录方式与费用范围。引导我在本机填写模型 Key；抖音/小红书按需准备 TikHub；需要语音识别时安装并验证本地 ASR，或配置云端 ASR 并由我确认报价。不同服务的 Key 不能混用。
+新安装默认 SQLite 自动建表；已有 PostgreSQL 保留，新增 PostgreSQL 按指南建库并检查自动迁移。用 server.sh 启动，默认端口 8000。
+最终逐个平台验收：真实内容取得 → 正文、字幕或实际 ASR → 真实 AI 解读 → 查看与导出 → 历史保存。示例文字、缓存和模拟返回不能代替新视频转录验收。
+如果我还选择手机到飞书闭环，再按手机收集和飞书归档指南配置并实测，不默认开放公网。真实 Key 和私密结果令牌不进入聊天、截图、日志或 Git；付费调用先取得授权。
+遇到缺凭据或不兼容时告诉我在哪里操作、应看到什么；能继续的工作继续做，未通过的环节如实说明。
+```
+
+<details>
+<summary>展开复制完整安装与真实链接验收提示词（含 Key、ASR、数据库和排错要求）</summary>
 
 ```text
 我是第一次使用 LearnFlux，不懂 Git、终端和数据库。请直接操作我的电脑，完成真实链接的安装与验收；需要我输入凭据、登录或确认费用时，用中文引导我在本机操作，不要只给命令后结束。
@@ -39,65 +63,15 @@ LearnFlux 是一个可以部署在自己电脑或服务器上的 AI 学习工具
 11. 最后按平台和实际内容路径列出解析/下载、字幕或ASR、AI解读、查看/导出、持久化的通过/失败/未验证结果，给本机入口和导出位置，不公开私密结果令牌。选中的平台和ASR模式实际跑通才说可用；不默认配置无关OCR、飞书、公网或生图，不替我提交或推送代码。
 ```
 
-[完整安装与真实链接验收提示词](docs/prompts/macos-local-quick-start.md)包含更细的配置、排错和费用边界。下面是手动安装方式。
+</details>
 
-## 快速开始
+也可以打开[独立完整版提示词](docs/prompts/macos-local-quick-start.md)复制。真实 Key 只在自己的电脑填写。
 
-**以一条你实际要处理的真实链接完成首次验收。** 先选择平台和转录方式，再准备相应服务。粘贴文字可以排查模型配置，但不代表链接解析、下载或 ASR 已可用。
-
-**数据库默认是 SQLite，无需另外安装数据库服务；PostgreSQL 仍可选。** SQLite 已通过隔离的文字学习、导出、笔记、合集、阅读及重启持久化验证，模型结果使用模拟返回；这不代表已验证所有音视频来源、OCR 或真实模型。已有 PostgreSQL 用户继续使用原连接，不会自动切换或迁移。
-
-准备 Git、Bash、curl 和 lsof（macOS 通常已自带 lsof），在 macOS / Linux 终端运行：
-
-```bash
-git clone https://github.com/zhangxun-ai/LearnFlux.git
-cd LearnFlux
-cp -n .env.example .env
-chmod 600 .env
-bash scripts/bootstrap.sh --with-media
-bash server.sh start
-```
-
-`bootstrap.sh` 用于首次安装：准备 uv、Python 3.11 和应用依赖，并创建本机配置与随机管理口令；已有配置和数据会保留。首次安装需要下载依赖，请等待执行完成。以后启动只需在项目根目录运行 `bash server.sh start`，无需重复安装。
-
-`.env.example` 是可公开的[环境变量模板](.env.example)，`cp -n` 会保留已有 `.env`。**真实 Key、服务地址和模型名只填在自己的 `.env` 中**；非空环境变量优先于系统设置和私有主配置，修改后重启。已有用户也可继续使用设置页配置。真实 `.env`、私有配置及 Cookie 不应上传到 GitHub。
-
-上面的手动命令使用模板默认的 SQLite；项目也支持日常使用的 PostgreSQL。需要 PostgreSQL 时，先按[数据库指南](docs/guides/postgresql.md)安装服务、创建专用库，并在 `.env` 设置 `LEARNFLUX_PERSISTENCE_BACKEND=postgres` 与 `DATABASE_URL` 后再启动。**表结构由仓库内的版本化 SQL 在首次启动时自动创建**，无需自己手工建表。已有 PostgreSQL 用户保留原连接，不要改回 SQLite。S3、云端 ASR 等按[配置指南](docs/guides/configuration.md)启用。
-
-`server.sh` 会在后台启动服务，默认地址为 **<http://127.0.0.1:8000>**。端口优先读取 `LEARNFLUX_API_PORT`，未设置时沿用 `config/config.jsonc` 的 `api.port`；如果改过端口，下面的访问地址也要相应调整。macOS 使用用户级 LaunchAgent 保持运行，并在用户登录时自动启动；执行 `stop` 会卸载该启动项。
-
-按你要用的内容准备服务，不能把所有 Key 当成同一种凭据：
-
-| 你要跑通什么 | 必须准备 | 怎样算通过 |
-| --- | --- | --- |
-| AI 校对和解读 | DeepSeek 或已有兼容服务的 Key、Base URL、可用模型，填 `.env` 的 `LEARNFLUX_LLM_*` | 真实内容生成完整原文与 AI 解读 |
-| 抖音视频 / 小红书视频笔记 | `.env` 的 `LEARNFLUX_TIKHUB_API_KEY`，以及实际需要的 ASR | 对应平台真实链接能取到内容，不能只验 Key |
-| 本地语音转录 | FFmpeg、可用本机引擎与模型；当前普通链接为 Apple Silicon Mac 的 MLX Whisper | 未缓存且需要语音识别的真实短视频生成可读转录 |
-| 云端语音转录 | 百炼三项 `DASHSCOPE_*` 凭据、启用 `cloud_asr.enabled`、选择 `cloud` 并确认任务报价 | 同一已确认云任务完成识别，并生成真实 AI 解读 |
-| YouTube 可用字幕 / 小红书图文 | 可取得的字幕或正文、模型服务；对应来源按需准备 TikHub | 内容取得并解读成功，单独标明 ASR 未运行 |
-
-配置步骤、官方 Key 入口和平台限制见[服务配置指南](docs/guides/configuration.md)。Apple Silicon Mac 的本机引擎用 `bash scripts/bootstrap.sh --with-local-whisper` 安装；其他系统不能只填 CapsWriter 地址就认为普通链接的 `local` 策略可用，需选择并验证当前支持的转录路径。
-
-1. 在本机填写模型、所选平台和 ASR 凭据，重启后打开[系统设置](http://127.0.0.1:8000/settings)核对生效状态；密钥只显示脱敏值。
-2. 在[单篇深度学习](http://127.0.0.1:8000/add_task_by_web)粘贴你有权处理的真实链接，选择已配置的本地 / 云端方式并提交；云端费用按页面报价确认。
-3. 等待成功，核对标题与来源、原文覆盖和 AI 解读，再导出并打开文件。从历史记录重新访问，确认保存。多个目标平台需分别验证；要验证 ASR，不能仅用字幕、图文或缓存代替。
-
-模型、TikHub、云端 ASR 可能分别计费；原始媒体和正文会按所选路径发给对应服务。真实调用前确认本次内容与费用范围。本地转录不产生云端 ASR 费用，不代表模型和 TikHub 免费。离线测试与真实平台验收分别记录，所选平台是否可用以真实链接结果为准。
-
-日常管理在项目根目录运行：
-
-```bash
-bash server.sh status   # 查看运行状态
-bash server.sh log      # 查看实时日志，Ctrl+C 仅退出日志查看
-bash server.sh restart  # 修改配置或更新代码后重启
-bash server.sh stop     # 停止后台服务
-```
-
-需要前台排错时，先用 `bash server.sh stop` 停止后台服务，再运行 `uv run python main.py --start`；此时 `Ctrl+C` 才是停止服务。不要同时启动两个实例。
-
-遇到问题，或使用 Windows / Docker：[完整首次使用指南](docs/guides/quickstart.md)。也可以复制[安装提示词](docs/prompts/macos-local-quick-start.md)交给能操作本机终端的 Agent。
+基础链路跑通后，想启用上图的手机到飞书闭环，可继续复制[手机收集与飞书归档提示词](docs/prompts/optional-services.md)，分别验证手机提交、后台处理和飞书全文阅读。
 
 ## 功能介绍
+
+先看学习结果和日常回看，再按需展开阅读、写作与日报。[截图来源说明](docs/images/readme-20261103-real/README.md) · [新版雨雪写作截图](docs/images/readme-20261104-real/README.md)。
 
 ### 单篇深度学习：提炼视频、文章和文档要点
 
@@ -132,40 +106,6 @@ bash server.sh stop     # 停止后台服务
   <img src="docs/images/readme-20261103-cases/09-player.webp" alt="边播边学：咖啡店案例演示短片、文稿跳转与学习笔记" width="1040" />
 </p>
 
-### 心流阅读：沉浸式阅读 PDF、电子书和文档
-
-支持 PDF、EPUB、DOCX、TXT 和 Markdown，导入后统一放在书架中。阅读器支持单页 / 双页、目录、字号和主题切换，并自动保存阅读进度。扫描版 PDF 需要另外安装 OCR（文字识别工具）。
-
-<p align="center">
-  <img src="docs/images/readme-20261103-real/04-reading-library.webp" alt="本地实际书架：已导入的 PDF、阅读进度与 OCR 状态" width="1040" />
-</p>
-
-<details>
-<summary>查看双页阅读界面</summary>
-
-<p align="center">
-  <img src="docs/images/readme-20261103-real/05-reading.webp" alt="本地文档的实际双页阅读界面" width="1040" />
-</p>
-
-</details>
-
-### 心流写作：在雨雪场景中专注写作
-
-用来写日记、学习笔记或草稿。可以选择雨景或雪景，调整字体与背景音，使用专注计时。文字自动保存，支持导出 TXT 或 Markdown。
-
-<p align="center">
-  <img src="docs/images/readme-20261103-real/06-writing-rain.webp" alt="心流写作：雨景中的实际工作记录、背景音与专注计时" width="1040" />
-</p>
-
-<details>
-<summary>查看雪景写作界面</summary>
-
-<p align="center">
-  <img src="docs/images/readme-20261103-real/06-writing-snow.webp" alt="心流写作：雪景中的实际工作记录" width="1040" />
-</p>
-
-</details>
-
 ### 历史记录：搜索和回看学过的内容
 
 按标题、作者或正文搜索，也可以按来源、时间和处理状态筛选，重新打开原文和 AI 总结。选中多份资料后，可以向 AI 提问、比较其中的观点，回答会附上引用出处。
@@ -183,7 +123,48 @@ bash server.sh stop     # 停止后台服务
 
 </details>
 
-### 日报：集中阅读 AI 资讯和微信日报
+<details>
+<summary>心流阅读：沉浸式阅读 PDF、电子书和文档（展开查看真实页面与操作）</summary>
+
+支持 PDF、EPUB、DOCX、TXT 和 Markdown，导入后统一放在书架中。阅读器支持单页 / 双页、目录、字号和主题切换，并自动保存阅读进度。扫描版 PDF 需要另外安装 OCR（文字识别工具）。
+
+<p align="center">
+  <img src="docs/images/readme-20261103-real/04-reading-library.webp" alt="本地实际书架：已导入的 PDF、阅读进度与 OCR 状态" width="1040" />
+</p>
+
+<details>
+<summary>查看双页阅读界面</summary>
+
+<p align="center">
+  <img src="docs/images/readme-20261103-real/05-reading.webp" alt="本地文档的实际双页阅读界面" width="1040" />
+</p>
+
+</details>
+
+</details>
+
+<details>
+<summary>心流写作：在雨雪场景中专注写作（展开查看真实页面与操作）</summary>
+
+用来写日记、学习笔记或草稿。可以选择雨景或雪景，调整字体与背景音，使用专注计时。文字自动保存，支持导出 TXT 或 Markdown。
+
+<p align="center">
+  <img src="docs/images/readme-20261104-real/06-writing-rain.webp" alt="心流写作：雨景中的实际工作记录与专注写作界面" width="1040" />
+</p>
+
+<details>
+<summary>查看雪景写作界面</summary>
+
+<p align="center">
+  <img src="docs/images/readme-20261104-real/06-writing-snow.webp" alt="心流写作：雪景中的实际工作记录" width="1040" />
+</p>
+
+</details>
+
+</details>
+
+<details>
+<summary>日报：集中阅读 AI 资讯和微信日报（展开查看真实页面与操作）</summary>
 
 在同一个页面阅读 **AI 导游** 和 **微信日报**，按日期查看往期内容，下载或保存报告。使用前需按[日报指南](docs/guides/daily-briefings.md)配置数据来源和报告生成；打开页面本身不会生成日报。
 
@@ -192,6 +173,78 @@ bash server.sh stop     # 停止后台服务
 </p>
 
 复盘模块支持按日、周、月、年记录和回顾。详细操作步骤见[使用指南](docs/guides/product-tour.md)。
+
+</details>
+
+## 快速开始
+
+愿意自己操作终端时，按下面三步完成安装。新手也可以直接使用上面的[安装提示词](#不懂代码复制这段提示词给-ai)。
+
+### 1. 下载并安装
+
+macOS / Linux 需要 Git、Bash、curl 和 lsof。在终端运行：
+
+```bash
+git clone https://github.com/zhangxun-ai/LearnFlux.git
+cd LearnFlux
+cp -n .env.example .env
+chmod 600 .env
+bash scripts/bootstrap.sh --with-media
+```
+
+脚本准备 uv、Python 3.11、应用与音视频依赖，并创建本机配置和随机管理口令。首次需要下载依赖；已有配置和资料会保留。以后不必重复安装。
+
+**新安装默认 SQLite，自动建表，无需另装数据库。** 已有 PostgreSQL 用户保留原连接；新装 PostgreSQL 请先按[数据库指南](docs/guides/postgresql.md)创建专用账号和数据库，再设置 `LEARNFLUX_PERSISTENCE_BACKEND=postgres` 与 `DATABASE_URL`。启动会自动执行仓库中的版本化 SQL，无需手工建表。
+
+### 2. 只配置本次需要的服务
+
+在自己的 `.env` 中填写真实值；[.env.example](.env.example) 是公开模板。非空环境变量优先于设置页，修改后需要重启。已有用户可保留原有私有配置。**真实 `.env`、私有配置、Cookie 和数据库不要上传到 GitHub，也不要把 Key 发到聊天里。**
+
+| 你要使用什么 | 需要准备什么 |
+| --- | --- |
+| AI 校对、总结与问答 | DeepSeek 或兼容模型服务：`LEARNFLUX_LLM_API_KEY`、`LEARNFLUX_LLM_BASE_URL`、`LEARNFLUX_LLM_MODEL` |
+| 抖音 / 小红书链接 | `LEARNFLUX_TIKHUB_API_KEY`；视频还需要可用的转录方式 |
+| 本地语音转录 | FFmpeg、本地引擎与模型；当前普通链接的 `local` 策略使用 Apple Silicon Mac 的 MLX Whisper |
+| 云端语音转录 | 百炼的三项 `DASHSCOPE_*` 凭据、启用 `cloud_asr.enabled`，提交时选择 `cloud` 并确认报价 |
+| YouTube 可用字幕 / 小红书图文 | 可取得的字幕或正文、模型服务；小红书仍按来源配置 TikHub，此路径可能不运行 ASR |
+
+Apple Silicon Mac 可用 `bash scripts/bootstrap.sh --with-local-whisper` 安装本地引擎，并按输出完成配置。Intel Mac、Linux、Windows 不能照搬这条本地路径，需选择当前支持的云端方案或核对兼容性。Key 获取入口、具体字段与排错见[服务配置指南](docs/guides/configuration.md)。
+
+模型、TikHub、云端 ASR 各自计费，也分别接收相应的正文、链接或媒体；先确认内容与费用范围。本地转录不收云端 ASR 费用，模型和 TikHub 仍可能收费。
+
+### 3. 启动，处理一条真实链接
+
+在项目根目录运行：
+
+```bash
+bash server.sh start
+```
+
+打开 **[http://127.0.0.1:8000](http://127.0.0.1:8000)**。以后启动仍用这条命令；实际地址以启动输出为准。
+
+1. 打开[系统设置](http://127.0.0.1:8000/settings)，核对模型和所选服务是否生效；修改 `.env` 后先重启。
+2. 打开[单篇深度学习](http://127.0.0.1:8000/add_task_by_web)，粘贴你有权处理的真实链接，选择已配置的转录方式并提交；云端按页面报价确认费用。
+3. 等待完成，核对来源、原文与 AI 解读；导出并打开文件，再从历史记录重新打开结果。每个要使用的平台都分别跑一条。要验证 ASR，须用未缓存、需要语音识别的真实视频；字幕、图文和示例文字只验证各自的处理路径。
+
+<details>
+<summary>日常启停、端口、前台排错与数据库验证说明</summary>
+
+```bash
+bash server.sh status   # 查看状态
+bash server.sh log      # 查看实时日志，Ctrl+C 退出日志查看
+bash server.sh restart  # 修改配置或更新代码后重启
+bash server.sh stop     # 停止服务
+```
+
+端口优先读取 `LEARNFLUX_API_PORT`，未设置时沿用私有 `config/config.jsonc` 的 `api.port`。macOS 使用用户级 LaunchAgent 后台运行、登录时自动启动；`stop` 会卸载该启动项。
+
+前台排错时先停止后台服务，再运行 `uv run python main.py --start`；此时 `Ctrl+C` 才是停止服务。不要同时启动两个实例。
+
+SQLite 已通过隔离的文字学习、导出、笔记、合集、阅读与重启持久化检查；该检查使用模拟模型结果，不能代替真实模型、音视频平台或 OCR 验收。已有 PostgreSQL 不会被自动切换或迁移。
+
+</details>
+
+Windows、Docker、详细排错见[完整首次使用指南](docs/guides/quickstart.md)。
 
 ## 支持哪些内容，需要哪些服务
 
@@ -234,7 +287,10 @@ uv sync --extra ocr
 
 ## 开发与更多文档
 
-新安装默认使用 SQLite 与本地文件；PostgreSQL / S3 可选。模型、解析 API 和知识库集成只在启用对应能力时参与处理。不要把真实配置、媒体、密钥或结果访问令牌提交到仓库。
+[系统架构](docs/architecture.md) · [API Quick Start](docs/guides/api/quickstart.md) · [测试说明](tests/README.md) · [PostgreSQL](docs/guides/postgresql.md) · [本地验证范围](docs/release-readiness.md) · [文档中心](docs/README.md)
+
+<details>
+<summary>开发检查与其他部署方式</summary>
 
 ```bash
 uv sync --extra dev
@@ -242,11 +298,11 @@ uv run --extra dev pytest tests/unit
 uv run --extra dev pytest
 ```
 
-[系统架构](docs/architecture.md) · [API Quick Start](docs/guides/api/quickstart.md) · [测试说明](tests/README.md) · [PostgreSQL 迁移](docs/guides/postgresql.md) · [文档中心](docs/README.md)
+新安装默认 SQLite 和本地文件，PostgreSQL / S3 可选。不要将真实配置、媒体、密钥或结果访问令牌加入仓库。
 
-Docker 当前按 `linux/amd64` 准备，宿主机默认入口为 `127.0.0.1:8200`；本轮尚未验收镜像构建和容器运行，不作为首次体验的默认路径。[Docker 说明](docs/guides/quickstart.md#docker-替代路径)
+Docker 当前按 `linux/amd64` 准备，宿主机默认入口为 `127.0.0.1:8200`；镜像构建和容器运行尚未验收。[Docker 说明](docs/guides/quickstart.md#docker-替代路径)
 
-[本地验证结果与未验证事项](docs/release-readiness.md)
+</details>
 
 ## 项目来源与许可
 

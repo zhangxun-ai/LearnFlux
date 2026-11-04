@@ -18,6 +18,7 @@
 | [手机快捷指令](guides/mobile-shortcut.md) | 手机直达本地任务、隧道范围、独立令牌和验收 |
 | [自动保存到飞书知识库](guides/feishu-archive.md) | 将完整解析结果自动归档为飞书文档，并持久化重试与去重状态 |
 | [读取飞书文档](guides/feishu-documents.md) | 将 Wiki/Docx 正文送入深度学习，保留来源及读取范围 |
+| [微信日报与 AI 导游](guides/daily-briefings.md) | Codex 定时整理、来源接入、按期阅读和手动保存；附[接入提示词](prompts/daily-briefings.md) |
 | [PostgreSQL 指南](guides/postgresql.md) | SQLite 到 PostgreSQL 的迁移、验收和回滚 |
 
 新用户也可以复制[新手安装提示词](prompts/macos-local-quick-start.md)，交给有本机终端权限的 Agent 按所选平台准备 TikHub / 模型 / 本地或云端 ASR，初始化 SQLite 或复用 PostgreSQL，并用真实链接完成解读与导出验收。飞书归档、手机快捷入口和其他 ASR 的独立配置提示词见[可选服务配置](prompts/optional-services.md)，无需全部安装。

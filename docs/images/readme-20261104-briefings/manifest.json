@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-04",
+  "source": "User-provided real local LearnFlux screenshots; user requested replacement of names and group names with pseudonyms for public documentation",
+  "processing": "Native deterministic opaque background replacement and text rendering; lossless WebP; metadata removed; no generative redraw, cropping or resizing",
+  "screenshots": [
+    {
+      "file": "01-wechat-daily-redacted.webp",
+      "description": "微信日报真实界面，来源人名与群名使用化名",
+      "source_sha256": "7903e13977d012a2d4f605fcab47e0451bd264e54b7a05ee7b5c2d7e55d7755c",
+      "sha256": "832aed31ffc6f98a5d6edcab059d1cfaa96950935887f2798be5500b4977c49b",
+      "dimensions": {
+        "width": 2856,
+        "height": 1646
+      },
+      "bytes": 659106,
+      "replacement_regions": [
+        {
+          "x": 650,
+          "y": 740,
+          "width": 1880,
+          "height": 83
+        },
+        {
+          "x": 650,
+          "y": 1134,
+          "width": 1800,
+          "height": 50
+        },
+        {
+          "x": 658,
+          "y": 1355,
+          "width": 110,
+          "height": 46
+        },
+        {
+          "x": 650,
+          "y": 1484,
+          "width": 1800,
+          "height": 50
+        }
+      ],
+      "outside_region_changed_pixels": 0
+    },
+    {
+      "file": "02-ai-guide-redacted.webp",
+      "description": "AI 导游真实界面，人物姓名使用化名",
+      "source_sha256": "373f89eaae30c44bf6cbaf1c77f48abe61b791b1b208ad757a816d5f5e7957db",
+      "sha256": "8b806c753ae65b88807c0533cf6adadf256971bd8e53f6e8531d95ada9653d82",
+      "dimensions": {
+        "width": 2806,
+        "height": 1644
+      },
+      "bytes": 531424,
+      "replacement_regions": [
+        {
+          "x": 683,
+          "y": 228,
+          "width": 196,
+          "height": 41
+        },
+        {
+          "x": 565,
+          "y": 687,
+          "width": 110,
+          "height": 42
+        },
+        {
+          "x": 742,
+          "y": 1320,
+          "width": 210,
+          "height": 42
+        }
+      ],
+      "outside_region_changed_pixels": 0
+    }
+  ]
+}

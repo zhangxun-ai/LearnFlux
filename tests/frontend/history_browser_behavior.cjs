@@ -86,6 +86,11 @@ async function run() {
         assert.equal(h.run(`readHistoryCache('records', 10000)`), null, 'Another owner must not reuse cached records');
     }
     {
+        const h = harness();
+        h.run(`cacheOwner = 'alice'; writeHistoryCache('records', {items:[{task_id:'old'}]}); localStorage.setItem('learnflux_history_changed', 'new');`);
+        assert.equal(h.run(`readHistoryCache('records', 10000)`), null, 'Returning from home cleanup must invalidate history session snapshots');
+    }
+    {
         const h = harness('?page=3&per_page=50');
         h.run('restoreHistoryLocation()'); assert.equal(h.run('currentPage'), 2); assert.equal(h.run('PAGE_SIZE'), 50);
         h.run('serializeFiltersToURL(false)'); assert.match(h.sandbox.location.search, /page=3/);
@@ -153,6 +158,41 @@ async function run() {
             assert.equal(cardLabel, label, 'A recent card must show the actual task state');
             assert.ok(h.run('buildRow(statusItem, new Set(), 0)').includes(label), 'Card and table state labels must agree');
         }
+    }
+    {
+        const h = harness(); let calls = 0; let refreshed = false;
+        h.run(`displayedItems = [{task_id:'one', view_token:'v1', title:'One'}, {task_id:'two', view_token:'v2', title:'Two'}]; selectedSet.add('v1'); cacheOwner = 'alice'; writeHistoryCache('old', {items: displayedItems});`);
+        h.sandbox.window.LearnFluxHistoryConfirm = { open: async () => false };
+        h.context.fetch = () => { calls++; throw new Error('Must not call'); };
+        await h.run('removeHistoryRecords()');
+        assert.equal(calls, 0, 'Cancel must not write to the server');
+        h.sandbox.window.LearnFluxHistoryConfirm = { open: async () => true };
+        h.context.fetch = async (url, options) => {
+            calls++;
+            assert.equal(url, '/api/audit/history/remove');
+            assert.equal(options.method, 'POST');
+            assert.deepEqual(JSON.parse(options.body).task_ids, ['one']);
+            return { ok: true, json: async () => ({code:200}) };
+        };
+        h.context.loadHistory = async () => { refreshed = true; };
+        await h.run('removeHistoryRecords()');
+        assert.equal(calls, 1);
+        assert.equal(refreshed, true);
+        assert.equal(h.run('readHistoryCache("old", 60000)'), null, 'Deleted records must not return from session cache');
+        assert.equal(h.context.lastItems.length, 1);
+        assert.equal(h.context.lastItems[0].task_id, 'two');
+        assert.equal(h.run('selectedSet.size'), 0);
+    }
+    {
+        const h = harness();
+        h.run(`displayedItems = [{task_id:'one', view_token:'v1', title:'One'}]; selectedSet.add('v1');`);
+        h.sandbox.window.LearnFluxHistoryConfirm = { open: async () => true };
+        h.context.fetch = async () => ({ok:false, json:async () => ({detail:'Please retry'})});
+        await h.run('removeHistoryRecords()');
+        assert.equal(h.run('displayedItems.length'), 1, 'Failure must preserve the current record');
+        assert.equal(h.run('selectedSet.size'), 1, 'Failure must preserve selection for retry');
+        assert.equal(h.get('authStatus').textContent, 'Please retry');
+        assert.equal(h.run('historyRemovalBusy'), false);
     }
     console.log('History browser behavior checks passed');
 }

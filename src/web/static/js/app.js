@@ -503,6 +503,21 @@ class APIManager {
         return await response.json();
     }
 
+    static async removeHistoryTasks(taskIds) {
+        await requireManagementSession('输入管理口令后继续整理历史记录。');
+        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
+        const response = await fetch('/api/audit/history/remove', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_ids: taskIds }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.code !== 200) {
+            throw new Error(data.message || data.detail || `HTTP ${response.status}`);
+        }
+        return data;
+    }
+
     static async deleteTask(taskId) {
         await requireManagementSession('输入管理口令后继续删除这条任务记录。');
         const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
@@ -662,24 +677,35 @@ class TaskHistoryManager {
      * 删除指定任务
      */
     static async deleteTask(taskId) {
+        if (this.deletingHistory) return;
+        this.deletingHistory = true;
         try {
-            if (!confirm('确定要删除这个任务记录及服务器缓存吗？删除后同一视频会重新转写。')) {
+            const task = this.getHistory().find(entry => entry.id === taskId);
+            if (!task || !await window.LearnFluxHistoryConfirm.open([task])) {
                 return;
             }
 
-            await APIManager.deleteTask(taskId);
+            document.querySelectorAll('#history-list .history-remove-button').forEach(button => { button.disabled = true; });
+            // Let an earlier server sync finish before updating the local snapshot.
+            if (taskHistoryServerSyncPromise) await taskHistoryServerSyncPromise;
+            await APIManager.removeHistoryTasks([taskId]);
             const history = this.getHistory();
             const updatedHistory = history.filter(task => task.id !== taskId);
 
             StorageManager.set(APP_CONFIG.STORAGE_KEYS.TASK_HISTORY, updatedHistory);
+            try { localStorage.setItem('learnflux_history_changed', String(Date.now())); } catch (_) {}
             this.renderHistory();
+            await this.syncFromServer();
 
-            UIManager.showStatus('success', '任务记录及服务器缓存已删除');
+            UIManager.showStatus('success', '已从历史记录移除');
             setTimeout(UIManager.hideStatus, 2000);
         } catch (e) {
-            console.error('删除任务记录失败:', e);
-            UIManager.showStatus('error', '删除失败', '请稍后重试');
+            console.error('History removal failed:', e);
+            UIManager.showStatus('error', '删除失败，记录仍保留', e.message || '请稍后重试');
             setTimeout(UIManager.hideStatus, 3000);
+        } finally {
+            this.deletingHistory = false;
+            document.querySelectorAll('#history-list .history-remove-button').forEach(button => { button.disabled = false; });
         }
     }
 
@@ -1360,9 +1386,10 @@ function buildHistoryCard(task) {
                     ${studyPreviewButton}
                     ${viewBtn}
                     <button class="hist-btn" onclick="copyToClipboard('${jsAttr(task.url)}')">复制</button>
-                    <button class="hist-btn danger" onclick="TaskHistoryManager.deleteTask('${jsAttr(task.id)}')">删除</button>
+                    ${task.id && !task.result_id ? `<button type="button" class="hist-btn danger history-remove-button" aria-label="从历史记录删除：${escapeAttr(displayTitle)}">删除</button>` : ''}
                 </div>
             `;
+    card.querySelector('.history-remove-button')?.addEventListener('click', () => TaskHistoryManager.deleteTask(task.id));
     if (taskHref) {
         card.classList.add('is-clickable');
         card.setAttribute('role', 'link');
@@ -2529,6 +2556,11 @@ async function initializePage() {
     // 从其他页面返回或重新激活标签页时，再从 PostgreSQL 恢复最新状态。
     window.addEventListener('pageshow', () => {
         if (window.LearnFluxAuth && window.LearnFluxAuth.isAuthenticated()) {
+            TaskHistoryManager.syncFromServer();
+        }
+    });
+    window.addEventListener('storage', event => {
+        if (event.key === 'learnflux_history_changed' && window.LearnFluxAuth?.isAuthenticated()) {
             TaskHistoryManager.syncFromServer();
         }
     });

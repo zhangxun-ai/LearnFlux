@@ -187,3 +187,7 @@ node tests/frontend/timezone_behavior.cjs
 ```
 
 覆盖无时区 UTC、`Z`、正负偏移、微秒、北京时间跨日、近期任务相对时间及“今天”筛选；前端用北京、UTC、洛杉矶和基里蒂马蒂四种宿主时区重复验证，不调用付费服务。
+
+## 历史记录清理
+
+`uv run --extra dev pytest tests/unit/test_history_removal.py tests/unit/test_history_delete_client.py tests/unit/test_history_browser_behavior.py tests/unit/test_transcription_control_store.py -q` 使用临时数据库或浏览器行为模型，覆盖单条 / 批量移除、归属校验、整批失败不写入、重复提交共用结果链接、刷新与分页、会话缓存失效、取消及失败保留。首页行为可单独运行 `node tests/frontend/home_history_removal_behavior.cjs`。删除确认由两个页面共用 `history-confirm.js` / `history-confirm.css`，使用原生 dialog 焦点隔离、自定义外观和异步确认；默认聚焦取消，Esc、取消和遮罩点击均不得提交删除。历史删除通过 `/api/audit/history/remove` 保存按用户、任务编号隔离的可见性状态，保留解析结果、原始文件和审计记录；与旧的任务及共享缓存清理接口不同。

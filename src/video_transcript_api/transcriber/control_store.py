@@ -122,6 +122,14 @@ class _TranscriptionControlStore:
         with self.database.transaction() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.execute(
+                """CREATE TABLE IF NOT EXISTS task_history_hidden (
+                    user_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, task_id)
+                )"""
+            )
+            connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS task_status (
                     task_id TEXT PRIMARY KEY,
@@ -415,10 +423,13 @@ class _TranscriptionControlStore:
         try:
             rows = connection.execute(
                 f"""SELECT * FROM task_status
-                WHERE {where_sql}
+                WHERE {where_sql} AND NOT EXISTS (
+                    SELECT 1 FROM task_history_hidden h
+                    WHERE h.task_id = task_status.task_id AND h.user_id = ?
+                )
                 ORDER BY created_at DESC, task_id DESC
                 LIMIT ? OFFSET ?""",
-                parameters + (safe_limit, safe_offset),
+                parameters + (owner_user_id or "", safe_limit, safe_offset),
             ).fetchall()
         finally:
             connection.close()

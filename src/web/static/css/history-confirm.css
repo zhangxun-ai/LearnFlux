@@ -1,0 +1,50 @@
+.history-confirm {
+    box-sizing: border-box;
+    position: fixed;
+    inset: 0;
+    width: min(480px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    margin: auto;
+    padding: 30px;
+    overflow-y: auto;
+    border: 0;
+    border-radius: 20px;
+    background: #FDFCF8;
+    color: #123D32;
+    box-shadow: 0 24px 80px rgba(18, 61, 50, 0.2);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    text-align: left;
+}
+.history-confirm[open] { animation: history-confirm-enter 180ms ease-out; }
+.history-confirm::backdrop { background: rgba(22, 43, 34, 0.3); }
+.history-confirm *, .history-confirm *::before, .history-confirm *::after { box-sizing: border-box; }
+.history-confirm svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.history-confirm button { font: inherit; cursor: pointer; transition: background-color 140ms ease-out; }
+.history-confirm-close { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: #64756D; }
+.history-confirm-close:hover { background: #E7F1E9; color: #123D32; }
+.history-confirm-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 18px; border-radius: 14px; background: #E7F1E9; color: #337B62; }
+.history-confirm h2 { margin: 0 24px 10px 0; color: #123D32; font: 700 24px/1.4 Georgia, "Songti SC", STSong, serif; letter-spacing: -0.02em; }
+.history-confirm #history-confirm-description { margin: 0; color: #64756D; font-size: 14px; line-height: 1.7; }
+.history-confirm-records { display: grid; gap: 10px; margin: 22px 0 16px; padding: 16px 0; list-style: none; border-block: 1px solid #E3EAE4; }
+.history-confirm-records li { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: #33443D; font-size: 14px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
+.history-confirm-records .history-confirm-more { color: #64756D; font-size: 13px; font-weight: 400; }
+.history-confirm #history-confirm-note { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: #337B62; font-size: 13px; line-height: 1.6; }
+.history-confirm #history-confirm-note svg { flex: 0 0 18px; width: 18px; height: 20px; }
+.history-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 28px; }
+.history-confirm-actions button { min-height: 44px; padding: 0 22px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+.history-confirm-cancel { border: 1px solid #CCDAD0; background: #FFFFFF; color: #33443D; }
+.history-confirm-cancel:hover { background: #E7F1E9; }
+.history-confirm-submit { border: 1px solid transparent; background: #995345; color: #FFFFFF; }
+.history-confirm-submit:hover { background: #824336; }
+.history-confirm button:focus-visible { outline: 2px solid #337B62; outline-offset: 3px; }
+.history-confirm ::selection { color: #123D32; background: #E7F1E9; }
+@keyframes history-confirm-enter { from { opacity: 0.65; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 520px) {
+    .history-confirm { padding: 24px; border-radius: 16px; }
+    .history-confirm h2 { font-size: 22px; }
+    .history-confirm-actions button { flex: 1; padding-inline: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .history-confirm[open] { animation: none; }
+    .history-confirm button { transition: none; }
+}

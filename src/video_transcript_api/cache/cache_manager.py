@@ -167,6 +167,14 @@ class CacheManager:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS task_history_hidden (
+                    user_id TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, task_id)
+                )
+            ''')
 
         # 执行数据库迁移
         self._migrate_database()
@@ -2081,6 +2089,18 @@ class CacheManager:
             logger.error(f"获取任务信息失败: {e}")
             return None
 
+    def hide_history_tasks(self, task_ids: list[str], user_id: str) -> None:
+        """Persist authorized history removals without changing tasks or artifacts."""
+        if not user_id:
+            raise ValueError("history_owner_required")
+        with self._get_cursor() as cursor:
+            for task_id in task_ids:
+                cursor.execute(
+                    "INSERT INTO task_history_hidden (user_id, task_id) VALUES (?, ?) "
+                    "ON CONFLICT (user_id, task_id) DO NOTHING",
+                    (user_id, task_id),
+                )
+
     def list_recent_tasks(
         self,
         *,
@@ -2115,10 +2135,13 @@ class CacheManager:
             with self._get_cursor() as cursor:
                 cursor.execute(
                     f"""SELECT * FROM task_status
-                    WHERE {where_sql}
+                    WHERE {where_sql} AND NOT EXISTS (
+                        SELECT 1 FROM task_history_hidden h
+                        WHERE h.task_id = task_status.task_id AND h.user_id = ?
+                    )
                     ORDER BY created_at DESC, task_id DESC
                     LIMIT ? OFFSET ?""",
-                    parameters + (safe_limit, safe_offset),
+                    parameters + (owner_user_id or "", safe_limit, safe_offset),
                 )
                 return [self._decode_task_row(row) for row in cursor.fetchall()]
         except Exception as e:

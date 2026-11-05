@@ -146,7 +146,7 @@ body.workbench-meadow.page-history .header h1 {
     .page-history .history-filter-divider { margin-inline: 12px 6px; }
     .page-history #historyStatusFilter { margin-left: 4px; }
     .page-history .history-inline-filter label { font-size: 14px; }
-    .page-history .history-table-head,.page-history #listArea .history-record-row { grid-template-columns: minmax(0,1fr) 100px 106px 114px 145px; }
+    .page-history .history-table-head,.page-history #listArea .history-record-row { grid-template-columns: minmax(0,1fr) 100px 106px 114px 154px; }
     .page-history .history-open-link { min-width: 82px; }
 }
 @media (max-width: 1100px) {
@@ -156,7 +156,7 @@ body.workbench-meadow.page-history .header h1 {
     .page-history .history-inline-filter { flex: 0 0 auto; }
     .page-history .tendedero-section { margin-inline: -24px; }
     .page-history .tendedero-heading { padding-inline: 24px; }
-    .page-history .history-table-head,.page-history #listArea .history-record-row { grid-template-columns: minmax(0,1fr) 85px 88px 95px 100px; gap: 7px; padding-inline: 12px; }
+    .page-history .history-table-head,.page-history #listArea .history-record-row { grid-template-columns: minmax(0,1fr) 85px 88px 95px 150px; gap: 7px; padding-inline: 12px; }
     .page-history .history-open-link { min-width: 64px; padding-inline: 8px; }
     .page-history .history-row-action { gap: 0; }
     .page-history .history-row-title { font-size: 14px; }
@@ -328,4 +328,22 @@ html[data-theme="dark"] body.page-history :is(.platform-brand-local, .history-da
 }
 html[data-theme="dark"] body.page-history .history-date-select > svg {
     stroke: var(--product-muted);
+}
+
+/* Selected history entries can be removed without affecting their results. */
+.page-history .history-row-action { gap: 5px; }
+.page-history .history-row-action .history-preview-button { flex-shrink: 0; white-space: nowrap; padding-inline: 5px; }
+.page-history .history-row-action .history-open-link { min-width: 68px; padding-inline: 9px; }
+.page-history .history-remove-button { color: #80645B; }
+.page-history .history-remove-button:hover { color: #953E32; background: #FBF0EC; }
+.page-history .history-remove-button:disabled { opacity: 0.5; cursor: wait; }
+.page-history .history-remove-button:focus-visible,
+.page-history #manageHistoryBtn:focus-visible { outline: 2px solid #337B62; outline-offset: 3px; }
+.page-history .history-record-tools { flex-wrap: wrap; }
+.page-history.history-batch-mode .history-bulk-actions { display: flex; flex-wrap: wrap; opacity: 1; }
+.page-history.history-batch-mode .history-row-checkbox { opacity: 1; }
+@media (max-width: 760px) {
+    .page-history .history-row-action { flex-wrap: wrap; justify-content: flex-end; }
+    .page-history .history-row-action .history-remove-button { min-height: 44px; }
+    .page-history .history-bulk-actions { max-width: 100%; }
 }

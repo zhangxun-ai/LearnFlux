@@ -14,6 +14,7 @@ from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field
 
 from ..context import get_audit_logger, get_cache_manager, get_config, get_logger
 from ..services.transcription import TranscribeResponse, verify_token
@@ -102,6 +103,7 @@ def _history_connection(cache_manager):
         if is_postgres:
             # The content_marks table is created by the existing schema migration.
             has_marks = True
+            has_hidden = True
         else:
             cache_uri = Path(cache_manager.db_path).resolve().as_uri() + "?mode=ro"
             conn.execute("ATTACH DATABASE ? AS cache", (cache_uri,))
@@ -109,13 +111,17 @@ def _history_connection(cache_manager):
             has_marks = conn.execute(
                 "SELECT 1 FROM cache.sqlite_master WHERE type = 'table' AND name = 'content_marks'"
             ).fetchone() is not None
-        yield conn, prefix, has_marks
+            has_hidden = conn.execute(
+                "SELECT 1 FROM cache.sqlite_master WHERE type = 'table' AND name = 'task_history_hidden'"
+            ).fetchone() is not None
+        yield conn, prefix, has_marks, has_hidden
     finally:
         conn.close()
 
 
 def _history_records_cte(
-    user_info: dict, api_key_masked: str, prefix: str, has_marks: bool
+    user_info: dict, api_key_masked: str, prefix: str, has_marks: bool,
+    has_hidden: bool = False,
 ) -> tuple[str, list]:
     """Use one owner-scoped, deduplicated record set for rows and metadata.
 
@@ -136,6 +142,13 @@ def _history_records_cte(
     if has_marks:
         parameters.append(api_key_masked)
     parameters.extend([user_info.get("user_id") or "", int(include_unowned)])
+    visible_sql = ""
+    if has_hidden:
+        visible_sql = (
+            f"AND NOT EXISTS (SELECT 1 FROM {prefix}task_history_hidden h "
+            "WHERE h.task_id = candidates.task_id AND h.user_id = ?)"
+        )
+        parameters.append(user_info.get("user_id") or "")
     sql = f"""
         WITH owned_audits AS (
             SELECT id, task_id, video_url, wechat_webhook, request_time
@@ -184,7 +197,7 @@ def _history_records_cte(
                 ORDER BY request_time DESC,
                     CASE WHEN audit_url IS NOT NULL AND audit_url != '' THEN 0 ELSE 1 END,
                     audit_time DESC, audit_id DESC, task_id DESC
-            ) AS rn FROM candidates
+            ) AS rn FROM candidates WHERE 1 = 1 {visible_sql}
         ), history_records AS (
             SELECT * FROM ranked WHERE rn = 1
         )
@@ -286,9 +299,9 @@ async def get_history(
     where_sql = " AND ".join(conditions) or "1 = 1"
 
     def read_page():
-        with _history_connection(cache_manager) as (conn, prefix, has_marks):
+        with _history_connection(cache_manager) as (conn, prefix, has_marks, has_hidden):
             cte, scope_parameters = _history_records_cte(
-                user_info, api_key_masked, prefix, has_marks
+                user_info, api_key_masked, prefix, has_marks, has_hidden
             )
             query_parameters = scope_parameters + parameters
             excerpts = {}
@@ -386,9 +399,9 @@ async def get_filter_options(user_info: dict = Depends(verify_token)):
     cache_manager = get_cache_manager()
 
     def read_options():
-        with _history_connection(cache_manager) as (conn, prefix, has_marks):
+        with _history_connection(cache_manager) as (conn, prefix, has_marks, has_hidden):
             cte, parameters = _history_records_cte(
-                user_info, api_key_masked, prefix, has_marks
+                user_info, api_key_masked, prefix, has_marks, has_hidden
             )
             rows = conn.execute(
                 cte + "SELECT platform, author, wechat_webhook FROM history_records", parameters
@@ -412,6 +425,47 @@ async def get_filter_options(user_info: dict = Depends(verify_token)):
 
     data = await run_in_threadpool(_read_history_query, read_options)
     return TranscribeResponse(code=200, message="获取过滤选项成功", data=data)
+
+
+class RemoveHistoryRequest(BaseModel):
+    task_ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+@router.post("/history/remove")
+async def remove_history(
+    payload: RemoveHistoryRequest,
+    user_info: dict = Depends(verify_token),
+):
+    """Remove selected owned entries from history, retaining all source results."""
+    user_id = user_info.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=403, detail="无法核验历史记录归属")
+    task_ids = list(dict.fromkeys(payload.task_ids))
+    api_key_masked = audit_logger._mask_api_key(user_info.get("api_key", ""))
+    cache_manager = get_cache_manager()
+
+    def remove_owned_entries():
+        # Authorize individual tasks rather than deduplicated history rows: older
+        # submissions can share a view token and must remain individually removable.
+        for task_id in task_ids:
+            task = cache_manager.get_task_by_id(task_id)
+            if task:
+                _require_summary_owner(task, user_info, api_key_masked)
+            else:
+                with audit_logger._get_cursor() as cursor:
+                    cursor.execute(
+                        "SELECT 1 FROM api_audit_logs WHERE task_id = ? AND api_key_masked = ? LIMIT 1",
+                        (task_id, api_key_masked),
+                    )
+                    if cursor.fetchone() is None:
+                        raise HTTPException(status_code=403, detail="部分记录不存在或无权删除，请刷新后重试")
+        cache_manager.hide_history_tasks(task_ids, user_id)
+
+    await run_in_threadpool(remove_owned_entries)
+    return TranscribeResponse(
+        code=200, message="已从历史记录移除，解析结果和原始文件仍保留",
+        data={"task_ids": task_ids, "removed_count": len(task_ids)},
+    )
 
 
 def _require_summary_owner(task_info: dict, user_info: dict, api_key_masked: str) -> None:

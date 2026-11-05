@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
-    <script src="/static/js/time.js?v=a700f496c4e6"></script>
+    <script src="/static/js/time.js?v=6f6d62a34f7f"></script>
         <script>
         (function() {
             try {
@@ -29,13 +29,13 @@
     <meta name="apple-mobile-web-app-title" content="LearnFlux">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="manifest" href="/manifest.webmanifest">
-            <link rel="stylesheet" href="/static/css/editorial.css?v=a700f496c4e6">
-    <link rel="stylesheet" href="/static/css/app-shell.css?v=a700f496c4e6">
-    <link rel="stylesheet" href="/static/css/styles.css?v=a700f496c4e6">
-    <script src="/static/js/auth-session.js?v=a700f496c4e6"></script>
-    <script src="/static/js/pwa-register.js?v=a700f496c4e6" defer></script>
+            <link rel="stylesheet" href="/static/css/editorial.css?v=6f6d62a34f7f">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=6f6d62a34f7f">
+    <link rel="stylesheet" href="/static/css/styles.css?v=6f6d62a34f7f">
+    <script src="/static/js/auth-session.js?v=6f6d62a34f7f"></script>
+    <script src="/static/js/pwa-register.js?v=6f6d62a34f7f" defer></script>
     <script src="/static/js/ui-features.js?v=f35b18a5e3ce" defer></script>
-    <script src="/static/js/app-shell.js?v=a700f496c4e6" defer></script>
+    <script src="/static/js/app-shell.js?v=6f6d62a34f7f" defer></script>
     <style>
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -495,19 +495,21 @@
         }
 
     </style>
-    <link rel="stylesheet" href="/static/css/product-linear.css?v=a700f496c4e6">
-    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=a700f496c4e6">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=6f6d62a34f7f">
+    <link rel="stylesheet" href="/static/css/product-linear-system.css?v=6f6d62a34f7f">
 
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-leaf-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-leaf-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-leaf-180.png">
     <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
-    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=a700f496c4e6">
-    <link rel="stylesheet" href="/static/css/learning-history-meadow.css?v=a700f496c4e6">
-    <link rel="stylesheet" href="/static/css/history-improvements.css?v=a700f496c4e6">
-    <link rel="stylesheet" href="/static/css/output-reading.css?v=a700f496c4e6">
-    <link rel="stylesheet" href="/static/css/history-evidence.css?v=a700f496c4e6">
-    <script src="/static/js/history-evidence.js?v=a700f496c4e6" defer></script>
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=6f6d62a34f7f">
+    <link rel="stylesheet" href="/static/css/learning-history-meadow.css?v=6f6d62a34f7f">
+    <link rel="stylesheet" href="/static/css/history-improvements.css?v=6f6d62a34f7f">
+    <link rel="stylesheet" href="/static/css/output-reading.css?v=6f6d62a34f7f">
+    <link rel="stylesheet" href="/static/css/history-evidence.css?v=6f6d62a34f7f">
+    <script src="/static/js/history-evidence.js?v=6f6d62a34f7f" defer></script>
+    <link rel="stylesheet" href="/static/css/history-confirm.css?v=6f6d62a34f7f">
+    <script src="/static/js/history-confirm.js?v=6f6d62a34f7f" defer></script>
 </head>
 <body class="app-shell has-app-shell product-linear page-history workbench-meadow">
 <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -711,6 +713,7 @@
         </div>
         <div class="history-record-tools task-history-only">
             <span class="unread-badge" id="unreadBadge" style="display:none"></span>
+            <button class="btn btn-ghost" id="manageHistoryBtn" type="button" onclick="toggleHistoryManagement()" aria-pressed="false">批量管理</button>
             <div class="history-bulk-actions">
                 <label class="history-select-all" for="selectAllChk">
                     <input type="checkbox" id="selectAllChk" class="row-checkbox" title="全选当页" aria-label="全选当前页记录" onchange="toggleSelectAll(this.checked)">
@@ -719,6 +722,7 @@
                 <span id="selectedCount" style="display:none"></span>
                 <button class="btn btn-ghost" id="markSelectedBtn" onclick="markSelectedRead()" style="display:none">标为已打开</button>
                 <button class="btn btn-ghost" id="compareSelectedBtn" type="button" onclick="window.LearnFluxEvidence.open([...selectedSet], displayedItems)" hidden>对照提问</button>
+                <button class="btn btn-ghost history-remove-button" id="deleteSelectedBtn" type="button" onclick="removeHistoryRecords()" hidden>删除所选</button>
                 <button class="btn btn-ghost" id="clearSelectionBtn" onclick="clearSelection()" hidden>取消选择</button>
             </div>
         </div>
@@ -868,6 +872,7 @@ let currentMasked = '';
 let filterOptions = { webhooks: [], platforms: [], platform_counts: [], authors: [] };
 let historyFilterOptionsLoaded = false;
 let selectedSet = new Set();   // 当前选中的 view_token
+let historyRemovalBusy = false;
 
 // ===================== 工具函数 =====================
 function getMasked() { return currentMasked || 'anon'; }
@@ -892,6 +897,52 @@ function markAllRead() {
 }
 
 // ===================== 多选 =====================
+function toggleHistoryManagement() {
+    const active = document.body.classList.toggle('history-batch-mode');
+    const button = document.getElementById('manageHistoryBtn');
+    button.setAttribute('aria-pressed', String(active));
+    button.textContent = active ? '完成管理' : '批量管理';
+    if (!active) clearSelection();
+}
+
+async function removeHistoryRecords(taskId = null) {
+    if (historyRemovalBusy) return;
+    const items = displayedItems.filter(item => taskId
+        ? item.task_id === taskId
+        : selectedSet.has(item.view_token));
+    const taskIds = [...new Set(items.map(item => item.task_id).filter(Boolean))];
+    if (!taskIds.length) return;
+    historyRemovalBusy = true;
+    const owner = cacheOwner;
+    try {
+        if (!await window.LearnFluxHistoryConfirm.open(items.map(item => ({ title: historyItemTitle(item) })))) return;
+        if (owner !== cacheOwner) return;
+        document.querySelectorAll('.history-remove-button').forEach(button => { button.disabled = true; });
+        const response = await fetch('/api/audit/history/remove', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${currentApiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_ids: taskIds }),
+        });
+        const data = await response.json();
+        if (!response.ok || data.code !== 200) throw new Error(typeof data.detail === 'string' ? data.detail : data.message || '删除失败，请重试');
+        if (owner !== cacheOwner) return;
+        historyRequest += 1;
+        historyController?.abort();
+        if (filtersPromise) await filtersPromise;
+        invalidateHistoryCache();
+        clearSelection();
+        renderList(displayedItems.filter(item => !taskIds.includes(item.task_id)));
+        try { localStorage.setItem('learnflux_history_changed', String(Date.now())); } catch (_) {}
+        await loadHistory(currentPage, { force: true });
+        showStatus('ok', `已从历史记录移除 ${taskIds.length} 条，解析结果仍保留。`);
+    } catch (error) {
+        if (owner === cacheOwner) showStatus('err', error.message || '删除失败，记录仍保留，请重试。');
+    } finally {
+        historyRemovalBusy = false;
+        document.querySelectorAll('.history-remove-button').forEach(button => { button.disabled = false; });
+    }
+}
+
 function toggleSelect(vt, chkEl, rowEl) {
     if (selectedSet.has(vt)) {
         selectedSet.delete(vt);
@@ -943,6 +994,7 @@ function updateSelectionUI() {
     compare.disabled = count > 5;
     compare.title = count > 5 ? '每次选择 2–5 篇资料，便于准确对照' : '根据所选资料的原文回答';
     document.getElementById('clearSelectionBtn').hidden = !count;
+    document.getElementById('deleteSelectedBtn').hidden = !count;
     document.querySelector('.history-bulk-actions')?.classList.toggle('has-selection', count > 0);
     const rows = document.querySelectorAll('.task-row[data-vt]');
     const all = document.getElementById('selectAllChk');
@@ -1206,17 +1258,29 @@ function platformBadgeHTML(platform) {
 
 // ===================== Auth =====================
 function cacheKey(key) { return `vta_history_v2:${cacheOwner}:${key}`; }
+function invalidateHistoryCache() {
+    responseCache.clear();
+    filtersLoadedAt = 0;
+    try {
+        const keys = JSON.parse(sessionStorage.getItem(cacheKey('keys')) || '[]');
+        keys.forEach(key => sessionStorage.removeItem(cacheKey(key)));
+        sessionStorage.removeItem(cacheKey('keys'));
+    } catch (_) {}
+}
 function readHistoryCache(key, ttl) {
     let entry = responseCache.get(key);
     if (!entry) { try { entry = JSON.parse(sessionStorage.getItem(cacheKey(key)) || 'null'); } catch (_) {} }
     if (!entry || Date.now() - entry.time > ttl) return null;
+    try { if ((entry.revision || '') !== (localStorage.getItem('learnflux_history_changed') || '')) return null; } catch (_) {}
     return entry.data;
 }
 function writeHistoryCache(key, data) {
     const safeData = { ...data };
     if (Array.isArray(safeData.items)) safeData.items = safeData.items.map(({ wechat_webhook, ...item }) => item);
     if (Array.isArray(safeData.webhooks)) safeData.webhooks = [];
-    const entry = { time: Date.now(), data: safeData };
+    let revision = '';
+    try { revision = localStorage.getItem('learnflux_history_changed') || ''; } catch (_) {}
+    const entry = { time: Date.now(), data: safeData, revision };
     responseCache.set(key, entry);
     while (responseCache.size > 10) responseCache.delete(responseCache.keys().next().value);
     try {
@@ -1903,6 +1967,8 @@ function renderList(items) {
         });
         const preview = row.querySelector('[data-preview-view]');
         if (preview) preview.addEventListener('click', () => toggleSummary(preview.dataset.previewView, row, preview));
+        const remove = row.querySelector('[data-remove-task]');
+        if (remove) remove.addEventListener('click', () => removeHistoryRecords(remove.dataset.removeTask));
     });
     updateSelectionUI();
 }
@@ -1935,7 +2001,7 @@ function buildRow(item, readSet, index) {
         <div class="history-row-platform">${platformBadgeHTML(item.platform)}</div>
         <time class="history-row-date" ${date !== '—' ? `datetime="${esc(date)}"` : ''}>${esc(date)}</time>
         <div class="history-row-status"><span class="history-status ${statusClass}"><span class="history-status-dot" aria-hidden="true"></span>${statusLabel}</span></div>
-        <div class="history-row-action">${action}${preview}</div>
+        <div class="history-row-action">${action}${preview}${item.task_id ? `<button type="button" class="history-preview-button history-remove-button" data-remove-task="${esc(item.task_id)}" aria-label="从历史记录删除：${esc(title)}" ${historyRemovalBusy ? 'disabled' : ''}>删除</button>` : ''}</div>
         ${item.error ? `<div class="history-row-error">${esc(item.error)}</div>` : ''}
         ${preview ? `<div id="history-summary-${index}" class="history-row-summary" aria-live="polite" hidden></div>` : !canOpen ? `<div id="history-summary-${index}" class="history-row-summary" hidden>这条记录保留了导入信息，目前没有可打开的处理结果。\n任务编号：${esc(item.task_id || '未记录')}\n原链接：${esc(item.video_url || '未记录')}</div>` : ''}
     </div>`;
@@ -2100,6 +2166,11 @@ function esc(s) {
 
 // 过滤栏任意子元素 change → 实时写入 URL（冒泡监听，无需逐一绑定）
 document.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('storage', event => {
+        if (event.key !== 'learnflux_history_changed' || !window.LearnFluxAuth?.isAuthenticated()) return;
+        invalidateHistoryCache();
+        void loadHistory(currentPage, { force: true });
+    });
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape') { const opener = activePreview?.button; closeSummary(); opener?.focus(); }
     });

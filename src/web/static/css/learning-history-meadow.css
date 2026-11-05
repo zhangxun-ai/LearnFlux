@@ -276,7 +276,7 @@ body.workbench-meadow.page-home .app-home {
 .page-home.home-linear .app-home .hist-preview { display: none; }
 .page-home.home-linear .app-home .hist-author { display: none; }
 .page-home.home-linear .app-home .hist-actions { gap: 6px; }
-.page-home.home-linear .app-home .hist-actions .hist-btn:not(:first-child) { display: none; }
+.page-home.home-linear .app-home .hist-actions .hist-btn:not(:first-child):not(.history-remove-button) { display: none; }
 .page-home.home-linear .app-home .hist-actions .hist-btn { min-height: 36px; }
 
 .page-history.workbench-meadow .page-stage { padding-top: 20px; }
@@ -1081,7 +1081,7 @@ body.workbench-meadow.page-home #share-content {
 .page-home.home-linear .app-home .hist-meta .status-badge.s-done::before { content: "✓"; }
 
 .page-home.home-linear .app-home .hist-actions { gap: 4px; }
-.page-home.home-linear .app-home .hist-actions .hist-btn:not(:first-child) { display: none; }
+.page-home.home-linear .app-home .hist-actions .hist-btn:not(:first-child):not(.history-remove-button) { display: none; }
 .page-home.home-linear .app-home .hist-actions .hist-btn:first-child {
     min-height: 32px;
     padding: 0 10px;
@@ -1523,4 +1523,25 @@ body.product-linear.page-history .history-record-header {
     .page-history .history-type-chips { flex: 1 1 100%; }
     .page-history .history-inline-filter { flex: 1 1 100%; }
     .page-history .history-inline-filter select { width: auto; min-width: 0; }
+}
+
+/* History cleanup keeps the result action prominent and removals secondary. */
+.page-home.home-linear .app-home .hist-actions .history-remove-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    background: transparent;
+    color: #80645B;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.page-home.home-linear .app-home .hist-actions .history-remove-button:hover { color: #953E32; background: #FBF0EC; }
+.history-remove-button:disabled { opacity: 0.5; cursor: wait; }
+.history-remove-button:focus-visible,
+#manageHistoryBtn:focus-visible { outline: 2px solid #337B62; outline-offset: 3px; }
+@media (max-width: 760px) {
+    .page-home.home-linear .app-home .hist-actions .history-remove-button { min-height: 44px; }
 }

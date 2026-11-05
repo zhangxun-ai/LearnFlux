@@ -279,3 +279,16 @@ def test_no_transcript_is_terminal_in_the_explicit_task_store(tmp_path) -> None:
     stored = manager.get_task_by_id(task["task_id"])
     assert stored["status"] == "no_transcript"
     assert stored["progress_json"]["stage"] == "no_transcript"
+
+
+def test_history_removal_is_applied_before_control_store_pagination(tmp_path) -> None:
+    store = _store(tmp_path)
+    manager = CacheManager(cache_dir=str(tmp_path / "artifacts"), database=store.database)
+    manager.set_task_status_repository(store)
+    visible = manager.create_task(url="https://example.com/visible", owner_user_id="alice")
+    hidden = manager.create_task(url="https://example.com/hidden", owner_user_id="alice")
+    manager.hide_history_tasks([hidden["task_id"]], "alice")
+    items = manager.list_recent_tasks(owner_user_id="alice", limit=1)
+    assert [item["task_id"] for item in items] == [visible["task_id"]]
+    assert manager.get_task_by_id(hidden["task_id"]) is not None
+    manager.close()

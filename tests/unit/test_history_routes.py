@@ -1077,6 +1077,7 @@ def test_postgres_history_uses_one_read_statement_per_endpoint(db_pair, monkeypa
         conn.execute("ATTACH DATABASE ? AS cache", (setup["cache_db_path"],))
         conn.execute("CREATE TEMP VIEW task_status AS SELECT * FROM cache.task_status")
         conn.execute("CREATE TEMP TABLE content_marks (id TEXT, owner_type TEXT, owner_id TEXT, user_key TEXT)")
+        conn.execute("CREATE TEMP TABLE task_history_hidden (user_id TEXT, task_id TEXT)")
         conn.set_trace_callback(statements.append)
         return conn
 

@@ -264,6 +264,40 @@ class TestTranscribeEndpoint:
         assert task["notification_webhooks"] == {"feishu": webhook}
         assert task["restore_notifications"] is False
 
+    def test_feishu_source_checks_owner_before_reusing_a_result(
+        self, client, mock_task_queue, mock_send_notification, monkeypatch, tmp_path
+    ):
+        from video_transcript_api.api.routes import tasks
+        from video_transcript_api.cache.cache_manager import CacheManager
+        from video_transcript_api.document_sources.feishu import parse_feishu_url
+
+        url = "https://team.feishu.cn/wiki/PrivateDocument123"
+        cache = CacheManager(cache_dir=str(tmp_path / "cache"))
+        try:
+            original = cache.create_task(
+                url=url, platform="feishu", media_id=parse_feishu_url(url).media_id,
+                owner_user_id="document-owner",
+            )
+            cache.update_task_status(original["task_id"], "success")
+            monkeypatch.setattr(tasks, "cache_manager", cache)
+            settings = {"enabled": True, "owner_user_id": "document-owner"}
+            monkeypatch.setattr(tasks, "get_config", lambda: {"feishu_documents": settings})
+
+            denied = client.post("/api/transcribe", json={"url": url})
+            assert denied.status_code == 403
+            assert original["view_token"] not in denied.text
+            assert cache.list_recent_tasks(owner_user_id="test-user") == []
+            assert mock_task_queue.empty()
+            mock_send_notification.assert_not_called()
+
+            monkeypatch.setitem(_FAKE_USER_INFO, "user_id", "document-owner")
+            allowed = client.post("/api/transcribe", json={"url": url + "?from=share"})
+            assert allowed.json()["code"] == 202
+            assert allowed.json()["data"]["view_token"] == original["view_token"]
+            assert mock_task_queue.qsize() == 1
+        finally:
+            cache.close()
+
     def test_transcribe_empty_url_returns_400(self, client):
         resp = client.post("/api/transcribe", json={"url": ""})
         assert resp.status_code == 400

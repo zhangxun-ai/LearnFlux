@@ -45,6 +45,7 @@ from ..services.transcription import (
 from ...transcriber.cloud_quote_repository import CloudQuoteConflict
 from ...transcriber.asr_retry_repository import ASRRetryConflict
 from ...transcriber.usage_repository import UsageEventRepository
+from ...document_sources.feishu import FeishuDocumentError, require_feishu_access
 from ..context import get_transcription_control_database
 from ...utils.notifications import get_notification_router
 from ...utils.accounts.user_manager import get_user_manager
@@ -209,15 +210,6 @@ async def transcribe_video(
     user_id = user_info.get("user_id")
     api_key = user_info.get("api_key")
 
-    audit_logger.log_api_call(
-        api_key=api_key,
-        user_id=user_id,
-        endpoint="/api/transcribe",
-        video_url=url,
-        user_agent=request.headers.get("User-Agent"),
-        remote_ip=request.client.host if request.client else None,
-    )
-
     # 提前解析 URL，提取 platform+media_id 用于同源视频去重
     parsed_platform = None
     parsed_media_id = None
@@ -229,6 +221,22 @@ async def transcribe_video(
         logger.info(f"URL预解析成功: platform={parsed_platform}, media_id={parsed_media_id}")
     except Exception as e:
         logger.warning(f"URL预解析失败，降级到精确URL匹配: {e}")
+
+    if parsed_platform == "feishu":
+        # A result link is a bearer credential. Authorize before reuse or notification.
+        try:
+            require_feishu_access(get_config().get("feishu_documents") or {}, {"owner_user_id": user_id})
+        except FeishuDocumentError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from None
+
+    audit_logger.log_api_call(
+        api_key=api_key,
+        user_id=user_id,
+        endpoint="/api/transcribe",
+        video_url=url,
+        user_agent=request.headers.get("User-Agent"),
+        remote_ip=request.client.host if request.client else None,
+    )
 
     try:
         task_info = cache_manager.create_task(
@@ -258,7 +266,7 @@ async def transcribe_video(
             if request_body.feishu_webhook:
                 notification_webhooks["feishu"] = request_body.feishu_webhook
 
-            notification_config = getattr(request_body, "notification_config", None)
+            notification_config = request_body.notification_config
             if notification_config and notification_config.webhook:
                 effective_channel = notification_config.channel
                 if effective_channel:

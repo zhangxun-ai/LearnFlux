@@ -59,6 +59,8 @@ When a transcription control store is installed, use its `updated_at` as the pro
 
 Ordinary URL recovery uses persisted non-secret `task_requests` and `api/services/task_recovery.py`; never blindly replay cloud requests, disabled owners or canceled work. Evidence retrieval lives in `study/evidence.py` and `study/body_search.py`: authorize all selected sources before loading private text, keep model context bounded and preserve real source positions. Feishu delivery and revision protection are described in `docs/guides/feishu-archive.md`.
 
+Single-study, comparison and image diagrams share `api/services/study_access.py`. A durable task owner takes precedence, and historical unowned tasks use exact audit links or the legacy owner. PDF batch replay returns the saved task state. Only explicit single-study retry creates a new attempt.
+
 ## Testing Guidelines
 Use pytest. `verify-fast` covers unit tests; `verify-full` covers the default offline suite. Feature, integration, LLM, platform, manual, and performance tests must be run explicitly. Mock CapsWriter, FunASR, TikHub, and notification clients in fast feedback tests. Redirect transient media into `tests/cache/` and clean up afterward to avoid polluting `data/`. Update `tests/README.md` when you add new suites or flags.
 

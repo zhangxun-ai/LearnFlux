@@ -2191,9 +2191,16 @@ function initializeFileImport() {
             filename.textContent = file.name;
             item.append(filename);
             if (result?.view_token) {
+                const retry = ['failed', 'canceled'].includes(result.status);
+                if (retry) {
+                    const error = document.createElement('span');
+                    error.className = 'study-pdf-row-error';
+                    error.textContent = result.status === 'failed' ? '解析失败' : '解析已取消';
+                    item.append(error);
+                }
                 const link = document.createElement('a');
-                link.href = '/view/' + encodeURIComponent(result.view_token);
-                link.textContent = '查看结果';
+                link.href = (retry ? '/study/' : '/view/') + encodeURIComponent(result.view_token);
+                link.textContent = retry ? '打开并重新解析' : '查看结果';
                 item.append(link);
             } else if (result?.error) {
                 const error = document.createElement('span');
@@ -2261,7 +2268,7 @@ function initializeFileImport() {
             url: 'local://' + taskTitle,
             title: taskTitle,
             type: mediaFile ? 'video' : 'file',
-            status: 'submitted',
+            status: task.status || 'submitted',
         });
     };
     const uploadLocalFile = async () => {
@@ -2335,10 +2342,12 @@ function initializeFileImport() {
                 });
                 renderPdfFiles();
                 const accepted = pdfEntries.filter(entry => entry.result?.view_token).length;
-                const failed = pdfEntries.length - accepted;
-                setStatus(failed
-                    ? `已提交 ${accepted} 份，${failed} 份未提交。可重试未提交的文件。`
-                    : `已提交 ${accepted} 份文件，可逐篇查看结果。`, Boolean(failed));
+                const unsubmitted = pdfEntries.length - accepted;
+                const retryable = pdfEntries.filter(entry => ['failed', 'canceled'].includes(entry.result?.status)).length;
+                const messages = [`已确认 ${accepted} 份提交。`];
+                if (unsubmitted) messages.push(`${unsubmitted} 份未提交，可重试上传。`);
+                if (retryable) messages.push(`${retryable} 份需打开后重新解析。`);
+                setStatus(messages.join(''), Boolean(unsubmitted || retryable));
                 return;
             }
             if (!d || d.code !== 202 || !d.data || !d.data.view_token) throw new Error(d.message || '上传未完成，请重试');

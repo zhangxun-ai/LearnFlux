@@ -19,10 +19,10 @@ from ..context import (
     get_config,
     get_logger,
     get_repository_database,
-    get_user_manager,
 )
 from ..services.transcription import TranscribeResponse, process_local_upload, verify_token
 from ..services.source_preservation import PDFTextLimitExceeded, extract_pdf_text
+from ..services.study_access import require_study_source
 from ...collections.titles import source_basename
 from ...obsidian.service import (
     ObsidianConflict,
@@ -48,7 +48,6 @@ config = get_config()
 logger = get_logger()
 cache_manager = get_cache_manager()
 audit_logger = get_audit_logger()
-user_manager = get_user_manager()
 
 _UPLOAD_MAX_MB = int((config.get("upload") or {}).get("max_mb", 20480))
 _UPLOAD_MAX_BYTES = _UPLOAD_MAX_MB * 1024 * 1024
@@ -166,47 +165,17 @@ def _get_owned_collection_context(collection_id: str, source_id: str, user_info:
     return service, detail, source
 
 
-def _require_owned_single(view_token: str, user_info: dict) -> None:
-    if not user_manager.is_multi_user_mode():
-        return
-    task = cache_manager.get_task_by_view_token(view_token) or {}
-    task_id = task.get("task_id")
-    owned_task_ids = {
-        row.get("task_id")
-        for row in audit_logger.get_recent_calls(
-            user_id=user_info.get("user_id") or "",
-            limit=10000,
-        )
-    }
-    if not task_id or task_id not in owned_task_ids:
-        raise HTTPException(status_code=404, detail="学习内容不存在")
+def _require_owned_single(view_token: str, user_info: dict) -> dict:
+    return require_study_source(
+        cache_manager.get_task_by_view_token(view_token), user_info, audit_logger,
+        config.get("feishu_documents") or {},
+    )
 
 
 def _require_comparison_sources(view_tokens: list[str], user_info: dict) -> None:
     """Authorize every selected source before loading any transcript or cache."""
-    from ...document_sources.feishu import FeishuDocumentError, require_feishu_access
-
-    legacy_ids = None
     for token in view_tokens:
-        task = cache_manager.get_task_by_view_token(token) or {}
-        if not isinstance(task, dict) or not task.get("task_id"):
-            raise HTTPException(status_code=404, detail="学习内容不存在")
-        owner = task.get("owner_user_id")
-        if owner is not None:
-            if owner != user_info.get("user_id"):
-                raise HTTPException(status_code=404, detail="学习内容不存在")
-        elif not (user_info.get("is_legacy") or user_info.get("user_id") == "legacy_user"):
-            if legacy_ids is None:
-                legacy_ids = {row.get("task_id") for row in audit_logger.get_recent_calls(
-                    user_id=user_info.get("user_id") or "", limit=10000,
-                )}
-            if task["task_id"] not in legacy_ids:
-                raise HTTPException(status_code=404, detail="学习内容不存在")
-        if str(task.get("platform") or "").lower() == "feishu":
-            try:
-                require_feishu_access(config.get("feishu_documents") or {}, task)
-            except FeishuDocumentError:
-                raise HTTPException(status_code=403, detail="当前身份未获准读取这份飞书资料") from None
+        _require_owned_single(token, user_info)
 
 
 @router.post("/compare", response_model=TranscribeResponse)
@@ -837,6 +806,8 @@ async def upload_study_video(
         platform="generic",
         media_id=media_id,
         force_new_view_token=True,
+        owner_user_id=user_info["user_id"],
+        source_file_path=str(stable_path),
     )
     audit_logger.log_api_call(
         api_key=user_info.get("api_key") or "",
@@ -872,11 +843,7 @@ async def retry_single_study(
     background_tasks: BackgroundTasks,
     user_info: dict = Depends(verify_token),
 ):
-    old_task = cache_manager.get_task_by_view_token(view_token) or {}
-    task_id = old_task.get("task_id") or ""
-    if not task_id:
-        raise HTTPException(status_code=404, detail="学习内容不存在")
-    _require_owned_single(view_token, user_info)
+    old_task = _require_owned_single(view_token, user_info)
     if old_task.get("status") not in {"failed", "canceled"}:
         raise HTTPException(status_code=400, detail="只有失败或已取消的任务可以重新解析")
     source_file = get_study_service().get_source_file(view_token)
@@ -892,6 +859,8 @@ async def retry_single_study(
         platform=old_task.get("platform") or "generic",
         media_id=media_id,
         force_new_view_token=True,
+        owner_user_id=user_info["user_id"],
+        source_file_path=str(source_file),
     )
     audit_logger.log_api_call(
         api_key=user_info.get("api_key") or "",
@@ -926,7 +895,7 @@ async def create_study_text(
     background_tasks: BackgroundTasks,
     user_info: dict = Depends(verify_token),
 ):
-    return _submit_study_text(request, background_tasks)
+    return _submit_study_text(request, background_tasks, user_info, endpoint="/api/study/text")
 
 
 @router.post("/pdf-bundle", response_model=TranscribeResponse, status_code=202)
@@ -940,7 +909,7 @@ async def create_study_pdf_bundle(
     content = await run_in_threadpool(_combine_pdf_text, files, filenames)
     default_title = f"{Path(filenames[0]).stem[:100]} 等 {len(files)} 份 PDF"
     request = StudyTextRequest(title=title.strip() or default_title, content=content)
-    return _submit_study_text(request, background_tasks, pdf_user=user_info)
+    return _submit_study_text(request, background_tasks, user_info, endpoint="/api/study/pdf-bundle")
 
 
 @router.post("/pdf-batch", response_model=TranscribeResponse, status_code=202)
@@ -964,7 +933,7 @@ async def create_study_pdf_batch(
             )
             request = StudyTextRequest(title=Path(filename).stem[:160], content=content)
             result = _submit_study_text(
-                request, background_tasks, pdf_user=user_info, pdf_item_key=key
+                request, background_tasks, user_info, endpoint="/api/study/pdf-batch", pdf_item_key=key
             )
         except HTTPException as exc:
             items.append({"key": key, "error": exc.detail})
@@ -1035,17 +1004,16 @@ def _combine_pdf_text(files: list[UploadFile], filenames: list[str]) -> str:
 def _submit_study_text(
     request: StudyTextRequest,
     background_tasks: BackgroundTasks,
+    user_info: dict,
     *,
-    pdf_user: dict | None = None,
+    endpoint: str,
     pdf_item_key: str | None = None,
 ) -> TranscribeResponse:
     title = request.title or _title_from_content(request.content)
-    identity = request.content
-    if pdf_user is not None:
-        identity_parts = [pdf_user.get("user_id"), title, request.content]
-        if pdf_item_key:
-            identity_parts.append(pdf_item_key)
-        identity = json.dumps(identity_parts, ensure_ascii=False)
+    identity_parts = [user_info["user_id"], title, request.content]
+    if pdf_item_key:
+        identity_parts.append(pdf_item_key)
+    identity = json.dumps(identity_parts, ensure_ascii=False)
     content_hash = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     media_id = f"text_{content_hash[:32]}"
     display_filename = _display_markdown_filename(title)
@@ -1056,50 +1024,40 @@ def _submit_study_text(
         existing = cache_manager.get_existing_task_by_url(display_url)
         if existing:
             return TranscribeResponse(
-                code=202, message="文件已提交",
-                data={"task_id": existing["task_id"], "view_token": existing["view_token"], "title": title},
+                code=202, message="已找到原提交任务",
+                data={
+                    "task_id": existing["task_id"], "view_token": existing["view_token"],
+                    "title": title, "status": existing["status"],
+                },
             )
     source_dir = get_source_root() / "study_texts"
     source_dir.mkdir(parents=True, exist_ok=True)
     source_path = source_dir / f"{media_id}.md"
-    if pdf_user is None:
-        source_path.write_text(request.content, encoding="utf-8")
-    else:
-        staged_path = None
-        try:
-            with NamedTemporaryFile(mode="w", encoding="utf-8", dir=source_dir, delete=False) as staged:
-                staged_path = Path(staged.name)
-                staged.write(request.content)
-            os.replace(staged_path, source_path)
-        finally:
-            if staged_path is not None:
-                staged_path.unlink(missing_ok=True)
-
-    task_source = {}
-    if pdf_user is not None:
-        task_source = {
-            "owner_user_id": pdf_user.get("user_id"),
-            "source_file_path": str(source_path),
-        }
+    staged = NamedTemporaryFile(mode="w", encoding="utf-8", dir=source_dir, delete=False)
+    staged_path = Path(staged.name)
+    try:
+        with staged:
+            staged.write(request.content)
+        os.replace(staged_path, source_path)
+    finally:
+        staged_path.unlink(missing_ok=True)
     task_info = cache_manager.create_task(
         url=display_url,
         use_speaker_recognition=False,
         platform="generic",
         media_id=media_id,
-        **task_source,
+        owner_user_id=user_info["user_id"],
+        source_file_path=str(source_path),
     )
-    if pdf_user is not None:
-        cache_manager.update_task_status(
-            task_info["task_id"], "queued", title=display_filename
-        )
-        audit_logger.log_api_call(
-            api_key=pdf_user.get("api_key") or "",
-            user_id=pdf_user.get("user_id"),
-            endpoint="/api/study/pdf-batch" if pdf_item_key else "/api/study/pdf-bundle",
-            video_url=display_url,
-            status_code=202,
-            task_id=task_info["task_id"],
-        )
+    cache_manager.update_task_status(task_info["task_id"], "queued", title=display_filename)
+    audit_logger.log_api_call(
+        api_key=user_info.get("api_key") or "",
+        user_id=user_info["user_id"],
+        endpoint=endpoint,
+        video_url=display_url,
+        status_code=202,
+        task_id=task_info["task_id"],
+    )
     background_tasks.add_task(
         process_local_upload,
         task_info["task_id"],
@@ -1114,8 +1072,10 @@ def _submit_study_text(
     )
     logger.info("study text accepted: task=%s", task_info["task_id"])
     response_data = {"task_id": task_info["task_id"], "view_token": task_info["view_token"]}
-    if pdf_user is not None:
+    if endpoint != "/api/study/text":
         response_data["title"] = title
+    if pdf_item_key:
+        response_data["status"] = "queued"
     return TranscribeResponse(
         code=202,
         message="文字内容已提交，正在解析",

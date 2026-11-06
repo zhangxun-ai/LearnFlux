@@ -11,13 +11,18 @@ async def _fake_verify_token():
 
 
 @pytest.fixture(autouse=True)
-def _isolated_user_mode(monkeypatch):
-    """Route fixtures must not inherit a developer's configured local account."""
+def _isolated_source_access(monkeypatch):
+    """Default to one owned task and no historical audit access."""
     from video_transcript_api.api.routes import study
 
-    manager = MagicMock()
-    manager.is_multi_user_mode.return_value = False
-    monkeypatch.setattr(study, "user_manager", manager)
+    cache = MagicMock()
+    cache.get_task_by_view_token.side_effect = lambda token: {
+        "task_id": token, "view_token": token, "owner_user_id": "test-user",
+    }
+    audit = MagicMock()
+    audit.has_task_call.return_value = False
+    monkeypatch.setattr(study, "cache_manager", cache)
+    monkeypatch.setattr(study, "audit_logger", audit)
 
 
 def _build_app():
@@ -165,22 +170,34 @@ def test_get_study_session_returns_404_for_missing_token(monkeypatch):
     assert response.status_code == 404
 
 
-def test_multi_user_study_session_hides_other_users_task(monkeypatch):
+def test_study_session_hides_explicitly_owned_foreign_task(monkeypatch):
     from video_transcript_api.api.routes import study
 
-    user_manager = MagicMock()
-    user_manager.is_multi_user_mode.return_value = True
     cache = MagicMock()
-    cache.get_task_by_view_token.return_value = {"task_id": "task-other"}
+    cache.get_task_by_view_token.return_value = {"task_id": "task-other", "owner_user_id": "other"}
     audit = MagicMock()
-    audit.get_recent_calls.return_value = [{"task_id": "task-owned"}]
-    monkeypatch.setattr(study, "user_manager", user_manager)
+    audit.has_task_call.return_value = True
     monkeypatch.setattr(study, "cache_manager", cache)
     monkeypatch.setattr(study, "audit_logger", audit)
 
     response = TestClient(_build_app()).get("/api/study/view-other")
 
     assert response.status_code == 404
+    audit.has_task_call.assert_not_called()
+
+
+def test_study_session_allows_legacy_task_by_exact_audit_link(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    study.cache_manager.get_task_by_view_token.side_effect = None
+    study.cache_manager.get_task_by_view_token.return_value = {"task_id": "legacy-task"}
+    study.audit_logger.has_task_call.return_value = True
+    service = MagicMock()
+    service.get_session.return_value = _study_session()
+    monkeypatch.setattr(study, "get_study_service", lambda: service)
+    response = TestClient(_build_app()).get("/api/study/old-view")
+    assert response.status_code == 200
+    study.audit_logger.has_task_call.assert_called_once_with("test-user", "legacy-task")
 
 
 def test_create_study_note(monkeypatch):
@@ -588,7 +605,7 @@ def test_retry_failed_single_study_creates_new_task_and_audits(monkeypatch, tmp_
     service = MagicMock()
     service.get_source_file.return_value = source
     audit = MagicMock()
-    audit.get_recent_calls.return_value = [{"task_id": "old-task"}]
+    audit.has_task_call.return_value = True
     monkeypatch.setattr(study, "cache_manager", cache)
     monkeypatch.setattr(study, "audit_logger", audit)
     monkeypatch.setattr(study, "get_study_service", lambda: service)
@@ -792,7 +809,7 @@ def test_study_pdf_batch_keeps_good_files_and_reuses_retried_item(monkeypatch, t
     def create_task(**kwargs):
         number = len(submissions) + 1
         result = {"task_id": f"task-{number}", "view_token": f"view-{number}"}
-        submissions[kwargs["url"]] = result
+        submissions[kwargs["url"]] = {**result, "status": "queued"}
         return result
 
     cache.create_task.side_effect = create_task
@@ -812,8 +829,8 @@ def test_study_pdf_batch_keeps_good_files_and_reuses_retried_item(monkeypatch, t
     response = client.post("/api/study/pdf-batch", data={"keys": keys}, files=[first, blank, second])
     assert response.status_code == 202
     one, rejected, two = response.json()["data"]["items"]
-    assert one == {"key": keys[0], "task_id": "task-1", "view_token": "view-1", "title": "first"}
-    assert two == {"key": keys[2], "task_id": "task-2", "view_token": "view-2", "title": "second"}
+    assert one == {"key": keys[0], "task_id": "task-1", "view_token": "view-1", "title": "first", "status": "queued"}
+    assert two == {"key": keys[2], "task_id": "task-2", "view_token": "view-2", "title": "second", "status": "queued"}
     assert rejected["key"] == keys[1]
     assert "blank.pdf" in rejected["error"]
     assert all(call.kwargs["owner_user_id"] == "test-user" for call in cache.create_task.call_args_list)
@@ -823,6 +840,9 @@ def test_study_pdf_batch_keeps_good_files_and_reuses_retried_item(monkeypatch, t
 
     retry = client.post("/api/study/pdf-batch", data={"keys": [keys[0]]}, files=[first])
     assert retry.json()["data"]["items"] == [one]
+    next(iter(submissions.values()))["status"] = "failed"
+    replay = client.post("/api/study/pdf-batch", data={"keys": [keys[0]]}, files=[first])
+    assert replay.json()["data"]["items"] == [{**one, "status": "failed"}]
     assert cache.create_task.call_count == worker.call_count == audit.log_api_call.call_count == 2
 
 

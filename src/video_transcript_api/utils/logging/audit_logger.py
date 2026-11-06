@@ -353,6 +353,15 @@ class AuditLogger:
             logger.error(f"获取所有用户统计失败: {str(e)}")
             return []
 
+    def has_task_call(self, user_id: str, task_id: str) -> bool:
+        """Check an exact historical task link without a recent-call limit."""
+        with self._get_cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM api_audit_logs WHERE user_id = ? AND task_id = ? LIMIT 1",
+                (user_id, task_id),
+            )
+            return cursor.fetchone() is not None
+
     def get_recent_calls(self, user_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         """
         获取最近的API调用记录

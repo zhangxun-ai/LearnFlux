@@ -146,7 +146,7 @@ class ImageDiagramService:
         })
         request_key = _hash({"owner": owner_user_id, "source": view_token,
                              "request_id": request["request_id"]})
-        existing = self.repository.get_by_request_key(request_key) if hasattr(self.repository, "get_by_request_key") else None
+        existing = self.repository.get_by_request_key(request_key)
         if existing is not None:
             if existing["request"] != request:
                 raise ValueError("image_diagram_request_key_conflict")
@@ -278,7 +278,7 @@ class ImageDiagramService:
             self.repository.update(job_id, token, status="succeeded", stage="completed",
                                    image_key=image_key, usage=usage)
         except ImageDiagramAPIError as exc:
-            usage.update(getattr(exc, "usage", {}) or {})
+            usage.update(exc.usage)
             status = "unknown" if submitted and exc.unknown_outcome else "failed"
             self.repository.update(job_id, token, status=status, stage=status,
                                    error_code=exc.code, usage=usage)

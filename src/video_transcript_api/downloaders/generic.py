@@ -1,4 +1,6 @@
 import os
+import re
+import tempfile
 import mimetypes
 import hashlib
 import contextlib
@@ -183,148 +185,84 @@ class GenericDownloader(BaseDownloader):
         return hashlib.md5(url.encode()).hexdigest()[:16]
 
     def download_file(self, url, filename, progress_callback=None):
+        """Stream media into a file owned by this download, resuming interrupted transfers.
+
+        Args:
+            url: Media download URL.
+            filename: Original filename used to preserve the media extension.
+            progress_callback: Optional callback for downloaded and total bytes.
+
+        Returns:
+            Temporary file path on success, or None if the download failed.
         """
-        下载文件到本地（增强版，支持大文件和断点续传）
+        with tempfile.NamedTemporaryFile(
+            dir=self.temp_dir, prefix="generic-", suffix=os.path.splitext(filename)[1], delete=False,
+        ) as staging:
+            local_path = staging.name
 
-        参数:
-            url: 文件URL
-            filename: 本地文件名
-
-        返回:
-            str: 本地文件路径，如果下载失败则返回None
-        """
-        local_path = os.path.join(self.temp_dir, filename)
-
-        # 创建目录（如果不存在）
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-
-        # 最大重试次数
-        max_retries = 3
-        chunk_size = 1024 * 1024  # 1MB 块大小
-
-        for attempt in range(max_retries):
+        etag = None
+        for attempt in range(1, 4):
             try:
-                logger.info(f"开始下载文件 (尝试 {attempt + 1}/{max_retries}): {url}")
+                headers = {"Accept-Encoding": "identity"}
+                initial_pos = os.path.getsize(local_path) if etag else 0
+                if initial_pos:
+                    headers.update({"Range": f"bytes={initial_pos}-", "If-Range": etag})
 
-                # 检查是否已有部分下载的文件
-                resume_header = {}
-                initial_pos = 0
-
-                if os.path.exists(local_path):
-                    initial_pos = os.path.getsize(local_path)
-                    if initial_pos > 0:
-                        resume_header['Range'] = f'bytes={initial_pos}-'
-                        logger.info(f"检测到部分下载文件，从 {initial_pos} 字节处续传")
-
-                # 发起请求
-                try:
-                    response = requests.get(
-                        url,
-                        headers=resume_header,
-                        stream=True,
-                        timeout=(30, 300)  # 连接超时30秒，读取超时300秒
-                    )
+                with requests.get(url, headers=headers, stream=True, timeout=(30, 300)) as response:
+                    if response.status_code == 416 and initial_pos:
+                        etag = None
+                        continue
                     response.raise_for_status()
-                except requests.exceptions.HTTPError as e:
-                    # 处理 416 Range Not Satisfiable 错误（服务器不支持断点续传）
-                    if e.response.status_code == 416:
-                        logger.warning(f"服务器不支持断点续传 (416)，删除部分文件重新下载: {local_path}")
-                        if os.path.exists(local_path):
-                            os.remove(local_path)
-                            logger.info("已删除部分下载文件，准备重新下载")
-                        # 重新发起请求（不带 Range header）
-                        response = requests.get(
-                            url,
-                            stream=True,
-                            timeout=(30, 300)
+
+                    identity = response.headers.get("Content-Encoding", "identity").lower() == "identity"
+                    response_etag = response.headers.get("ETag", "")
+                    content_length = response.headers.get("Content-Length")
+                    if response.status_code == 206:
+                        content_range = re.fullmatch(
+                            r"bytes (\d+)-(\d+)/(\d+)", response.headers.get("Content-Range", ""),
                         )
-                        response.raise_for_status()
-                        initial_pos = 0  # 重置初始位置
-                        resume_header = {}  # 清空 resume header
+                        if (
+                            not initial_pos or not identity or not content_range
+                            or (response_etag and response_etag != etag)
+                        ):
+                            etag = None
+                            continue
+                        start, end, total_size = map(int, content_range.groups())
+                        if start != initial_pos or end != total_size - 1 or end < start:
+                            etag = None
+                            continue
+                        next_etag = etag
+                    elif response.status_code == 200:
+                        # A server may ignore Range or return a new representation.
+                        initial_pos = 0
+                        total_size = int(content_length) if content_length and identity else None
+                        next_etag = response_etag if identity and re.fullmatch(r'"[^"]*"', response_etag) else None
                     else:
-                        raise
+                        raise ValueError(f"unexpected download HTTP status {response.status_code}")
 
-                # 获取文件总大小
-                content_length = response.headers.get('content-length')
-                if content_length:
-                    total_size = int(content_length)
-                    if initial_pos > 0:
-                        total_size += initial_pos
-                    logger.info(f"文件总大小: {total_size / (1024*1024):.2f} MB")
-
-                # 打开文件进行写入
-                mode = 'ab' if initial_pos > 0 else 'wb'
-                with open(local_path, mode) as f:
                     downloaded = initial_pos
-                    last_log_time = datetime.datetime.now()
-
-                    for chunk in response.iter_content(chunk_size=chunk_size):
-                        if chunk:
-                            f.write(chunk)
+                    with open(local_path, "ab" if initial_pos else "wb") as target:
+                        etag = next_etag
+                        for chunk in response.iter_content(chunk_size=1024 * 1024):
+                            if not chunk:
+                                continue
+                            target.write(chunk)
                             downloaded += len(chunk)
                             if progress_callback:
                                 with contextlib.suppress(Exception):
-                                    progress_callback(
-                                        downloaded,
-                                        total_size if content_length else None,
-                                    )
+                                    progress_callback(downloaded, total_size)
 
-                            # 每10秒打印一次进度
-                            now = datetime.datetime.now()
-                            if (now - last_log_time).seconds >= 10:
-                                if content_length:
-                                    progress = (downloaded / total_size) * 100
-                                    progress_msg = f"下载进度: {progress:.1f}% ({downloaded / (1024*1024):.2f}/{total_size / (1024*1024):.2f} MB)"
-                                    logger.info(progress_msg)
+                    if downloaded and (total_size is None or downloaded == total_size):
+                        logger.info(f"Media download complete: {downloaded} bytes")
+                        return local_path
+                    if total_size is not None and downloaded > total_size:
+                        etag = None
+                    logger.warning(f"Incomplete media download: {downloaded} of {total_size} bytes")
+            except (requests.RequestException, OSError, ValueError) as exc:
+                logger.warning(f"Media download attempt {attempt}/3 failed: {type(exc).__name__}")
 
-                                else:
-                                    logger.info(f"已下载: {downloaded / (1024*1024):.2f} MB")
-                                last_log_time = now
-
-                # 验证文件完整性
-                final_size = os.path.getsize(local_path)
-                if content_length and final_size != total_size:
-                    logger.warning(f"文件大小不匹配: 期望 {total_size}, 实际 {final_size}")
-                    # 不删除文件，下次重试时会续传
-                    continue
-
-                logger.info(f"文件下载成功: {local_path} (大小: {final_size / (1024*1024):.2f} MB)")
-                return local_path
-
-            except requests.exceptions.ChunkedEncodingError as e:
-                logger.warning(f"分块编码错误 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
-                if attempt < max_retries - 1:
-                    logger.info("将尝试断点续传...")
-                    continue
-
-            except requests.exceptions.ConnectionError as e:
-                logger.warning(f"连接错误 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
-                if attempt < max_retries - 1:
-                    logger.info("将尝试重新连接...")
-                    continue
-
-            except requests.exceptions.Timeout as e:
-                logger.warning(f"下载超时 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
-                if attempt < max_retries - 1:
-                    logger.info("将尝试重新下载...")
-                    continue
-
-            except Exception as e:
-                logger.error(f"下载异常 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
-                if attempt < max_retries - 1:
-                    continue
-
-        # 所有重试都失败了
-        logger.error(f"文件下载失败，已尝试 {max_retries} 次: {url}")
-
-        # 清理不完整的文件
-        if os.path.exists(local_path):
-            try:
-                os.remove(local_path)
-                logger.info("已清理不完整的下载文件")
-            except:
-                pass
-
+        with contextlib.suppress(OSError):
+            os.unlink(local_path)
         return None
 
     def _fetch_metadata(self, url: str, video_id: str) -> VideoMetadata:

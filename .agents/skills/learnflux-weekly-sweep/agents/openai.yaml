@@ -1,0 +1,4 @@
+interface:
+  display_name: "LearnFlux 每周代码大扫除"
+  short_description: "增量复查本周改动，找出功能回归、多余兜底和退役功能残留"
+  default_prompt: "用 $learnflux-weekly-sweep 只读检查 LearnFlux 本周合入的代码，列出有证据的问题和验证方式。"

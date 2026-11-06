@@ -71,6 +71,7 @@
             versions: [], selected: null, active: null, timer: null,
             pendingSubmission: null, refreshSerial: 0, dialogTrigger: null,
             progressTimer: null, progressPaused: false, submissionStarted: null,
+            archiveTimer: null, archiveSerial: 0,
         };
         const root = node('section', 'image-diagrams');
         root.setAttribute('aria-label', 'AI 图片图解');
@@ -173,7 +174,15 @@
         const zoomButton = action('放大', 'idg-button idg-quiet', () => openZoom());
         const download = node('a', 'idg-button idg-quiet', '下载');
         download.setAttribute('download', '');
-        resultBar.append(zoomButton, download, editButton);
+        const archiveButton = action('同步到飞书', 'idg-button idg-quiet', () => refreshArchive(true));
+        archiveButton.hidden = true;
+        const archiveLink = node('a', 'idg-button idg-quiet', '在飞书中打开图解');
+        archiveLink.target = '_blank';
+        archiveLink.rel = 'noopener noreferrer';
+        archiveLink.hidden = true;
+        const archiveStatus = node('span', 'idg-quiet');
+        archiveStatus.setAttribute('aria-live', 'polite');
+        resultBar.append(zoomButton, download, editButton, archiveButton, archiveLink, archiveStatus);
         const more = node('details', 'idg-more');
         more.hidden = true;
         more.append(node('summary', '', '更多'));
@@ -320,8 +329,55 @@
             });
             sourceNotes.append(list);
         }
+        async function refreshArchive(enqueue = false) {
+            global.clearTimeout(state.archiveTimer);
+            const serial = ++state.archiveSerial;
+            const jobId = state.selected?.id;
+            archiveButton.hidden = !enqueue;
+            archiveButton.disabled = true;
+            archiveLink.hidden = true;
+            archiveStatus.textContent = '';
+            if (!jobId) return;
+            try {
+                const result = await apiJSON(
+                    `/api/image-diagrams/jobs/${encodeURIComponent(jobId)}/feishu`,
+                    enqueue ? { method: 'POST' } : undefined,
+                );
+                if (state.destroyed || serial !== state.archiveSerial) return;
+                if (['ready', 'failed', 'uncertain'].includes(result.state)) {
+                    archiveButton.textContent = {
+                        ready: '同步到飞书', failed: '重试同步', uncertain: '核对飞书同步',
+                    }[result.state];
+                    archiveButton.hidden = false;
+                    archiveButton.disabled = false;
+                }
+                if (result.state === 'done' && result.document_url) {
+                    archiveLink.href = result.document_url;
+                    archiveLink.textContent = result.document_url.includes('#') ? '在飞书中打开图解' : '打开飞书文档';
+                    archiveLink.hidden = false;
+                }
+                archiveStatus.textContent = {
+                    waiting: '解读归档后可同步图解',
+                    queued: '已排队同步图解',
+                    writing: '正在核对飞书图片',
+                    done: '图解已同步',
+                    failed: '图解同步失败，可重试',
+                    uncertain: '同步结果待核对',
+                }[result.state] || '';
+                if (['queued', 'writing'].includes(result.state)) {
+                    state.archiveTimer = global.setTimeout(refreshArchive, 8000);
+                }
+            } catch (error) {
+                if (state.destroyed || serial !== state.archiveSerial || !enqueue) return;
+                archiveButton.disabled = false;
+                archiveStatus.textContent = error.message || '暂时无法同步图解';
+            }
+        }
+
         function choose(job) {
+            const previousId = state.selected?.id;
             state.selected = job && job.image_url ? job : null;
+            if (previousId !== state.selected?.id) refreshArchive();
             if (!state.selected) {
                 imageButton.hidden = true; resultBar.hidden = true;
                 sourceNotes.hidden = true; updateControls(); return;
@@ -408,6 +464,7 @@
                 state.versions = (data.versions || []).map(normalizeJob);
                 const selected = state.selected && state.versions.find((job) => job.id === state.selected.id);
                 choose(selected || state.versions.find((job) => job.image_url));
+                if (selected?.id && state.selected?.id === selected.id) refreshArchive();
                 renderVersions();
                 const active = normalizeJob(data.active_job) || state.versions.find((job) => ACTIVE.has(job.status));
                 state.active = null;
@@ -492,7 +549,9 @@
             destroy() {
                 state.destroyed = true;
                 ++state.refreshSerial;
+                ++state.archiveSerial;
                 global.clearTimeout(state.timer);
+                global.clearTimeout(state.archiveTimer);
                 if (state.progressTimer !== null) global.clearInterval(state.progressTimer);
                 if (progressObserver) progressObserver.disconnect();
                 if (document.removeEventListener) document.removeEventListener('visibilitychange', syncProgressVisibility);

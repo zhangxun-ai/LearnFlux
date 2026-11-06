@@ -79,6 +79,31 @@ const state = (versions = [], active = null) => ({
 
 async function main() {
     {
+        let archiveState = 'ready';
+        const writes = [];
+        const h = harness(async (url, init = {}) => {
+            if (!url.endsWith('/feishu')) return response(state([job()]));
+            if (init.method === 'POST') {
+                writes.push(url);
+                archiveState = 'queued';
+            }
+            return response({ state: archiveState, document_url: 'https://my.feishu.cn/wiki/archive#image-block' });
+        });
+        await tick();
+        const sync = h.button('同步到飞书');
+        assert.equal(sync.hidden, false);
+        assert.deepEqual(writes, []);
+        await sync.listeners.click();
+        assert.deepEqual(writes, ['/api/image-diagrams/jobs/job-1/feishu']);
+        assert.ok(h.visible().some(node => node.textContent === '已排队同步图解'));
+        archiveState = 'done';
+        await h.poll();
+        assert.ok(h.visible().some(node => node.textContent === '图解已同步'));
+        assert.ok(h.visible().some(node => node.href === 'https://my.feishu.cn/wiki/archive#image-block'
+            && node.textContent === '在飞书中打开图解'));
+        h.controller.destroy();
+    }
+    {
         const legacy = job('legacy-reviewing', { status: 'reviewing', stage: 'reviewing', review: {
             status: 'unavailable', summary: 'LEGACY_REVIEW_MUST_NOT_RENDER', issues: [],
         } });

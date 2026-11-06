@@ -13,24 +13,30 @@ from .audit import _require_summary_owner, audit_logger
 router = APIRouter(prefix="/api/tasks", tags=["delivery"])
 
 
+def archive_config_for_user(user_id: str) -> dict | None:
+    try:
+        config = load_archive_config()
+        owner = next((user.get("user_id") for user in get_user_manager().list_all_users()
+                      if config and user.get("name") == config["api_user_name"]
+                      and user.get("enabled", True)), None)
+        if owner and owner == user_id:
+            return config
+    except (OSError, ValueError, KeyError) as exc:
+        raise HTTPException(status_code=503, detail="暂时无法读取飞书归档配置") from exc
+    return None
+
+
 def _read_delivery(task_id: str, user_info: dict, retry: bool = False) -> dict:
     task = get_cache_manager().get_task_by_id(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     _require_summary_owner(task, user_info, audit_logger._mask_api_key(user_info.get("api_key", "")))
     try:
-        config = load_archive_config()
-        owner = next((user.get("user_id") for user in get_user_manager().list_all_users()
-                      if config and user.get("name") == config.get("api_user_name")
-                      and user.get("enabled", True)), None)
-        # The archive is configured for a single local identity. Even another
-        # authenticated user cannot observe or requeue that person's exports.
-        if not config or not owner or owner != user_info.get("user_id"):
+        config = archive_config_for_user(user_info["user_id"])
+        if not config:
             return {"state": "unavailable", "label": "", "document_url": None,
                     "can_retry": False, "updated_at": None, "message": ""}
         return delivery_state(config, task, retry=retry)
-    except HTTPException:
-        raise
     except (OSError, ValueError, KeyError, sqlite3.Error) as exc:
         raise HTTPException(status_code=503, detail="暂时无法读取飞书同步状态，请稍后重试") from exc
 

@@ -92,6 +92,14 @@ def test_retry_does_not_discard_remote_edit_conflict_or_reopen_success(setup):
         assert tuple(job.db.execute("SELECT status,next_retry FROM exports").fetchone()) == (status, 42)
 
 
+def test_done_label_refers_to_text_only(setup):
+    client, job, *_ = setup
+    job.db.execute("UPDATE exports SET status='done'")
+    job.db.commit()
+    data = client.get("/api/tasks/task/delivery/feishu").json()["data"]
+    assert data["label"] == "解读已同步到飞书"
+
+
 def test_interrupted_update_is_visible_and_retry_only_rechecks_the_same_document(setup):
     client, job, *_ = setup
     job.db.execute("UPDATE exports SET status='updating',last_error='Update timed out'")

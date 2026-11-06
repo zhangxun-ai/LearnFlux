@@ -4,6 +4,8 @@
 
 手动 GPT Image 图解的离线回归：`uv run --extra dev pytest tests/unit/test_image_diagram*.py`；浏览器交互模型：`node tests/frontend/image_diagrams_behavior.cjs`。覆盖短文直接一次生图、长文一次提炼、方案复用、彻底取消看图模型调用、来源完整性、权限、去重、未知结果不重发、历史版本与两阶段进度。真实 API 调用不包含在离线测试里，参见 [图解指南](../docs/guides/image-diagrams.md)。
 
+单篇资料归属、PDF 重传和图解飞书归档回归：`uv run --extra dev pytest tests/unit/test_study_routes.py tests/unit/test_image_diagram_routes.py tests/unit/test_feishu_archive.py tests/unit/test_feishu_delivery.py -q`。覆盖旧任务精确审计匹配、失败任务重传状态、图解权限与去重、同一飞书文档的图片回读和正文更新保护。测试使用临时数据库和模拟 CLI。
+
 项目使用 pytest。开发、测试和输出规则以根目录的 [AGENTS.md](../AGENTS.md) 为唯一事实来源。
 
 ## 公共导航与缓存回归

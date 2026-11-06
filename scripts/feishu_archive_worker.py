@@ -33,7 +33,10 @@ def main():
         try:
             while not stop.is_set():
                 try:
-                    print(json.dumps(worker.run_once()), flush=True)
+                    synced = worker.run_diagram_exports()
+                    result = worker.run_once()
+                    result["diagrams_synced_this_run"] = synced
+                    print(json.dumps(result), flush=True)
                 except Exception as error:
                     # No API keys, view URLs, bodies, or CLI stderr in logs.
                     print(json.dumps({"error_type": type(error).__name__, "status": "retrying"}), flush=True)

@@ -187,6 +187,41 @@ def test_pending_image_download_is_404_and_does_not_trigger_generation(endpoint)
     endpoint.service.client.generate.assert_not_called()
 
 
+def test_feishu_diagram_queue_checks_the_archived_task_and_never_writes_on_get(endpoint, tmp_path, monkeypatch):
+    from video_transcript_api.exports.feishu import ArchiveWorker
+
+    created = endpoint.client.post("/api/image-diagrams/study/source-1/generate", json=manual_request())
+    job_id = created.json()["data"]["id"]
+    claim = endpoint.service.repository.claim_next()
+    image_key = endpoint.service.artifacts.save_image(job_id, png_bytes())
+    endpoint.service.repository.update(
+        job_id, claim["generation_token"], status="succeeded", stage="completed", image_key=image_key,
+    )
+    config = {"state_db": str(tmp_path / "archive.db"), "parent_node_token": "parent"}
+    worker = ArchiveWorker(config, source=MagicMock(), cli=MagicMock())
+    worker.db.execute(
+        """INSERT INTO exports(source_key, task_id, status, document_id, document_url, updated_at)
+           VALUES ('parent:source-1', 'archive-task', 'done', 'doc', 'https://my.feishu.cn/wiki/doc', 1)"""
+    )
+    worker.db.commit()
+    task = {"task_id": "archive-task", "view_token": "source-1", "owner_user_id": "owner-1"}
+    monkeypatch.setattr(endpoint.module, "archive_config_for_user", lambda _: config)
+    monkeypatch.setattr(endpoint.module, "get_cache_manager",
+                        lambda: SimpleNamespace(get_task_by_id=lambda _: task))
+    path = f"/api/image-diagrams/jobs/{job_id}/feishu"
+    assert endpoint.client.get(path).json()["data"]["state"] == "ready"
+    assert worker.db.execute("SELECT COUNT(*) FROM diagram_exports").fetchone()[0] == 0
+    task["owner_user_id"] = "foreign"
+    assert endpoint.client.post(path).status_code == 404
+    task["owner_user_id"] = "owner-1"
+    for _ in range(2):
+        assert endpoint.client.post(path).json()["data"]["state"] == "queued"
+    assert worker.db.execute("SELECT COUNT(*) FROM diagram_exports").fetchone()[0] == 1
+    worker.cli.insert_diagram.assert_not_called()
+    worker.cli.fetch_document.assert_not_called()
+    worker.db.close()
+
+
 def test_authenticated_enabled_user_missing_optional_enabled_field_is_accepted(endpoint, monkeypatch):
     task = {"task_id": "task-1", "owner_user_id": "owner-1", "status": "completed"}
     monkeypatch.setattr(endpoint.module, "get_cache_manager",

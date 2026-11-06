@@ -2,12 +2,14 @@
 
 import json
 from pathlib import Path
+import re
 
 import pytest
 
 from video_transcript_api.exports.feishu import (
     ArchiveWorker, FeishuRejected, LocalResults, build_document, normalized_text, summary_xml,
 )
+from video_transcript_api.exports.delivery import diagram_delivery_state
 
 
 TASK = {"task_id": "task-1", "view_token": "private-view", "status": "success",
@@ -22,6 +24,9 @@ class Source:
     def document(self, task):
         return build_document(task, "## 结论\n\n**重要观点**。", "第一句。\n\n最后一句。", calibrated=True)
 
+    def read_diagram(self, job_id):
+        return b"private png"
+
 
 class CLI:
     def __init__(self):
@@ -32,6 +37,9 @@ class CLI:
         self.revision = 1
         self.updates = 0
         self.update_timeout = False
+        self.image_calls = []
+        self.image_timeout = False
+        self.moves = []
 
     def create(self, parent, xml):
         self.calls += 1
@@ -46,8 +54,12 @@ class CLI:
             raise RuntimeError("Temporary read failure")
         return self.xml
 
-    def fetch_document(self, doc):
-        return {"content": self.fetch(doc), "revision_id": self.revision}
+    def fetch_document(self, doc, *, with_ids=False):
+        content = self.fetch(doc)
+        if with_ids:
+            content = content.replace("<h1>AI 解读</h1>", '<h1 id="analysis">AI 解读</h1>', 1)
+            content = content.replace('<img src="media-', f'<img id="block-{self.revision}" src="media-')
+        return {"content": content, "revision_id": self.revision}
 
     def update(self, doc, xml, revision_id):
         assert revision_id == self.revision
@@ -58,6 +70,27 @@ class CLI:
             raise RuntimeError("Timed out after remote update")
         return {"document": {"revision_id": self.revision}}
 
+    def insert_diagram(self, doc, job_id, image, *, heading_id, revision_id):
+        assert doc == "document-1"
+        assert image == b"private png"
+        assert heading_id == "analysis" and revision_id == self.revision
+        self.image_calls.append(job_id)
+        tag = f'<img src="media-{job_id}" caption="AI 图解 · {job_id}\n"/>'
+        self.xml = self.xml.replace("<h1>AI 解读</h1>", "<h1>AI 解读</h1>" + tag, 1)
+        self.revision += 1
+        if self.image_timeout:
+            self.fetch_failure = True
+            raise RuntimeError("Timed out after remote image insertion")
+
+    def move_diagram(self, doc, image_id, *, heading_id, revision_id):
+        assert doc == "document-1"
+        assert heading_id == "analysis" and revision_id == self.revision
+        assert image_id == f"block-{revision_id}"
+        self.moves.append(image_id)
+        tag = re.findall(r"<img [^>]+/>", self.xml)[-1]
+        self.xml = self.xml.replace(tag, "").replace("<h1>AI 解读</h1>", "<h1>AI 解读</h1>" + tag, 1)
+        self.revision += 1
+
     def call(self, *args, **kwargs):
         return {"nodes": [{"title": Source().document(TASK)[0], "obj_token": "document-1",
                             "obj_type": "docx", "node_token": "node-1"}], "has_more": False}
@@ -66,6 +99,103 @@ class CLI:
 def worker(tmp_path, cli=None, source=None):
     return ArchiveWorker({"state_db": str(tmp_path / "archive.db"), "parent_node_token": "parent",
                           "space_id": "space"}, source=source or Source(), cli=cli or CLI())
+
+
+def diagram_state(job, job_id, **kwargs):
+    return diagram_delivery_state(job.config, TASK["view_token"], job_id, lambda _: None, **kwargs)
+
+
+def test_diagrams_precede_text_and_survive_later_text_update(tmp_path):
+    cli = CLI()
+    job = worker(tmp_path, cli=cli)
+    first, second = "a" * 32, "b" * 32
+    assert diagram_state(job, first, enqueue=True)["state"] == "waiting"
+    job.run_once()
+    assert diagram_state(job, first)["state"] == "ready"
+    assert diagram_state(job, first, enqueue=True)["state"] == "queued"
+    assert diagram_state(job, first, enqueue=True)["state"] == "queued"
+    assert diagram_state(job, second, enqueue=True)["state"] == "queued"
+    assert job.run_diagram_exports() == 2
+    assert cli.xml.index("<h1>AI 解读</h1>") < cli.xml.index(f"media-{first}") < cli.xml.index("<h2>结论")
+    assert not cli.moves
+    assert diagram_state(job, first, enqueue=True)["state"] == "done"
+    initial_link = diagram_state(job, first)["document_url"]
+    assert initial_link.endswith("#block-2")
+    assert job.run_diagram_exports() == 0
+    assert cli.image_calls == [first, second]
+
+    class EditedSource(Source):
+        def tasks(self):
+            yield {**TASK, "updated_at": "2026-10-19T11:13:00"}
+
+        def document(self, task):
+            return build_document(task, "Updated analysis.", "Updated full body.", calibrated=True)
+
+    job.source = EditedSource()
+    assert job.run_once()["counts"] == {"done": 1}
+    assert cli.calls == cli.updates == 1
+    assert "Updated full body." in cli.xml
+    assert all(f'src="media-{key}"' in cli.xml for key in (first, second))
+    assert cli.xml.index("<h1>AI 解读</h1>") < cli.xml.index(f"media-{first}") < cli.xml.index("Updated analysis.")
+    assert diagram_state(job, first)["document_url"].endswith(f"#block-{cli.revision}")
+    assert diagram_state(job, first)["document_url"] != initial_link
+    assert cli.image_calls == [first, second]
+
+
+def test_completed_diagram_reposition_moves_existing_block_only(tmp_path):
+    from video_transcript_api.exports.feishu import remote_digest
+
+    cli = CLI()
+    job = worker(tmp_path, cli=cli)
+    key = "a" * 32
+    job.run_once()
+    assert diagram_state(job, key, enqueue=True, reposition=True)["state"] == "ready"
+    assert job.run_diagram_exports() == 0
+    tag = f'<img src="media-{key}" caption="AI 图解 · {key}\n"/>'
+    cli.xml += tag
+    cli.revision += 1
+    job.save("parent:private-view", remote_digest=remote_digest(cli.xml))
+    job.db.execute("INSERT INTO diagram_exports (source_key, job_id, document_id, status) VALUES (?, ?, ?, 'done')",
+                   ("parent:private-view", key, "document-1"))
+    job.db.commit()
+    assert diagram_state(job, key, enqueue=True, reposition=True)["state"] == "writing"
+    assert job.run_diagram_exports() == 1
+    assert cli.moves == ["block-2"]
+    assert cli.image_calls == []
+    assert cli.xml.count(tag) == 1
+    assert "<h1>AI 解读</h1>" + tag in cli.xml
+    assert job._row("parent:private-view")["remote_digest"] == remote_digest(cli.xml)
+
+
+def test_uncertain_image_insert_only_rechecks_after_restart(tmp_path):
+    cli = CLI()
+    job = worker(tmp_path, cli=cli)
+    key = "a" * 32
+    job.run_once()
+    diagram_state(job, key, enqueue=True)
+    cli.image_timeout = True
+    assert job.run_diagram_exports() == 0
+    assert diagram_state(job, key)["state"] == "uncertain"
+    job.db.close()
+
+    cli.fetch_failure = False
+    resumed = worker(tmp_path, cli=cli)
+    assert diagram_state(resumed, key, enqueue=True)["state"] == "writing"
+    assert resumed.run_diagram_exports() == 1
+    assert diagram_state(resumed, key)["state"] == "done"
+    assert cli.image_calls == [key]
+
+
+def test_image_append_does_not_adopt_manual_document_edits(tmp_path):
+    cli = CLI()
+    job = worker(tmp_path, cli=cli)
+    job.run_once()
+    original = job._row("parent:private-view")["remote_digest"]
+    cli.xml += "<p>Handwritten note</p>"
+    diagram_state(job, "a" * 32, enqueue=True)
+    assert job.run_diagram_exports() == 1
+    assert job._row("parent:private-view")["remote_digest"] == original
+    assert "Handwritten note" in cli.xml
 
 
 def test_complete_content_and_sources_are_preserved_without_private_links():

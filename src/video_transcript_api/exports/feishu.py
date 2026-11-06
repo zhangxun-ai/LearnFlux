@@ -15,10 +15,11 @@ from pathlib import Path
 import re
 import sqlite3
 import subprocess
+from tempfile import TemporaryDirectory
 import time
 from urllib.error import HTTPError
 from urllib.parse import quote, urlsplit
-from urllib.request import Request, build_opener, ProxyHandler
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from bs4 import BeautifulSoup, NavigableString
 import markdown
@@ -26,6 +27,12 @@ import markdown
 
 class FeishuRejected(RuntimeError):
     """A confirmed authorization rejection that did not create a document."""
+
+
+class _LocalOnlyRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        # The archive client only reads exact loopback endpoints with a private key.
+        return None
 
 
 _EXPORT_HEADER = re.compile(
@@ -36,6 +43,8 @@ _EXPORT_FIELDS = re.compile(
     r"\ATitle: [\s\S]*?\nPlatform: [^\n]*\nType: [^\n]*\n"
     r"(?:Source: [^\n]*\n)?Export-Date: \d{4}-\d{2}-\d{2}\s*\Z"
 )
+_ANALYSIS_TITLE = "AI 解读"
+_ANALYSIS_HEADING = f"<h1>{_ANALYSIS_TITLE}</h1>"
 
 
 def _without_export_header(source: str) -> str:
@@ -88,6 +97,49 @@ def remote_digest(xml: str) -> str:
         for attribute in ("id", "block-id", "block_id"):
             node.attrs.pop(attribute, None)
     return hashlib.sha256(str(soup).encode("utf-8")).hexdigest()
+
+
+def _diagram_caption(job_id: str) -> str:
+    return f"AI 图解 · {job_id}"
+
+
+def _diagram_media_token(image) -> str | None:
+    # Lark CLI XML uses src for a native image token. Keep token for older readbacks.
+    token = image.get("src") or image.get("token") or ""
+    return token if re.fullmatch(r"[A-Za-z0-9_-]+", token) else None
+
+
+def _diagram_image(soup, job_id: str):
+    return next((
+        image for image in soup.find_all("img")
+        if image.get("caption", "").strip() == _diagram_caption(job_id) and _diagram_media_token(image)
+    ), None)
+
+
+def _analysis_heading(soup):
+    return next((tag for tag in soup.find_all("h1", recursive=False)
+                 if tag.get_text(strip=True) == _ANALYSIS_TITLE), None)
+
+
+def _diagram_above_analysis_text(soup, image) -> bool:
+    heading = _analysis_heading(soup)
+    if heading is None:
+        return False
+    for sibling in heading.find_next_siblings():
+        if sibling is image:
+            return True
+        if sibling.name != "img" or not re.fullmatch(
+            r"AI 图解 · [a-f0-9]{32}", sibling.get("caption", "").strip(),
+        ):
+            break
+    return False
+
+
+def _block_id(tag) -> str:
+    value = tag.get("id", "") if tag is not None else ""
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", value):
+        raise ValueError("Archive block ID unavailable")
+    return value
 
 
 def summary_xml(source: str) -> str:
@@ -155,7 +207,7 @@ def build_document(task: dict, analysis: str, transcript: str, *, calibrated: bo
     if urlsplit(source_url).scheme in {"http", "https"}:
         body += f'<p>原始链接：<a href="{html.escape(source_url, quote=True)}">{html.escape(source_url)}</a></p>'
     body += "<p>以下解读由 AI 生成，重要事实请对照原始来源核实。</p>"
-    body += "<h1>AI 解读</h1>" + summary_xml(analysis)
+    body += _ANALYSIS_HEADING + summary_xml(analysis)
     label = "完整逐字稿 / 正文（已校对）" if calibrated else "完整逐字稿 / 正文（原始转录）"
     body += f"<h1>{label}</h1>"
     for paragraph in re.split(r"\n\s*\n", transcript.strip()):
@@ -178,9 +230,21 @@ class LocalResults:
         parsed = urlsplit(self.base)
         if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
             raise ValueError("Archive source must be a loopback HTTP API")
-        self.opener = build_opener(ProxyHandler({}))
+        self.opener = build_opener(ProxyHandler({}), _LocalOnlyRedirect())
 
     def read(self, path: str) -> str:
+        return self._read(path).decode("utf-8")
+
+    def read_diagram(self, job_id: str) -> bytes:
+        if not re.fullmatch(r"[a-f0-9]{32}", job_id):
+            raise ValueError("Invalid diagram identity")
+        limit = 32 * 1024 * 1024
+        image = self._read(f"/api/image-diagrams/jobs/{job_id}/image", max_bytes=limit)
+        if not image.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("Local diagram is not a PNG")
+        return image
+
+    def _read(self, path: str, *, max_bytes: int | None = None) -> bytes:
         users = json.loads(Path(self.config["users_file"]).read_text())["users"]
         token = next((key for key, user in users.items()
                       if user.get("name") == self.config["api_user_name"] and user.get("enabled", True)), None)
@@ -192,7 +256,10 @@ class LocalResults:
             with self.opener.open(request, timeout=30) as response:
                 if response.status != 200:
                     raise ValueError("Local result is not ready")
-                return response.read().decode("utf-8")
+                body = response.read(max_bytes + 1) if max_bytes is not None else response.read()
+                if max_bytes is not None and len(body) > max_bytes:
+                    raise ValueError("Local diagram exceeds the archive limit")
+                return body
         except HTTPError as error:
             # Never expose the private view-token URL in logs.
             raise ValueError(f"Local API returned HTTP {error.code}") from None
@@ -236,14 +303,14 @@ class FeishuCLI:
     """Call lark-cli without a shell, tokens, or credential copies."""
 
     def __init__(self, executable: str):
-        self.executable = executable
+        self.executable = str(Path(executable).expanduser().absolute()) if "/" in executable else executable
 
-    def call(self, *args: str, content: str | None = None) -> dict:
+    def call(self, *args: str, content: str | None = None, cwd: str | None = None) -> dict:
         env = {**os.environ, "LARKSUITE_CLI_NO_UPDATE_NOTIFIER": "1", "LARKSUITE_CLI_NO_SKILLS_NOTIFIER": "1"}
         try:
             result = subprocess.run([self.executable, *args, "--as", "user"],
                                     input=content, capture_output=True, text=True,
-                                    timeout=240, env=env, check=False)
+                                    timeout=240, env=env, check=False, cwd=cwd)
         except subprocess.TimeoutExpired:
             raise RuntimeError("Feishu operation timed out; reconcile before any new write") from None
         if result.returncode:
@@ -267,8 +334,26 @@ class FeishuCLI:
     def fetch(self, document_id: str) -> str:
         return self.fetch_document(document_id)["content"]
 
-    def fetch_document(self, document_id: str) -> dict:
-        return self.call("docs", "+fetch", "--doc", document_id)["document"]
+    def fetch_document(self, document_id: str, *, with_ids: bool = False) -> dict:
+        args = ("--detail", "with-ids") if with_ids else ()
+        return self.call("docs", "+fetch", "--doc", document_id, *args)["document"]
+
+    def insert_diagram(self, document_id: str, job_id: str, image: bytes, *,
+                       heading_id: str, revision_id: int) -> None:
+        with TemporaryDirectory(prefix="learnflux-feishu-diagram-") as directory:
+            (Path(directory) / "diagram.png").write_bytes(image)
+            self.call(
+                "docs", "+update", "--doc", document_id, "--command", "block_insert_after",
+                "--block-id", heading_id, "--revision-id", str(revision_id), "--doc-format", "xml",
+                "--content", "-", content=f'<img path="@./diagram.png" caption="{_diagram_caption(job_id)}"/>',
+                cwd=directory,
+            )
+
+    def move_diagram(self, document_id: str, image_id: str, *, heading_id: str, revision_id: int) -> None:
+        self.call(
+            "docs", "+update", "--doc", document_id, "--command", "block_move_after",
+            "--block-id", heading_id, "--src-block-ids", image_id, "--revision-id", str(revision_id),
+        )
 
     def update(self, document_id: str, xml: str, revision_id: int) -> dict:
         """Replace only a verified, unchanged generated document revision."""
@@ -300,15 +385,15 @@ class ArchiveWorker:
                 self.db.execute(f"ALTER TABLE exports ADD COLUMN {column} TEXT")
         if "written_revision" not in columns:
             self.db.execute("ALTER TABLE exports ADD COLUMN written_revision INTEGER")
+        self.db.execute("""CREATE TABLE IF NOT EXISTS diagram_exports (
+            source_key TEXT NOT NULL, job_id TEXT NOT NULL, document_id TEXT NOT NULL,
+            status TEXT NOT NULL, block_id TEXT, PRIMARY KEY (source_key, job_id, document_id))""")
+        if "block_id" not in {row[1] for row in self.db.execute("PRAGMA table_info(diagram_exports)")}:
+            self.db.execute("ALTER TABLE diagram_exports ADD COLUMN block_id TEXT")
         self.db.commit()
 
     def _row(self, key: str):
         return self.db.execute("SELECT * FROM exports WHERE source_key=?", (key,)).fetchone()
-
-    def _fetch_document(self, document_id: str) -> dict:
-        if hasattr(self.cli, "fetch_document"):
-            return self.cli.fetch_document(document_id)
-        return {"content": self.cli.fetch(document_id), "revision_id": None}
 
     def _finish(self, key: str, content: str, revision: str, remote: str, *, trusted: bool):
         self.save(key, status="done", content=content, source_revision=revision,
@@ -317,33 +402,169 @@ class ArchiveWorker:
 
     def _update_document(self, key: str, row) -> bool:
         """Reconcile interrupted updates and protect remote edits with a revision."""
-        document = self._fetch_document(row["document_id"])
+        document = self.cli.fetch_document(row["document_id"])
         remote, desired = document["content"], row["pending_content"]
-        if normalized_text(remote) == normalized_text(desired):
+        job_ids = [item[0] for item in self.db.execute(
+            """SELECT job_id FROM diagram_exports WHERE source_key=? AND document_id=?
+               AND status='done'""",
+            (key, row["document_id"]),
+        )]
+        diagrams = {_diagram_caption(job_id) for job_id in job_ids}
+        soup = BeautifulSoup(remote, "html.parser")
+        image_tags = [
+            (tag["caption"].strip(), token) for tag in soup.find_all("img")
+            if tag.get("caption", "").strip() in diagrams and (token := _diagram_media_token(tag))
+        ]
+        images_intact = len(image_tags) == len(diagrams) and {caption for caption, _ in image_tags} == diagrams
+        if images_intact and normalized_text(remote) == normalized_text(desired):
             # A timed-out write may have succeeded, followed by human edits.
             # Text proves delivery, not ownership of the current rich revision.
             trusted = (row["written_revision"] is not None
                        and row["written_revision"] == document.get("revision_id"))
+            self._save_diagram_links(key, row["document_id"], job_ids)
             self._finish(key, desired, row["pending_revision"], remote, trusted=trusted)
             return True
         revision_id = document.get("revision_id")
         unchanged = (row["remote_digest"] and remote_digest(remote) == row["remote_digest"]
                      and normalized_text(remote) == normalized_text(row["content"]))
-        if not unchanged or not isinstance(revision_id, int) or revision_id < 0:
+        if (not unchanged or not images_intact or not isinstance(revision_id, int) or revision_id < 0
+                or (diagrams and _ANALYSIS_HEADING not in desired)):
             self.save(key, status="conflict", last_error="Remote edits or unverified revision; preserved",
                       next_retry=0)
             return False
         self.save(key, status="updating", written_revision=None)
-        result = self.cli.update(row["document_id"], desired, revision_id) or {}
+        # Carry the native image resources forward only on a verified baseline.
+        images = "".join(
+            f'<img src="{token}" caption="{html.escape(caption, quote=True)}"/>'
+            for caption, token in image_tags
+        )
+        combined = desired.replace(_ANALYSIS_HEADING, _ANALYSIS_HEADING + images, 1)
+        result = self.cli.update(row["document_id"], combined, revision_id) or {}
         written_revision = (result.get("document") or {}).get("revision_id")
         self.save(key, written_revision=written_revision)
-        document = self._fetch_document(row["document_id"])
+        document = self.cli.fetch_document(row["document_id"])
         remote = document["content"]
-        if normalized_text(remote) != normalized_text(desired):
+        soup = BeautifulSoup(remote, "html.parser")
+        verified_captions = {tag.get("caption", "").strip() for tag in soup.find_all("img") if _diagram_media_token(tag)}
+        if normalized_text(remote) != normalized_text(desired) or not diagrams <= verified_captions:
             raise ValueError("Document readback differs from complete source content")
         trusted = written_revision is not None and written_revision == document.get("revision_id")
+        self._save_diagram_links(key, row["document_id"], job_ids)
         self._finish(key, desired, row["pending_revision"], remote, trusted=trusted)
         return True
+
+    def _save_diagram_links(self, key: str, document_id: str, job_ids: list[str]) -> None:
+        if not job_ids:
+            return
+        try:
+            markup = self.cli.fetch_document(document_id, with_ids=True)["content"]
+        except Exception:
+            # The native image is already verified. The document link still works.
+            markup = ""
+        soup = BeautifulSoup(markup, "html.parser")
+        for job_id in job_ids:
+            image = _diagram_image(soup, job_id)
+            block_id = image.get("id", "") if image else ""
+            self.db.execute(
+                """UPDATE diagram_exports SET block_id=?
+                   WHERE source_key=? AND job_id=? AND document_id=?""",
+                (block_id if re.fullmatch(r"[A-Za-z0-9_-]+", block_id) else None, key, job_id, document_id),
+            )
+
+    def run_diagram_exports(self) -> int:
+        """Place selected native images before the analysis text and verify them."""
+        prefix = self.config["parent_node_token"] + ":"
+        rows = self.db.execute(
+            """SELECT d.* FROM diagram_exports d JOIN exports e
+               ON e.source_key=d.source_key AND e.document_id=d.document_id
+               WHERE d.status IN ('queued','writing')
+                 AND substr(d.source_key, 1, ?) = ?
+                 AND e.status IN ('done','conflict') LIMIT 10""",
+            (len(prefix), prefix),
+        ).fetchall()
+        synced = 0
+        for row in rows:
+            key, job_id, document_id = row["source_key"], row["job_id"], row["document_id"]
+            status = row["status"]
+            if status == "queued":
+                try:
+                    image = self.source.read_diagram(job_id)
+                    heading_id, revision_id, _ = self._diagram_layout(document_id)
+                except Exception:
+                    self._set_diagram_status(row, "failed")
+                    continue
+                self._set_diagram_status(row, "writing")
+                try:
+                    self.cli.insert_diagram(
+                        document_id, job_id, image, heading_id=heading_id, revision_id=revision_id,
+                    )
+                except FeishuRejected:
+                    self._set_diagram_status(row, "failed")
+                    continue
+                except Exception:
+                    # The write may have succeeded. Only a readback can settle it.
+                    pass
+            try:
+                remote, base = self._verify_diagram_position(document_id, job_id)
+            except Exception:
+                self._set_diagram_status(row, "uncertain")
+                continue
+            with self.db:
+                self._save_diagram_links(key, document_id, [job_id])
+                # Adopt the new rich baseline only if the verified image is the
+                # only change. Any human edit retains the existing conflict guard.
+                self.db.execute(
+                    "UPDATE exports SET remote_digest=? WHERE source_key=? AND document_id=? AND remote_digest=?",
+                    (remote_digest(remote), key, document_id, base),
+                )
+                self._set_diagram_status(row, "done", commit=False)
+            synced += 1
+        return synced
+
+    def _diagram_layout(self, document_id: str):
+        document = self.cli.fetch_document(document_id, with_ids=True)
+        revision = document.get("revision_id")
+        if not isinstance(revision, int) or revision <= 0:
+            raise ValueError("Archive revision unavailable")
+        soup = BeautifulSoup(document["content"], "html.parser")
+        return _block_id(_analysis_heading(soup)), revision, soup
+
+    def _verify_diagram_position(self, document_id: str, job_id: str) -> tuple[str, str | None]:
+        document = self.cli.fetch_document(document_id)
+        remote = document["content"]
+        soup = BeautifulSoup(remote, "html.parser")
+        image = _diagram_image(soup, job_id)
+        if image is None:
+            raise ValueError("Archive diagram not confirmed")
+        if _diagram_above_analysis_text(soup, image):
+            image.decompose()
+            return remote, remote_digest(str(soup))
+        # A previously appended image can be moved by block ID without uploading it again.
+        heading_id, revision, layout = self._diagram_layout(document_id)
+        if revision != document.get("revision_id"):
+            raise ValueError("Archive changed during placement")
+        self.cli.move_diagram(
+            document_id, _block_id(_diagram_image(layout, job_id)),
+            heading_id=heading_id, revision_id=revision,
+        )
+        updated = self.cli.fetch_document(document_id)["content"]
+        updated_soup = BeautifulSoup(updated, "html.parser")
+        moved = _diagram_image(updated_soup, job_id)
+        if moved is None or not _diagram_above_analysis_text(updated_soup, moved):
+            raise ValueError("Archive diagram placement not confirmed")
+        same_image = str(image) == str(moved)
+        image.decompose()
+        moved.decompose()
+        only_moved = same_image and remote_digest(str(soup)) == remote_digest(str(updated_soup))
+        return updated, remote_digest(remote) if only_moved else None
+
+    def _set_diagram_status(self, row, status: str, *, commit: bool = True):
+        self.db.execute(
+            "UPDATE diagram_exports SET status=? WHERE source_key=? AND job_id=? AND document_id=?",
+            (status, row["source_key"], row["job_id"], row["document_id"]),
+        )
+        if commit:
+            self.db.commit()
 
     def save(self, key: str, **values):
         values["updated_at"] = time.time()
@@ -433,7 +654,7 @@ class ArchiveWorker:
                     doc_id, url = document["document_id"], document["url"]
                     self.save(key, document_id=doc_id, document_url=url, status="verifying",
                               written_revision=document.get("revision_id"))
-                document = self._fetch_document(doc_id)
+                document = self.cli.fetch_document(doc_id)
                 remote = document["content"]
                 if normalized_text(remote) != normalized_text(row["content"]):
                     raise ValueError("Document readback differs from complete source content")

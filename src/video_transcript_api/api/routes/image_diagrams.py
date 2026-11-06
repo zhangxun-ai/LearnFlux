@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import sqlite3
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..context import get_audit_logger, get_cache_manager, get_config, get_repository_database, get_user_manager
 from ..services.transcription import verify_token
-from ...document_sources.feishu import FeishuDocumentError, parse_feishu_url, require_feishu_access
+from ..services.study_access import require_study_source
+from ...exports.delivery import diagram_delivery_state
 from ...image_diagrams.client import OpenAIImageDiagramClient
 from ...image_diagrams.config import ImageDiagramSettings
 from ...image_diagrams.repository import ImageDiagramRepository
@@ -21,6 +23,7 @@ from ...image_diagrams.source import snapshot_session
 from ...study.repository import StudyRepository
 from ...study.service import StudyService
 from ...study.transcript import normalize_transcript
+from .delivery import archive_config_for_user
 
 
 router = APIRouter(prefix="/api/image-diagrams", tags=["image-diagrams"])
@@ -39,30 +42,15 @@ class ImageDiagramRequest(BaseModel):
 
 def require_source_access(view_token: str, owner_user_id: str) -> dict:
     """Authorize metadata before loading even a cached private source."""
-    manager = get_cache_manager()
-    task = manager.get_task_by_view_token(view_token)
-    if not isinstance(task, dict) or not task.get("task_id"):
-        raise HTTPException(status_code=404, detail="学习内容不存在")
     user = get_user_manager().get_user_by_id(owner_user_id)
     if not user or not user.get("enabled", True):
         raise HTTPException(status_code=403, detail="当前账号不可使用这份内容")
-    owner = task.get("owner_user_id")
-    if owner:
-        if owner != owner_user_id:
-            raise HTTPException(status_code=404, detail="学习内容不存在")
-    elif not (user.get("is_legacy") or owner_user_id == "legacy_user"):
-        owned = {row.get("task_id") for row in get_audit_logger().get_recent_calls(
-            user_id=owner_user_id, limit=10000,
-        )}
-        if task["task_id"] not in owned:
-            raise HTTPException(status_code=404, detail="学习内容不存在")
+    task = require_study_source(
+        get_cache_manager().get_task_by_view_token(view_token), {**user, "user_id": owner_user_id},
+        get_audit_logger(), get_config().get("feishu_documents") or {},
+    )
     if task.get("status") in {"canceled", "cancelled"}:
         raise HTTPException(status_code=409, detail="任务已取消，未开始图解生成")
-    if str(task.get("platform") or "").lower() == "feishu" or parse_feishu_url(task.get("url") or ""):
-        try:
-            require_feishu_access(get_config().get("feishu_documents") or {}, task)
-        except FeishuDocumentError:
-            raise HTTPException(status_code=403, detail="当前身份未获准读取这份飞书资料") from None
     return task
 
 
@@ -144,6 +132,46 @@ async def owned_job(job_id: str, user: dict) -> tuple:
 async def get_image_job(job_id: str, user: dict = Depends(verify_token)):
     service, record = await owned_job(job_id, user)
     return response(service.public(record))
+
+
+def _diagram_archive(record: dict, user: dict, *, enqueue: bool, reposition: bool = False) -> dict:
+    if not record.get("image_key"):
+        raise HTTPException(status_code=404, detail="图片尚未就绪")
+    config = archive_config_for_user(user["user_id"])
+    if not config:
+        return {"state": "unavailable"}
+
+    def authorize_archive_task(task_id):
+        task = get_cache_manager().get_task_by_id(task_id)
+        require_study_source(task, user, get_audit_logger(), get_config().get("feishu_documents") or {})
+        if task["view_token"] != record["view_token"]:
+            raise HTTPException(status_code=404, detail="飞书归档不属于当前资料")
+
+    try:
+        return diagram_delivery_state(
+            config, record["view_token"], record["id"], authorize_archive_task,
+            enqueue=enqueue, reposition=reposition,
+        )
+    except (OSError, ValueError, KeyError, sqlite3.Error) as exc:
+        raise HTTPException(status_code=503, detail="暂时无法读取图解同步状态") from exc
+
+
+@router.get("/jobs/{job_id}/feishu")
+async def get_diagram_archive(job_id: str, user: dict = Depends(verify_token)):
+    _, record = await owned_job(job_id, user)
+    return response(await run_in_threadpool(_diagram_archive, record, user, enqueue=False))
+
+
+@router.post("/jobs/{job_id}/feishu")
+async def queue_diagram_archive(job_id: str, reposition: bool = False, user: dict = Depends(verify_token)):
+    service, record = await owned_job(job_id, user)
+    try:
+        service.artifacts.image_path(record.get("image_key"))
+    except (ValueError, FileNotFoundError):
+        raise HTTPException(status_code=404, detail="图片暂不可用") from None
+    return response(await run_in_threadpool(
+        _diagram_archive, record, user, enqueue=True, reposition=reposition,
+    ))
 
 
 @router.get("/jobs/{job_id}/image")

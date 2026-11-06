@@ -1,8 +1,10 @@
 import hashlib
+import json
 import os
 import re
 import uuid
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Literal
 from urllib.parse import quote
 
@@ -20,6 +22,8 @@ from ..context import (
     get_user_manager,
 )
 from ..services.transcription import TranscribeResponse, process_local_upload, verify_token
+from ..services.source_preservation import PDFTextLimitExceeded, extract_pdf_text
+from ...collections.titles import source_basename
 from ...obsidian.service import (
     ObsidianConflict,
     ObsidianSyncError,
@@ -48,6 +52,9 @@ user_manager = get_user_manager()
 
 _UPLOAD_MAX_MB = int((config.get("upload") or {}).get("max_mb", 20480))
 _UPLOAD_MAX_BYTES = _UPLOAD_MAX_MB * 1024 * 1024
+_STUDY_TEXT_MAX_CHARS = 200_000
+_PDF_UPLOAD_MAX_FILES = 20
+_PDF_UPLOAD_MAX_BYTES = min(_UPLOAD_MAX_BYTES, 100 * 1024 * 1024)
 
 
 class StudyNoteRequest(BaseModel):
@@ -81,7 +88,7 @@ class StudyCompareRequest(StudyChatRequest):
 
 class StudyTextRequest(BaseModel):
     title: str = Field(default="", max_length=160)
-    content: str = Field(..., min_length=1, max_length=200000)
+    content: str = Field(..., min_length=1, max_length=_STUDY_TEXT_MAX_CHARS)
 
     @field_validator("title", "content", mode="before")
     @classmethod
@@ -919,22 +926,180 @@ async def create_study_text(
     background_tasks: BackgroundTasks,
     user_info: dict = Depends(verify_token),
 ):
+    return _submit_study_text(request, background_tasks)
+
+
+@router.post("/pdf-bundle", response_model=TranscribeResponse, status_code=202)
+async def create_study_pdf_bundle(
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    title: str = Form("", max_length=160),
+    user_info: dict = Depends(verify_token),
+):
+    filenames = _pdf_upload_filenames(files, minimum=2)
+    content = await run_in_threadpool(_combine_pdf_text, files, filenames)
+    default_title = f"{Path(filenames[0]).stem[:100]} 等 {len(files)} 份 PDF"
+    request = StudyTextRequest(title=title.strip() or default_title, content=content)
+    return _submit_study_text(request, background_tasks, pdf_user=user_info)
+
+
+@router.post("/pdf-batch", response_model=TranscribeResponse, status_code=202)
+async def create_study_pdf_batch(
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    keys: list[str] = Form(...),
+    user_info: dict = Depends(verify_token),
+):
+    filenames = _pdf_upload_filenames(files)
+    if len(keys) != len(files) or len(set(keys)) != len(keys) or any(
+        not re.fullmatch(r"[a-f0-9]{32}", key) for key in keys
+    ):
+        raise HTTPException(status_code=422, detail="文件清单已失效，请重新选择")
+
+    items = []
+    for key, file, filename in zip(keys, files, filenames):
+        try:
+            content = await run_in_threadpool(
+                _read_study_pdf, file, filename, _STUDY_TEXT_MAX_CHARS
+            )
+            request = StudyTextRequest(title=Path(filename).stem[:160], content=content)
+            result = _submit_study_text(
+                request, background_tasks, pdf_user=user_info, pdf_item_key=key
+            )
+        except HTTPException as exc:
+            items.append({"key": key, "error": exc.detail})
+        except PDFTextLimitExceeded:
+            items.append({"key": key, "error": f"正文超过 {_STUDY_TEXT_MAX_CHARS:,} 字"})
+        except Exception:
+            logger.exception("Individual PDF submission failed")
+            items.append({"key": key, "error": "提交失败，请重试此文件"})
+        else:
+            items.append({"key": key, **result.data})
+    return TranscribeResponse(code=202, message="逐篇提交完成", data={"items": items})
+
+
+def _pdf_upload_filenames(files: list[UploadFile], minimum: int = 1) -> list[str]:
+    if not minimum <= len(files) <= _PDF_UPLOAD_MAX_FILES:
+        raise HTTPException(
+            status_code=422, detail=f"请选择 {minimum} 至 {_PDF_UPLOAD_MAX_FILES} 份 PDF"
+        )
+    if sum(file.size or 0 for file in files) > _PDF_UPLOAD_MAX_BYTES:
+        limit_mb = _PDF_UPLOAD_MAX_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"PDF 总大小不能超过 {limit_mb} MB")
+    return [
+        re.sub(r"[\x00-\x1f\x7f]+", " ", source_basename(file.filename or ""))
+        for file in files
+    ]
+
+
+def _read_study_pdf(file: UploadFile, filename: str, max_chars: int) -> str:
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=422, detail="此入口仅支持 PDF 文件")
+    if not file.size:
+        raise HTTPException(status_code=422, detail=f"「{filename}」是空文件")
+    try:
+        text = extract_pdf_text(file.file, max_chars=max_chars)
+    except PDFTextLimitExceeded:
+        raise
+    except Exception as exc:
+        logger.warning("Study PDF extraction failed: {}", type(exc).__name__)
+        raise HTTPException(
+            status_code=422, detail=f"无法读取「{filename}」，请检查文件是否损坏或加密"
+        ) from exc
+    if not text:
+        raise HTTPException(
+            status_code=422,
+            detail=f"「{filename}」没有可提取的文字，请先完成 OCR 或移除此文件",
+        )
+    return text
+
+
+def _combine_pdf_text(files: list[UploadFile], filenames: list[str]) -> str:
+    sections = []
+    remaining = _STUDY_TEXT_MAX_CHARS
+    for number, (file, filename) in enumerate(zip(files, filenames), start=1):
+        heading = f"## 资料 {number} · {filename}\n\n"
+        remaining -= len(heading) + (2 if sections else 0)
+        try:
+            text = _read_study_pdf(file, filename, remaining)
+        except PDFTextLimitExceeded as exc:
+            raise HTTPException(
+                status_code=413,
+                detail=f"合并后的正文超过 {_STUDY_TEXT_MAX_CHARS:,} 字，请减少文件后再试",
+            ) from exc
+        sections.append(heading + text)
+        remaining -= len(text)
+    return "\n\n".join(sections)
+
+
+def _submit_study_text(
+    request: StudyTextRequest,
+    background_tasks: BackgroundTasks,
+    *,
+    pdf_user: dict | None = None,
+    pdf_item_key: str | None = None,
+) -> TranscribeResponse:
     title = request.title or _title_from_content(request.content)
-    content_hash = hashlib.sha256(request.content.encode("utf-8")).hexdigest()
+    identity = request.content
+    if pdf_user is not None:
+        identity_parts = [pdf_user.get("user_id"), title, request.content]
+        if pdf_item_key:
+            identity_parts.append(pdf_item_key)
+        identity = json.dumps(identity_parts, ensure_ascii=False)
+    content_hash = hashlib.sha256(identity.encode("utf-8")).hexdigest()
     media_id = f"text_{content_hash[:32]}"
+    display_filename = _display_markdown_filename(title)
+    display_url = f"local://study-text/{quote(media_id)}/content.md"
+    if pdf_item_key:
+        # The same browser item can be resent after a lost response.
+        # This synchronous lookup and submit run without yielding on the API loop.
+        existing = cache_manager.get_existing_task_by_url(display_url)
+        if existing:
+            return TranscribeResponse(
+                code=202, message="文件已提交",
+                data={"task_id": existing["task_id"], "view_token": existing["view_token"], "title": title},
+            )
     source_dir = get_source_root() / "study_texts"
     source_dir.mkdir(parents=True, exist_ok=True)
     source_path = source_dir / f"{media_id}.md"
-    source_path.write_text(request.content, encoding="utf-8")
+    if pdf_user is None:
+        source_path.write_text(request.content, encoding="utf-8")
+    else:
+        staged_path = None
+        try:
+            with NamedTemporaryFile(mode="w", encoding="utf-8", dir=source_dir, delete=False) as staged:
+                staged_path = Path(staged.name)
+                staged.write(request.content)
+            os.replace(staged_path, source_path)
+        finally:
+            if staged_path is not None:
+                staged_path.unlink(missing_ok=True)
 
-    display_filename = _display_markdown_filename(title)
-    display_url = f"local://study-text/{quote(media_id)}/content.md"
+    task_source = {}
+    if pdf_user is not None:
+        task_source = {
+            "owner_user_id": pdf_user.get("user_id"),
+            "source_file_path": str(source_path),
+        }
     task_info = cache_manager.create_task(
         url=display_url,
         use_speaker_recognition=False,
         platform="generic",
         media_id=media_id,
+        **task_source,
     )
+    if pdf_user is not None:
+        cache_manager.update_task_status(
+            task_info["task_id"], "queued", title=display_filename
+        )
+        audit_logger.log_api_call(
+            api_key=pdf_user.get("api_key") or "",
+            user_id=pdf_user.get("user_id"),
+            endpoint="/api/study/pdf-batch" if pdf_item_key else "/api/study/pdf-bundle",
+            video_url=display_url,
+            status_code=202,
+            task_id=task_info["task_id"],
+        )
     background_tasks.add_task(
         process_local_upload,
         task_info["task_id"],
@@ -948,10 +1113,13 @@ async def create_study_text(
         False,
     )
     logger.info("study text accepted: task=%s", task_info["task_id"])
+    response_data = {"task_id": task_info["task_id"], "view_token": task_info["view_token"]}
+    if pdf_user is not None:
+        response_data["title"] = title
     return TranscribeResponse(
         code=202,
         message="文字内容已提交，正在解析",
-        data={"task_id": task_info["task_id"], "view_token": task_info["view_token"]},
+        data=response_data,
     )
 
 

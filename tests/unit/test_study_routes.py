@@ -1,3 +1,4 @@
+from io import BytesIO
 from unittest.mock import MagicMock
 
 import pytest
@@ -680,6 +681,163 @@ def test_study_text_rejects_blank_content():
     )
 
     assert response.status_code == 422
+
+
+def _pdf_bytes(text=""):
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(612, 792)
+    if text:
+        font = DictionaryObject({
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        })
+        page[NameObject("/Resources")] = DictionaryObject({
+            NameObject("/Font"): DictionaryObject({NameObject("/F1"): font}),
+        })
+        stream = DecodedStreamObject()
+        stream.set_data(f"BT /F1 12 Tf 48 740 Td ({text}) Tj ET".encode("ascii"))
+        page.replace_contents(stream)
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def test_study_pdf_bundle_schedules_one_owned_task_with_ordered_source(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import study
+
+    cache = MagicMock()
+    cache.create_task.return_value = {"task_id": "bundle-task", "view_token": "bundle-view"}
+    worker = MagicMock()
+    audit = MagicMock()
+    monkeypatch.setattr(study, "cache_manager", cache)
+    monkeypatch.setattr(study, "audit_logger", audit)
+    monkeypatch.setattr(study, "process_local_upload", worker)
+    monkeypatch.setattr(study, "get_source_root", lambda: tmp_path)
+
+    response = TestClient(_build_app()).post(
+        "/api/study/pdf-bundle",
+        data={"title": "One Topic"},
+        files=[
+            ("files", ("Chapter 2.pdf", _pdf_bytes("Second argument"), "application/pdf")),
+            ("files", ("Chapter 1.PDF", _pdf_bytes("First argument"), "application/pdf")),
+        ],
+    )
+
+    assert response.status_code == 202
+    assert response.json()["data"] == {
+        "task_id": "bundle-task", "view_token": "bundle-view", "title": "One Topic"
+    }
+    cache.create_task.assert_called_once()
+    args = cache.create_task.call_args.kwargs
+    assert args["owner_user_id"] == "test-user"
+    [source] = (tmp_path / "study_texts").glob("*.md")
+    assert str(source) == args["source_file_path"]
+    assert source.read_text(encoding="utf-8") == (
+        "## 资料 1 · Chapter 2.pdf\n\nSecond argument\n\n"
+        "## 资料 2 · Chapter 1.PDF\n\nFirst argument"
+    )
+    worker.assert_called_once()
+    assert worker.call_args.args[1:3] == (str(source), "One Topic.md")
+    assert audit.log_api_call.call_args.kwargs["task_id"] == "bundle-task"
+
+
+@pytest.mark.parametrize("bad_file", ["blank.pdf", "broken.pdf", "mixed.txt"])
+def test_study_pdf_bundle_never_submits_an_incomplete_source(monkeypatch, tmp_path, bad_file):
+    from video_transcript_api.api.routes import study
+
+    cache = MagicMock()
+    monkeypatch.setattr(study, "cache_manager", cache)
+    monkeypatch.setattr(study, "get_source_root", lambda: tmp_path)
+    bad_content = _pdf_bytes() if bad_file == "blank.pdf" else b"not a PDF"
+    response = TestClient(_build_app()).post(
+        "/api/study/pdf-bundle",
+        files=[
+            ("files", ("readable.pdf", _pdf_bytes("Readable text"), "application/pdf")),
+            ("files", (bad_file, bad_content, "application/octet-stream")),
+        ],
+    )
+    assert response.status_code == 422
+    assert ("仅支持 PDF" if bad_file == "mixed.txt" else bad_file) in response.json()["detail"]
+    cache.create_task.assert_not_called()
+    assert not (tmp_path / "study_texts").exists()
+
+
+def test_study_pdf_bundle_rejects_text_over_combined_budget(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    cache = MagicMock()
+    monkeypatch.setattr(study, "cache_manager", cache)
+    monkeypatch.setattr(study, "_STUDY_TEXT_MAX_CHARS", 100)
+    response = TestClient(_build_app()).post(
+        "/api/study/pdf-bundle",
+        files=[
+            ("files", ("part1.pdf", _pdf_bytes("A" * 50), "application/pdf")),
+            ("files", ("part2.pdf", _pdf_bytes("B" * 50), "application/pdf")),
+        ],
+    )
+    assert response.status_code == 413
+    cache.create_task.assert_not_called()
+
+
+def test_study_pdf_batch_keeps_good_files_and_reuses_retried_item(monkeypatch, tmp_path):
+    from video_transcript_api.api.routes import study
+
+    cache = MagicMock()
+    submissions = {}
+
+    def create_task(**kwargs):
+        number = len(submissions) + 1
+        result = {"task_id": f"task-{number}", "view_token": f"view-{number}"}
+        submissions[kwargs["url"]] = result
+        return result
+
+    cache.create_task.side_effect = create_task
+    cache.get_existing_task_by_url.side_effect = submissions.get
+    worker = MagicMock()
+    audit = MagicMock()
+    monkeypatch.setattr(study, "cache_manager", cache)
+    monkeypatch.setattr(study, "audit_logger", audit)
+    monkeypatch.setattr(study, "process_local_upload", worker)
+    monkeypatch.setattr(study, "get_source_root", lambda: tmp_path)
+    client = TestClient(_build_app())
+    first = ("files", ("first.pdf", _pdf_bytes("First argument"), "application/pdf"))
+    second = ("files", ("second.pdf", _pdf_bytes("Second argument"), "application/pdf"))
+    blank = ("files", ("blank.pdf", _pdf_bytes(), "application/pdf"))
+    keys = ["a" * 32, "b" * 32, "c" * 32]
+
+    response = client.post("/api/study/pdf-batch", data={"keys": keys}, files=[first, blank, second])
+    assert response.status_code == 202
+    one, rejected, two = response.json()["data"]["items"]
+    assert one == {"key": keys[0], "task_id": "task-1", "view_token": "view-1", "title": "first"}
+    assert two == {"key": keys[2], "task_id": "task-2", "view_token": "view-2", "title": "second"}
+    assert rejected["key"] == keys[1]
+    assert "blank.pdf" in rejected["error"]
+    assert all(call.kwargs["owner_user_id"] == "test-user" for call in cache.create_task.call_args_list)
+    assert sorted(path.read_text() for path in (tmp_path / "study_texts").glob("*.md")) == [
+        "First argument", "Second argument",
+    ]
+
+    retry = client.post("/api/study/pdf-batch", data={"keys": [keys[0]]}, files=[first])
+    assert retry.json()["data"]["items"] == [one]
+    assert cache.create_task.call_count == worker.call_count == audit.log_api_call.call_count == 2
+
+
+def test_study_pdf_batch_rejects_duplicate_submission_keys(monkeypatch):
+    from video_transcript_api.api.routes import study
+
+    cache = MagicMock()
+    monkeypatch.setattr(study, "cache_manager", cache)
+    response = TestClient(_build_app()).post(
+        "/api/study/pdf-batch",
+        data={"keys": ["a" * 32, "a" * 32]},
+        files=[("files", ("one.pdf", b"pdf")), ("files", ("two.pdf", b"pdf"))],
+    )
+    assert response.status_code == 422
+    cache.create_task.assert_not_called()
 
 
 def test_study_text_keeps_user_title_out_of_file_path(monkeypatch, tmp_path):

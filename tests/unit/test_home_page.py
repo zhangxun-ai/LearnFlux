@@ -183,7 +183,7 @@ def test_workbench_local_upload_adds_file_to_recent_history():
 
     assert "TaskHistoryManager.addTask" in app_js
     assert "type: mediaFile ? 'video' : 'file'" in app_js
-    assert "title: fileObj.name" in app_js
+    assert "const taskTitle = bundle ? d.data.title : fileObj.name" in app_js
 
 
 def test_workbench_local_video_upload_opens_analysis_result():

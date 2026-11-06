@@ -2093,6 +2093,12 @@ function initializeFileImport() {
     const selection = document.getElementById('file-selection');
     const name = document.getElementById('selected-file-name');
     const details = document.getElementById('selected-file-details');
+    const pdfList = document.getElementById('selected-pdf-list');
+    const pdfModes = document.getElementById('pdf-reading-modes');
+    const pdfModeInputs = [...document.querySelectorAll('input[name="pdf-reading-mode"]')];
+    const pdfSeparateCount = document.getElementById('pdf-separate-count');
+    const pdfOptions = document.getElementById('pdf-bundle-options');
+    const pdfTitle = document.getElementById('pdf-bundle-title');
     const options = document.getElementById('file-transcription-options');
     const cloudNote = document.getElementById('file-cloud-note');
     const actions = document.getElementById('file-actions');
@@ -2103,7 +2109,10 @@ function initializeFileImport() {
     if (!dz || !fileInput || !selection || !submit || !status) return;
     const mediaExtensions = new Set(['mp3', 'm4a', 'wav', 'aac', 'flac', 'mp4', 'ts', 'mov', 'mkv', 'webm', 'avi', 'm4v']);
     const documentExtensions = new Set(['txt', 'md', 'markdown', 'csv', 'log', 'html', 'htm', 'pdf', 'docx']);
-    let selectedFile = null;
+    let selectedFiles = [];
+    let pdfEntries = [];
+    let pdfMode = '';
+    let batchLocked = false;
     let activeUpload = null;
     const isMediaFile = fileObj => /^(audio|video)\//.test(fileObj.type || '')
         || mediaExtensions.has(fileObj.name.split('.').pop().toLowerCase());
@@ -2114,19 +2123,44 @@ function initializeFileImport() {
     };
     const renderSelection = () => {
         const busy = Boolean(activeUpload);
-        const mediaFile = selectedFile && isMediaFile(selectedFile);
+        const selectedFile = selectedFiles[0];
+        const multiple = selectedFiles.length > 1;
+        const separate = multiple && pdfMode === 'separate';
+        const merged = multiple && pdfMode === 'merged';
+        const accepted = pdfEntries.filter(entry => entry.result?.view_token).length;
+        const complete = separate && accepted === selectedFiles.length;
+        const mediaFile = !multiple && selectedFile && isMediaFile(selectedFile);
         selection.hidden = !selectedFile;
         if (actions) actions.hidden = !selectedFile;
         if (options) options.hidden = !mediaFile;
         if (cloudNote) cloudNote.hidden = !mediaFile || strategy() !== 'cloud';
-        submit.disabled = busy || !selectedFile;
-        submit.textContent = busy ? '上传中…' : '开始学习';
+        submit.disabled = busy || !selectedFile || (multiple && !pdfMode) || complete;
+        if (busy) submit.textContent = '提交中…';
+        else if (complete) submit.textContent = `已提交 ${accepted} 份文件`;
+        else if (separate) submit.textContent = batchLocked
+            ? `重试 ${selectedFiles.length - accepted} 份文件`
+            : `逐篇解读 ${selectedFiles.length} 份文件`;
+        else if (merged) submit.textContent = '合并为一篇并解读';
+        else submit.textContent = multiple ? '请先选择解读方式' : '开始学习';
+        dz.dataset.hasFiles = String(Boolean(selectedFile));
         dz.disabled = busy;
         fileInput.disabled = busy;
-        if (remove) remove.disabled = busy;
+        if (remove) {
+            remove.disabled = busy;
+            remove.textContent = multiple ? '清空选择' : '移除';
+        }
         if (cancel) cancel.hidden = !busy;
         document.querySelectorAll('input[name="file-transcription-strategy"]').forEach(input => { input.disabled = busy; });
-        if (selectedFile) {
+        pdfList.hidden = !multiple;
+        pdfModes.hidden = !multiple;
+        pdfModes.disabled = busy || batchLocked;
+        pdfOptions.hidden = !merged;
+        pdfTitle.disabled = busy;
+        if (multiple) {
+            name.textContent = `已选 ${selectedFiles.length} 份文件`;
+            details.textContent = '';
+            pdfSeparateCount.textContent = `${selectedFiles.length} 条学习记录`;
+        } else if (selectedFile) {
             if (name) name.textContent = selectedFile.name;
             const bytes = selectedFile.size;
             const size = bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -2135,19 +2169,65 @@ function initializeFileImport() {
             if (details) details.textContent = `${type} · ${size} · ${mediaFile ? (strategy() === 'cloud' ? '先估算云端转录费用' : '本地转录后解析') : '提取正文后解析，无需音视频转录'}`;
         }
     };
-    const selectFile = fileObj => {
-        if (!fileObj || activeUpload) return;
+    const renderPdfFiles = () => {
+        pdfList.replaceChildren(...pdfEntries.map(({ file, result }) => {
+            const item = document.createElement('li');
+            const filename = document.createElement('span');
+            filename.textContent = file.name;
+            item.append(filename);
+            if (result?.view_token) {
+                const link = document.createElement('a');
+                link.href = '/view/' + encodeURIComponent(result.view_token);
+                link.textContent = '查看结果';
+                item.append(link);
+            } else if (result?.error) {
+                const error = document.createElement('span');
+                error.className = 'study-pdf-row-error';
+                error.textContent = result.error;
+                item.append(error);
+            }
+            return item;
+        }));
+    };
+    const resetPdfBatch = () => {
+        pdfMode = '';
+        batchLocked = false;
+        pdfModeInputs.forEach(input => { input.checked = false; });
+        pdfTitle.value = '';
+        pdfEntries = selectedFiles.length > 1 ? selectedFiles.map(file => ({
+            file,
+            key: Array.from(crypto.getRandomValues(new Uint8Array(16)), byte =>
+                byte.toString(16).padStart(2, '0')
+            ).join(''),
+            result: null,
+        })) : [];
+        renderPdfFiles();
+    };
+    const selectFiles = fileList => {
+        const files = Array.from(fileList || []);
+        if (!files.length || activeUpload) return;
+        if (files.length > 20) {
+            setStatus('一次最多上传 20 份 PDF，请减少文件后重试。', true);
+            return;
+        }
+        const fileObj = files[0];
         const ext = fileObj.name.split('.').pop().toLowerCase();
-        if (!isMediaFile(fileObj) && !documentExtensions.has(ext)) {
+        if (files.length > 1 && files.some(file => !/\.pdf$/i.test(file.name))) {
+            setStatus('多选解读仅支持 PDF。其他格式请每次选择一份。', true);
+            return;
+        }
+        if (files.length === 1 && !isMediaFile(fileObj) && !documentExtensions.has(ext)) {
             setStatus('暂不支持此文件格式，请选择音视频、PDF、DOCX 或文本文件。', true);
             return;
         }
-        if (!fileObj.size) {
-            setStatus('文件为空，请重新选择。', true);
+        const emptyFile = files.find(file => !file.size);
+        if (emptyFile) {
+            setStatus(`「${emptyFile.name}」是空文件，请重新选择。`, true);
             return;
         }
-        selectedFile = fileObj;
-        setStatus('文件已就绪，点击「开始学习」后上传。');
+        selectedFiles = files.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true }));
+        resetPdfBatch();
+        setStatus(files.length > 1 ? '' : '文件已就绪，点击「开始学习」后上传。');
         renderSelection();
     };
     const readUploadResponse = async response => {
@@ -2159,9 +2239,26 @@ function initializeFileImport() {
             text: contentType.includes('application/json') ? '' : (await response.text().catch(() => '')).trim(),
         };
     };
+    const addUploadToHistory = (task, taskTitle, mediaFile) => {
+        TaskHistoryManager.addTask({
+            task_id: task.task_id,
+            view_token: task.view_token,
+            url: 'local://' + taskTitle,
+            title: taskTitle,
+            type: mediaFile ? 'video' : 'file',
+            status: 'submitted',
+        });
+    };
     const uploadLocalFile = async () => {
-        if (!selectedFile || activeUpload) return;
-        const fileObj = selectedFile;
+        if (!selectedFiles.length || activeUpload) return;
+        const fileObj = selectedFiles[0];
+        const multiple = selectedFiles.length > 1;
+        if (multiple && !pdfMode) return;
+        const bundle = multiple && pdfMode === 'merged';
+        const separate = multiple && pdfMode === 'separate';
+        const pending = separate ? pdfEntries.filter(entry => !entry.result?.view_token) : [];
+        if (separate && !pending.length) return;
+        const bundleTitle = pdfTitle.value.trim();
         const attempt = new AbortController();
         activeUpload = attempt;
         renderSelection();
@@ -2170,15 +2267,31 @@ function initializeFileImport() {
             await requireManagementSession('输入管理口令后继续上传；已经选择的文件会保留。');
             if (attempt.signal.aborted) return;
             const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
-            const mediaFile = isMediaFile(fileObj);
+            const mediaFile = !multiple && isMediaFile(fileObj);
             const fileStrategyEl = mediaFile ? document.querySelector('input[name="file-transcription-strategy"]:checked') : null;
             const fileStrategy = fileStrategyEl ? fileStrategyEl.value : 'local';
             const fd = new FormData();
-            fd.append('file', fileObj);
-            fd.append('use_speaker_recognition', 'false');
-            fd.append('transcription_strategy', fileStrategy);
-            const uploadEndpoint = mediaFile && fileStrategy === 'local' ? '/api/study/upload' : '/api/upload-transcribe';
-            setStatus(`正在上传「${fileObj.name}」…`);
+            let uploadEndpoint;
+            if (separate) {
+                pending.forEach(({ file, key }) => {
+                    fd.append('files', file);
+                    fd.append('keys', key);
+                });
+                batchLocked = true;
+                uploadEndpoint = '/api/study/pdf-batch';
+                setStatus(`正在逐篇提交 ${pending.length} 份 PDF…`);
+            } else if (bundle) {
+                selectedFiles.forEach(file => fd.append('files', file));
+                fd.append('title', bundleTitle);
+                uploadEndpoint = '/api/study/pdf-bundle';
+                setStatus(`正在上传并合并 ${selectedFiles.length} 份 PDF…`);
+            } else {
+                fd.append('file', fileObj);
+                fd.append('use_speaker_recognition', 'false');
+                fd.append('transcription_strategy', fileStrategy);
+                uploadEndpoint = mediaFile && fileStrategy === 'local' ? '/api/study/upload' : '/api/upload-transcribe';
+                setStatus(`正在上传「${fileObj.name}」…`);
+            }
             const response = await fetch(uploadEndpoint, {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + token },
@@ -2193,16 +2306,30 @@ function initializeFileImport() {
                 const message = typeof d.detail === 'string' ? d.detail : d.message;
                 throw new Error(message || text || `上传失败（HTTP ${code}）`);
             }
+            if (separate) {
+                if (d.code !== 202 || !Array.isArray(d.data?.items)) throw new Error('上传结果未确认，请重试。');
+                const results = new Map(d.data.items.map(item => [item.key, item]));
+                pending.forEach(entry => {
+                    const result = results.get(entry.key);
+                    if (result?.task_id && result?.view_token) {
+                        entry.result = result;
+                        addUploadToHistory(result, result.title || entry.file.name, false);
+                    } else {
+                        entry.result = { error: result?.error || '上传结果未确认，请重试。' };
+                    }
+                });
+                renderPdfFiles();
+                const accepted = pdfEntries.filter(entry => entry.result?.view_token).length;
+                const failed = pdfEntries.length - accepted;
+                setStatus(failed
+                    ? `已提交 ${accepted} 份，${failed} 份未提交。可重试未提交的文件。`
+                    : `已提交 ${accepted} 份文件，可逐篇查看结果。`, Boolean(failed));
+                return;
+            }
             if (!d || d.code !== 202 || !d.data || !d.data.view_token) throw new Error(d.message || '上传未完成，请重试');
             setStatus('上传成功，正在打开学习内容…');
-            TaskHistoryManager.addTask({
-                task_id: d.data.task_id,
-                view_token: d.data.view_token,
-                url: 'local://' + fileObj.name,
-                title: fileObj.name,
-                type: mediaFile ? 'video' : 'file',
-                status: 'submitted',
-            });
+            const taskTitle = bundle ? d.data.title : fileObj.name;
+            addUploadToHistory(d.data, taskTitle, mediaFile);
             window.location.href = '/view/' + d.data.view_token;
         } catch (error) {
             if (activeUpload !== attempt) return;
@@ -2217,11 +2344,21 @@ function initializeFileImport() {
         }
     };
     dz.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', () => selectFile(fileInput.files?.[0]));
+    fileInput.addEventListener('change', () => {
+        selectFiles(fileInput.files);
+        fileInput.value = '';
+    });
     submit.addEventListener('click', uploadLocalFile);
+    pdfModeInputs.forEach(input => input.addEventListener('change', () => {
+        if (!input.checked || activeUpload || batchLocked) return;
+        pdfMode = input.value;
+        setStatus('');
+        renderSelection();
+    }));
     if (remove) remove.addEventListener('click', () => {
         if (activeUpload) return;
-        selectedFile = null;
+        selectedFiles = [];
+        resetPdfBatch();
         fileInput.value = '';
         setStatus('');
         renderSelection();
@@ -2241,12 +2378,7 @@ function initializeFileImport() {
     dz.addEventListener('drop', event => {
         event.preventDefault();
         dz.classList.remove('dragover');
-        const files = event.dataTransfer?.files;
-        if (files && files.length > 1) {
-            setStatus('单篇学习每次选择一个文件，请重新选择。', true);
-            return;
-        }
-        selectFile(files?.[0]);
+        selectFiles(event.dataTransfer?.files);
     });
     document.querySelectorAll('input[name="file-transcription-strategy"], input[name="transcription-strategy"]').forEach(input => {
         input.addEventListener('change', () => queueMicrotask(renderSelection));

@@ -6,11 +6,31 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import BinaryIO, Optional
 
 
 DOC_EXTS = {".txt", ".md", ".markdown", ".csv", ".log", ".html", ".htm", ".pdf", ".docx"}
 VIDEO_EXTS = {".mp4", ".ts", ".mov", ".m4v", ".webm", ".mkv", ".flv", ".avi"}
+
+
+class PDFTextLimitExceeded(ValueError):
+    """The extracted PDF exceeds the caller's text budget."""
+
+
+def extract_pdf_text(source: str | BinaryIO, *, max_chars: int | None = None) -> str:
+    """Extract PDF page text from a path or a seekable upload."""
+    from pypdf import PdfReader
+
+    reader = PdfReader(source)
+    parts = []
+    size = 0
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        size += len(text) + bool(parts)
+        if max_chars is not None and size > max_chars:
+            raise PDFTextLimitExceeded
+        parts.append(text)
+    return "\n".join(parts).strip()
 
 
 def _read_text_file(path: str) -> str:
@@ -39,11 +59,7 @@ def extract_document_text(path: str, ext: str) -> str:
         lines = [line.strip() for line in root.get_text("\n").splitlines()]
         return "\n".join(line for line in lines if line).strip()
     if ext == ".pdf":
-        from pypdf import PdfReader
-
-        reader = PdfReader(path)
-        parts = [(page.extract_text() or "") for page in reader.pages]
-        return "\n".join(parts).strip()
+        return extract_pdf_text(path)
     if ext == ".docx":
         import docx
 

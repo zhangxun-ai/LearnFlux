@@ -13,11 +13,14 @@ class Element {
         this.disabled = false;
         this.checked = false;
         this.files = [];
+        this.children = [];
         this.classList = { add() {}, remove() {} };
     }
     addEventListener(name, handler) { this.handlers.set(name, handler); }
     emit(name, data = {}) { return this.handlers.get(name)?.({ preventDefault() {}, ...data }); }
     setAttribute() {}
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
     focus() {}
     click() { return this.emit('click'); }
 }
@@ -26,6 +29,7 @@ const ids = [
     'study-text-status', 'study-text-count', 'study-draft-note', 'study-draft-clear',
     'file-dropzone', 'file-input', 'dropzone-hint', 'file-selection', 'selected-file-name',
     'selected-file-details', 'file-transcription-options', 'file-cloud-note',
+    'selected-pdf-list', 'pdf-reading-modes', 'pdf-separate-count', 'pdf-bundle-options', 'pdf-bundle-title',
     'file-actions', 'file-submit', 'file-remove', 'file-cancel', 'file-upload-status',
 ];
 const elements = Object.fromEntries(ids.map(id => [id, new Element()]));
@@ -35,6 +39,10 @@ const cloudRadio = new Element();
 cloudRadio.value = 'cloud';
 const localRadio = new Element();
 localRadio.value = 'local';
+const separateRadio = new Element();
+separateRadio.value = 'separate';
+const mergedRadio = new Element();
+mergedRadio.value = 'merged';
 const storage = new Map();
 let authState = { status: 'authenticated', authenticated: true, user: { user_id: 'owner-a' }, expires_at: 'session-a' };
 const windowEvents = new Map();
@@ -51,9 +59,13 @@ const setAuth = next => {
 };
 global.document = {
     getElementById: byId,
+    createElement: () => new Element(),
     querySelector: selector => selector.includes('file-transcription-strategy')
         ? (strategy === 'cloud' ? cloudRadio : localRadio) : null,
-    querySelectorAll: selector => selector.includes('file-transcription-strategy') ? [cloudRadio, localRadio] : [],
+    querySelectorAll: selector => {
+        if (selector.includes('file-transcription-strategy')) return [cloudRadio, localRadio];
+        return selector.includes('pdf-reading-mode') ? [separateRadio, mergedRadio] : [];
+    },
 };
 global.sessionStorage = {
     getItem: key => storage.get(key) ?? null,
@@ -61,9 +73,10 @@ global.sessionStorage = {
     removeItem: key => storage.delete(key),
 };
 global.FormData = class {
-    constructor() { this.entries = new Map(); }
-    append(key, value) { this.entries.set(key, value); }
-    get(key) { return this.entries.get(key); }
+    constructor() { this.entries = []; }
+    append(key, value) { this.entries.push([key, value]); }
+    get(key) { return this.getAll(key)[0]; }
+    getAll(key) { return this.entries.filter(([name]) => name === key).map(([, value]) => value); }
 };
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -221,6 +234,64 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
     assert.equal(addedTasks[1].task_id, 'local-task');
     assert.equal(addedTasks[1].title, 'local-video.mp4');
     assert.equal(addedTasks[1].type, 'video');
+
+    const beforeBundle = uploadRequests;
+    const pdfOne = { name: 'Part 2.pdf', type: 'application/pdf', size: 1024 };
+    const pdfTwo = { name: 'Part 10.pdf', type: 'application/pdf', size: 2048 };
+    byId('file-input').files = [pdfTwo, pdfOne];
+    byId('file-input').emit('change');
+    assert.equal(uploadRequests, beforeBundle);
+    assert.equal(byId('file-submit').disabled, true);
+    assert.equal(byId('pdf-separate-count').textContent, '2 条学习记录');
+    mergedRadio.checked = true;
+    mergedRadio.emit('change');
+    assert.equal(byId('file-submit').textContent, '合并为一篇并解读');
+    assert.deepEqual(byId('selected-pdf-list').children.map(child => child.children[0].textContent), ['Part 2.pdf', 'Part 10.pdf']);
+    byId('pdf-bundle-title').value = 'One Topic';
+    const bundleUpload = byId('file-submit').emit('click');
+    await flush();
+    assert.equal(uploadRequests, beforeBundle + 1);
+    assert.equal(uploadArgs.url, '/api/study/pdf-bundle');
+    assert.deepEqual(uploadArgs.options.body.getAll('files'), [pdfOne, pdfTwo]);
+    assert.equal(uploadArgs.options.body.get('title'), 'One Topic');
+    finishUpload(new Response(JSON.stringify({
+        code: 202, data: { task_id: 'bundle-task', view_token: 'bundle-view', title: 'One Topic' },
+    }), { status: 202, headers: { 'Content-Type': 'application/json' } }));
+    await bundleUpload;
+    assert.equal(window.location.href, '/view/bundle-view');
+    assert.equal(addedTasks.length, 3);
+    assert.equal(addedTasks[2].title, 'One Topic');
+
+    byId('file-input').files = [pdfTwo, pdfOne];
+    byId('file-input').emit('change');
+    separateRadio.checked = true;
+    separateRadio.emit('change');
+    assert.equal(byId('pdf-bundle-options').hidden, true);
+    const separateUpload = byId('file-submit').emit('click');
+    await flush();
+    assert.equal(uploadArgs.url, '/api/study/pdf-batch');
+    assert.deepEqual(uploadArgs.options.body.getAll('files'), [pdfOne, pdfTwo]);
+    const [firstKey, secondKey] = uploadArgs.options.body.getAll('keys');
+    finishUpload(new Response(JSON.stringify({ code: 202, data: { items: [
+        {key: firstKey, task_id: 'separate-task-1', view_token: 'separate-view-1'},
+        {key: secondKey, error: 'Broken file'},
+    ] }}), { status: 202, headers: { 'Content-Type': 'application/json' } }));
+    await separateUpload;
+    assert.equal(window.location.href, '/view/bundle-view');
+    assert.equal(addedTasks.length, 4);
+    assert.equal(byId('file-submit').textContent, '重试 1 份文件');
+    assert.equal(byId('selected-pdf-list').children[1].children[1].textContent, 'Broken file');
+
+    const retry = byId('file-submit').emit('click');
+    await flush();
+    assert.deepEqual(uploadArgs.options.body.getAll('files'), [pdfTwo]);
+    assert.deepEqual(uploadArgs.options.body.getAll('keys'), [secondKey]);
+    finishUpload(new Response(JSON.stringify({ code: 202, data: { items: [
+        {key: secondKey, task_id: 'separate-task-2', view_token: 'separate-view-2'},
+    ] }}), { status: 202, headers: { 'Content-Type': 'application/json' } }));
+    await retry;
+    assert.equal(addedTasks.length, 5);
+    assert.equal(byId('file-submit').disabled, true);
 
     byId('file-remove').emit('click');
     assert.equal(byId('file-actions').hidden, true);

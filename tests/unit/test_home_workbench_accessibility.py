@@ -31,6 +31,8 @@ def test_home_form_controls_have_programmatic_labels_and_native_upload_button():
     assert '<button type="button" class="file-dropzone" id="file-dropzone"' in html
     assert 'aria-describedby="dropzone-hint"' in html
     assert "dz.addEventListener('keydown'" not in js
+    assert 'multiple' in html.split('id="file-input"', 1)[1].split(">", 1)[0]
+    assert 'for="pdf-bundle-title"' in html
 
 
 def test_shared_shell_uses_design_tokens_without_layout_transitions():

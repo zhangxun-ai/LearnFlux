@@ -280,19 +280,42 @@
                     </div>
                     <input type="file" id="file-input"
                            accept="audio/*,video/*,.mp3,.m4a,.wav,.aac,.flac,.mp4,.ts,.mov,.mkv,.webm,.avi,.m4v,.txt,.md,.markdown,.csv,.log,.html,.htm,.pdf,.docx"
-                           hidden>
+                           multiple hidden>
                     <button type="button" class="file-dropzone" id="file-dropzone" aria-describedby="dropzone-hint">
                         <div class="dropzone-icon" aria-hidden="true">+</div>
-                        <div class="dropzone-title">点击或将文件拖拽至此处</div>
+                        <div class="dropzone-title">选择或拖入本地文件</div>
                         <div class="dropzone-sub">支持音视频、PDF、DOCX、Markdown 及纯文本</div>
-                        <div class="dropzone-badge" id="dropzone-hint">选择后确认文件，再开始学习；PDF 需包含可复制文字。</div>
+                        <div class="dropzone-badge" id="dropzone-hint">可多选含可复制文字的 PDF，逐篇或合并解读。</div>
                     </button>
                     <div class="study-file-selection" id="file-selection" hidden>
-                        <div class="study-file-summary">
-                            <strong id="selected-file-name"></strong>
-                            <span id="selected-file-details"></span>
+                        <div class="study-file-selection-head">
+                            <div class="study-file-summary">
+                                <strong id="selected-file-name"></strong>
+                                <span id="selected-file-details"></span>
+                            </div>
+                            <button type="button" class="study-text-action" id="file-remove">移除</button>
                         </div>
-                        <button type="button" class="study-text-action" id="file-remove">移除</button>
+                        <ol id="selected-pdf-list" class="study-pdf-list" hidden></ol>
+                        <fieldset id="pdf-reading-modes" class="study-pdf-modes" hidden>
+                            <legend class="form-label">解读方式</legend>
+                            <div class="study-pdf-mode-grid">
+                                <label class="study-pdf-mode">
+                                    <input type="radio" name="pdf-reading-mode" value="separate">
+                                    <span><strong>逐篇解读</strong><small>每份文件单独生成解读</small></span>
+                                    <span id="pdf-separate-count" class="study-pdf-mode-count"></span>
+                                </label>
+                                <label class="study-pdf-mode">
+                                    <input type="radio" name="pdf-reading-mode" value="merged">
+                                    <span><strong>合并解读</strong><small>所有文件合成一篇解读</small></span>
+                                    <span class="study-pdf-mode-count">1 条学习记录</span>
+                                </label>
+                            </div>
+                        </fieldset>
+                        <div id="pdf-bundle-options" class="study-pdf-options" hidden>
+                            <label class="form-label" for="pdf-bundle-title">合并标题（选填）</label>
+                            <input type="text" class="form-input" id="pdf-bundle-title"
+                                   maxlength="160" placeholder="输入本次合读的标题">
+                        </div>
                     </div>
                     <p class="study-cloud-note" id="file-cloud-note" role="status" hidden>提交后先查看费用估算，确认后才会调用云端转录服务。</p>
                     <div class="study-file-actions" id="file-actions" hidden>

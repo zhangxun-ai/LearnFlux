@@ -194,4 +194,8 @@ node tests/frontend/timezone_behavior.cjs
 
 ## 历史记录清理
 
-`uv run --extra dev pytest tests/unit/test_history_removal.py tests/unit/test_history_delete_client.py tests/unit/test_history_browser_behavior.py tests/unit/test_transcription_control_store.py -q` 使用临时数据库或浏览器行为模型，覆盖单条 / 批量移除、归属校验、整批失败不写入、重复提交共用结果链接、刷新与分页、会话缓存失效、取消及失败保留。首页行为可单独运行 `node tests/frontend/home_history_removal_behavior.cjs`。删除确认由两个页面共用 `history-confirm.js` / `history-confirm.css`，使用原生 dialog 焦点隔离、自定义外观和异步确认；默认聚焦取消，Esc、取消和遮罩点击均不得提交删除。历史删除通过 `/api/audit/history/remove` 保存按用户、任务编号隔离的可见性状态，保留解析结果、原始文件和审计记录；与旧的任务及共享缓存清理接口不同。
+`uv run --extra dev pytest tests/unit/test_history_removal.py tests/unit/test_history_delete_client.py tests/unit/test_history_browser_behavior.py tests/unit/test_transcription_control_store.py -q` 使用临时数据库或浏览器行为模型，覆盖单条 / 批量移除、归属校验、整批失败不写入、重复提交共用结果链接、刷新与分页、会话缓存失效、取消及失败保留。首页行为可单独运行 `node tests/frontend/home_history_removal_behavior.cjs`。删除确认由两个页面共用 `history-confirm.js` / `history-confirm.css`，使用原生 dialog 焦点隔离、自定义外观和异步确认；默认聚焦取消，Esc、取消和遮罩点击均不得提交删除。历史删除通过 `/api/audit/history/remove` 保存按用户、任务编号隔离的可见性状态，保留解析结果、原始文件和审计记录；旧的 `DELETE /api/task/{task_id}` 返回 410。回归检查验证同源任务（包括仍在运行的任务）和缓存均保留。
+
+## 草稿保存与下载续传
+
+`uv run --extra dev pytest tests/unit/test_focus_journal_assets.py tests/unit/test_download_improvement.py -q` 使用可控的前端计时器和模拟下载响应，覆盖日记切换日期或类型、复盘保存顺序和失败保留，以及通用下载断流后返回 206、完整 200、无效范围和同名文件。

@@ -78,6 +78,27 @@ def test_remove_only_selected_duplicate_and_preserve_results_after_reopen(histor
     reopened.close()
 
 
+def test_retired_delete_preserves_shared_result_and_active_task(history_app):
+    client, manager, _, _ = history_app
+    url = "https://example.com/shared"
+    done = manager.create_task(url=url, platform="generic", media_id="shared", owner_user_id="alice")
+    active = manager.create_task(url=url, platform="generic", media_id="shared", owner_user_id="alice")
+    manager.update_task_status(done["task_id"], "success")
+    manager.update_task_status(active["task_id"], "processing")
+    cache = manager.save_cache(
+        platform="generic", url=url, media_id="shared", use_speaker_recognition=False,
+        transcript_data="Shared transcript", transcript_type="capswriter",
+    )
+
+    response = client.delete(f"/api/task/{done['task_id']}")
+
+    assert response.status_code == 410
+    assert manager.get_task_by_id(done["task_id"])["status"] == "success"
+    assert manager.get_task_by_id(active["task_id"])["status"] == "processing"
+    assert manager.get_cache(platform="generic", media_id="shared")["transcript_data"] == "Shared transcript"
+    assert cache["transcript_file"]
+
+
 def test_batch_authorizes_all_before_writing_and_keeps_owner_isolation(history_app):
     client, manager, _, user = history_app
     first, second, foreign = create_task(manager), create_task(manager), create_task(manager, "bob")

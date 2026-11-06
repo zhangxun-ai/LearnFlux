@@ -518,21 +518,6 @@ class APIManager {
         }
         return data;
     }
-
-    static async deleteTask(taskId) {
-        await requireManagementSession('输入管理口令后继续删除这条任务记录。');
-        const token = StorageManager.get(APP_CONFIG.STORAGE_KEYS.BEARER_TOKEN);
-
-        const response = await fetch(`/api/task/${encodeURIComponent(taskId)}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${token}` },
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            throw new Error(data.message || data.detail || `HTTP ${response.status}`);
-        }
-        return data;
-    }
 }
 
 let taskHistoryServerSyncPromise = null;

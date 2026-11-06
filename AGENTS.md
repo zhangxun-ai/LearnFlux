@@ -79,7 +79,9 @@ For new social-media data features, first evaluate TikHub REST APIs for determin
 
 ## Web Shell
 
-History cleanup uses `POST /api/audit/history/remove` and per-user `task_history_hidden` entries. Remove only selected task IDs from recent/history lists, counts and filters; preserve shared results, original files and audit logs. Never wire history cleanup to the destructive task/cache deletion endpoint. Offline checks are listed under history cleanup in `tests/README.md`.
+History cleanup uses `POST /api/audit/history/remove` and per-user `task_history_hidden` entries. Remove only selected task IDs from recent/history lists, counts and filters, and preserve shared results, original files and audit logs. The retired `DELETE /api/task/{task_id}` returns 410. Offline checks are listed under history cleanup in `tests/README.md`.
+
+For the personal local workflow, verify that the Mac browser opens existing history through automatic loopback login and that the owner's iPhone shortcut can still submit to `POST /api/transcribe`. Both entries use the same owner identity. See [the mobile shortcut guide](docs/guides/mobile-shortcut.md).
 
 New-install setup uses `scripts/init_config.py`: preserve existing configuration, generate a unique token, and default to loopback. Bootstrap defaults to text learning; media, local Whisper, OCR and dev dependencies are optional. Public documentation captures use `scripts/capture_readme.py` and the isolated public-source and authored fixtures in `scripts/readme_demo.py` and `scripts/readme_cases.py`, never the live application database or configuration. Capture provenance is in `docs/images/readme-20261103-cases/README.md`; user-provided local screenshots are documented separately in `docs/images/readme-20261103-real/README.md` and must not be overwritten by demo captures.
 

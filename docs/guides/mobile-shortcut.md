@@ -49,7 +49,8 @@
 ## 后台运行与验证
 
 - macOS 使用 LaunchAgent 管理服务；`RunAtLoad` 表示登录后启动，`KeepAlive` 用于进程退出后重启。复用已有启动项，避免重复监听同一端口。
-- VPN 虚拟网卡可能影响隧道出站连接。遇到 QUIC 超时或 HTTP/2 TLS EOF 时，先排查网络；本机实测通过 HTTP/2 并绑定物理接口的 IPv4 地址可连接，启动脚本应读取当前地址，避免写死 DHCP 地址。不要关闭 TLS 校验或擅自修改全局 VPN 规则。
+- VPN 虚拟网卡可能影响隧道出站连接。遇到 QUIC 超时或 HTTP/2 TLS EOF 时，先排查网络。本机实测通过 HTTP/2 并绑定物理接口的 IPv4 地址可连接。采用这种配置时，启动脚本应在运行中检查出站地址，发现地址变化时退出旧连接，由 LaunchAgent 用当前地址重新启动。否则旧地址失效后，进程可能一直重试，无法触发 LaunchAgent 重启。保留 TLS 校验和全局 VPN 规则。
+- Apple Silicon Mac 可用 [隧道启动脚本](../../scripts/start_mobile_tunnel.sh)。脚本读取本机的 `~/.config/learnflux-mobile/tunnel.yml`，使用 Homebrew 安装的 `/opt/homebrew/bin/cloudflared`。用它更新已有 LaunchAgent 调用的启动脚本，保留原来的私有隧道配置与 `KeepAlive`。
 - 登录后自动启动不等于关机、合盖或休眠后仍在线。没有云端收件箱时，离线提交会失败，需要重新提交。
 - 依次验证：本地令牌鉴权、公网无凭据拒绝、公网有效请求受理、本地任务进入终态和结果可读、公网非收集路径返回 404。
 - 验证可以使用已有完整缓存的视频，避免额外下载或模型费用；需明确这验证的是公网提交及缓存处理链路，并非新视频转录质量。

@@ -275,6 +275,22 @@ class TestHistoryEndpoint:
         assert files["items"][0]["content_type"] == "file"
         assert videos["items"] == []
 
+    def test_saved_wechat_article_stays_in_post_filter(self, history_client):
+        client, setup = history_client
+        url = "https://mp.weixin.qq.com/s/ExampleArticle123"
+        _log(setup["audit_logger"], "wechat-article", video_url=url)
+        setup["insert_task"](
+            "wechat-article", "article-view", platform="weixin", url=url,
+            source_file_path="/tmp/saved-article.md",
+        )
+
+        posts = client.get("/api/audit/history?content_type=post").json()["data"]
+        files = client.get("/api/audit/history?content_type=file").json()["data"]
+
+        assert [item["task_id"] for item in posts["items"]] == ["wechat-article"]
+        assert posts["items"][0]["content_type"] == "post"
+        assert files["items"] == []
+
     def test_returns_completed_by_default(self, history_client):
         """Default status filter returns only completed tasks (LEFT JOIN match)."""
         client, setup = history_client

@@ -34,8 +34,11 @@ router = APIRouter(prefix="/api/audit", tags=["audit"])
 
 def _history_content_type(platform: str | None, title: str, source_file_path: str | None, video_url: str | None) -> str:
     """Group history inputs for the UI without adding a persisted schema field."""
-    if str(platform or "").lower() == "feishu":
+    platform = (platform or "").lower()
+    if platform == "feishu":
         return "file"
+    if platform in {"xiaohongshu", "twitter", "x", "weixin"}:
+        return "post"
     is_local_source = bool(source_file_path) or str(video_url or "").lower().startswith("local://")
     if is_local_source:
         filenames = [title or "", Path(source_file_path).name if source_file_path else ""]
@@ -45,8 +48,6 @@ def _history_content_type(platform: str | None, title: str, source_file_path: st
         )
         if not media_source:
             return "file"
-    if str(platform or "").lower() in {"xiaohongshu", "twitter", "x", "weixin"}:
-        return "post"
     return "video"
 
 
@@ -121,7 +122,7 @@ def _history_connection(cache_manager):
 
 def _history_records_cte(
     user_info: dict, api_key_masked: str, prefix: str, has_marks: bool,
-    has_hidden: bool = False,
+    has_hidden: bool,
 ) -> tuple[str, list]:
     """Use one owner-scoped, deduplicated record set for rows and metadata.
 
@@ -275,10 +276,10 @@ async def get_history(
         )
         type_sql = (
             "CASE WHEN LOWER(platform) = 'feishu' THEN 'file' "
+            "WHEN LOWER(platform) IN ('xiaohongshu', 'twitter', 'x', 'weixin') THEN 'post' "
             "WHEN (COALESCE(source_file_path, '') != '' OR "
             "LOWER(COALESCE(video_url, '')) LIKE 'local://%') "
             f"AND NOT ({suffixes}) THEN 'file' "
-            "WHEN LOWER(platform) IN ('xiaohongshu', 'twitter', 'x', 'weixin') THEN 'post' "
             "ELSE 'video' END"
         )
         conditions.append(f"({type_sql}) = ?")
@@ -404,7 +405,7 @@ async def get_filter_options(user_info: dict = Depends(verify_token)):
                 user_info, api_key_masked, prefix, has_marks, has_hidden
             )
             rows = conn.execute(
-                cte + "SELECT platform, author, wechat_webhook FROM history_records", parameters
+                cte + "SELECT platform, author FROM history_records", parameters
             ).fetchall()
         platform_counts = Counter(row[0] for row in rows)
         authors = Counter(row[1] for row in rows if row[1])

@@ -1,5 +1,7 @@
 # source_url 重构方案：改为 download_url
 
+> 历史设计记录。以下内容保留当时的接口和通知字段。当前用法见[来源链接与元数据覆盖](../features/source_url_and_metadata_override.md)，通知状态见[企业微信退役说明](../guides/wechat_notification.md)。
+
 ## 一、背景与问题
 
 ### 当前问题

@@ -39,7 +39,8 @@
 - [Gemini OpenAI 兼容模式](development/llm/gemini_openai_compat.md)。
 - [JSON 输出模式](development/llm/json_output.md)。
 - [结构化校对配置](development/llm/structured_calibration_guide.md)。
-- [并发处理](development/concurrency.md)、[日志](development/logging.md)、[风控](development/risk_control.md)和 [Web 视图](development/web_view.md)。
+- [并发处理](development/concurrency.md)、[日志](development/logging.md)、[通知文本处理](development/risk_control.md)和 [Web 结果页与学习页](development/web_view.md)。
+- [通知与企业微信退役说明](guides/notification.md)。
 - [复盘模块设计](review_module_plan.md)：数据模型、AI 候选与用户确认边界。
 
 过往方案、已完成设计和阶段性实施记录集中在 [`superpowers/`](superpowers/) 与 [`development/archive/`](development/archive/)。它们用于追溯背景；实际行为以当前代码、配置模板和测试为准。

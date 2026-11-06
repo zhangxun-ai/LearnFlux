@@ -40,7 +40,7 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户管理口令）�
   "url": "https://...",                        // 必填
   "use_speaker_recognition": false,            // 可选，默认 false
   "feishu_webhook": "https://open.feishu.cn/...", // 可选，飞书 webhook
-  "download_url": "https://direct-link.mp4",   // 可选，绕过平台解析
+  "download_url": "https://cdn.example.com/video.mp4", // 可选，公开媒体直链，url 仍用于识别来源
   "metadata_override": {                       // 可选
     "title": "...",        // ≤ 200 字
     "author": "...",       // ≤ 200 字
@@ -140,7 +140,7 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户管理口令）�
 | `platform` | `youtube` / `bilibili` / `douyin` / `xiaohongshu` / `xiaoyuzhou` |
 | `author` | 频道/作者名（支持逗号分隔多选） |
 | `status` | `success` / `failed` / `processing` |
-| `webhook` | webhook URL |
+| `webhook` | 旧客户端的历史记录精确过滤参数 |
 | `q` | 关键词（命中标题/作者/内容） |
 | `limit` | 默认 20，上限 10000 |
 | `offset` | 分页偏移 |
@@ -172,19 +172,19 @@ token 可能是 `config.jsonc` 中 `api.auth_token`（单用户管理口令）�
 }
 ```
 
-注意：字段名是 `items`（不是 `tasks`），时间字段是 `request_time` 且为本地时间字符串。
+历史记录位于 `items`。`wechat_webhook` 为兼容旧客户端返回 `null`。
 
 ## GET /api/audit/filter-options
 
-返回可选的平台/作者/webhook 集合，用于 UI 下拉或参数校验：
+返回平台和作者的筛选选项。`webhooks` 为兼容旧客户端返回空数组。
 
 ```json
 {
   "code": 200,
   "data": {
-    "platforms": ["youtube", "bilibili", ...],
-    "authors": [...],
-    "webhooks": [...]
+    "platforms": ["youtube", "bilibili"],
+    "authors": ["频道名称"],
+    "webhooks": []
   }
 }
 ```

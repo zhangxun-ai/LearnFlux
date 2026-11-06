@@ -73,10 +73,10 @@ curl -X POST https://your-domain.com/api/transcribe \
 |------|------|------|------|
 | `url` | string | 是 | 视频/音频平台链接，同时用于元数据解析、缓存去重和生成 view_token |
 | `use_speaker_recognition` | bool | 否 | 是否启用说话人识别（FunASR），默认 `false`（普通转录走 CapsWriter） |
-| `download_url` | string | 否 | 自定义直链下载地址；提供后跳过平台解析，`url` 仅用于取元数据 |
+| `download_url` | string | 否 | 公开 HTTP(S) 媒体直链，用于下载，`url` 仍用于识别来源和读取元数据 |
 | `metadata_override` | object | 否 | 覆盖/补充元数据，见下方 |
 
-`metadata_override` 字段（平台解析失败时作为覆盖，解析成功时作为补充）：
+`metadata_override` 的非空字段用于补充或覆盖同名平台元数据。媒体直链和来源链接的使用方式见[来源链接与元数据覆盖](../../features/source_url_and_metadata_override.md)。
 
 | 子参数 | 类型 | 说明 |
 |--------|------|------|

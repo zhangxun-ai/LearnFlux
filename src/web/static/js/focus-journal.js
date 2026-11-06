@@ -1,6 +1,8 @@
 (function () {
     'use strict';
 
+    const LOCAL_DRAFT_PREFIX = 'vta_focus_studio_journal_draft:';
+    const LOCAL_DRAFT_MIGRATED_KEY = 'vta_focus_studio_journal_draft_migrated';
     const LOCAL_TEXT_KEY = 'vta_focus_studio_text';
     const LOCAL_SAVED_AT_KEY = 'vta_focus_studio_saved_at';
 
@@ -17,9 +19,11 @@
         date: todayISO(),
         month: todayISO().slice(0, 7),
         entryType: 'daily',
+        drafts: new Map(),
+        savesInFlight: new Set(),
         saveTimer: null,
         closeTimer: null,
-        loadingEntry: false,
+        entryLoad: 0,
         historyLoaded: false
     };
 
@@ -105,10 +109,10 @@
         if (els.typeSelect) els.typeSelect.value = state.entryType;
     }
 
-    function titleFromBody(body) {
+    function titleFromBody(body, date = state.date, type = state.entryType) {
         const line = String(body || '').split('\n').map((item) => item.trim()).find(Boolean);
         if (line) return line.slice(0, 80);
-        return state.date + ' ' + (TYPE_LABELS[state.entryType] || '记录');
+        return date + ' ' + (TYPE_LABELS[type] || '记录');
     }
 
     function shortBody(body) {
@@ -116,73 +120,141 @@
         return text.length > 54 ? text.slice(0, 54) + '...' : text;
     }
 
-    function saveLocalSnapshot() {
-        localStorage.setItem(LOCAL_TEXT_KEY, els.editor.value);
-        localStorage.setItem(LOCAL_SAVED_AT_KEY, new Date().toISOString());
+    function entryKey() {
+        return state.date + ':' + state.entryType;
+    }
+
+    function readDraft(key) {
+        if (state.drafts.has(key)) return state.drafts.get(key);
+        try {
+            const draft = JSON.parse(localStorage.getItem(LOCAL_DRAFT_PREFIX + key));
+            if (draft) state.drafts.set(key, draft);
+            return draft;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function clearDraft(key, draft) {
+        state.drafts.delete(key);
+        try {
+            const storageKey = LOCAL_DRAFT_PREFIX + key;
+            if (localStorage.getItem(storageKey) === JSON.stringify(draft)) {
+                localStorage.removeItem(storageKey);
+            }
+        } catch (error) {}
+    }
+
+    function captureDraft() {
+        const body = els.editor.value;
+        const draft = {
+            entry_date: state.date,
+            entry_type: state.entryType,
+            title: titleFromBody(body),
+            body
+        };
+        const key = entryKey();
+        state.drafts.set(key, draft);
+        try {
+            localStorage.setItem(LOCAL_DRAFT_PREFIX + key, JSON.stringify(draft));
+        } catch (error) {}
     }
 
     function scheduleSave() {
-        if (state.loadingEntry) return;
-        saveLocalSnapshot();
-        if (state.saveTimer) clearTimeout(state.saveTimer);
-        state.saveTimer = setTimeout(saveCurrentEntry, 700);
+        state.entryLoad++;
+        const key = entryKey();
+        captureDraft();
+        setStatus('Local');
+        clearTimeout(state.saveTimer);
+        state.saveTimer = setTimeout(() => {
+            state.saveTimer = null;
+            saveEntry(key);
+        }, 700);
     }
 
-    async function saveCurrentEntry() {
-        if (!els.editor) return;
-        if (!getToken()) {
-            setStatus('Local');
-            return;
-        }
-        const body = els.editor.value || '';
+    async function saveEntry(key) {
+        const draft = state.drafts.get(key);
+        if (!draft || state.savesInFlight.has(key)) return;
+        state.savesInFlight.add(key);
         try {
+            await window.LearnFluxAuth?.ready;
             const entry = await apiJSON('/api/journal/entries', {
                 method: 'POST',
-                body: JSON.stringify({
-                    entry_date: state.date,
-                    entry_type: state.entryType,
-                    title: titleFromBody(body),
-                    body
-                })
+                body: JSON.stringify(draft)
             });
-            const clock = formatClock(entry && entry.updated_at);
-            setStatus(clock ? 'Synced ' + clock : 'Synced');
             state.historyLoaded = false;
+            if (state.drafts.get(key) !== draft) return;
+            clearDraft(key, draft);
+            if (key === entryKey()) {
+                const clock = formatClock(entry?.updated_at);
+                setStatus(clock ? 'Synced ' + clock : 'Synced');
+            }
         } catch (error) {
-            setStatus(error.message === 'NO_TOKEN' ? 'Local' : 'Offline');
+            if (key === entryKey() && state.drafts.get(key) === draft) {
+                setStatus(error.message === 'NO_TOKEN' ? 'Local' : 'Offline');
+            }
+        } finally {
+            state.savesInFlight.delete(key);
+            const pending = state.drafts.get(key);
+            if (pending && pending !== draft && (key !== entryKey() || state.saveTimer === null)) {
+                saveEntry(key);
+            }
         }
     }
 
-    async function loadCurrentEntry() {
-        if (!els.editor) return;
+    async function loadCurrentEntry(legacySavedAt = null) {
+        const load = ++state.entryLoad;
+        const key = entryKey();
+        const draft = readDraft(key);
         updateMeta();
-        if (!getToken()) {
+        els.editor.value = draft?.body ?? '';
+        if (draft && legacySavedAt === null) {
             setStatus('Local');
             return;
         }
-        state.loadingEntry = true;
+        setStatus('Loading');
+        const params = new URLSearchParams({
+            entry_date: state.date,
+            entry_type: state.entryType
+        });
         try {
-            const params = new URLSearchParams({
-                entry_date: state.date,
-                entry_type: state.entryType
-            });
+            await window.LearnFluxAuth?.ready;
+            if (load !== state.entryLoad) return;
             const entry = await apiJSON('/api/journal/entry?' + params.toString());
+            if (load !== state.entryLoad) return;
+            if (draft) {
+                // The pre-journal fallback had one draft without a date or type.
+                if (!entry || legacySavedAt > LearnFluxTime.parse(entry.updated_at)) {
+                    setStatus('Local');
+                    return;
+                }
+                clearDraft(key, draft);
+            }
             if (entry && typeof entry.body === 'string') {
                 els.editor.value = entry.body;
-                localStorage.setItem(LOCAL_TEXT_KEY, entry.body);
-                if (entry.updated_at) {
-                    localStorage.setItem(LOCAL_SAVED_AT_KEY, entry.updated_at);
-                }
                 const clock = formatClock(entry.updated_at);
                 setStatus(clock ? 'Synced ' + clock : 'Synced');
-            } else if (!els.editor.value.trim()) {
+            } else {
                 setStatus('Ready');
             }
         } catch (error) {
-            setStatus(error.message === 'NO_TOKEN' ? 'Local' : 'Offline');
-        } finally {
-            state.loadingEntry = false;
+            if (load === state.entryLoad) {
+                setStatus(error.message === 'NO_TOKEN' ? 'Local' : 'Offline');
+            }
         }
+    }
+
+    function selectEntry(date, type) {
+        if (date === state.date && type === state.entryType) return;
+        if (state.saveTimer !== null) {
+            clearTimeout(state.saveTimer);
+            state.saveTimer = null;
+            saveEntry(entryKey());
+        }
+        state.date = date;
+        state.month = date.slice(0, 7);
+        state.entryType = type;
+        loadCurrentEntry();
     }
 
     async function loadHistory() {
@@ -211,7 +283,7 @@
             const entryDate = escapeHTML(entry.entry_date);
             const entryType = escapeHTML(entry.entry_type);
             const label = escapeHTML(TYPE_LABELS[entry.entry_type] || entry.entry_type);
-            const title = escapeHTML(entry.title || titleFromBody(entry.body));
+            const title = escapeHTML(entry.title || titleFromBody(entry.body, entry.entry_date, entry.entry_type));
             const preview = escapeHTML(shortBody(entry.body));
             return '<button type="button" class="journal-history-card" ' +
                 'data-entry-date="' + entryDate + '" data-entry-type="' + entryType + '">' +
@@ -343,11 +415,8 @@
             els.editor.addEventListener('input', scheduleSave);
         }
         if (els.typeSelect) {
-            els.typeSelect.addEventListener('change', async () => {
-                await saveCurrentEntry();
-                state.entryType = els.typeSelect.value || 'daily';
-                els.editor.value = '';
-                loadCurrentEntry();
+            els.typeSelect.addEventListener('change', () => {
+                selectEntry(state.date, els.typeSelect.value || 'daily');
             });
         }
         const journalTabs = Array.from(els.tabs);
@@ -380,10 +449,7 @@
             els.historyList.addEventListener('click', (event) => {
                 const card = event.target.closest('.journal-history-card');
                 if (!card) return;
-                state.date = card.dataset.entryDate || state.date;
-                state.month = state.date.slice(0, 7);
-                state.entryType = card.dataset.entryType || 'daily';
-                loadCurrentEntry();
+                selectEntry(card.dataset.entryDate || state.date, card.dataset.entryType || 'daily');
             });
         }
         document.querySelectorAll('[data-review-range]').forEach((button) => {
@@ -394,20 +460,35 @@
                 closePanel();
             }
         });
-        window.addEventListener('beforeunload', () => {
-            if (state.saveTimer) {
-                clearTimeout(state.saveTimer);
-                saveLocalSnapshot();
-            }
-        });
     }
 
     function init() {
         bindElements();
         if (!els.editor) return;
-        updateMeta();
+        els.editor.dataset.journalAutosave = 'true';
+        const handoff = els.editor.dataset.focusHandoff;
+        let legacyText = '';
+        let legacySavedAt = null;
+        try {
+            if (!localStorage.getItem(LOCAL_DRAFT_MIGRATED_KEY) && !readDraft(entryKey())) {
+                if (handoff) {
+                    legacyText = localStorage.getItem(LOCAL_TEXT_KEY) || '';
+                } else if (els.editor.value) {
+                    legacySavedAt = LearnFluxTime.parse(localStorage.getItem(LOCAL_SAVED_AT_KEY)) || 0;
+                    captureDraft();
+                }
+            }
+            localStorage.setItem(LOCAL_DRAFT_MIGRATED_KEY, '1');
+        } catch (error) {}
+        if (handoff) {
+            const previous = readDraft(entryKey())?.body ?? legacyText;
+            if (previous && previous !== els.editor.value) {
+                els.editor.value = previous + '\n\n' + els.editor.value;
+            }
+            captureDraft();
+        }
         bindEvents();
-        loadCurrentEntry();
+        loadCurrentEntry(legacySavedAt);
     }
 
     document.addEventListener('DOMContentLoaded', init);

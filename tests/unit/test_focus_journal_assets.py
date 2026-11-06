@@ -56,6 +56,18 @@ def test_focus_studio_contains_lightweight_journal_ui():
     assert "/static/js/focus-journal.js" in sw
 
 
+def test_journal_and_review_autosave_keep_latest_drafts():
+    result = subprocess.run(
+        ["node", "tests/frontend/autosave_drafts_behavior.cjs"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_focus_editor_has_a_subtle_scrollbar_and_reserved_ui_space():
     css = (PROJECT_ROOT / "src/web/static/css/focus-studio.css").read_text(encoding="utf-8")
 

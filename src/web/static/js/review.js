@@ -187,6 +187,9 @@
         preferences: {newbie_mode: true, week_start_day: 0, obsidian_root: '复盘'},
         daily: null,
         dailyEventId: null,
+        dailyDrafts: new Map(),
+        dailyLoad: 0,
+        dailyWrites: 0,
         weekly: null,
         weeklyStep: 1,
         weeklyDrafts: new Map(),
@@ -366,19 +369,25 @@
     function draftKey(id) { return `${DRAFT_PREFIX}${id}`; }
 
     function readDraft(item) {
+        const pending = state.dailyDrafts.get(item.id);
+        if (pending) return {...item, ...pending, _draft: true};
         try {
             const draft = JSON.parse(localStorage.getItem(draftKey(item.id)) || 'null');
             const serverTime = LearnFluxTime.parse(item.updated_at || 0) || 0;
-            if (draft?.saved_at > serverTime && draft.payload) return {...item, ...draft.payload, _draft: true};
+            if (draft?.payload && (draft.pending || draft.saved_at > serverTime)) {
+                return {...item, ...draft.payload, _draft: true};
+            }
         } catch (error) {}
         return item;
     }
 
     function writeDraft(id, payload) {
-        try { localStorage.setItem(draftKey(id), JSON.stringify({saved_at: Date.now(), payload})); } catch (error) {}
+        state.dailyDrafts.set(id, payload);
+        try { localStorage.setItem(draftKey(id), JSON.stringify({saved_at: Date.now(), pending: true, payload})); } catch (error) {}
     }
 
     function clearDraft(id) {
+        state.dailyDrafts.delete(id);
         try { localStorage.removeItem(draftKey(id)); } catch (error) {}
     }
 
@@ -506,7 +515,13 @@
     }
 
     async function loadDaily() {
-        state.daily = await api(`/api/reviews/daily-events?date=${encodeURIComponent(state.date)}`);
+        const date = state.date;
+        const request = ++state.dailyLoad;
+        const writes = state.dailyWrites;
+        const daily = await api(`/api/reviews/daily-events?date=${encodeURIComponent(date)}`);
+        if (request !== state.dailyLoad || state.tab !== 'daily' || date !== state.date) return;
+        if (writes !== state.dailyWrites) return loadDaily();
+        state.daily = daily;
         state.daily.items = state.daily.items.map(readDraft);
         if (!state.daily.items.some((item) => item.id === state.dailyEventId)) {
             state.dailyEventId = state.daily.items[0]?.id || null;
@@ -660,7 +675,7 @@
         if (target) selectDailyEvent(target.id);
     }
 
-    function scheduleDailySave(card) {
+    function captureDailyDraft(card) {
         const id = card.dataset.eventId;
         const payload = collectDailyCard(card);
         writeDraft(id, payload);
@@ -670,29 +685,59 @@
         }
         card.querySelector('[data-card-status]').textContent = '本地草稿';
         setSaveState('saving', '正在自动保存…');
-        clearTimeout(state.saveTimers.get(id));
-        state.saveTimers.set(id, setTimeout(() => saveDailyCard(card), 800));
+        return id;
     }
 
-    async function saveDailyCard(card) {
-        const id = card.dataset.eventId;
+    function scheduleDailySave(card) {
+        const id = captureDailyDraft(card);
+        clearTimeout(state.saveTimers.get(id));
+        state.saveTimers.set(id, setTimeout(() => {
+            state.saveTimers.delete(id);
+            saveDailyDraft(id);
+        }, 800));
+    }
+
+    function saveDailyCard(card) {
+        const id = captureDailyDraft(card);
         clearTimeout(state.saveTimers.get(id));
         state.saveTimers.delete(id);
-        const payload = collectDailyCard(card);
+        return saveDailyDraft(id);
+    }
+
+    async function saveDailyDraft(id) {
+        const payload = state.dailyDrafts.get(id);
+        const saveId = draftVersionKey('daily', id);
+        if (!payload || state.savesInFlight.has(saveId)) return;
+        state.savesInFlight.add(saveId);
+        const visible = () => state.tab === 'daily' && state.dailyEventId === id;
         try {
             const data = await api(`/api/reviews/daily-events/${encodeURIComponent(id)}`, {
                 method: 'PATCH', body: JSON.stringify(payload),
             });
+            state.dailyWrites++;
+            if (state.dailyDrafts.get(id) !== payload) return;
             const updated = data.record;
-            const index = state.daily.items.findIndex((item) => item.id === id);
+            const index = state.daily?.items.findIndex((item) => item.id === id) ?? -1;
             if (index >= 0) state.daily.items[index] = updated;
             clearDraft(id);
-            card.querySelector('[data-card-status]').textContent = `已保存 ${formatTime(updated.updated_at)}`;
-            setSaveState('saved', `自动保存 · ${syncLabel(data.sync)} · ${formatTime(updated.updated_at)}`);
+            if (visible()) {
+                const status = elements.view.querySelector('[data-card-status]');
+                if (status) status.textContent = `已保存 ${formatTime(updated.updated_at)}`;
+                setSaveState('saved', `自动保存 · ${syncLabel(data.sync)} · ${formatTime(updated.updated_at)}`);
+            }
         } catch (error) {
-            card.querySelector('[data-card-status]').textContent = '保存失败，草稿仍在本机';
-            setSaveState('error', '自动保存失败 · 本地草稿已保留');
-            toast(error.message);
+            if (state.dailyDrafts.get(id) === payload && visible()) {
+                const status = elements.view.querySelector('[data-card-status]');
+                if (status) status.textContent = '保存失败，草稿仍在本机';
+                setSaveState('error', '自动保存失败 · 本地草稿已保留');
+                toast(error.message);
+            }
+        } finally {
+            state.savesInFlight.delete(saveId);
+            const pending = state.dailyDrafts.get(id);
+            if (pending && pending !== payload && !state.saveTimers.has(id)) {
+                saveDailyDraft(id);
+            }
         }
     }
 
@@ -723,6 +768,8 @@
             await api(`/api/reviews/daily-events/${encodeURIComponent(id)}`, {method: 'DELETE'});
             state.daily.items = state.daily.items.filter((item) => item.id !== id);
             state.dailyEventId = state.daily.items[0]?.id || null;
+            clearTimeout(state.saveTimers.get(id));
+            state.saveTimers.delete(id);
             clearDraft(id);
             renderDaily();
             setSaveState('saved', '事件已删除');

@@ -907,8 +907,11 @@
             const payload = JSON.parse(rawInbox);
             const incomingText = typeof payload.text === 'string' ? payload.text : '';
             if (!incomingText.trim()) return savedText;
-            localStorage.setItem(STORAGE.text, incomingText);
-            localStorage.setItem(STORAGE.savedAt, new Date().toISOString());
+            if (!document.getElementById('journal-type-select')) {
+                localStorage.setItem(STORAGE.text, incomingText);
+                localStorage.setItem(STORAGE.savedAt, new Date().toISOString());
+            }
+            editor.dataset.focusHandoff = 'true';
             return incomingText;
         } catch (error) {
             console.error('Focus Studio inbox failed:', error);
@@ -980,9 +983,11 @@
             stage.removeAttribute('data-tools-open');
             toolsToggle.setAttribute('aria-expanded', 'false');
             toolsToggle.setAttribute('aria-label', '显示写作工具');
-            persistDraft();
+            if (!editor.dataset.journalAutosave) persistDraft();
         });
-        window.addEventListener('beforeunload', persistDraft);
+        window.addEventListener('beforeunload', () => {
+            if (!editor.dataset.journalAutosave) persistDraft();
+        });
     }
 
     function init() {

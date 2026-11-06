@@ -90,6 +90,8 @@ uv run --extra dev pytest tests/unit/test_cloud_progress_display.py tests/unit/t
 
 X 视频分流由 `test_twitter_video.py` 覆盖：帖子含视频、`/video/N`、引用视频、TikHub 两种媒体结构、纯文字帖、播放地址缺失、旧正文缓存隔离及本地/云端转写分流。全部离线模拟；云端流程验证停在费用确认前，不调用付费转写。
 
+`uv run --extra dev pytest tests/unit/test_weixin_post_fetcher.py tests/unit/test_wechat_channels_downloader.py -q` 离线验证公众号正文进入深度学习、同公众号文章的缓存标识独立，以及视频号下载器的原有流程。
+
 ```bash
 uv run --extra dev pytest tests/unit/test_twitter_video.py tests/unit/test_twitter_deep_learning.py tests/unit/test_twitter_post_fetcher.py
 ```

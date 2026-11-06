@@ -94,7 +94,7 @@
 .page-home .study-recent-note { margin: 14px 0 0; }
 .page-home .submit-hint[data-state="error"] { color: #9B382A; }
 .page-home .url-preview[data-single="true"] { display: none; }
-.page-home :is(.study-cloud-note, .study-file-selection, .study-file-actions, .study-pdf-list, .study-pdf-modes, #file-cancel, #study-draft-clear, #file-transcription-options)[hidden] { display: none; }
+.page-home :is(.study-cloud-note, .study-file-selection, .study-file-actions, .study-pdf-list, .study-pdf-modes, #file-cancel, #study-draft-clear, #file-transcription-options, #link-transcription-options)[hidden] { display: none; }
 
 @media (max-width: 700px) {
     .page-home .study-file-selection { padding: 12px; }

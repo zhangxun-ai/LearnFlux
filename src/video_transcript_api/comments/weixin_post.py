@@ -1,23 +1,16 @@
-"""Fetch a WeChat Official Account (公众号) article + 留言 via TikHub wechat_mp.
-
-Verified 2026-06-09 against a real article:
-- `fetch_mp_article_detail_json` -> data.title / data.author / data.content.article.full_text
-- `fetch_mp_article_comment_list` -> list of {content, nick_name, content_id, reply_new...}
-
-Returns the same shape as TwitterPost / XhsPost so it plugs into generate_post_insight.
-"""
+"""Fetch WeChat Official Account text and optional comments via TikHub."""
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
-from ..downloaders import create_downloader
-from ..utils.logging import setup_logger
+from ..tikhub import TikHubClient
+from ..utils.logging import load_config, setup_logger
 from .selector import CommentItem
 
 logger = setup_logger("weixin_post_fetcher")
 
-_ARTICLE_ENDPOINT = "/api/v1/wechat_mp/web/fetch_mp_article_detail_json"
-_COMMENTS_ENDPOINT = "/api/v1/wechat_mp/web/fetch_mp_article_comment_list"
+_ARTICLE_ENDPOINT = "/api/v1/wechat_mp/v2/fetch_article_detail_h5"
+_COMMENTS_ENDPOINT = "/api/v1/wechat_mp/v2/fetch_article_comments"
 
 
 @dataclass(frozen=True)
@@ -32,29 +25,24 @@ class WeixinPost:
 
 
 class WeixinPostFetcher:
-    """Fetch a 公众号 article body + 留言 for post insight."""
+    """Share article acquisition between deep learning and post insight."""
 
-    def __init__(self, downloader_factory: Callable[[str], Any] = create_downloader):
-        self.downloader_factory = downloader_factory
+    def __init__(self, client: TikHubClient | None = None):
+        self.client = client if client is not None else TikHubClient(load_config().get("tikhub"))
 
     def fetch(self, url: str, media_id: str = "", max_comments: int = 80) -> WeixinPost:
-        downloader = self.downloader_factory(url)
-        data = self._data(downloader.make_api_request(_ARTICLE_ENDPOINT, {"url": url}))
+        data = self._data(self.client.post(_ARTICLE_ENDPOINT, {"url": url, "raw": False}, min_timeout=30))
+        article = data.get("content")
+        if not isinstance(article, dict):
+            raise ValueError("公众号接口未返回文章正文")
 
-        title = (self._dig(data, ("title",)) or "").strip()
-        author = (
-            self._dig(data, ("author",))
-            or self._dig(data, ("content", "article", "author"))
-            or "unknown"
-        ).strip()
-        full_text = (self._dig(data, ("content", "article", "full_text")) or "").strip()
-        if not full_text:
-            full_text = self._join_sections(data)
+        title = self._text(article.get("title"))
+        author = self._text(article.get("author")) or self._text(article.get("nick_name")) or "unknown"
+        full_text = self._text(article.get("content_text"))
+        if not full_text or article.get("_content_type") in {"unknown", "video"}:
+            raise ValueError("公众号文章没有可读取的正文")
 
-        if not full_text and not title:
-            raise ValueError("无法获取公众号文章正文")
-
-        comments = self._fetch_comments(downloader, url, max_comments)
+        comments = self._fetch_comments(url, article.get("comment_id"), max_comments) if max_comments > 0 else []
         logger.info(
             f"Fetched weixin article: author=@{author}, "
             f"text_len={len(full_text)}, comments={len(comments)}"
@@ -70,45 +58,28 @@ class WeixinPostFetcher:
     # --- helpers -----------------------------------------------------------
 
     @staticmethod
-    def _data(response: Any) -> Any:
+    def _data(response: Any) -> dict:
         if not isinstance(response, dict):
             raise ValueError("公众号 API 返回无效响应")
-        if response.get("code") not in (None, 0, 200) and not response.get("success", True):
-            raise ValueError(response.get("message") or response.get("msg") or "公众号 API 返回错误")
-        return response.get("data", response)
+        if response.get("code") not in (None, 0, 200) or response.get("success") is False:
+            raise ValueError(response.get("message_zh") or response.get("message") or "公众号 API 返回错误")
+        data = response.get("data")
+        if not isinstance(data, dict):
+            raise ValueError("公众号 API 未返回有效内容")
+        return data
 
     @staticmethod
-    def _dig(obj: Any, path: tuple[str, ...]) -> Any:
-        cur = obj
-        for key in path:
-            if not isinstance(cur, dict):
-                return None
-            cur = cur.get(key)
-        return cur if isinstance(cur, str) else (cur if cur is not None else None)
+    def _text(value: Any) -> str:
+        return value.strip() if isinstance(value, str) else ""
 
-    def _join_sections(self, data: Any) -> str:
-        """Fallback: assemble body from content.article.sections[].text."""
-        article = data.get("content", {}).get("article", {}) if isinstance(data, dict) else {}
-        sections = article.get("sections") if isinstance(article, dict) else None
-        if not isinstance(sections, list):
-            return ""
-        parts = []
-        for sec in sections:
-            if isinstance(sec, dict):
-                t = sec.get("title")
-                body = sec.get("text")
-                if isinstance(t, str) and t.strip():
-                    parts.append(t.strip())
-                if isinstance(body, str) and body.strip():
-                    parts.append(body.strip())
-        return "\n\n".join(parts)
-
-    def _fetch_comments(self, downloader: Any, url: str, max_comments: int) -> list[CommentItem]:
-        """Best-effort 留言 via fetch_mp_article_comment_list; [] on failure."""
+    def _fetch_comments(self, url: str, comment_id: Any, max_comments: int) -> list[CommentItem]:
+        """Fetch the first page of selected comments, if available."""
         try:
-            response = downloader.make_api_request(_COMMENTS_ENDPOINT, {"url": url})
-            data = response.get("data", response) if isinstance(response, dict) else response
-            raw = data if isinstance(data, list) else self._find_comment_list(data)
+            payload = {"url": url}
+            if comment_id:
+                payload["comment_id"] = str(comment_id)
+            data = self._data(self.client.post(_COMMENTS_ENDPOINT, payload))
+            raw = self._find_comment_list(data)
             items: list[CommentItem] = []
             for rank, c in enumerate(raw[:max_comments]):
                 if not isinstance(c, dict):

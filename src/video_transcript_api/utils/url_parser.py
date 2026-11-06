@@ -10,13 +10,39 @@ import hashlib
 import requests
 from dataclasses import dataclass
 from typing import Optional
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from .logging import setup_logger
 from .xiaohongshu_url import normalize_xiaohongshu_url, xiaohongshu_note_id, url_without_query
 from ..document_sources.feishu import parse_feishu_url
 
 # 创建日志记录器
 logger = setup_logger("url_parser")
+
+
+def weixin_article_id(url: str) -> str | None:
+    """Identify a specific article on the WeChat Official Accounts host."""
+    try:
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"} or parsed.hostname != "mp.weixin.qq.com":
+            return None
+    except ValueError:
+        return None
+
+    match = re.fullmatch(r"/s/([A-Za-z0-9_-]+)/?", parsed.path)
+    if match:
+        return match.group(1)
+    if parsed.path.rstrip("/") != "/s":
+        return None
+
+    params = parse_qs(parsed.query)
+    biz = params.get("__biz", [""])[0]
+    mid = params.get("mid", [""])[0]
+    idx = params.get("idx", ["1"])[0]
+    if biz and mid:
+        # One publisher can send multiple issues and multiple articles per issue.
+        identity = hashlib.sha256(f"{biz}\0{mid}\0{idx}".encode()).hexdigest()[:24]
+        return f"mp-{identity}"
+    return None
 
 
 @dataclass
@@ -85,10 +111,6 @@ class URLParser:
             # X / Twitter 推文链接：x.com 或 twitter.com 的 /<user>/status/<id>
             # 负向后顾 (?<!\w) 防止把 'x.com' 当作 netflix.com 等的子串而误判
             r'(?<!\w)(?:x|twitter)\.com/[^/]+/status/(\d+)',
-        ],
-        'weixin': [
-            r'mp\.weixin\.qq\.com/s/([A-Za-z0-9_\-]+)',  # /s/TOKEN 形式
-            r'mp\.weixin\.qq\.com/s\?[^\s]*?(?:__biz|mid)=([A-Za-z0-9_\-=%]+)',  # 查询参数形式
         ],
     }
 
@@ -242,6 +264,9 @@ class URLParser:
         document = parse_feishu_url(url)
         if document:
             return "feishu", document.media_id
+        article_id = weixin_article_id(url)
+        if article_id:
+            return "weixin", article_id
         for platform, patterns in self.PATTERNS.items():
             if platform == "xiaohongshu":
                 note_id = xiaohongshu_note_id(url)
@@ -296,6 +321,8 @@ class URLParser:
         Returns:
             str: 平台名称，无法识别时返回 'generic'
         """
+        if weixin_article_id(url):
+            return "weixin"
         for platform, patterns in self.PATTERNS.items():
             # 跳过短链接模式（避免误判）
             for pattern in patterns:

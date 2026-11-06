@@ -39,6 +39,7 @@ from ...utils.rendering import (
 from ...utils.timeutil import format_datetime_for_display, get_configured_timezone
 from ...utils.task_progress import build_progress, CLOUD_SUBMISSION_UNKNOWN_MESSAGE
 from ...document_sources.feishu import parse_feishu_url
+from ...utils.url_parser import weixin_article_id
 from ...collections.titles import source_display_title
 
 logger = get_logger()
@@ -203,7 +204,7 @@ def _decorate_source_link(view_data: Dict[str, Any]) -> None:
         return
     if _is_browser_source_url(url):
         view_data["source_link_url"] = url
-        view_data["source_link_label"] = "查看原文" if parse_feishu_url(url) else "查看原视频"
+        view_data["source_link_label"] = "查看原文" if parse_feishu_url(url) or weixin_article_id(url) else "查看原视频"
         return
     if not url.startswith("local://"):
         return
@@ -1410,9 +1411,11 @@ async def view_transcript(
         _decorate_title_and_tags(view_data)
 
         if view_data["status"] == "processing":
-            is_document = _is_local_document_view(view_data) or bool(parse_feishu_url(view_data.get("url") or ""))
+            source_url = view_data.get("url") or ""
+            is_weixin_article = bool(weixin_article_id(source_url))
+            is_document = is_weixin_article or _is_local_document_view(view_data) or bool(parse_feishu_url(source_url))
             if is_document and not view_data.get("title"):
-                view_data["title"] = _local_url_filename(view_data) or "本地文档"
+                view_data["title"] = "公众号文章" if is_weixin_article else (_local_url_filename(view_data) or "本地文档")
             return _no_store(
                 templates.TemplateResponse(
                     "processing.html",

@@ -120,7 +120,8 @@ function initializeTranscriptionStrategy() {
     const select = (value) => {
         inputs.forEach(input => { input.checked = input.value === value; });
         const cloudNote = document.getElementById('link-cloud-note');
-        if (cloudNote) cloudNote.hidden = value !== 'cloud';
+        const options = document.getElementById('link-transcription-options');
+        if (cloudNote) cloudNote.hidden = Boolean(options?.hidden) || value !== 'cloud';
     };
     select(strategy);
     inputs.forEach(input => input.addEventListener('change', () => {
@@ -1112,10 +1113,12 @@ function getSelectedURL() {
 function classifyContent(url) {
     let host = '';
     let path = '';
+    let params;
     try {
         const u = new URL(url);
         host = u.hostname.replace(/^www\./, '').toLowerCase();
         path = u.pathname;
+        params = u.searchParams;
     } catch (e) {
         return { type: 'unknown', platform: 'unknown', label: '未识别', action: '深度学习解析', soon: false };
     }
@@ -1130,9 +1133,12 @@ function classifyContent(url) {
         && /\/status\/\d+/.test(path)) {
         return { type: 'video', platform: 'twitter', label: '𝕏 帖子', action: '深度学习解析', soon: false };
     }
-    // 微信公众号文章：同上，入口决定产品能力。
-    if (host === 'mp.weixin.qq.com') {
-        return { type: 'video', platform: 'weixin', label: '微信公众号', action: '深度学习解析', soon: false };
+    if (host === 'mp.weixin.qq.com' && (/^\/s\/[A-Za-z0-9_-]+\/?$/.test(path)
+        || (/^\/s\/?$/.test(path) && params.get('__biz') && params.get('mid')))) {
+        return { type: 'article', platform: 'weixin', label: '公众号文章', action: '读取文章并解读', soon: false };
+    }
+    if (host === 'weixin.qq.com' && path.startsWith('/sph/')) {
+        return { type: 'video', platform: 'wechat_channels', label: '微信视频号', action: '深度学习解析', soon: false };
     }
     // 小红书内容
     if (host === 'xiaohongshu.com' || host === 'xhslink.com' || host === 'xhslink.cn') {
@@ -1157,7 +1163,7 @@ function submitLabelForUrl(url) {
 /** 历史状态徽章信息 */
 function statusInfo(status, type) {
     const s = (status || '').toString().toLowerCase();
-    if (type === 'post') return { cls: 'done', text: '解析完成' };
+    if (type === 'post' && !s) return { cls: 'done', text: '解析完成' };
     if (['done', 'completed', 'success', 'finished'].includes(s)) return { cls: 'done', text: '解析完成' };
     if (s === 'no_transcript') return { cls: 'failed', text: '无可转录内容' };
     if (s === 'canceled') return { cls: 'failed', text: '已取消' };
@@ -1906,11 +1912,21 @@ function syncMarkedHistoryFromServer(force = false) {
     return markedHistorySyncPromise;
 }
 
+function updateLinkTranscriptionOptions(isArticle) {
+    const options = document.getElementById('link-transcription-options');
+    if (options) options.hidden = isArticle;
+    const cloudNote = document.getElementById('link-cloud-note');
+    const strategy = document.querySelector('input[name="transcription-strategy"]:checked');
+    if (cloudNote) cloudNote.hidden = isArticle || strategy?.value !== 'cloud';
+}
+
 /** 更新识别横幅 + 视频专属选项可见性 + 按钮文案 */
 function updateDetection() {
     const banner = document.getElementById('detect-banner');
     const videoOpts = document.getElementById('video-options');
     const url = getSelectedURL();
+    const c = classifyContent(url);
+    updateLinkTranscriptionOptions(c.type === 'article');
 
     if (!url) {
         if (banner) banner.hidden = true;
@@ -1919,10 +1935,9 @@ function updateDetection() {
         return;
     }
 
-    const c = classifyContent(url);
     if (banner) {
         const variant = c.type === 'video' ? 'is-video'
-            : (c.type === 'post' ? (c.soon ? 'is-soon' : 'is-post') : 'is-unknown');
+            : (c.type === 'article' ? 'is-post' : 'is-unknown');
         banner.className = 'detect-banner ' + variant;
         banner.hidden = false;
         banner.innerHTML = '<span class="db-chip">' + escapeHtml(c.label) + '</span>'
@@ -2535,11 +2550,12 @@ async function submitTranscription(event) {
     }
 
     const selectedURL = getSelectedURL();
+    const isArticle = classifyContent(selectedURL).type === 'article';
 
     const speakerRecEl = document.getElementById('speaker-recognition');
-    const useSpeakerRecognition = speakerRecEl ? speakerRecEl.checked : false;
+    const useSpeakerRecognition = !isArticle && Boolean(speakerRecEl?.checked);
     const strategyEl = document.querySelector('input[name="transcription-strategy"]:checked');
-    const transcriptionStrategy = strategyEl ? strategyEl.value : 'local';
+    const transcriptionStrategy = isArticle ? 'local' : (strategyEl ? strategyEl.value : 'local');
 
     const preserveEl = document.getElementById('preserve-source-file');
     const preserveSourceFile = preserveEl ? preserveEl.checked : false;
@@ -2566,7 +2582,7 @@ async function submitTranscription(event) {
     try {
         currentTask = { url: selectedURL };
         UIManager.updateSubmitButton();
-        UIManager.showStatus('loading', '正在提交转录任务...', '请稍候，正在处理您的请求');
+        UIManager.showStatus('loading', '正在提交学习任务...', '请稍候，正在处理您的请求');
 
         // 保存设置到本地存储
         StorageManager.set(APP_CONFIG.STORAGE_KEYS.SPEAKER_RECOGNITION, useSpeakerRecognition);

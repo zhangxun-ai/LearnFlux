@@ -1087,6 +1087,62 @@ def _queue_feishu_document_deep_learning(
     }}
 
 
+def _queue_weixin_article_deep_learning(
+    *, task_id: str, url: str, display_url: str, media_id: str, tracker: PerfTracker,
+    wechat_webhook: Optional[str], notification_channel: Optional[str],
+    notification_webhooks: Dict[str, Any], preserve_source_file: bool = False,
+) -> Dict[str, Any]:
+    """Fetch the article once and hand its text to the deep-learning worker."""
+    from ...comments.weixin_post import WeixinPostFetcher
+
+    _safe_update_progress(
+        task_id, stage="metadata", stage_label="正在读取公众号文章正文",
+        basis="weixin_article_text", confidence="medium",
+    )
+    article = WeixinPostFetcher().fetch(url, media_id, max_comments=0)
+    if _is_task_canceled(task_id):
+        return {"status": "canceled", "message": "任务已取消"}
+
+    description = "微信公众号文章正文"
+    saved = cache_manager.save_cache(
+        platform="weixin", url=url, media_id=media_id,
+        use_speaker_recognition=False, transcript_data=article.thread_text,
+        transcript_type="capswriter", title=article.title, author=article.author,
+        description=description,
+    )
+    if not saved:
+        raise ValueError("保存公众号文章正文失败")
+
+    source_path = None
+    if preserve_source_file:
+        source_path = _preserve_source_file(
+            platform="weixin", media_id=media_id, title=article.title,
+            source_kind="document", source_text=article.thread_text,
+        )
+    cache_manager.update_task_status(
+        task_id, TaskStatus.CALIBRATING, platform="weixin", media_id=media_id,
+        title=article.title, author=article.author, source_file_path=source_path,
+    )
+    _safe_update_progress(
+        task_id, stage="calibrating", stage_label="已读取公众号正文，正在生成深度学习笔记",
+        basis="weixin_article_text", confidence="high",
+        evidence={"transcript_chars": len(article.thread_text)},
+    )
+    llm_task_queue.put({
+        "task_id": task_id, "url": url, "display_url": display_url,
+        "platform": "weixin", "media_id": media_id, "video_title": article.title,
+        "author": article.author, "description": description, "transcript": article.thread_text,
+        "use_speaker_recognition": False, "is_generic": False, "include_comments": False,
+        "wechat_webhook": wechat_webhook, "notification_channel": notification_channel,
+        "notification_webhooks": notification_webhooks, "perf_tracker": tracker,
+    })
+    tracker.count("weixin_article_text")
+    return {"status": "success", "message": "已读取公众号文章，正在生成深度学习笔记", "data": {
+        "video_title": article.title, "author": article.author,
+        "transcript": article.thread_text, "media_type": "article",
+    }}
+
+
 def _queue_xiaohongshu_article_deep_learning(
     *,
     task_id: str,
@@ -2461,6 +2517,11 @@ def process_transcription(
             if use_speaker_recognition or download_url:
                 raise FeishuDocumentError("飞书文档请直接提交文档链接，无需说话人识别或音视频下载地址")
 
+        if platform == "weixin":
+            if use_speaker_recognition or download_url:
+                raise ValueError("公众号文章请直接提交文章链接，无需说话人识别或音视频下载地址")
+            include_comments = False
+
         # X status URLs can represent either text or video. Resolve media before
         # cache lookup so historical post text cannot masquerade as an ASR result.
         twitter_downloader = None
@@ -2525,6 +2586,16 @@ def process_transcription(
             else:
                 transcript = cache_data["transcript_data"]
                 logger.info("使用 CapsWriter 缓存文本")
+
+            if platform == "weixin" and preserve_source_file:
+                source_path = _preserve_source_file(
+                    platform=platform, media_id=video_id, title=video_title,
+                    source_kind="document", source_text=transcript,
+                )
+                if source_path:
+                    cache_manager.update_task_status(
+                        task_id, TaskStatus.PROCESSING, source_file_path=source_path,
+                    )
 
             has_llm_calibrated = "llm_calibrated" in cache_data
             has_llm_summary = (
@@ -2741,6 +2812,14 @@ def process_transcription(
                 return _queue_feishu_document_deep_learning(
                     task_id=task_id, url=parsed_normalized_url, display_url=display_url,
                     tracker=tracker, wechat_webhook=wechat_webhook,
+                    notification_channel=notification_channel, notification_webhooks=notification_webhooks,
+                    preserve_source_file=preserve_source_file,
+                )
+
+            if platform == "weixin":
+                return _queue_weixin_article_deep_learning(
+                    task_id=task_id, url=parsed_normalized_url, display_url=display_url,
+                    media_id=video_id, tracker=tracker, wechat_webhook=wechat_webhook,
                     notification_channel=notification_channel, notification_webhooks=notification_webhooks,
                     preserve_source_file=preserve_source_file,
                 )

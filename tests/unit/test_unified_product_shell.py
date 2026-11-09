@@ -651,3 +651,52 @@ def test_all_workbench_brand_marks_and_favicons_use_canonical_leaf():
     for entry in manifest["icons"] + [icon for shortcut in manifest["shortcuts"] for icon in shortcut["icons"]]:
         assert "learnflux-leaf-" in entry["src"]
         assert (STATIC_ROOT / entry["src"].split("/static/", 1)[1]).is_file()
+
+
+class TestLightAppearance:
+    def test_light_startup_ignores_dark_preferences_and_survives_blocked_storage(self):
+        node_test = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+for (const blocked of [false, true]) {
+    const attributes = {'data-theme': 'dark'};
+    const saved = new Map([['vta_theme_preference', JSON.stringify('dark')]]);
+    const root = {style: {}, setAttribute(key, value) {attributes[key] = value;}};
+    const context = {
+        document: {documentElement: root},
+        window: {matchMedia() {throw new Error('System appearance must not be consulted');}},
+        localStorage: {
+            getItem(key) {return saved.get(key);},
+            setItem(key, value) {
+                if (blocked) throw new Error('Storage unavailable');
+                saved.set(key, value);
+            },
+        },
+    };
+    vm.runInNewContext(source, context);
+    assert.equal(attributes['data-theme'], 'light');
+    assert.equal(root.style.colorScheme, 'light');
+    if (!blocked) assert.equal(JSON.parse(saved.get('vta_theme_preference')), 'light');
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", node_test, str(STATIC_ROOT / "js/appearance.js")],
+            check=False, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_all_shell_entrypoints_set_light_before_loading_styles(self):
+        paths = [STATIC_ROOT / name for name in STATIC_SHELLS]
+        paths += [TEMPLATE_ROOT / "base.html", TEMPLATE_ROOT / "flywheel.html"]
+        for path in paths:
+            source = path.read_text(encoding="utf-8")
+            appearance = source.index('/static/js/appearance.js')
+            first_stylesheet = source.index('rel="stylesheet"')
+            assert appearance < first_stylesheet, path.name
+            assert "prefers-color-scheme" not in source, path.name
+            assert "vta_theme_preference" not in source, path.name
+        shell = APP_SHELL.read_text(encoding="utf-8")
+        assert "shell-theme-toggle" not in shell
+        assert "toggleTheme" not in (STATIC_ROOT / "js/app.js").read_text(encoding="utf-8")

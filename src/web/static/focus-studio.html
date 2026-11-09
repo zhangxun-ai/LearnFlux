@@ -1,23 +1,8 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
-    <script src="/static/js/time.js?v=9b76f7fddf08"></script>
-        <script>
-        (function() {
-            try {
-                var theme = localStorage.getItem('vta_theme_preference');
-                if (theme) {
-                    var parsedTheme = theme;
-                    try { parsedTheme = JSON.parse(theme); } catch(e) {}
-                    document.documentElement.setAttribute('data-theme', parsedTheme);
-                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                    document.documentElement.setAttribute('data-theme', 'dark');
-                } else {
-                    document.documentElement.setAttribute('data-theme', 'light');
-                }
-            } catch(e) {}
-        })();
-    </script>
+    <script src="/static/js/time.js?v=18657876743c"></script>
+        <script src="/static/js/appearance.js?v=18657876743c"></script>
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,22 +16,22 @@
     <meta name="apple-mobile-web-app-title" content="心流写作">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/manifest.webmanifest">
-            <link rel="stylesheet" href="/static/css/editorial.css?v=9b76f7fddf08">
-    <link rel="stylesheet" href="/static/css/app-shell.css?v=9b76f7fddf08">
+            <link rel="stylesheet" href="/static/css/editorial.css?v=18657876743c">
+    <link rel="stylesheet" href="/static/css/app-shell.css?v=18657876743c">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css">
-    <link rel="stylesheet" href="/static/css/focus-studio.css?v=9b76f7fddf08">
-    <link rel="stylesheet" href="/static/css/product-linear.css?v=9b76f7fddf08">
-    <link rel="stylesheet" href="/static/css/product-linear-core.css?v=9b76f7fddf08">
-    <script src="/static/js/auth-session.js?v=9b76f7fddf08"></script>
-    <script src="/static/js/pwa-register.js?v=9b76f7fddf08" defer></script>
+    <link rel="stylesheet" href="/static/css/focus-studio.css?v=18657876743c">
+    <link rel="stylesheet" href="/static/css/product-linear.css?v=18657876743c">
+    <link rel="stylesheet" href="/static/css/product-linear-core.css?v=18657876743c">
+    <script src="/static/js/auth-session.js?v=18657876743c"></script>
+    <script src="/static/js/pwa-register.js?v=18657876743c" defer></script>
     <script src="/static/js/ui-features.js?v=f35b18a5e3ce" defer></script>
-    <script src="/static/js/app-shell.js?v=9b76f7fddf08" defer></script>
+    <script src="/static/js/app-shell.js?v=18657876743c" defer></script>
 
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icon/learnflux-leaf-32.png">
     <link rel="icon" type="image/png" sizes="256x256" href="/static/icon/learnflux-leaf-256.png">
     <link rel="apple-touch-icon" href="/static/icon/learnflux-leaf-180.png">
     <link rel="icon" type="image/svg+xml" href="/static/icon/learnflux-leaf.svg">
-    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=9b76f7fddf08">
+    <link rel="stylesheet" href="/static/css/workbench-wildwood.css?v=18657876743c">
 </head>
 <body class="app-shell has-app-shell product-linear page-focus focus-body workbench-meadow" data-mode="rainy" data-font="handwriting" data-size="medium">
     <script>
@@ -319,7 +304,7 @@
         </section>
     </main>
 
-    <script src="/static/js/focus-studio.js?v=9b76f7fddf08"></script>
-    <script src="/static/js/focus-journal.js?v=9b76f7fddf08"></script>
+    <script src="/static/js/focus-studio.js?v=18657876743c"></script>
+    <script src="/static/js/focus-journal.js?v=18657876743c"></script>
 </body>
 </html>

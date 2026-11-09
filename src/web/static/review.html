@@ -7,20 +7,7 @@
     <meta name="robots" content="noindex">
     <meta name="theme-color" content="#F6F8FB">
     <title>复盘 · LearnFlux</title>
-    <script>
-        (function () {
-            try {
-                var theme = localStorage.getItem('vta_theme_preference');
-                if (theme) {
-                    var parsedTheme = theme;
-                    try { parsedTheme = JSON.parse(theme); } catch (error) {}
-                    document.documentElement.setAttribute('data-theme', parsedTheme);
-                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                    document.documentElement.setAttribute('data-theme', 'dark');
-                }
-            } catch (error) {}
-        })();
-    </script>
+    <script src="/static/js/appearance.js?v=__ASSET_VERSION__"></script>
     <link rel="stylesheet" href="/static/css/app-shell.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/product-linear.css?v=__ASSET_VERSION__">
     <link rel="stylesheet" href="/static/css/product-linear-core.css?v=__ASSET_VERSION__">

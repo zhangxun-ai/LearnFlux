@@ -1,4 +1,4 @@
-const CACHE_NAME = 'learnflux-pwa-20261103-revalidated-shell';
+const CACHE_NAME = 'learnflux-pwa-20261104-light-shell';
 
 const PRECACHE_URLS = [
   '/',
@@ -28,6 +28,7 @@ const PRECACHE_URLS = [
   '/static/js/time.js',
   '/static/js/auth-session.js',
   '/static/js/app-shell.js',
+  '/static/js/appearance.js',
   '/static/js/ui-features.js',
   '/static/js/collections.js',
   '/static/js/floating-toc.js',

@@ -1,19 +1,8 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
+    <script src="/static/js/appearance.js?v=__ASSET_VERSION__"></script>
     <script>
-            try {
-            var theme = localStorage.getItem('vta_theme_preference');
-            if (theme) {
-                var parsedTheme = theme;
-                try { parsedTheme = JSON.parse(theme); } catch(e) {}
-                document.documentElement.setAttribute('data-theme', parsedTheme);
-            } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                document.documentElement.setAttribute('data-theme', 'dark');
-            } else {
-                document.documentElement.setAttribute('data-theme', 'light');
-            }
-        } catch(e) {}
     window.STUDY_VIEW_TOKEN = '__VIEW_TOKEN__';
     window.STUDY_COLLECTION_ID = '__COLLECTION_ID__';
     window.STUDY_SOURCE_ID = '__SOURCE_ID__';

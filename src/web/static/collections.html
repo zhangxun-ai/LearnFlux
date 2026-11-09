@@ -222,9 +222,9 @@
 
                 <div class="lc-type-field">
                     <span class="lc-label">内容类型</span>
-                    <div class="lc-type-tabs" role="tablist" aria-label="集合类型">
-                        <button class="lc-type active" data-type="video_course" type="button">视频课程</button>
-                        <button class="lc-type" data-type="document_topic" type="button">文档专题</button>
+                    <div class="lc-type-tabs" role="group" aria-label="集合类型">
+                        <button class="lc-type active" data-type="video_course" type="button" aria-pressed="true">视频课程</button>
+                        <button class="lc-type" data-type="document_topic" type="button" aria-pressed="false">文档专题</button>
                     </div>
                 </div>
             </form>
@@ -243,7 +243,7 @@
                 </label>
             </section>
 
-            <div class="lc-import-primary" id="drop-action" role="group" aria-labelledby="drop-title" aria-describedby="drop-subtitle">
+            <div class="lc-import-primary" id="drop-action" role="group" aria-label="导入学习资料">
                 <button class="lc-btn primary lc-import-cta" id="browse-local-path" type="button">
                     <span class="lc-import-cta-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
@@ -253,6 +253,23 @@
                         <span id="drop-subtitle">视频按本机路径解析，不复制原文件</span>
                     </span>
                 </button>
+                <button class="lc-btn primary lc-import-cta" id="pick-files" type="button" hidden>
+                    <span class="lc-import-cta-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    </span>
+                    <span class="lc-import-cta-copy">
+                        <strong>选择多个文档</strong>
+                        <span>也可拖入 PDF、DOCX 或文本文件。PDF 需包含可复制文字。</span>
+                    </span>
+                </button>
+                <section class="lc-document-selection" id="document-selection" aria-labelledby="document-selection-title" hidden>
+                    <strong id="document-selection-title" aria-live="polite"></strong>
+                    <ol id="document-selection-list"></ol>
+                    <div class="lc-document-actions">
+                        <button class="lc-btn primary" id="import-documents" type="button">上传并开始解析</button>
+                        <button class="lc-btn ghost" id="clear-documents" type="button">清空选择</button>
+                    </div>
+                </section>
                 <div class="lc-import-preview is-idle" id="import-preview" aria-live="polite"></div>
             </div>
 
@@ -266,11 +283,9 @@
                             <button class="lc-btn primary" id="import-local-path" type="button">导入</button>
                         </div>
                     </div>
-                    <button class="lc-btn ghost" id="pick-files" type="button" title="仅适合小体积文档">上传文件副本</button>
+                    <button class="lc-btn ghost" id="pick-folder" type="button" hidden>选择本机文件夹</button>
                 </div>
             </details>
-            <!-- Folder import references local files; document upload remains available for small files. -->
-            <input id="folder-input" type="file" webkitdirectory multiple hidden>
             <input id="files-input" type="file" multiple hidden>
             <input id="append-folder-input" type="file" webkitdirectory multiple hidden>
             <input id="append-local-path" type="hidden">

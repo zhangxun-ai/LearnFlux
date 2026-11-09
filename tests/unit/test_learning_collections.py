@@ -1777,15 +1777,16 @@ def test_collections_catalog_and_create_page_use_one_primary_import_choice():
     assert 'id="browse-local-path"' in import_card
     assert 'id="local-import-path"' in import_card
     assert 'id="import-local-path"' in import_card
-    assert 'id="pick-files"' in import_card
+    primary_import = import_card.split('<details class="lc-import-advanced">', 1)[0]
+    assert 'id="pick-files"' in primary_import
+    assert 'id="import-documents"' in primary_import
+    assert 'id="files-input" type="file" multiple' in import_card
     assert "选择文件夹并导入" in import_card
     assert "导入方式与并发设置" in import_card
     assert "扫描路径并导入" not in import_card
     assert "上传文件副本（不推荐）" not in import_card
     assert import_card.count("lc-btn primary") >= 1
-    busy_guard = import_files[import_files.index("if (busy)") : import_files.index("const files = normalizeFiles")]
-    assert "return;" in busy_guard
-    assert "video_course" in busy_guard or "选择文件夹并导入" in import_files
+    assert "if (busy || activeType !== 'document_topic' || !stagedDocumentFiles.length) return;" in import_files
     assert "startFolderImport" in js
     assert "importSelectedLocalDirectory" in js
     assert "preview-local-paths" in js

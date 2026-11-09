@@ -4,8 +4,7 @@
     const POLL_MS = 2500;
     const DEFAULT_MAP_ZOOM = 1.16;
     const VISUAL_DOCUMENT_TYPES = ['overview', 'full_note'];
-    // Upload large video folders in small batches so sources appear progressively
-    // and the UI can show real progress (a single 90-file request looks frozen).
+    // Upload documents in small batches so sources appear progressively.
     const UPLOAD_BATCH_SIZE = 3;
     const TRANSCRIPTION_LIMITS = {
         local: { min: 1, max: 3, defaultValue: 1 },
@@ -40,11 +39,15 @@
         dropSubtitle: document.getElementById('drop-subtitle'),
         pickFolder: document.getElementById('pick-folder'),
         pickFiles: document.getElementById('pick-files'),
+        documentSelection: document.getElementById('document-selection'),
+        documentSelectionTitle: document.getElementById('document-selection-title'),
+        documentSelectionList: document.getElementById('document-selection-list'),
+        importDocuments: document.getElementById('import-documents'),
+        clearDocuments: document.getElementById('clear-documents'),
         importLocalPath: document.getElementById('import-local-path'),
         browseLocalPath: document.getElementById('browse-local-path'),
         localImportPath: document.getElementById('local-import-path'),
         appendFolder: document.getElementById('append-folder'),
-        folderInput: document.getElementById('folder-input'),
         filesInput: document.getElementById('files-input'),
         appendFolderInput: document.getElementById('append-folder-input'),
         transcriptionPolicy: document.getElementById('collection-transcription-policy'),
@@ -283,6 +286,7 @@
     const summaryProgressByCollection = new Map();
     let pendingImportMethod = 'local_files';
     let selectedCandidateCount = 0;
+    let stagedDocumentFiles = [];
     let cloudQuote = null;
     let cloudQuoteLoading = false;
     let cloudQuoteFeedbackVisible = false;
@@ -307,9 +311,12 @@
         scrollY: 0
     };
     let initialTarget = readInitialTarget();
-    const initialView = new URLSearchParams(window.location.search).get('view');
+    const initialParams = new URLSearchParams(window.location.search);
     if (initialTarget.collectionId) pageMode = 'topic';
-    else if (initialView === 'create') pageMode = 'create';
+    else if (initialParams.get('view') === 'create') {
+        pageMode = 'create';
+        if (initialParams.get('type') === 'document_topic') activeType = 'document_topic';
+    }
     const SUMMARY_CARD_META = {
         problem: {
             title: '这个系列解决什么问题',
@@ -374,7 +381,9 @@
 
     function setBusy(nextBusy) {
         busy = nextBusy;
-        [els.pickFolder, els.pickFiles, els.importLocalPath, els.browseLocalPath, els.appendFolder, els.cancelCollection, els.continueCollection].forEach((button) => {
+        [els.pickFolder, els.pickFiles, els.importLocalPath, els.browseLocalPath, els.importDocuments,
+            els.clearDocuments, els.createBack, els.collectionBack, els.appendFolder,
+            els.cancelCollection, els.continueCollection].forEach((button) => {
             if (button) button.disabled = busy;
         });
         if (els.localImportPath) els.localImportPath.disabled = busy;
@@ -739,11 +748,18 @@
         activeType = type;
         const config = typeConfig(type);
         els.typeTabs.forEach((tab) => {
-            tab.classList.toggle('active', tab.dataset.type === type);
+            const selected = tab.dataset.type === type;
+            tab.classList.toggle('active', selected);
+            tab.setAttribute('aria-pressed', String(selected));
         });
-        [els.filesInput, els.folderInput, els.appendFolderInput].forEach((input) => {
+        [els.filesInput, els.appendFolderInput].forEach((input) => {
             if (input) input.setAttribute('accept', config.accept);
         });
+        const isDocument = type === 'document_topic';
+        els.browseLocalPath.hidden = isDocument;
+        els.pickFiles.hidden = !isDocument;
+        els.pickFolder.hidden = !isDocument;
+        els.documentSelection.hidden = !isDocument || !stagedDocumentFiles.length;
         els.dropTitle.textContent = config.title;
         els.dropSubtitle.textContent = config.subtitle;
         updateTranscriptionControls({ applyDefault: type === 'document_topic' });
@@ -793,21 +809,10 @@
         updateTranscriptionControls();
     }
 
-    function isAllowedFile(file) {
-        if (!file || !file.name || file.name.startsWith('.')) return false;
+    function isAllowedDocument(file) {
+        if (!file.size || !file.name || file.name.startsWith('.')) return false;
         const lower = file.name.toLowerCase();
-        const exts = activeType === 'document_topic' ? DOC_EXTS : VIDEO_EXTS;
-        return exts.some((ext) => lower.endsWith(ext));
-    }
-
-    function normalizeFiles(fileList) {
-        return Array.from(fileList || [])
-            .filter((file) => file.size > 0 && isAllowedFile(file))
-            .sort((a, b) => {
-                const left = a.webkitRelativePath || a.name;
-                const right = b.webkitRelativePath || b.name;
-                return left.localeCompare(right, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' });
-            });
+        return DOC_EXTS.some((ext) => lower.endsWith(ext));
     }
 
     function folderDisplayName(directory) {
@@ -816,18 +821,33 @@
         return parts[parts.length - 1] || normalized || '未命名文件夹';
     }
 
-    function previewFiles(files) {
-        if (!els.importPreview) return;
-        els.importPreview.classList.remove('is-uploading', 'is-error', 'is-idle');
-        if (!files.length) {
-            els.importPreview.classList.add('is-idle');
-            els.importPreview.innerHTML = '';
+    function setStagedDocumentFiles(files) {
+        stagedDocumentFiles = files;
+        els.documentSelection.hidden = !files.length;
+        els.documentSelectionTitle.textContent = files.length ? `已选 ${files.length} 份文档` : '';
+        els.documentSelectionList.replaceChildren(...files.map((file) => {
+            const item = document.createElement('li');
+            item.textContent = file.name;
+            return item;
+        }));
+        previewLocalPath('');
+    }
+
+    function stageDocumentFiles(fileList) {
+        if (busy || activeType !== 'document_topic') return;
+        const files = Array.from(fileList || []);
+        if (!files.length) return;
+        const invalidFile = files.find((file) => !isAllowedDocument(file));
+        if (invalidFile) {
+            els.importPreview.classList.remove('is-idle');
+            els.importPreview.classList.add('is-error');
+            els.importPreview.textContent = invalidFile.size
+                ? `「${invalidFile.name}」不支持导入，请重新选择文档。`
+                : `「${invalidFile.name}」为空，请重新选择文档。`;
             return;
         }
-
-        const first = files[0].webkitRelativePath || files[0].name;
-        const last = files[files.length - 1].webkitRelativePath || files[files.length - 1].name;
-        els.importPreview.innerHTML = `<strong>${escapeHTML(files.length)} 个文件</strong><span>${escapeHTML(first)}${files.length > 1 ? ' - ' + escapeHTML(last) : ''}</span>`;
+        files.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }));
+        setStagedDocumentFiles(files);
     }
 
     function previewLocalPath(directory) {
@@ -1343,10 +1363,8 @@
 
     async function uploadFiles(collectionId, files) {
         const total = files.length;
-        if (!total) return { data: { sources: [] } };
-
+        const counts = { pending_count: 0, new_source_count: 0, existing_source_count: 0, reconciled_source_count: 0 };
         let uploaded = 0;
-        let lastPayload = null;
         for (let offset = 0; offset < total; offset += UPLOAD_BATCH_SIZE) {
             const batch = files.slice(offset, offset + UPLOAD_BATCH_SIZE);
             const batchStart = uploaded;
@@ -1359,7 +1377,7 @@
                 message: `正在上传第 ${batchStart + 1}-${batchEnd} / ${total} 个文件`
             });
 
-            lastPayload = await uploadFileBatch(collectionId, batch, (loaded, totalBytes) => {
+            const payload = await uploadFileBatch(collectionId, batch, (loaded, totalBytes) => {
                 const fraction = totalBytes > 0 ? loaded / totalBytes : 0;
                 const overall = batchStart + fraction * batch.length;
                 setImportStatus({
@@ -1370,6 +1388,9 @@
                     message: `正在上传第 ${batchStart + 1}-${batchEnd} / ${total} 个文件`
                 });
             });
+            for (const key of Object.keys(counts)) {
+                counts[key] += Number(payload.data?.[key] || 0);
+            }
 
             uploaded = batchEnd;
             setImportStatus({
@@ -1392,7 +1413,7 @@
                 console.warn('refresh after upload batch failed', error);
             }
         }
-        return lastPayload || { data: { sources: [] } };
+        return { data: { ...counts, candidate_count: total } };
     }
 
     async function loadFilterOptions() {
@@ -1775,9 +1796,8 @@
     }
 
     async function beginCollectionImport(prepareSources) {
-        let identity;
         try {
-            identity = readImportIdentity();
+            readImportIdentity();
         } catch (error) {
             showToast(error.message || '请先填写 IP 名称和专题名称');
             return;
@@ -1841,6 +1861,7 @@
             await loadFilterOptions();
             await loadCollections({ selectLatest: false });
             startPolling();
+            return true;
         } catch (error) {
             lastImportError = error.message || '导入失败';
             showToast(lastImportError);
@@ -1852,11 +1873,11 @@
                     + `<span>${escapeHTML(lastImportError)}</span>`
                 );
             }
+            return false;
         } finally {
             clearImportStatus();
             setBusy(false);
             render();
-            if (els.folderInput) els.folderInput.value = '';
             if (els.filesInput) els.filesInput.value = '';
         }
     }
@@ -1928,47 +1949,12 @@
         });
     }
 
-    async function importFiles(fileList, importMethod) {
-        if (busy) {
-            showToast('当前导入正在处理中');
-            return;
-        }
-        // Video courses should use zero-copy path import. Browser multipart upload
-        // duplicates every file under data/source_files and can fill the disk.
-        if (activeType === 'video_course') {
-            showToast('视频请用「选择文件夹并导入」，避免重复占用磁盘');
-            return;
-        }
-        const files = normalizeFiles(fileList);
+    async function importFiles() {
+        if (busy || activeType !== 'document_topic' || !stagedDocumentFiles.length) return;
+        const files = stagedDocumentFiles;
         selectedCandidateCount = files.length;
-        updateTranscriptionControls({ applyDefault: selectedTranscriptionStrategy() === 'cloud' });
-        pendingImportMethod = importMethod || 'local_files';
-        previewFiles(files);
-        if (!files.length) {
-            showToast('没有找到当前类型支持的文件');
-            return;
-        }
-
-        let identity;
-        try {
-            identity = readImportIdentity();
-        } catch (error) {
-            showToast(error.message || '请先填写 IP 名称和专题名称');
-            return;
-        }
-        const confirmed = window.confirm(
-            `确认新建专题并上传文档副本？\n\n`
-            + `IP 名称：${identity.creatorName}\n`
-            + `专题名称：${identity.title}\n`
-            + `文件数量：${files.length}\n\n`
-            + `文档体积通常较小；视频课程请改用本机路径导入。`
-        );
-        if (!confirmed) {
-            showToast('已取消导入');
-            return;
-        }
-
-        await beginCollectionImport(async (collection) => {
+        pendingImportMethod = 'local_files';
+        const imported = await beginCollectionImport((collection) => {
             setImportStatus({
                 phase: 'uploading',
                 total: files.length,
@@ -1976,14 +1962,17 @@
                 percent: 0,
                 message: `正在上传 ${files.length} 个文档…`
             });
-            await uploadFiles(collection.id, files);
-            return {
-                data: {
-                    candidate_count: files.length,
-                    pending_count: files.length
-                }
-            };
+            return uploadFiles(collection.id, files);
         });
+        if (imported) {
+            setStagedDocumentFiles([]);
+        } else if (pageMode === 'topic') {
+            window.clearInterval(pollTimer);
+            currentCollection = null;
+            setCollectionPageMode('create', { replaceUrl: true });
+            render();
+            els.importDocuments.focus();
+        }
     }
 
     function formatAppendFileSize(value) {
@@ -2753,8 +2742,10 @@
         const url = new URL(window.location.href);
         url.searchParams.delete('collection_id');
         url.searchParams.delete('source_id');
+        url.searchParams.delete('type');
         if (pageMode === 'create') {
             url.searchParams.set('view', 'create');
+            if (activeType === 'document_topic') url.searchParams.set('type', activeType);
         } else {
             url.searchParams.delete('view');
             if (pageMode === 'topic' && currentCollection) {
@@ -6052,6 +6043,7 @@
                 currentCollection = null;
                 selectedSourceId = null;
                 currentView = 'summary';
+                setStagedDocumentFiles([]);
                 setCollectionPageMode('create');
                 render();
                 if (els.creator) els.creator.focus();
@@ -6059,6 +6051,7 @@
         }
         if (els.createBack) {
             els.createBack.addEventListener('click', () => {
+                setStagedDocumentFiles([]);
                 setCollectionPageMode('catalog');
                 render();
             });
@@ -6092,11 +6085,19 @@
             currentCollection = null;
             selectedSourceId = null;
             pageMode = params.get('view') === 'create' ? 'create' : 'catalog';
+            if (pageMode === 'create') {
+                setActiveType(params.get('type') === 'document_topic' ? 'document_topic' : 'video_course');
+            }
             render();
         });
 
         els.typeTabs.forEach((tab) => {
-            tab.addEventListener('click', () => setActiveType(tab.dataset.type));
+            tab.addEventListener('click', () => {
+                if (tab.dataset.type === activeType) return;
+                setStagedDocumentFiles([]);
+                setActiveType(tab.dataset.type);
+                setCollectionPageMode('create', { replaceUrl: true });
+            });
         });
         els.transcriptionStrategies.forEach((input) => {
             input.addEventListener('change', () => updateTranscriptionControls({ applyDefault: true }));
@@ -6406,18 +6407,23 @@
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && els.actionDialog && els.actionDialog.open) closeActionDialog();
         });
-        if (els.folderInput) {
-            els.folderInput.addEventListener('change', () => importFiles(els.folderInput.files, 'local_folder'));
-        }
         if (els.filesInput) {
-            els.filesInput.addEventListener('change', () => importFiles(els.filesInput.files, 'local_files'));
+            els.filesInput.addEventListener('change', () => {
+                stageDocumentFiles(els.filesInput.files);
+                els.filesInput.value = '';
+            });
         }
+        els.importDocuments.addEventListener('click', importFiles);
+        els.clearDocuments.addEventListener('click', () => {
+            setStagedDocumentFiles([]);
+            els.pickFiles.focus();
+        });
         if (els.dropAction) {
             // Keep drag affordance for documents only; primary action is the CTA button.
             ['dragenter', 'dragover'].forEach((eventName) => {
                 els.dropAction.addEventListener(eventName, (event) => {
                     event.preventDefault();
-                    els.dropAction.classList.add('dragging');
+                    if (activeType === 'document_topic' && !busy) els.dropAction.classList.add('dragging');
                 });
             });
             ['dragleave', 'drop'].forEach((eventName) => {
@@ -6432,7 +6438,7 @@
                     showToast('视频请用「选择文件夹并导入」');
                     return;
                 }
-                importFiles(event.dataTransfer.files, 'local_files');
+                stageDocumentFiles(event.dataTransfer?.files);
             });
         }
 
@@ -6635,8 +6641,6 @@
         if (els.authGate) els.authGate.hidden = true;
         if (els.tokenHint) els.tokenHint.textContent = '';
         await loadFilterOptions();
-        // Clear again after datalist options load, so history names never stick as values.
-        clearImportIdentityFields();
         if (initialTarget.collectionId) {
             await selectCollection(initialTarget.collectionId, {
                 silent: true,
@@ -6648,7 +6652,6 @@
         } else {
             await loadCollections({ selectLatest: false });
         }
-        clearImportIdentityFields();
     }
 
     async function init() {

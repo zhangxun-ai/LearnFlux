@@ -4894,6 +4894,38 @@ body.workbench-meadow .lc-history-filters select {
     font-size: 12px;
 }
 
+.lc-create-card :is(.lc-import-cta, .lc-document-selection, #pick-folder)[hidden] {
+    display: none;
+}
+
+.lc-document-selection {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid var(--lc-line);
+    border-radius: 12px;
+}
+
+.lc-document-selection ol {
+    max-height: 12rem;
+    overflow: auto;
+    margin: 8px 0 12px;
+    padding-inline-start: 24px;
+    color: var(--lc-body);
+    overflow-wrap: anywhere;
+}
+
+.lc-document-selection li + li { margin-top: 4px; }
+
+.lc-document-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.lc-document-selection:not([hidden]) + .lc-import-preview { margin-top: 8px; }
+.lc-create-card .lc-import-preview.is-error { overflow-wrap: anywhere; }
+.lc-create-card .lc-import-preview.is-error span { white-space: normal; }
+
 .lc-create-card .lc-import-advanced {
     margin-top: 20px;
     border-top: 1px solid var(--lc-line);

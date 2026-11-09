@@ -32,24 +32,17 @@
 
 </details>
 
-<details>
-<summary><strong>我要用 iPhone 快捷指令收集：复制此提示词</strong></summary>
+## iPhone 快捷指令与 Tunnel
 
 ```text
-请为已运行的 LearnFlux 配置“iPhone 快捷指令 → 本地后台解析”。先读 AGENTS.md 和 docs/guides/mobile-shortcut.md。
+请帮我把 iPhone 快捷指令接到本机 LearnFlux，让手机关闭 Wi-Fi 后也能提交链接。先读 AGENTS.md、docs/guides/mobile-shortcut.md 和 config/users.example.json。已存在的配置、域名和启动项优先复用。
 
-复用已有域名和 Cloudflare Tunnel；缺少域名或登录授权时由我提供并确认，不自动购买。安装缺少的 cloudflared，只为我指定的子域名建立 HTTPS 收集入口，精确放行 /api/transcribe，其余路径返回 404，不直接公开设置或文件接口。
-
-生成手机专用随机 Bearer Token，保留本地资料身份，使 user_id 与网页所有者一致。凭据仅在私人配置和我自己的快捷指令内使用，不在聊天、日志、截图或公开文件里展示。个人机器同时配置手机用户时，按指南保持本机管理会话自动恢复。
-
-在可操作的快捷指令 App 内完成配置：获取剪贴板 → 提取 URL → 取第一项 → POST 到 https://<我的子域名>/api/transcribe；JSON 的 url 使用第一项变量；仅在已实测本机ASR可用时将 transcription_strategy 设为 local。若需要cloud，先说明还需在工作台确认报价，不能把快捷指令请求当作付费任务已获授权。通知只表示快捷指令已执行，不误报解析成功。
-
-在手机手动运行成功后，引导我按手机指南把该指令绑定到“轻点背面 → 轻点三下”；保留已有指令名称和标识。若我还选择了飞书闭环，按本文件飞书提示词配置后，继续核对同一真实任务的正文与解读已归档，并在手机飞书打开；不能以快捷指令已执行或文档标题存在替代完整阅读验收。
-
-配置本地服务和隧道的用户级自启动。先验证无凭据拒绝、有效请求受理、其他公网路径拒绝、本地结果可读，再请我用手机移动网络实测。不要调用付费云端 ASR。说明锁屏与休眠的区别、电脑离线时如何重试，以及如何停用入口。
+1. 核对 LearnFlux 本机监听地址、网页资料的 user_id、可用平台和本地 ASR。在 config/users.json 的 users 对象内添加独立随机令牌，保留原用户，用同一 user_id 让手机任务出现在原历史中。令牌只在本机私有配置和我的快捷指令里使用，权限设为仅本人可读。由我在自己的设备填入真实令牌，不把令牌打印或发到对话。个人 Mac 按指南保留本机免口令访问，重启前检查运行中的任务。
+2. 检查 cloudflared、Cloudflare 账号、已有 Tunnel 和我控制的子域名。缺少账号授权时引导我在官方页面登录，缺少域名时说明要准备什么。由我明确指定并授权公网入口后，按官方指南创建或复用固定域名的 Tunnel，配置精确路径 ^/api/transcribe$ → 本机端口和兜底 http_status:404。先用 ingress validate 与 ingress rule 校验，再建立 DNS 路由并启动。凭据和私有配置放在用户目录，保留其他站点和全局 VPN 配置。
+3. 先检查无令牌的 POST 被拒绝，公网 /、/briefings、设置和文件路径返回 404。再用我同意的短链接确认带令牌的请求受理、本机任务归到同一个账号、结果可读。验证公网接入可用已完成的缓存，另用真实未缓存口播才能验证新视频 ASR。云端 ASR 要在工作台对实际任务确认报价，TikHub 与模型调用也要符合我的费用范围。
+4. 引导我导入 docs/LearnFlux-Link-Collector.shortcut。在「获取 URL 内容」把 learnflux.example.com 换成我的 HTTPS 子域名，保留 /api/transcribe，将 Authorization 中的 YOUR_MOBILE_TOKEN 换成我自己的令牌，保留 Bearer 后的空格。JSON 的 url 保留第三步「来自列表的项目」变量。先关闭 Wi-Fi，用手机移动网络手动运行，再去本机历史核对同一条链接与结果。手机没实测时把这一步标为待验。最后可绑定「轻点背面 → 轻点三下」。
+5. 前台跑通后复用或配置 macOS 用户级 LaunchAgent，验证登录后启动和进程退出后的恢复，说明电脑休眠或离线时的行为。给我停用隧道与令牌的具体步骤。飞书归档只在我选用时另行配置和实测。
 ```
-
-</details>
 
 <details>
 <summary><strong>我要配置其他转录服务：复制此提示词</strong></summary>

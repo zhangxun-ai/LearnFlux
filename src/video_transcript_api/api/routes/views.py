@@ -204,7 +204,8 @@ def _decorate_source_link(view_data: Dict[str, Any]) -> None:
         return
     if _is_browser_source_url(url):
         view_data["source_link_url"] = url
-        view_data["source_link_label"] = "查看原文" if parse_feishu_url(url) or weixin_article_id(url) else "查看原视频"
+        is_article = view_data.get("platform") == "web" or parse_feishu_url(url) or weixin_article_id(url)
+        view_data["source_link_label"] = "查看原文" if is_article else "查看原视频"
         return
     if not url.startswith("local://"):
         return
@@ -1413,9 +1414,16 @@ async def view_transcript(
         if view_data["status"] == "processing":
             source_url = view_data.get("url") or ""
             is_weixin_article = bool(weixin_article_id(source_url))
-            is_document = is_weixin_article or _is_local_document_view(view_data) or bool(parse_feishu_url(source_url))
+            is_web_article = view_data.get("platform") == "web"
+            is_document = (
+                is_web_article or is_weixin_article or _is_local_document_view(view_data)
+                or bool(parse_feishu_url(source_url))
+            )
             if is_document and not view_data.get("title"):
-                view_data["title"] = "公众号文章" if is_weixin_article else (_local_url_filename(view_data) or "本地文档")
+                if is_web_article:
+                    view_data["title"] = "网页文章"
+                else:
+                    view_data["title"] = "公众号文章" if is_weixin_article else (_local_url_filename(view_data) or "本地文档")
             return _no_store(
                 templates.TemplateResponse(
                     "processing.html",

@@ -1100,46 +1100,60 @@ def _queue_weixin_article_deep_learning(
         basis="weixin_article_text", confidence="medium",
     )
     article = WeixinPostFetcher().fetch(url, media_id, max_comments=0)
+    return _queue_article_text(
+        task_id=task_id, url=url, display_url=display_url, platform="weixin", media_id=media_id,
+        title=article.title, author=article.author, text=article.thread_text,
+        source_label="公众号文章", description="微信公众号文章正文", tracker=tracker,
+        wechat_webhook=wechat_webhook, notification_channel=notification_channel,
+        notification_webhooks=notification_webhooks, preserve_source_file=preserve_source_file,
+    )
+
+
+def _queue_article_text(
+    *, task_id: str, url: str, display_url: str, platform: str, media_id: str,
+    title: str, author: str, text: str, source_label: str, description: str,
+    tracker: PerfTracker, wechat_webhook: Optional[str], notification_channel: Optional[str],
+    notification_webhooks: Dict[str, Any], preserve_source_file: bool,
+) -> Dict[str, Any]:
+    """Persist acquired article text and enqueue the existing learning worker."""
     if _is_task_canceled(task_id):
         return {"status": "canceled", "message": "任务已取消"}
 
-    description = "微信公众号文章正文"
     saved = cache_manager.save_cache(
-        platform="weixin", url=url, media_id=media_id,
-        use_speaker_recognition=False, transcript_data=article.thread_text,
-        transcript_type="capswriter", title=article.title, author=article.author,
+        platform=platform, url=url, media_id=media_id,
+        use_speaker_recognition=False, transcript_data=text,
+        transcript_type="capswriter", title=title, author=author,
         description=description,
     )
     if not saved:
-        raise ValueError("保存公众号文章正文失败")
+        raise ValueError(f"保存{source_label}正文失败")
 
     source_path = None
     if preserve_source_file:
         source_path = _preserve_source_file(
-            platform="weixin", media_id=media_id, title=article.title,
-            source_kind="document", source_text=article.thread_text,
+            platform=platform, media_id=media_id, title=title,
+            source_kind="document", source_text=text,
         )
     cache_manager.update_task_status(
-        task_id, TaskStatus.CALIBRATING, platform="weixin", media_id=media_id,
-        title=article.title, author=article.author, source_file_path=source_path,
+        task_id, TaskStatus.CALIBRATING, platform=platform, media_id=media_id,
+        title=title, author=author, source_file_path=source_path,
     )
+    basis = f"{platform}_article_text"
     _safe_update_progress(
-        task_id, stage="calibrating", stage_label="已读取公众号正文，正在生成深度学习笔记",
-        basis="weixin_article_text", confidence="high",
-        evidence={"transcript_chars": len(article.thread_text)},
+        task_id, stage="calibrating", stage_label=f"已读取{source_label}正文，正在生成深度学习笔记",
+        basis=basis, confidence="high", evidence={"transcript_chars": len(text)},
     )
     llm_task_queue.put({
         "task_id": task_id, "url": url, "display_url": display_url,
-        "platform": "weixin", "media_id": media_id, "video_title": article.title,
-        "author": article.author, "description": description, "transcript": article.thread_text,
+        "platform": platform, "media_id": media_id, "video_title": title,
+        "author": author, "description": description, "transcript": text,
         "use_speaker_recognition": False, "is_generic": False, "include_comments": False,
         "wechat_webhook": wechat_webhook, "notification_channel": notification_channel,
         "notification_webhooks": notification_webhooks, "perf_tracker": tracker,
     })
-    tracker.count("weixin_article_text")
-    return {"status": "success", "message": "已读取公众号文章，正在生成深度学习笔记", "data": {
-        "video_title": article.title, "author": article.author,
-        "transcript": article.thread_text, "media_type": "article",
+    tracker.count(basis)
+    return {"status": "success", "message": f"已读取{source_label}，正在生成深度学习笔记", "data": {
+        "video_title": title, "author": author, "transcript": text, "media_type": "article",
     }}
 
 
@@ -2549,7 +2563,15 @@ def process_transcription(
         )
 
         with tracker.track("cache_check"):
-            if video_id and platform and not is_generic_downloader:
+            if is_generic_downloader and video_id and not download_url and not use_speaker_recognition:
+                cache_data = cache_manager.get_cache(
+                    platform="web", media_id=video_id, use_speaker_recognition=False,
+                )
+                if cache_data:
+                    platform = "web"
+                    is_generic_downloader = False
+                    include_comments = False
+            if not cache_data and video_id and platform and not is_generic_downloader:
                 logger.info(
                     f"[缓存检测] 检查缓存: platform={platform}, video_id={video_id}, "
                     f"use_speaker_recognition={use_speaker_recognition}"
@@ -2559,7 +2581,7 @@ def process_transcription(
                     media_id=video_id,
                     use_speaker_recognition=use_speaker_recognition,
                 )
-            else:
+            elif not cache_data:
                 logger.info(
                     f"[缓存检测] 跳过缓存检查 (platform={platform}, is_generic={is_generic_downloader})"
                 )
@@ -2587,7 +2609,7 @@ def process_transcription(
                 transcript = cache_data["transcript_data"]
                 logger.info("使用 CapsWriter 缓存文本")
 
-            if platform == "weixin" and preserve_source_file:
+            if platform in {"weixin", "web"} and preserve_source_file:
                 source_path = _preserve_source_file(
                     platform=platform, media_id=video_id, title=video_title,
                     source_kind="document", source_text=transcript,
@@ -2861,9 +2883,49 @@ def process_transcription(
                 if twitter_result is not None:
                     return twitter_result
 
+            from ...downloaders.generic import GenericDownloader
+
+            metadata_downloader = None
+            try:
+                metadata_downloader = twitter_downloader or create_downloader(url)
+            except Exception as exc:
+                logger.warning(f"[元数据获取] 创建下载器失败: {exc}")
+            if is_generic_downloader and not download_url and isinstance(metadata_downloader, GenericDownloader):
+                from urllib.parse import unquote, urlsplit
+                from ...document_sources.web import WebArticleError, fetch_web_article
+
+                path = unquote(urlsplit(parsed_normalized_url).path).lower()
+                if Path(path).suffix not in metadata_downloader.supported_extensions:
+                    _safe_update_progress(
+                        task_id, stage="metadata", stage_label="正在识别网页正文或音视频",
+                        basis="web_source_probe", confidence="medium",
+                    )
+                    try:
+                        article = fetch_web_article(parsed_normalized_url)
+                        if article is not None and use_speaker_recognition:
+                            raise WebArticleError("这是网页文章，请关闭说话人识别后重新提交。")
+                    except WebArticleError as exc:
+                        if _is_task_canceled(task_id):
+                            return {"status": "canceled", "message": "任务已取消"}
+                        cache_manager.update_task_status(
+                            task_id, TaskStatus.FAILED, platform="web", media_id=video_id,
+                            error_message=str(exc),
+                        )
+                        return {"status": "failed", "message": str(exc)}
+                    if article is not None:
+                        description = "公开网页文章正文"
+                        if article.has_images:
+                            description += "。图表和插图仅保留可提取的文字说明。"
+                        return _queue_article_text(
+                            task_id=task_id, url=parsed_normalized_url, display_url=display_url,
+                            platform="web", media_id=video_id, title=article.title, author=article.author,
+                            text=article.text, source_label="网页文章", description=description, tracker=tracker,
+                            wechat_webhook=wechat_webhook, notification_channel=notification_channel,
+                            notification_webhooks=notification_webhooks, preserve_source_file=preserve_source_file,
+                        )
+
             # ==================== 阶段3: 元数据获取（创建下载器实例）====================
             parsed_metadata = None
-            metadata_downloader = None
             metadata_obj = None
             download_info_obj = None
             parse_url = url
@@ -2877,26 +2939,25 @@ def process_transcription(
 
             with tracker.track("metadata"):
                 try:
-                    logger.info(f"[元数据获取] 创建下载器实例: {parse_url}")
-                    metadata_downloader = twitter_downloader or create_downloader(parse_url)
                     logger.info(
                         f"[元数据获取] 下载器类型: {metadata_downloader.__class__.__name__}"
                     )
 
-                    metadata_obj = metadata_downloader.get_metadata(parse_url)
-                    parsed_metadata = {
-                        "video_id": metadata_obj.video_id,
-                        "video_title": metadata_obj.title,
-                        "title": metadata_obj.title,
-                        "author": metadata_obj.author,
-                        "description": metadata_obj.description,
-                        "platform": metadata_obj.platform,
-                    }
-                    logger.info(
-                        f"[元数据获取] 成功: platform={metadata_obj.platform}, "
-                        f"video_id={metadata_obj.video_id}, "
-                        f"title={metadata_obj.title[:50]}"
-                    )
+                    metadata_obj = metadata_downloader.get_metadata(parse_url) if metadata_downloader else None
+                    if metadata_obj is not None:
+                        parsed_metadata = {
+                            "video_id": metadata_obj.video_id,
+                            "video_title": metadata_obj.title,
+                            "title": metadata_obj.title,
+                            "author": metadata_obj.author,
+                            "description": metadata_obj.description,
+                            "platform": metadata_obj.platform,
+                        }
+                        logger.info(
+                            f"[元数据获取] 成功: platform={metadata_obj.platform}, "
+                            f"video_id={metadata_obj.video_id}, "
+                            f"title={metadata_obj.title[:50]}"
+                        )
                 except Exception as e:
                     logger.warning(f"[元数据获取] 失败: {e}")
                     parsed_metadata = None
@@ -2935,7 +2996,6 @@ def process_transcription(
             )
 
             # 下载器准备
-            from ...downloaders.generic import GenericDownloader
             download_downloader = None
             if has_separate_download_url:
                 download_downloader = GenericDownloader()

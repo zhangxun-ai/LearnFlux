@@ -596,6 +596,7 @@ class TaskHistoryManager {
         const source = cached || {};
         const url = task.url || source.url || '';
         const type = (
+            task.platform === 'web' ? 'article' :
             task.platform === 'feishu' || (url.startsWith('local://') && !isLocalMediaHistoryItem({ url, title: task.title }))
                 ? 'file'
                 : 'video'
@@ -1136,8 +1137,7 @@ function classifyContent(url) {
     if (videoHosts.some((h) => host === h || host.endsWith('.' + h))) {
         return { type: 'video', platform: host, label: '视频', action: '深度学习解析', soon: false };
     }
-    // 其它/短链：未知，仍尝试深度学习
-    return { type: 'unknown', platform: host || 'unknown', label: '未识别', action: '深度学习解析', soon: false };
+    return { type: 'unknown', platform: host || 'unknown', label: '网页链接', action: '识别网页正文或音视频', soon: false };
 }
 
 /** 单篇深度学习工作台提交按钮文案：与内容形态解耦，始终深度学习。 */
@@ -1273,8 +1273,8 @@ function buildHistoryCard(task) {
     const cls = classifyContent(task.url);
     const displayTitle = compactText(task.title || '未命名', 100);
     const histType = histTypeOf(task);
-    const icon = histType === 'file' ? '文' : (histType === 'post' ? '帖' : '视');
-    const typeLabel = histType === 'post' ? '帖子' : (histType === 'file' ? '文件' : '视频');
+    const icon = { article: '文', file: '文', post: '帖' }[histType] || '视';
+    const typeLabel = { article: '文章', file: '文件', post: '帖子' }[histType] || '视频';
     const st = statusInfo(task.status, histType);
     const timeStr = formatRelativeTime(task.timestamp);
     const author = compactText(task.author || '', 36);
@@ -1810,6 +1810,7 @@ function historyTypeFromAuditItem(item) {
     const url = String(item && item.video_url || '');
     if (url.startsWith('local://')) return isLocalMediaHistoryItem(item) ? 'video' : 'file';
     const platform = String(item && item.platform || '').toLowerCase();
+    if (platform === 'web') return 'article';
     if (['twitter', 'x', 'xiaohongshu', 'weixin', 'wechat'].includes(platform)) return 'post';
     return 'video';
 }

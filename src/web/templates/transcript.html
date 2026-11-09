@@ -828,6 +828,8 @@ body.export-document-mode .export-print-nav {
 {% block content %}
     {% if platform == 'feishu' and description %}
     <aside class="section" aria-label="飞书文档读取范围">{{ description }}。AI 解读仅依据可读取的文字，图片和画板请对照原文。</aside>
+    {% elif platform == 'web' and description %}
+    <aside class="section" aria-label="网页文章读取范围">{{ description }}</aside>
     {% endif %}
     <style id="immersive-styles">
     /* --- Result reading layout --- */

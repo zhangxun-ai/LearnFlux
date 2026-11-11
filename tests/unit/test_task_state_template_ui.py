@@ -4,6 +4,7 @@ import shutil
 import subprocess
 
 import pytest
+from jinja2 import Environment, FileSystemLoader
 
 
 TEMPLATE_DIR = Path(__file__).parents[2] / "src" / "web" / "templates"
@@ -106,14 +107,15 @@ def test_processing_page_returns_to_the_previous_page_after_cancellation():
 
 
 def test_transcript_reader_and_export_menu_are_keyboard_accessible():
-    template_source = (TEMPLATE_DIR / "transcript.html").read_text(encoding="utf-8")
+    environment = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+    template = environment.get_template("transcript.html").render(view_token="test-result")
     reader_source = (STATIC_DIR / "js" / "transcript-visual-reader.js").read_text(
         encoding="utf-8"
     )
 
-    assert 'aria-haspopup="dialog"' in template_source
-    assert 'aria-expanded="false"' in template_source
-    assert 'role="dialog"' in template_source
-    assert 'role="radio"' in template_source
+    assert 'aria-haspopup="dialog"' in template
+    assert 'aria-expanded="false"' in template
+    assert 'role="dialog"' in template
+    assert 'role="radio"' in template
     assert "case 'ArrowRight':" in reader_source
     assert "case 'Home':" in reader_source

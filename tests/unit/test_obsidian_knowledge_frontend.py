@@ -1,13 +1,14 @@
 from pathlib import Path
 
+from jinja2 import Environment, FileSystemLoader
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_single_result_syncs_without_a_preview_step_and_closes_on_success():
-    template = (ROOT / "src/web/templates/transcript.html").read_text(
-        encoding="utf-8"
-    )
+    environment = Environment(loader=FileSystemLoader(ROOT / "src/web/templates"))
+    template = environment.get_template("transcript.html").render(view_token="test-result")
     script = (ROOT / "src/web/static/js/obsidian-knowledge.js").read_text(
         encoding="utf-8"
     )

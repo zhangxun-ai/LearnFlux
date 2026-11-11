@@ -823,6 +823,26 @@ body.export-document-mode .export-print-nav {
 
 {% block page_styles %}
 <link rel="stylesheet" href="/static/css/output-reading.css?v={{ asset_ver }}">
+<link rel="stylesheet" href="/static/css/transcript-toolbar.css?v={{ asset_ver }}">
+{% endblock %}
+
+{% block page_header %}
+{% include "partials/transcript_toolbar.html" %}
+<script>
+{
+    const time = document.getElementById('resultCreatedAt');
+    if (time) {
+        const timestamp = window.LearnFluxTime.parse(time.dataset.createdAt);
+        if (Number.isFinite(timestamp)) {
+            time.dateTime = new Date(timestamp).toISOString();
+            time.textContent = window.LearnFluxTime.format(timestamp, {
+                month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+            });
+            time.hidden = false;
+        }
+    }
+}
+</script>
 {% endblock %}
 
 {% block content %}
@@ -902,36 +922,6 @@ body.export-document-mode .export-print-nav {
     .top-btn.primary:hover {
         background: rgba(0, 0, 0, 0.06);
     }
-    .top-btn.mark-btn.is-marked {
-        background: rgba(228, 80, 58, 0.1);
-        border-color: rgba(228, 80, 58, 0.24);
-        color: #E4503A;
-        font-weight: 600;
-    }
-    .top-btn.mark-btn:disabled {
-        opacity: 0.65;
-        cursor: default;
-    }
-    
-    /* Subdued Status Indicators */
-    .status-island {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 0;
-        background: transparent;
-        font-size: 0.82rem;
-        color: var(--muted, rgba(0, 0, 0, 0.5));
-        margin-bottom: 24px;
-        transition: all 0.2s ease;
-        cursor: default;
-    }
-    .status-island:hover { color: var(--ink-soft, rgba(0,0,0,0.8)); }
-    .status-dot { width: 6px; height: 6px; border-radius: 50%; }
-    .status-dot.error { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.5); }
-    .status-dot.warn { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.5); }
-    .status-dot.ok { background: #10b981; }
-
     /* Collection chapter navigation */
     .minimal-nav {
         display: grid;
@@ -1189,12 +1179,6 @@ body.export-document-mode .export-print-nav {
     [data-theme="dark"] .top-btn:hover {
         background: rgba(255, 255, 255, 0.08);
     }
-    [data-theme="dark"] .status-island {
-        background: rgba(255, 255, 255, 0.06);
-    }
-    [data-theme="dark"] .status-island:hover {
-        background: rgba(255, 255, 255, 0.1);
-    }
     [data-theme="dark"] .summary-reader-actions {
         background: var(--bg-tertiary, #211E1A) !important;
         border-color: var(--line, #2B2722) !important;
@@ -1255,11 +1239,6 @@ body.export-document-mode .export-print-nav {
             max-width: 100%;
             overflow-wrap: anywhere;
         }
-        body.transcript-result-page .status-island {
-            max-width: 100%;
-            flex-wrap: wrap;
-            line-height: 1.5;
-        }
         body.transcript-result-page .top-actions {
             width: 100%;
             align-items: stretch;
@@ -1271,13 +1250,6 @@ body.export-document-mode .export-print-nav {
         body.transcript-result-page .summary-reader-btn,
         body.transcript-result-page .transcript-copy-btn.quick-copy-btn {
             min-height: 44px;
-        }
-        body.transcript-result-page .top-actions > .top-btn,
-        body.transcript-result-page #exportDropdownContainer {
-            flex: 1 1 132px;
-        }
-        body.transcript-result-page #exportMainBtn {
-            width: 100%;
         }
         body.transcript-result-page #exportMenu {
             width: min(280px, calc(100vw - 32px));
@@ -1396,95 +1368,6 @@ body.export-document-mode .export-print-nav {
     }
     </style>
 
-    <!-- Top Status & Meta Island -->
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
-        {% if stats %}
-        <div class="status-island" title="{% if llm_config %}校对模型: {{ llm_config.calibrate_model or '默认' }} | 总结模型: {{ llm_config.summary_model or '默认' }}{% endif %}">
-            {% set cal = stats.calibration_stats %}
-            {% if cal and cal.failed_count == cal.total_chunks and cal.total_chunks > 0 %}
-                <span class="status-dot error"></span>
-                <span>校准失败，显示原文</span>
-            {% elif cal and (cal.failed_count > 0 or cal.fallback_count > 0) %}
-                <span class="status-dot warn"></span>
-                <span>部分校准异常 ({{ cal.success_count }}/{{ cal.total_chunks }})</span>
-            {% else %}
-                <span class="status-dot ok"></span>
-                <span>校准完成</span>
-            {% endif %}
-            
-            {% if stats.original_length > 0 %}
-                <span style="opacity: 0.5; margin: 0 4px;">·</span>
-                <span>转录 {{ "{:,}".format(stats.original_length) }} 字</span>
-            {% endif %}
-            {% if stats.duration_display %}
-                <span style="opacity: 0.5; margin: 0 4px;">·</span>
-                <span>耗时 {{ stats.duration_display }}</span>
-            {% endif %}
-            {% if asr_usage %}
-                <span style="opacity: 0.5; margin: 0 4px;">·</span>
-                <span title="{{ asr_usage.detail }}">{{ asr_usage.label }}</span>
-            {% endif %}
-        </div>
-        {% endif %}
-
-        {% if view_token %}
-        <div class="top-actions">
-            <button
-                type="button"
-                class="top-btn mark-btn"
-                id="contentMarkBtn"
-                data-view-token="{{ view_token }}"
-                data-marked="false"
-                aria-pressed="false"
-                onclick="toggleContentMark()"
-            >精华</button>
-            <button type="button" class="top-btn" onclick="submitRecalibrate()">重新校对</button>
-            <button
-                type="button"
-                id="obsidian-knowledge-open"
-                class="top-btn"
-                data-view-token="{{ view_token }}"
-                aria-haspopup="dialog"
-                aria-controls="obsidian-knowledge-dialog"
-            >沉淀到 Obsidian</button>
-            <div style="position: relative;" id="exportDropdownContainer">
-                <button type="button" id="exportMainBtn" class="top-btn primary" onclick="toggleExportMenu(event)" aria-haspopup="dialog" aria-controls="exportMenu" aria-expanded="false">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    导出
-                </button>
-                <div id="exportMenu" role="dialog" aria-label="导出选项" style="display: none; position: absolute; right: 0; min-width: 220px; z-index: 1000;">
-                    <div class="export-menu-section">
-                        <div class="export-menu-title">导出内容</div>
-                        <div class="export-scope-options" role="radiogroup" aria-label="导出内容范围">
-                            <button type="button" role="radio" class="export-scope-option" data-export-scope="analysis" aria-checked="false" onclick="selectExportScope('analysis', event)">AI 解析</button>
-                            <button type="button" role="radio" class="export-scope-option" data-export-scope="calibrated" aria-checked="false" onclick="selectExportScope('calibrated', event)">校对文本</button>
-                            <button type="button" role="radio" class="export-scope-option is-active" data-export-scope="full" aria-checked="true" onclick="selectExportScope('full', event)">全内容</button>
-                        </div>
-                    </div>
-                    <div class="export-menu-section">
-                        <div class="export-menu-title">导出格式</div>
-                        <button type="button" class="export-menu-item" onclick="executeExport('markdown', '{{ view_token }}')">Markdown 文档</button>
-                        <button type="button" class="export-menu-item" onclick="executeExport('pdf', '{{ view_token }}')">PDF 文档</button>
-                        <button type="button" class="export-menu-item" onclick="executeExport('html', '{{ view_token }}')">HTML 页面</button>
-                        <button type="button" class="export-menu-item" onclick="executeExport('png', '{{ view_token }}')">PNG 长图</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-
-    {% if task_id %}
-    <div class="feishu-delivery" id="feishuDelivery" data-task-id="{{ task_id }}" aria-live="polite" hidden>
-        <div><span id="feishuDeliveryLabel"></span><span class="feishu-delivery-detail" id="feishuDeliveryDetail"></span></div>
-        <div class="feishu-delivery-actions"><a id="feishuDeliveryOpen" target="_blank" rel="noopener" hidden>在飞书中打开 ↗</a><button type="button" id="feishuDeliveryRetry" hidden>重试同步</button></div>
-    </div>
-    {% endif %}
-
     <!-- Collection chapter navigation -->
     {% if collection_navigation %}
     <nav class="minimal-nav" aria-label="合集章节导航">
@@ -1551,7 +1434,7 @@ body.export-document-mode .export-print-nav {
     {% endif %}
 
     <div class="section" data-export-section="summary">
-        <div class="section-header">
+        <div class="section-header result-summary-heading">
             <h2>内容总结</h2>
             {% if view_token and summary %}
             <div class="summary-reader-actions" role="tablist" aria-label="内容总结视图">
@@ -1679,6 +1562,7 @@ body.export-document-mode .export-print-nav {
 {% block extra_js %}
 <script src="/static/js/floating-toc.js?v={{ asset_ver }}"></script>
 {% if task_id %}<script src="/static/js/feishu-delivery.js?v={{ asset_ver }}" defer></script>{% endif %}
+{% if view_token and task_id %}<script src="/static/js/reading-switch.js?v={{ asset_ver }}" defer></script>{% endif %}
 {% if view_token %}
 <script src="/static/js/focus-handoff.js?v=20260617-1"></script>
 <script src="/static/js/visual-learning.js?v={{ asset_ver }}"></script>
@@ -1781,10 +1665,7 @@ function pollTask(taskId, apiKey, area) {
 function setContentMarkState(marked) {
     var btn = document.getElementById('contentMarkBtn');
     if (!btn) return;
-    btn.dataset.marked = marked ? 'true' : 'false';
     btn.setAttribute('aria-pressed', marked ? 'true' : 'false');
-    btn.classList.toggle('is-marked', Boolean(marked));
-    btn.textContent = marked ? '已标记精华' : '标记精华';
     btn.title = marked ? '取消精华标记' : '把这篇解读标记为精华';
 }
 
@@ -1828,9 +1709,8 @@ function loadContentMarkState() {
 function toggleContentMark() {
     var btn = document.getElementById('contentMarkBtn');
     if (!btn || btn.disabled) return;
-    var marked = btn.dataset.marked === 'true';
+    var marked = btn.getAttribute('aria-pressed') === 'true';
     btn.disabled = true;
-    btn.textContent = marked ? '取消中...' : '标记中...';
     fetchContentMark(marked ? 'DELETE' : 'POST')
         .then(function(data) { setContentMarkState(Boolean(data.marked)); })
         .catch(function(err) {
@@ -1846,34 +1726,49 @@ loadContentMarkState();
 
 function toggleExportMenu(e) {
     e.stopPropagation();
-    var menu = document.getElementById('exportMenu');
-    setExportMenuOpen(menu && menu.style.display === 'none');
+    const more = document.getElementById('resultMoreActions');
+    more.open = false;
+    setExportMenuOpen(document.getElementById('exportMenu').hidden);
 }
 
 function setExportMenuOpen(open) {
     var menu = document.getElementById('exportMenu');
-    var btn = document.getElementById('exportMainBtn');
-    if (!menu || !btn) return;
-    menu.style.display = open ? 'block' : 'none';
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!menu) return;
+    menu.hidden = !open;
+    document.querySelectorAll('[aria-controls="exportMenu"]').forEach(button => {
+        button.setAttribute('aria-expanded', String(open));
+    });
     if (open) {
         var firstOption = menu.querySelector('.export-scope-option');
         if (firstOption) firstOption.focus();
     }
 }
+document.getElementById('obsidian-knowledge-open')?.addEventListener('click', function() {
+    const more = document.getElementById('resultMoreActions');
+    more.querySelector('summary').focus({ preventScroll: true });
+    more.open = false;
+});
 document.addEventListener('click', function(e) {
     var menu = document.getElementById('exportMenu');
-    var btn = document.getElementById('exportMainBtn');
-    if (menu && btn && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
-        setExportMenuOpen(false);
-    }
+    if (menu && !menu.contains(e.target)) setExportMenuOpen(false);
+    document.querySelectorAll('.result-header details[open]').forEach(detail => {
+        if (!detail.contains(e.target)) detail.open = false;
+    });
 });
 document.addEventListener('keydown', function(e) {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
     var menu = document.getElementById('exportMenu');
-    if (!menu || menu.style.display === 'none') return;
-    setExportMenuOpen(false);
-    document.getElementById('exportMainBtn')?.focus();
+    if (menu && !menu.hidden) {
+        setExportMenuOpen(false);
+        const desktop = document.getElementById('exportMainBtn');
+        (desktop.getClientRects().length ? desktop : document.querySelector('#resultMoreActions summary')).focus();
+        return;
+    }
+    const detail = document.activeElement?.closest('.result-header details[open]');
+    if (detail) {
+        detail.open = false;
+        detail.querySelector('summary').focus();
+    }
 });
 
 var selectedExportScope = 'full';

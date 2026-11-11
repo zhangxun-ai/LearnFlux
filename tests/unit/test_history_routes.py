@@ -21,6 +21,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from video_transcript_api.cache.cache_manager import CacheManager
+from video_transcript_api.collections.repository import LearningCollectionRepository
 from video_transcript_api.utils.logging.audit_logger import AuditLogger
 
 # ---------------------------------------------------------------------------
@@ -159,6 +161,64 @@ def _store_body(setup, task_id, cache_id, content):
         conn.execute("CREATE TABLE IF NOT EXISTS video_cache (id INTEGER PRIMARY KEY, files_loc TEXT)")
         conn.execute("INSERT OR REPLACE INTO video_cache VALUES (?,?)", (cache_id, str(cache_id)))
         conn.execute("UPDATE task_status SET cache_id=? WHERE task_id=?", (cache_id, task_id))
+
+
+def test_reading_switch_fuzzy_search_and_suggestions_respect_history_scope(
+    history_client, tmp_path, monkeypatch,
+):
+    from video_transcript_api.api.routes import audit
+
+    client, _ = history_client
+    cache = CacheManager(cache_dir=str(tmp_path / "switch-cache"))
+    monkeypatch.setattr(audit, "get_cache_manager", lambda: cache)
+    monkeypatch.setattr(audit, "get_config", lambda: {"feishu_documents": {"enabled": False}})
+
+    def add_note(name, title, author, *, owner="test-user", platform="youtube", available=True):
+        url = f"https://example.test/{name}"
+        task = cache.create_task(url, platform=platform, media_id=name, owner_user_id=owner)
+        if available:
+            assert cache.save_cache(
+                platform, url, name, False, "Body-only search term",
+                "capswriter", title=title, author=author,
+            )
+        cache.update_task_status(task["task_id"], "success", title=title, author=author)
+        return task
+
+    current = add_note("current", "当前的解读", "Ryder")
+    same_author = add_note("author", "另一个想法", "Ryder")
+    same_series = add_note("series", "如何验证一个 AI 产品想法", "林编辑")
+    newest = add_note("newest", "先做一个产品", "公开作者")
+    foreign = add_note("foreign", "验证产品", "Ryder", owner="someone-else")
+    _log(audit.audit_logger, foreign["task_id"])
+    hidden = add_note("hidden", "验证产品", "Ryder")
+    cache.hide_history_tasks([hidden["task_id"]], "test-user")
+    add_note("cleaned", "验证产品", "Ryder", available=False)
+    add_note("feishu", "验证产品", "Ryder", platform="feishu")
+
+    collections = LearningCollectionRepository(cache.database)
+    collection = collections.create_collection("产品实践", "Ryder", "video_course", owner_user_id="test-user")
+    for task in (current, same_series):
+        collections.add_source(collection["id"], task["task_id"], task["view_token"], "Chapter", "video")
+
+    def switch(q=""):
+        response = client.get("/api/audit/reading-switch", params={"current": current["view_token"], "q": q})
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        return response.json()["data"]
+
+    default = switch()
+    assert {item["view_token"]: item["reason"] for item in default["related"]} == {
+        same_author["view_token"]: "同作者",
+        same_series["view_token"]: "同系列",
+    }
+    assert [item["view_token"] for item in default["recent"]] == [newest["view_token"]]
+    for query in ("验证产品", "ＡＩ 想法", "林编 产品"):
+        assert [item["view_token"] for item in switch(query)["matches"]] == [same_series["view_token"]]
+    assert [item["view_token"] for item in switch("ryD")["matches"]] == [same_author["view_token"]]
+    assert switch("Body-only search term")["matches"] == []
+    assert client.get(
+        "/api/audit/reading-switch", params={"current": foreign["view_token"]},
+    ).status_code == 404
 
 
 def test_body_only_search_paginates_after_matching_and_preserves_total(history_client):

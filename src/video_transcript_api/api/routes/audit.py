@@ -6,18 +6,21 @@
 
 import sqlite3
 import time
+import unicodedata
 from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from ..context import get_audit_logger, get_cache_manager, get_config, get_logger
+from ..services.study_access import require_study_source
 from ..services.transcription import TranscribeResponse, verify_token
+from ...collections.titles import source_display_title
 from ...study.source_files import media_type_for_filename
 from ...study.body_search import authorized_body_texts, matching_excerpt
 from ...utils.timeutil import format_datetime_with_timezone, get_configured_timezone
@@ -391,6 +394,143 @@ async def get_history(
         "items": items, "total": total, "limit": limit, "offset": offset,
         "api_key_masked": api_key_masked,
     })
+
+
+def _reading_search_key(value: str) -> str:
+    return "".join(char for char in unicodedata.normalize("NFKC", value).casefold() if char.isalnum())
+
+
+def _reading_match_score(phrase: str, terms: list[str], title: str, author: str) -> int:
+    fields = [_reading_search_key(title), _reading_search_key(author)]
+    if phrase in fields:
+        return 4
+    if any(phrase in field for field in fields):
+        return 3
+    if len(terms) > 1 and all(any(term in field for field in fields) for term in terms):
+        return 2
+    if len(phrase) >= 3:
+        # Match ordered characters across small gaps, e.g. “验证产品” in “验证一个 AI 产品”.
+        for field in fields:
+            start = field.find(phrase[0])
+            while start != -1:
+                position = start
+                for char in phrase[1:]:
+                    position = field.find(char, position + 1, start + 3 * len(phrase))
+                    if position == -1:
+                        break
+                if position != -1:
+                    return 1
+                start = field.find(phrase[0], start + 1)
+    return 0
+
+
+def _reading_series_tokens(conn, prefix: str, view_token: str, user_id: str) -> set[str]:
+    if prefix and not conn.execute(
+        "SELECT 1 FROM cache.sqlite_master WHERE type = 'table' AND name = 'learning_collection_sources'"
+    ).fetchone():
+        return set()
+    return {row[0] for row in conn.execute(f"""
+        SELECT DISTINCT sibling.view_token
+        FROM {prefix}learning_collection_sources current_source
+        JOIN {prefix}learning_collections collection ON collection.id = current_source.collection_id
+        JOIN {prefix}learning_collection_sources sibling ON sibling.collection_id = collection.id
+        WHERE current_source.view_token = ? AND collection.owner_user_id = ?
+    """, (view_token, user_id)).fetchall()}
+
+
+@router.get("/reading-switch")
+async def get_reading_switch(
+    response: Response,
+    current: str = Query(min_length=1, max_length=128),
+    q: str = Query("", max_length=200),
+    user_info: dict = Depends(verify_token),
+):
+    """Suggest completed results from the reader's own visible history."""
+    cache_manager = get_cache_manager()
+    api_key_masked = audit_logger._mask_api_key(user_info.get("api_key", ""))
+    user_id = user_info.get("user_id") or ""
+    feishu_settings = get_config().get("feishu_documents") or {}
+    search = q.strip()
+    phrase = _reading_search_key(search)
+    terms = [term for word in search.split() if (term := _reading_search_key(word))]
+
+    def read_switch():
+        task = require_study_source(
+            cache_manager.get_task_by_view_token(current), user_info, audit_logger, feishu_settings
+        )
+        with _history_connection(cache_manager) as (conn, prefix, has_marks, has_hidden):
+            cte, parameters = _history_records_cte(
+                user_info, api_key_masked, prefix, has_marks, has_hidden
+            )
+            series = set() if search else _reading_series_tokens(conn, prefix, current, user_id)
+            candidates = conn.execute(cte + f"""
+                SELECT r.view_token, COALESCE(NULLIF(r.title, ''), v.title) AS title,
+                    COALESCE(NULLIF(r.author, ''), v.author) AS author, t.url,
+                    COALESCE(t.completed_at, r.request_time) AS finished_at, v.files_loc
+                FROM history_records r
+                JOIN {prefix}task_status t ON t.task_id = r.task_id
+                JOIN {prefix}video_cache v ON v.id = (
+                    SELECT cached.id FROM {prefix}video_cache cached
+                    WHERE cached.platform = t.platform AND cached.media_id = t.media_id
+                        AND (COALESCE(t.use_speaker_recognition, 0) = 0 OR cached.use_speaker_recognition = 1)
+                    ORDER BY cached.use_speaker_recognition DESC, cached.updated_at DESC, cached.id DESC
+                    LIMIT 1
+                )
+                WHERE r.status = 'success' AND r.view_token != '' AND r.view_token != ?
+                ORDER BY COALESCE(t.completed_at, r.request_time) DESC, r.task_id DESC
+            """, parameters + [current]).fetchall()
+
+        author_key = unicodedata.normalize("NFKC", task.get("author") or "").strip().casefold()
+        related, recent, matches = [], [], []
+        ranked = []
+        for row in candidates:
+            # PostgreSQL rows are mappings with positional access; iteration yields keys.
+            token, title, author, url, completed_at, files_loc = (row[index] for index in range(6))
+            title = title or "未命名解读"
+            if (url or "").startswith("local://collection-source/"):
+                title = source_display_title(title) or title
+            author = author or ""
+            score = _reading_match_score(phrase, terms, title, author) if phrase else 0
+            if not search or score:
+                ranked.append((score, token, title, author, completed_at, files_loc))
+        if search:
+            ranked.sort(key=lambda row: row[0], reverse=True)
+
+        for _, token, title, author, completed_at, files_loc in ranked:
+            if not search and len(recent) >= 5 and len(related) >= 4:
+                break
+            same_author = bool(author_key and unicodedata.normalize("NFKC", author).strip().casefold() == author_key)
+            reason = "同系列" if token in series else "同作者" if same_author else ""
+            if not search and len(recent) >= 5 and (not reason or len(related) >= 4):
+                continue
+            # Historical tokens may be reused. Authorize the actual task selected by /view.
+            try:
+                require_study_source(
+                    cache_manager.get_task_by_view_token(token), user_info, audit_logger, feishu_settings
+                )
+            except HTTPException:
+                continue
+            if prefix and not (Path(cache_manager.cache_dir) / files_loc).is_dir():
+                continue
+            item = {
+                "view_token": token,
+                "title": title,
+                "author": author,
+                "date": format_datetime_with_timezone(completed_at, "%m月%d日"),
+            }
+            if search:
+                matches.append(item)
+                if len(matches) >= 20:
+                    break
+            elif reason and len(related) < 4:
+                related.append({**item, "reason": reason})
+            elif len(recent) < 5:
+                recent.append(item)
+        return {"related": related, "recent": recent, "matches": matches}
+
+    data = await run_in_threadpool(_read_history_query, read_switch)
+    response.headers["Cache-Control"] = "no-store"
+    return TranscribeResponse(code=200, message="获取可切换解读成功", data=data)
 
 
 @router.get("/filter-options")

@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from jinja2 import Environment, FileSystemLoader
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = PROJECT_ROOT / "src" / "web" / "static"
@@ -81,10 +83,12 @@ def test_production_visual_layer_preserves_primary_dom_and_script_contracts():
     for anchor in ("v-analyze", "result", "v-history", "v-opportunities", "v-settings"):
         assert f'id="{anchor}"' in flywheel
 
-    transcript = _source(TEMPLATE_DIR / "transcript.html")
+    environment = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+    transcript = environment.get_template("transcript.html").render(view_token="test-result")
     processing = _source(TEMPLATE_DIR / "processing.html")
     error = _source(TEMPLATE_DIR / "error.html")
     cleaned = _source(TEMPLATE_DIR / "cleaned.html")
+    assert 'id="exportMainBtn"' in transcript
     assert 'aria-haspopup="dialog"' in transcript
     assert 'role="progressbar"' in processing
     assert 'role="alert"' in error

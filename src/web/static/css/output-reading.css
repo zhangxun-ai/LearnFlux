@@ -230,14 +230,7 @@ body.workbench-meadow:is(.page-transcript, .page-collections, .page-study, .page
 .study-answer-evidence ol { padding-left: 20px; }
 .study-answer-evidence p { color: var(--reading-secondary); line-height: 1.8; font-size: 0.875rem; }
 .study-evidence-location { min-height: 44px; border: 0; padding: 6px 0; background: none; color: var(--reading-link); font: inherit; font-size: 0.875rem; text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.feishu-delivery[hidden] { display: none; }
-.feishu-delivery { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding-block: 12px; margin-bottom: 24px; border-block: 1px solid var(--product-line); color: var(--reading-body); font-size: 0.875rem; line-height: 1.6; }
-.feishu-delivery-detail { display: block; color: var(--reading-secondary); }
-.feishu-delivery-actions { display: flex; align-items: center; gap: 16px; }
-.feishu-delivery-actions a, .feishu-delivery-actions button { color: var(--reading-link); text-decoration: underline; text-underline-offset: 3px; }
-.feishu-delivery-actions button { min-height: 44px; padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
-.feishu-delivery-actions button:disabled { cursor: wait; opacity: 0.65; }
-.feishu-delivery :is(button, a):focus-visible, .study-evidence-location:focus-visible { outline: 2px solid var(--reading-link); outline-offset: 3px; }
+.study-evidence-location:focus-visible { outline: 2px solid var(--reading-link); outline-offset: 3px; }
 
 @media (max-width: 720px) {
     body.workbench-meadow.page-transcript.app-shell .page-stage > .container {

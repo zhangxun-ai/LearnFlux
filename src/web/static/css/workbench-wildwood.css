@@ -1584,14 +1584,6 @@ body.workbench-meadow.page-transcript .content a {
     color: var(--product-accent-hover);
 }
 
-body.workbench-meadow.page-transcript .status-island {
-    min-height: 36px;
-    border: 1px solid var(--product-line);
-    border-radius: 999px;
-    background: var(--product-surface-muted);
-    color: var(--product-muted);
-}
-
 body.workbench-meadow.page-transcript .top-actions {
     gap: 8px;
 }

@@ -1,0 +1,162 @@
+{% macro tool_icon(name) -%}
+<svg class="result-icon{% if name in ['chevron', 'external', 'check'] %} result-icon-small{% endif %}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {% if name == 'status' %}<circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16 9.3"/>
+    {% elif name == 'warning' %}<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16h.01"/>
+    {% elif name == 'star' %}<path d="m12 3 2.8 5.7 6.3.9-4.55 4.45 1.07 6.28L12 17.36l-5.62 2.97 1.07-6.28L2.9 9.6l6.3-.9L12 3Z"/>
+    {% elif name == 'refresh' %}<path d="M20 4v5h-5M4 20v-5h5M4.4 9a8 8 0 0 1 13.1-3.7L20 9M4 15l2.5 3.7A8 8 0 0 0 19.6 15"/>
+    {% elif name == 'download' %}<path d="M12 3v12m-4-4 4 4 4-4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>
+    {% elif name == 'switch' %}<rect x="7" y="5" width="13" height="16" rx="2"/><path d="M4 17V5a2 2 0 0 1 2-2h9m-4 7h5m-5 4h5"/>
+    {% elif name == 'search' %}<circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/>
+    {% elif name == 'close' %}<path d="m6 6 12 12M18 6 6 18"/>
+    {% elif name == 'chevron' %}<path d="m6 9 6 6 6-6"/>
+    {% elif name == 'external' %}<path d="M6 18 18 6M9 6h9v9"/>
+    {% elif name == 'more' %}<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>
+    {% elif name == 'feishu' %}
+        <path stroke="none" fill="#1BD4C6" d="M5 2h9.5l5.8 6.4-5.2 4.7Z"/>
+        <path stroke="none" fill="#1664FF" d="M2 8.2 8.2 13l5.7-1.9 5.6 4.5A16.7 16.7 0 0 1 2 20.1Z"/>
+        <path stroke="none" fill="#0747A6" d="M8.2 13 15 8.7h7.7a15.7 15.7 0 0 1-4.5 8.2 13.7 13.7 0 0 1-10-3.9Z"/>
+    {% elif name == 'obsidian' %}
+        <path stroke="none" fill="#7950D9" d="M11.3 1.9a1.6 1.6 0 0 1 2.4.2l4 5.2c.7 1 .3 3.1 1.1 5.4.3.9 1.1 2.2 1.5 2.8a1.2 1.2 0 0 1-.1 1.4l-1.7 2.4c-.8 1.2-.6 3.3-2.1 3.4l-5.7-1.2c-.8-.2-1.8 0-2.4-.6l-4.4-4.2a1.7 1.7 0 0 1-.3-1.9l2.1-4.8.6-3.4Z"/>
+        <path stroke="none" fill="#BDA3F1" d="M11.3 1.9c.5-.5 1.3-.6 1.9-.2.9 1.9-.7 4.1-1.3 6.2-.6 2.1-.5 4 .6 6.2l-3.3.4a8.6 8.6 0 0 0-3.5-4.6l.6-3.3Z"/>
+        <path stroke="none" fill="#6032C4" d="M5.7 9.9a8 8 0 0 1 3.5 4.6 9 9 0 0 1-1 6.3l-4.3-4.1c-.5-.5-.6-1.2-.3-1.9Z"/>
+        <path stroke="none" fill="#5127AB" d="M9.2 14.5c3.4-.8 6.9-.9 9.3 4.8-.8 1.2-.6 3.3-2.1 3.4l-5.7-1.2c-.8-.2-1.8 0-2.5-.7a9 9 0 0 0 1-6.3Z"/>
+    {% endif %}
+</svg>
+{%- endmacro %}
+
+<div class="header result-header">
+    <div class="result-heading">
+        <h1>{{ title or "LearnFlux" }}</h1>
+        {% if view_token and task_id %}
+        <button type="button" class="result-tool result-switch" id="readingSwitchTrigger" popovertarget="readingSwitch"
+                aria-label="切换解读" aria-haspopup="dialog" aria-expanded="false">
+            {{ tool_icon('switch') }}
+        </button>
+        {% endif %}
+    </div>
+    <div class="result-toolbar">
+        <div class="result-context">
+            <div class="result-source-meta">
+                {% if author %}<span>作者：{{ author }}</span>{% endif %}
+                {% if source_link_url %}
+                <a href="{{ source_link_url }}" target="_blank" rel="noopener">{{ source_link_label | default('原视频', true) | replace('查看原', '原') }} {{ tool_icon('external') }}</a>
+                {% endif %}
+                {% if source_reveal_url %}
+                <button type="button" class="source-reveal-button" data-source-reveal-url="{{ source_reveal_url }}">{{ source_reveal_label or "在本机显示" }}</button>
+                {% endif %}
+                {% if created_at %}
+                <time id="resultCreatedAt" data-created-at="{{ created_at }}" title="{{ created_at_display or '' }}" hidden></time>
+                {% endif %}
+            </div>
+            <div class="result-processing">
+                {% if stats or view_token %}
+                {% set cal = stats.calibration_stats if stats else none %}
+                {% set failed = cal and cal.failed_count == cal.total_chunks and cal.total_chunks > 0 %}
+                {% set partial = cal and (cal.failed_count > 0 or cal.fallback_count > 0) %}
+                <details class="result-detail result-calibration">
+                    <summary class="result-tool{% if failed or partial %} result-tool-warning{% endif %}">
+                        {{ tool_icon('warning' if failed or partial else 'status') }}
+                        {% if failed %}校准失败，显示原文
+                        {% elif partial %}部分校准异常{% elif stats %}校准完成{% else %}校对详情{% endif %}
+                        {{ tool_icon('chevron') }}
+                    </summary>
+                    <div class="result-detail-panel">
+                        {% if partial and not failed %}<p>校准成功 {{ cal.success_count }} / {{ cal.total_chunks }} 段</p>{% endif %}
+                        {% if stats and stats.original_length %}<p>转录 {{ "{:,}".format(stats.original_length) }} 字</p>{% endif %}
+                        {% if stats and stats.duration_display %}<p>耗时 {{ stats.duration_display }}</p>{% endif %}
+                        {% if asr_usage %}<p>{{ asr_usage.label }}{% if asr_usage.detail %}<small>{{ asr_usage.detail }}</small>{% endif %}</p>{% endif %}
+                        {% if llm_config %}
+                        <p>校对模型 {{ llm_config.calibrate_model or '默认' }}<br>总结模型 {{ llm_config.summary_model or '默认' }}</p>
+                        {% endif %}
+                        {% if view_token %}
+                        <button type="button" class="result-tool" onclick="this.closest('details').open = false; submitRecalibrate()">
+                            {{ tool_icon('refresh') }} 重新校对
+                        </button>
+                        {% endif %}
+                    </div>
+                </details>
+                {% endif %}
+
+                {% if task_id %}
+                <div class="result-delivery" id="feishuDelivery" data-task-id="{{ task_id }}" aria-live="polite" hidden>
+                    <a id="feishuDeliveryOpen" class="result-tool" target="_blank" rel="noopener" aria-label="在飞书中打开" hidden>
+                        {{ tool_icon('feishu') }} 飞书 {{ tool_icon('external') }}
+                    </a>
+                    <details class="result-detail">
+                        <summary class="result-tool">{{ tool_icon('feishu') }} <span id="feishuDeliveryLabel">飞书</span> {{ tool_icon('chevron') }}</summary>
+                        <div class="result-detail-panel">
+                            <p id="feishuDeliveryDetail"></p>
+                            <button type="button" id="feishuDeliveryRetry" class="result-tool" hidden>重试同步</button>
+                        </div>
+                    </details>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% if view_token %}
+        <div class="top-actions">
+            <button type="button" class="result-tool" id="contentMarkBtn" data-view-token="{{ view_token }}"
+                    aria-pressed="false" title="把这篇解读标记为精华" onclick="toggleContentMark()">
+                {{ tool_icon('star') }} 精华
+            </button>
+            <button type="button" id="exportMainBtn" class="result-tool result-desktop-export" onclick="toggleExportMenu(event)"
+                    aria-haspopup="dialog" aria-controls="exportMenu" aria-expanded="false">
+                {{ tool_icon('download') }} 导出
+            </button>
+            <div id="exportMenu" class="result-detail-panel" role="dialog" aria-label="导出选项" hidden>
+                <div class="export-menu-section">
+                    <div class="export-menu-title">导出内容</div>
+                    <div class="export-scope-options" role="radiogroup" aria-label="导出内容范围">
+                        <button type="button" role="radio" class="export-scope-option" data-export-scope="analysis" aria-checked="false" onclick="selectExportScope('analysis', event)">AI 解析</button>
+                        <button type="button" role="radio" class="export-scope-option" data-export-scope="calibrated" aria-checked="false" onclick="selectExportScope('calibrated', event)">校对文本</button>
+                        <button type="button" role="radio" class="export-scope-option is-active" data-export-scope="full" aria-checked="true" onclick="selectExportScope('full', event)">全内容</button>
+                    </div>
+                </div>
+                <div class="export-menu-section">
+                    <div class="export-menu-title">导出格式</div>
+                    <button type="button" class="export-menu-item" onclick="executeExport('markdown', '{{ view_token }}')">Markdown 文档</button>
+                    <button type="button" class="export-menu-item" onclick="executeExport('pdf', '{{ view_token }}')">PDF 文档</button>
+                    <button type="button" class="export-menu-item" onclick="executeExport('html', '{{ view_token }}')">HTML 页面</button>
+                    <button type="button" class="export-menu-item" onclick="executeExport('png', '{{ view_token }}')">PNG 长图</button>
+                </div>
+            </div>
+            <details id="resultMoreActions" class="result-detail result-more">
+                <summary class="result-tool result-icon-button" aria-label="更多操作" title="更多操作">
+                    {{ tool_icon('more') }}
+                </summary>
+                <div class="result-detail-panel">
+                    <button type="button" id="exportMobileBtn" class="result-tool result-mobile-export" onclick="toggleExportMenu(event)"
+                            aria-haspopup="dialog" aria-controls="exportMenu" aria-expanded="false">
+                        {{ tool_icon('download') }} 导出
+                    </button>
+                    <button type="button" class="result-tool" id="obsidian-knowledge-open" data-view-token="{{ view_token }}"
+                            aria-haspopup="dialog" aria-controls="obsidian-knowledge-dialog">
+                        {{ tool_icon('obsidian') }} 沉淀到 Obsidian
+                    </button>
+                </div>
+            </details>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if view_token and task_id %}
+<button type="button" class="result-tool result-switch result-switch-floating" id="readingSwitchFloating"
+        popovertarget="readingSwitch" aria-label="切换解读" aria-haspopup="dialog" aria-expanded="false" hidden>
+    {{ tool_icon('switch') }}
+</button>
+<div class="reading-switch-panel" id="readingSwitch" popover role="dialog" aria-label="切换解读" data-view-token="{{ view_token }}">
+    <div class="reading-switch-controls">
+        <label class="reading-switch-search">
+            {{ tool_icon('search') }}
+            <input type="search" id="readingSwitchQuery" aria-label="搜索标题或作者" placeholder="搜索标题或作者"
+                   autocomplete="off" maxlength="200">
+        </label>
+        <button type="button" class="result-tool reading-switch-close" popovertarget="readingSwitch"
+                popovertargetaction="hide" aria-label="关闭切换解读">{{ tool_icon('close') }}</button>
+    </div>
+    <p class="reading-switch-message" id="readingSwitchMessage" role="status"></p>
+    <button type="button" class="result-tool" id="readingSwitchRetry" hidden></button>
+    <div id="readingSwitchResults"></div>
+</div>
+{% endif %}
